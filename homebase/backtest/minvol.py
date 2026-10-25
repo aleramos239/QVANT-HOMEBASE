@@ -2,7 +2,10 @@
 (Strategy.needs_minute_volume, 2026-10-21) -- the feed an RVOL rule compares a bar's volume with.
 
     minutes(tape)                           -> array('q') [NMIN]: ONE tape's volume per ET clock minute
-    prior(store, root, d, n, cache=None)    -> [{"date": "YYYY-MM-DD", "vol": None or [NMIN numbers]}, ...], oldest first
+    deltas(tape)                            -> array('q') [NMIN]: its buy minus sell volume per minute (backtest/sides.py)
+    prior(store, root, d, n, cache=None, delta=False)
+                                            -> [{"date": "YYYY-MM-DD", "vol": None or [NMIN numbers]}, ...], oldest first;
+                                               delta=True (Strategy.needs_delta) adds "delta": None or [NMIN numbers]
 
 vol[i] = the volume traded in the ET minute that starts at 18:00 ET of the evening before the date + i minutes (index 0 =
 18:00 the evening before, NMIN - 1 = 16:59 ET of the date), every print of that date's own tape, whatever its contract (no roll
@@ -36,9 +39,21 @@ def minutes(tape) -> array:
     return array("q", (sum(sz[a:b]) for a, b in zip(cut, cut[1:])))
 
 
-def prior(store, root: str, d: dt.date, n: int, cache: dict | None = None) -> list[dict]:
-    """The minute volume of the n trade dates before d, oldest first (module docstring).
-    store: a TapeStore (sessions / daily / load). cache: {date: array or None} kept by the caller across days."""
+def _cuts(tape) -> list:
+    t0 = et_ns(tape.date, "00:00") + MIN0 * MIN_NS            # the engine's origin: 00:00 ET of the date - 6 h
+    return [bisect_left(tape.ts, t0 + i * MIN_NS) for i in range(NMIN + 1)]
+
+
+def deltas(tape) -> array:
+    """The tape's buy minus sell volume per ET clock minute (the minutes of minutes()), by its prints' sides (Tape.sides)."""
+    cut, sz, sd = _cuts(tape), tape.size, tape.sides()
+    return array("q", (sum(sz[j] * sd[j] for j in range(a, b)) for a, b in zip(cut, cut[1:])))
+
+
+def prior(store, root: str, d: dt.date, n: int, cache: dict | None = None, delta: bool = False) -> list[dict]:
+    """The minute volume of the n trade dates before d, oldest first (module docstring); delta=True: each row also carries
+    "delta". store: a TapeStore (sessions / daily / load). cache: {date: (file stamp, volume, delta or None)} kept by the caller
+    across days."""
     n = max(0, min(int(n), MAX_SESSIONS))
     if not n:
         return []
@@ -51,14 +66,18 @@ def prior(store, root: str, d: dt.date, n: int, cache: dict | None = None) -> li
         if hit is None and store.daily(root, x) is None:
             continue                                 # no daily bar: not a date of ctx.daily
         stamp = _stamp(store, root, x)
-        if hit is not None and stamp is not None and hit[0] == stamp:
-            v = hit[1]
+        if hit is not None and stamp is not None and hit[0] == stamp and (not delta or hit[2] is not None):
+            v, dl = hit[1], hit[2]
         else:
             tape = store.load(root, x) if stamp is not None else None
             v = minutes(tape) if tape is not None else None
+            dl = deltas(tape) if delta and tape is not None else None
             if v is not None:                        # a date whose tape did not load is read again next time (not cached)
-                cache[x] = (stamp, v)
-        out.append({"date": x.isoformat(), "vol": None if v is None else v.tolist()})
+                cache[x] = (stamp, v, dl)
+        row = {"date": x.isoformat(), "vol": None if v is None else v.tolist()}
+        if delta:
+            row["delta"] = None if dl is None else dl.tolist()
+        out.append(row)
     return out[::-1]
 
 

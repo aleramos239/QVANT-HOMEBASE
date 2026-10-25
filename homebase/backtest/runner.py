@@ -43,6 +43,7 @@ from collections import deque
 from pathlib import Path
 
 from .. import draftstore, strategies
+from ..strategies.base import wants
 from ..contracts import commission_rt
 from . import drafthost, hourly, minvol, sandbox
 from ..paths import repo_root, state_dir
@@ -310,6 +311,7 @@ def _execute(run_dir: Path, store: TapeStore) -> dict:
     if not 0 <= n_minvol <= minvol.MAX_SESSIONS:
         raise ValueError(f"needs_minute_volume: 0 .. {minvol.MAX_SESSIONS} dates, not {n_minvol}")
     mv_cache: dict = {}
+    needs_delta = wants(strat, "needs_delta")      # ctx.minute_volume rows carry "delta" too
     blocked: dict[str, int] = {}
     trades, skipped, no_trade, hlines, marks = [], [], [], [], []
     plots: dict[str, list] = {}
@@ -327,7 +329,8 @@ def _execute(run_dir: Path, store: TapeStore) -> dict:
         if n_hourly and d not in hour_cache:     # this session's hours, for the days after it (no second load)
             hour_cache[d] = (tape.contract, hourly.session_hours(tape))
         if n_minvol and d not in mv_cache:       # this date's minute volume, for the days after it (no second load)
-            mv_cache[d] = (minvol._stamp(store, cls.root, d), minvol.minutes(tape))     # minvol.prior's (file stamp, volume)
+            mv_cache[d] = (minvol._stamp(store, cls.root, d), minvol.minutes(tape),      # minvol.prior's (file stamp, volume,
+                           minvol.deltas(tape) if needs_delta else None)                 # delta)
         if strat.needs_daily():
             note_open930(d, tape)
         # Item 2: a CME half day shortens the session -- clamp the window BEFORE
@@ -342,7 +345,7 @@ def _execute(run_dir: Path, store: TapeStore) -> dict:
         strat.session_window = window
         prior = dailies[:bisect_left(daily_dates, d.isoformat())]
         hours = hourly.prior(store, cls.root, d, n_hourly, hour_cache) if n_hourly else None
-        mv = minvol.prior(store, cls.root, d, n_minvol, mv_cache) if n_minvol else None
+        mv = minvol.prior(store, cls.root, d, n_minvol, mv_cache, delta=needs_delta) if n_minvol else None
         res = run_session(strat, tape, costs, qty=req["qty"], daily=prior, controls=rules, hourly=hours, minute_volume=mv)
         for why, n in res.blocked.items():
             blocked[why] = blocked.get(why, 0) + n

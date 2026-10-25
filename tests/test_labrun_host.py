@@ -2072,3 +2072,75 @@ def test_run_folders_over_a_week_old_are_removed_when_the_runner_first_sees_the_
     k.open()
     k.r.sync()
     assert not old.exists() and new.is_dir()
+
+
+# ---------------------------------------------------------------- live delta (Strategy.needs_delta, owner 2026-10-24)
+
+DELTA = HEAD + '''class Dl(Strategy):
+    id, name, root, bar_minutes = "dl", "Dl", "NQ", 1
+
+    def needs_delta(self):
+        return True
+
+    def needs_minute_volume(self):
+        return 1
+
+    def on_session(self, ctx):
+        ctx.plot("delta0", ctx.now_ns, float(ctx.minute_volume[-1]["delta"][0]))
+
+    def on_bar(self, ctx, bar):
+        ctx.plot("buy", ctx.now_ns, float(bar.buy))
+        ctx.plot("sell", ctx.now_ns, float(bar.sell))
+'''
+
+
+def test_a_needs_delta_strategy_gets_bar_buy_sell_from_the_prints_sides_and_the_earlier_minutes_delta(days):
+    asked = []
+
+    def minute_vol(root, d, n, delta=False):
+        asked.append(delta)
+        return [{"date": "2024-03-04", "vol": [5] + [0] * 1379, "delta": [-3] + [0] * 1379}]
+
+    day = days(DELTA, minute_vol=minute_vol)
+    t0 = at("09:30:00")
+    day.on_ticks([(t0, 21000.0, 2, 1), (t0 + 10 * 1_000_000_000, 21000.25, 3, -1), (t0 + 20 * 1_000_000_000, 21000.0, 4, 1)])
+    day.on_ticks([(t0 + 61 * 1_000_000_000, 21000.0, 1, 1)])                 # closes the 09:30 bar
+    plots = day.fills.result.plots
+    assert asked and set(asked) == {True}                                    # the earlier minutes are asked for WITH their delta
+    assert plots["delta0"][0][1] == -3.0
+    assert plots["buy"][0][1] == 6.0 and plots["sell"][0][1] == 3.0
+    no = days(MINVOL, minute_vol=lambda root, d, n: vols_of("2024-03-01", "2024-03-04"))   # a strategy that does not ask
+    no.on_ticks(ticks("09:25:00", [21000.0]))
+    assert no.state == "running"
+
+
+def test_a_needs_delta_day_stops_on_a_print_without_its_side_never_trading_on_buy_sell_0(days):
+    day = days(DELTA, minute_vol=lambda root, d, n, delta=False: [{"date": "2024-03-04", "vol": [5] * 1380, "delta": [1] * 1380}])
+    day.on_ticks(ticks("09:30:00", [21000.0]))                               # an older chart service: (ts, price, size) only
+    assert (day.state, day.why) == ("stopped", host.NO_SIDES)
+    ok = days(MINVOL, minute_vol=lambda root, d, n: vols_of("2024-03-01", "2024-03-04"))   # a day that does not ask: unaffected
+    ok.on_ticks(ticks("09:30:00", [21000.0]))
+    assert ok.state == "running"
+
+
+def test_a_delta_strategy_hosted_after_prints_are_held_catches_up_with_their_sides(desk, monkeypatch):
+    monkeypatch.setattr(host, "minute_volume", lambda root, d, n, tapes=None, delta=False:
+                        [{"date": "2024-03-04", "vol": [5] * 1380, "delta": [1] * 1380}])
+    k = desk()
+    k.promote(DELTA)
+    k.clock("09:29:00")
+    t0 = ms_of("09:30:00")
+    k.r.on_rows("NQ", [[ms_of("18:00:05", d=D - dt.timedelta(days=1)), 21000.0, 1, 1],
+                       [t0, 21000.0, 2, 1], [t0 + 10_000, 21000.25, 3, -1], [t0 + 20_000, 21000.0, 4, -1]])
+    k.r.sync()                                                               # hosted now: the held prints are its catch-up
+    k.r.on_rows("NQ", [[t0 + 61_000, 21000.0, 1, 1]])
+    k.clock("09:31:02")
+    day = k.r._days["lab_x"].day
+    assert day.state == "running", (day.why, day.detail)
+    assert (day.fills.result.plots["buy"][0][1], day.fills.result.plots["sell"][0][1]) == (2.0, 7.0)
+
+
+def test_earlier_minutes_without_their_delta_wait_like_missing_volume(days):
+    day = days(DELTA, minute_vol=lambda root, d, n, delta=False: [{"date": "2024-03-04", "vol": [5] + [0] * 1379, "delta": None}])
+    day.on_ticks([(*r, 1) for r in ticks("09:25:00", [21000.0] * 3)])          # prints WITH their side: only the delta is missing
+    assert (day.state, day.summary()["why"]) == ("waiting", host.WAIT_YESTERDAY)

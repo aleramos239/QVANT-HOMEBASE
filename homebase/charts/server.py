@@ -521,12 +521,12 @@ def _sse(data, event: str = "") -> str:
 
 def _backlog_rows(root: str, tape: list, i: int, j: int) -> str:
     """Worker thread: one backlog event from today's tape (a list of Tick that only ever grows at its end)."""
-    return _sse({"root": root, "rows": [[t.ts_ms, t.price, t.size] for t in tape[i:j]]})
+    return _sse({"root": root, "rows": [[t.ts_ms, t.price, t.size, t.side] for t in tape[i:j]]})
 
 
-def _live_rows(root: str, rows: list) -> str:
-    """One live batch, as the feed delivered it (numbers live, strings in a replay)."""
-    return _sse({"root": root, "rows": [[int(r["ts_ms"]), float(r["price"]), int(r["size"])] for r in rows]})
+def _live_rows(root: str, ticks: list) -> str:
+    """One live batch: the hub's classified prints (charts/tick.py Tick), in the order it took them."""
+    return _sse({"root": root, "rows": [[t.ts_ms, t.price, t.size, t.side] for t in ticks]})
 
 
 class _TickReader:
@@ -540,7 +540,8 @@ class _TickReader:
 
 class TickFan:
     """The prints of this service as a read-only stream for the Lab strategy runner (GET /api/labrun/ticks, Server-
-    Sent Events). publish() is called from the tick path and costs it one queue put per reader: nothing is copied,
+    Sent Events). Rows are [ts_ms, price, size, side]: side as the hub classified the print (+1 at the ask, -1 at the bid;
+    charts/tick.py), so a Desk strategy reads the delta the charts show. publish() is called from the tick path and costs it one queue put per reader: nothing is copied,
     encoded or awaited there, and it cannot raise. A reader that falls LABRUN_QUEUE_MAX batches behind is dropped
     (its stream ends; it asks again with since_ms). clock: the service's (the replay's, in a replay). tape_of(root):
     today's tape, the hub's list of Tick, or None."""
@@ -568,7 +569,7 @@ class TickFan:
         """The backlog -- each market's prints of the current session with ts_ms >= since_ms, oldest first, at most
         LABRUN_CHUNK rows an event, built in a worker thread; then the prints that queued up behind it; `event: live`
         once; then `event: clock` {"now_ms"} at once and every clock_s, and the live batches as they arrive. Rows are
-        [ts_ms, price, size].
+        [ts_ms, price, size, side].
 
         A `live` or a clock is NEVER sent while prints that arrived before it are still queued for this reader: the
         runner takes `live` for "the tape is whole" and fires an event "with no print" off the clock, so either one
@@ -1001,9 +1002,14 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     # the Lab strategy runner's read-only tick stream (GET /api/labrun/ticks); hub and clock: defined below
     tick_fan = TickFan(lambda: clock(), lambda root: hub.today.get(root))
 
+    fan_new: dict[str, list] = {}               # root -> the hub's classified prints of the delivery in hand (fan_tap)
+
+    def fan_tap(root: str, tk) -> None:         # a hub tap: called for each print the hub keeps, after its side is known
+        fan_new.setdefault(root, []).append(tk)
+
     def labrun_ticks(root: str, rows: list[dict]) -> None:
         try:
-            tick_fan.publish(root, rows)
+            tick_fan.publish(root, fan_new.pop(root, []))     # the prints hub.on_ticks just took, with their sides
         except Exception as e:  # noqa: BLE001 — the runner's stream must never break the live tick path
             log(f"labrun ticks: {type(e).__name__}: {e}")
 
@@ -1106,6 +1112,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     if depth is not None:
         depth.tap = booklive.on_book
         hub.taps.append(booklive.on_tick)
+    hub.taps.append(fan_tap)                    # the runner's stream: the hub's classified prints (labrun_ticks)
     # per-chart Bar Replay: its own hubs over its own History memo; never the live hub, recorder, desk or quotes
     replays = BarReplay(store, sd / "cache", roots, lambda: clock(), min_bar=MIN_BAR,
                         max_studies=MAX_STUDIES, log=log, known=known)

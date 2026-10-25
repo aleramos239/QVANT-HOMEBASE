@@ -73,18 +73,18 @@ def test_the_backlog_comes_first_then_live_once_then_the_clock_and_the_live_batc
         fan = fan_of({"NQ": t})
         gen = fan.stream(["NQ"], 0, clock_s=60)
         head = await until(gen, "clock")
-        fan.publish("NQ", [{"ts_ms": T0 + 9000, "price": "250.25", "size": "4"}, {"ts_ms": T0 + 9000, "price": 250.5, "size": 2}])
-        fan.publish("ES", [{"ts_ms": 1, "price": 1.0, "size": 1}])               # a market it did not ask for
-        fan.publish("NQ", [{"ts_ms": T0 + 9500, "price": 251.0, "size": 1}])
+        fan.publish("NQ", [Tick(T0 + 9000, 250.25, 4, 1), Tick(T0 + 9000, 250.5, 2, 1)])
+        fan.publish("ES", [Tick(1, 1.0, 1, 1)])               # a market it did not ask for
+        fan.publish("NQ", [Tick(T0 + 9500, 251.0, 1, 1)])
         live = await take(gen, 2)
         await gen.aclose()
         return parse(head), parse(live), len(fan.readers)
 
     head, live, readers = asyncio.run(go())
     assert [n for n, _ in head] == ["", "live", "clock"] and head[2][1] == {"now_ms": 1_000}
-    assert head[0][1] == {"root": "NQ", "rows": [[T0 + i * 1000, 100.0 + i, 1 + i % 3] for i in range(5)]}
-    assert live == [("", {"root": "NQ", "rows": [[T0 + 9000, 250.25, 4], [T0 + 9000, 250.5, 2]]}),
-                    ("", {"root": "NQ", "rows": [[T0 + 9500, 251.0, 1]]})]
+    assert head[0][1] == {"root": "NQ", "rows": [[T0 + i * 1000, 100.0 + i, 1 + i % 3, 1] for i in range(5)]}
+    assert live == [("", {"root": "NQ", "rows": [[T0 + 9000, 250.25, 4, 1], [T0 + 9000, 250.5, 2, 1]]}),
+                    ("", {"root": "NQ", "rows": [[T0 + 9500, 251.0, 1, 1]]})]
     assert readers == 0                                                      # closed: no longer fanned out to
 
 
@@ -102,7 +102,7 @@ def test_prints_queued_while_the_backlog_went_out_come_before_live_and_before_th
         for i in range(10, 14):                                              # as the service does: the tape, then the fan-out
             tk = Tick(T0 + i * 1000, 100.0 + i, 1, 1, i + 1)
             t.append(tk)
-            fan.publish("NQ", [{"ts_ms": tk.ts_ms, "price": tk.price, "size": tk.size}])
+            fan.publish("NQ", [tk])
             now[0] = tk.ts_ms + 500
         out += await until(gen, "clock")
         await gen.aclose()
@@ -127,7 +127,7 @@ def test_a_clock_is_never_sent_ahead_of_prints_already_queued():
         await asyncio.sleep(0.12)                                            # another is due, and meanwhile:
         for i in range(3):
             now[0] = 2_000 + i
-            fan.publish("NQ", [{"ts_ms": now[0], "price": 1.0, "size": 1}])
+            fan.publish("NQ", [Tick(now[0], 1.0, 1, 1)])
         out += await take(gen, 4)
         await gen.aclose()
         return parse(out)
@@ -146,7 +146,7 @@ def test_a_reader_dropped_while_its_backlog_goes_out_gets_no_live_and_no_clock()
         gen = fan.stream(["NQ"], 0, clock_s=1.0)
         got = await take(gen, 1)
         for i in range(server.LABRUN_QUEUE_MAX + 1):                         # the tick path, while the backlog is in flight
-            fan.publish("NQ", [{"ts_ms": T0 + 9_000_000 + i, "price": 1.0, "size": 1}])
+            fan.publish("NQ", [Tick(T0 + 9_000_000 + i, 1.0, 1, 1)])
         got += [x async for x in gen]
         return parse(got), len(fan.readers)
 
@@ -163,10 +163,10 @@ def test_a_reader_dropped_while_its_queue_is_drained_gets_no_live_and_no_clock(m
         gen = fan.stream(["NQ"], 0, clock_s=60)
         got = await take(gen, 1)                                             # the backlog
         for i in range(3):
-            fan.publish("NQ", [{"ts_ms": T0 + 5000 + i, "price": 1.0, "size": 1}])
+            fan.publish("NQ", [Tick(T0 + 5000 + i, 1.0, 1, 1)])
         got += await take(gen, 1)                                            # the first queued batch ...
         for i in range(3, 8):
-            fan.publish("NQ", [{"ts_ms": T0 + 5000 + i, "price": 1.0, "size": 1}])   # ... and it falls behind for good
+            fan.publish("NQ", [Tick(T0 + 5000 + i, 1.0, 1, 1)])   # ... and it falls behind for good
         got += [x async for x in gen]
         return parse(got)
 
@@ -194,7 +194,7 @@ def test_the_clock_ticks_every_second_and_is_the_services_own():
         first = await until(gen, "clock")                                    # live, then the clock at once
         now[0] = 6_000
         second = await take(gen, 1)
-        fan.publish("NQ", [{"ts_ms": 1, "price": 1.0, "size": 1}])
+        fan.publish("NQ", [Tick(1, 1.0, 1, 1)])
         third = await take(gen, 1)
         now[0] = 7_000
         fourth = await take(gen, 1)
@@ -203,7 +203,7 @@ def test_the_clock_ticks_every_second_and_is_the_services_own():
 
     ev = asyncio.run(go())
     assert ev == [("live", {}), ("clock", {"now_ms": 5_000}), ("clock", {"now_ms": 6_000}),
-                  ("", {"root": "NQ", "rows": [[1, 1.0, 1]]}), ("clock", {"now_ms": 7_000})]
+                  ("", {"root": "NQ", "rows": [[1, 1.0, 1, 1]]}), ("clock", {"now_ms": 7_000})]
 
 
 def test_a_reader_that_falls_behind_is_dropped_and_the_others_go_on(monkeypatch):
@@ -216,7 +216,7 @@ def test_a_reader_that_falls_behind_is_dropped_and_the_others_go_on(monkeypatch)
         await until(fast, "clock")
         got = []
         for i in range(6):                                                   # the slow one reads nothing
-            fan.publish("NQ", [{"ts_ms": i, "price": 1.0, "size": 1}])
+            fan.publish("NQ", [Tick(i, 1.0, 1, 1)])
             got += await take(fast, 1)
         n = len(fan.readers)
         left = [x async for x in slow]                                       # its stream ends: it will ask again
@@ -280,7 +280,7 @@ def test_a_reader_that_hangs_up_leaves_the_fan_out_at_once(spec):
         await wait_for(lambda: len(sent) == 4)                               # the headers, the rows, live, the clock
         attached = len(fan.readers)
         gone.set()
-        fan.publish("NQ", [{"ts_ms": 1, "price": 1.0, "size": 1}])
+        fan.publish("NQ", [Tick(1, 1.0, 1, 1)])
         await asyncio.wait([task], timeout=2.0)
         return attached, len(fan.readers), task.done()
 
@@ -299,7 +299,7 @@ def test_publish_never_raises():
             raise RuntimeError("boom")
 
     fan.readers.add(Broken())
-    fan.publish("NQ", [{"ts_ms": 1, "price": 1.0, "size": 1}])              # logged, never raised into the tick path
+    fan.publish("NQ", [Tick(1, 1.0, 1, 1)])              # logged, never raised into the tick path
     fan.publish("NQ", [])
 
 
@@ -331,7 +331,7 @@ def test_the_route_serves_the_replayed_session_so_far_then_ends_when_the_service
         assert abs(ev[2][1]["now_ms"] - session_ms(D, 9, 30)) < 5_000        # the replay's clock, not the wall's
         got = prints(ev)                                                     # 09:29:30 up to where the replay is
         assert [x[0] for x in got] == [T0 + i * 1000 for i in range(30, 30 + len(got))] and 30 <= len(got) <= 45
-        assert got[0] == [T0 + 30_000, 200.5, 1]
+        assert got[0] == [T0 + 30_000, 200.5, 1, 1]
         assert c.get("/api/labrun/ticks?since_ms=x", headers=OK).status_code == 422
         none = parse([c.get("/api/labrun/ticks", headers=OK).text])           # no market asked for: the clock only
         assert [n for n, _ in none] == ["live", "clock"]
@@ -433,7 +433,7 @@ def test_live_prints_reach_the_reader_once_and_the_tick_path_never_depends_on_it
     assert [n for n, _ in first[:2]] == ["", "live"]                         # the backlog: what was recorded before
     got = prints(ev)
     assert [x[0] for x in got] == [session_ms(D, 9, 40) + i * 1000 for i in range(3)] + [t + i * 1000 for i in range(8)]
-    assert got[3] == [t, 101.0, 1] and len(prints(late)) < 8                 # none missing, none twice; the slow one: cut
+    assert got[3] == [t, 101.0, 1, 1] and len(prints(late)) < 8                 # none missing, none twice; the slow one: cut
     header, recs = read_table(base / "NQ" / "2026" / f"{D}_NQZ6.live.csv.gz")
     assert [r[header.index("id")] for r in recs][-9:] == [str(200 + i) for i in range(8)] + ["300"]   # all recorded
 
@@ -472,7 +472,7 @@ def test_the_real_stream_feeds_the_runner(tmp_path, monkeypatch):
     assert [x[0] for x in got] == ["connect", "ticks", "live", "clock"]      # the whole session, then live, then the clock
     assert abs(got[-1][1] - session_ms(D, 9, 30)) < 5_000
     held = [r for x in got if x[0] == "ticks" for r in x[2]]
-    assert [r[0] for r in held][:60] == [t0 + i * 1000 for i in range(60)] and held[1] == [t0 + 1000, 200.25, 1]
+    assert [r[0] for r in held][:60] == [t0 + i * 1000 for i in range(60)] and held[1] == [t0 + 1000, 200.25, 1, 1]
     r = Runner(at=at_, source="http://127.0.0.1:8852", spawn=plain, deadline_s=2.0, daily=lambda root, d: [])
     try:
         for item in got:
@@ -502,8 +502,8 @@ def test_a_reconnect_with_prints_queued_behind_its_backlog_gives_the_runner_the_
         return et_ns(DAY, hms) // 1_000_000
 
     held = [[ms("09:29:50") + i * 1000, 21000.0, 1] for i in range(8)]       # what the runner had before it lost the stream
-    queued = [[ms("09:29:58"), 21010.0, 1], [ms("09:29:59"), 21020.0, 1], [ms("09:30:00"), 21020.0, 1],
-              [ms("09:30:01"), 21021.0, 1]]
+    queued = [[ms("09:29:58"), 21010.0, 1, 1], [ms("09:29:59"), 21020.0, 1, 1], [ms("09:30:00"), 21020.0, 1, 1],
+              [ms("09:30:01"), 21021.0, 1, 1]]                               # [ts_ms, price, size, side]: the stream's rows
 
     async def stream():
         t = [Tick(r[0], r[1], r[2], 1, i + 1) for i, r in enumerate(held)]
@@ -512,7 +512,7 @@ def test_a_reconnect_with_prints_queued_behind_its_backlog_gives_the_runner_the_
         out = await take(gen, 1)                                             # the backlog is on its way ...
         for r in queued:                                                     # ... and the market does not wait for it
             t.append(Tick(r[0], r[1], r[2], 1, 0))
-            fan.publish("NQ", [{"ts_ms": r[0], "price": r[1], "size": r[2]}])
+            fan.publish("NQ", [t[-1]])
         out += await until(gen, "clock")
         await gen.aclose()
         return "".join(out)

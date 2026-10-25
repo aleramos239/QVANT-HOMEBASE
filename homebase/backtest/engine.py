@@ -41,6 +41,8 @@ from bisect import bisect_left
 from dataclasses import asdict, dataclass, field
 
 from ..contracts import exec_ok, point_value, tick_size
+from ..strategies.base import wants
+from .sides import split_delta
 from .tape import et_ns
 
 ENGINE_VERSION = "tick-2"      # tick-2: a strategy's own no-trade day is a flat 0.0 on the Sharpe grid (review C1)
@@ -775,6 +777,8 @@ def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None =
         bars = build_bars(ts, px, tape.size, lo, hi, et_ns(d, b0), et_ns(d, b1), bm, m1)
         if getattr(strategy, "needs_flow", False):
             split_flow(ts, px, tape.size, lo, hi, bars)
+        if wants(strategy, "needs_delta"):          # the tape's sides: its quotes, else the flow builder's rule (sides.py)
+            split_delta(ts, tape.size, tape.sides(), lo, hi, bars)
         for n, b in enumerate(bars):
             events.append((b.end_ns, 1, n, "bar", b))
     scan = getattr(strategy, "scan", None)          # opt-in: the strategy names the prints it acts on (no candle close)

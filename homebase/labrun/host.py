@@ -41,10 +41,12 @@ from array import array
 from bisect import bisect_left
 from collections import deque
 from dataclasses import asdict, dataclass
+from functools import partial
 from pathlib import Path
 
 from ..backtest import hourly as hourlymod, minvol, sandbox, slots
 from ..backtest.engine import Costs, build_bars
+from ..backtest.sides import split_delta
 from ..backtest.runner import DAILY_LOOKBACK
 from ..backtest.tape import ARCHIVE, CACHE, ET, TapeStore, effective_session_window, et_ns
 from ..charts.session import session_date, session_range_ms
@@ -94,6 +96,7 @@ WAIT_YESTERDAY = "Yesterday's prices are not stored yet: it checks again every m
 WAIT_RETRY_S = 60.0              # a day waiting for yesterday's prices asks again this often (its own wall clock)
 NO_HOURLY = "The earlier hours' prices could not be read."
 NO_MINVOL = "The earlier days' volume could not be read."
+NO_SIDES = "The prices carry no buy/sell side: this strategy needs it (needs_delta)."
 TOO_LATE = "Started too late to follow today."
 EVENING_DESK = "It starts the evening before: the Desk does not trade that yet (shadow only)."
 NOT_CHECKED = "Not checked yet: the check failed."
@@ -215,7 +218,8 @@ def well_set(meta, root, exec_root: str = "") -> bool:
             and isinstance(times, list) and len(times) <= 500 and all(_at_eve(t, _HMS) for t in times)
             and isinstance(meta.get("needs_daily"), bool) and isinstance(meta.get("trades_on"), bool)
             and _int(meta.get("needs_hourly", 0)) and 0 <= meta.get("needs_hourly", 0) <= hourlymod.MAX_SESSIONS
-            and _int(meta.get("needs_minute_volume", 0)) and 0 <= meta.get("needs_minute_volume", 0) <= minvol.MAX_SESSIONS)
+            and _int(meta.get("needs_minute_volume", 0)) and 0 <= meta.get("needs_minute_volume", 0) <= minvol.MAX_SESSIONS
+            and isinstance(meta.get("needs_delta", False), bool))
 
 
 def words(it: dict, tick: float) -> str:
@@ -273,9 +277,15 @@ def hourly_closes(root: str, d: dt.date, n: int, tapes: TapeStore | None = None)
 _MV_CACHE: dict = {}            # (root) -> {date: (archive file stamp, minute volume)}: re-read when the file changes
 
 
-def minute_volume(root: str, d: dt.date, n: int, tapes: TapeStore | None = None) -> list:
-    """The volume per minute of the n trade dates before d, read as the tester reads them (backtest/minvol.prior)."""
-    return minvol.prior(tapes or TapeStore(), root, d, n, _MV_CACHE.setdefault(root, {}))
+def minute_volume(root: str, d: dt.date, n: int, tapes: TapeStore | None = None, delta: bool = False) -> list:
+    """The volume per minute of the n trade dates before d, read as the tester reads them (backtest/minvol.prior); delta=True:
+    with each minute's delta (Strategy.needs_delta)."""
+    return minvol.prior(tapes or TapeStore(), root, d, n, _MV_CACHE.setdefault(root, {}), delta=delta)
+
+
+def _side(r) -> int:
+    """A stream row's side (+1 / -1 / 0): its fourth field when it has one and it is one of those."""
+    return r[3] if len(r) > 3 and r[3] in (1, -1) else 0
 
 
 def _session_of(end_ns: int) -> dt.date:
@@ -567,6 +577,7 @@ class StrategyDay:
                  start_s: float = START_S, save=None, wall=time.monotonic, late=None, now_ns: int | None = None,
                  desk: DeskSide | None = None, send=None, tell=None, resume=None, flat_et: str | None = None):
         self.name, self.date, self.sha256 = record.get("name"), date, record.get("sha256")
+        self._needs_delta = False                    # set from the child's meta by _start
         self.promoted = record.get("promoted_utc")
         self.state, self.why, self.detail = "waiting", None, None
         self.rebuilt = False                         # made by catch-up (the summary says so)
@@ -652,6 +663,9 @@ class StrategyDay:
         self._hourly_n = meta.get("needs_hourly", 0)
         self._hourly = hourly if self._hourly_n else None      # ... and so are the earlier sessions' 1-hour closes
         self._mv_n = meta.get("needs_minute_volume", 0)
+        self._needs_delta = meta.get("needs_delta", False) is True
+        if self._needs_delta and callable(minute_vol):         # the earlier minutes carry their delta too
+            minute_vol = partial(minute_vol, delta=True)
         self._mv = minute_vol if self._mv_n else None          # ... and the earlier trade dates' minute volume
         if callable(self._mv):
             try:                                     # warm the cache now (hosting: 18:00 the evening before, or a restart while
@@ -682,6 +696,11 @@ class StrategyDay:
                 if self._t0 <= ts < self._t1:
                     keep.append(r)
         if not arrived:
+            return
+        if self._needs_delta and any(len(r) < 4 or r[3] not in (1, -1) for r in keep):
+            # an older chart service sends no side, and a bar without it would read buy = sell = 0: stop, never trade on that
+            self._stopped(NO_SIDES, "a print came without its side")
+            self._changed()
             return
         self._newest = newest
         self.fills.add_ticks(keep)
@@ -767,8 +786,14 @@ class StrategyDay:
         if upto <= self._bar_next - self._bar_next % step:
             return
         f = self.fills
-        for b in build_bars(f.ts, f.px, f.size, 0, len(f.ts), self._bar_next, upto, self._bar_min):
-            self._bars.append((b.end_ns, 1, 0, "bar", asdict(b)))
+        bars = build_bars(f.ts, f.px, f.size, 0, len(f.ts), self._bar_next, upto, self._bar_min)
+        if self._needs_delta:                        # Strategy.needs_delta: the aggressors' volume, from the prints' sides
+            split_delta(f.ts, f.size, f.side, 0, len(f.ts), bars)
+        for b in bars:
+            arg = asdict(b)
+            if self._needs_delta:
+                arg.update(buy=b.buy, sell=b.sell)
+            self._bars.append((b.end_ns, 1, 0, "bar", arg))
         self._bar_next = -(-upto // step) * step
 
     def _session_daily(self) -> list:
@@ -813,7 +838,8 @@ class StrategyDay:
         except OSError as e:
             raise _Stop(NO_MINVOL, f"{type(e).__name__}: {e}") from None
         newest = got[-1].get("date") if got and isinstance(got[-1], dict) else None
-        if not isinstance(newest, str) or newest < _before(self.date).isoformat() or got[-1].get("vol") is None:
+        if (not isinstance(newest, str) or newest < _before(self.date).isoformat() or got[-1].get("vol") is None
+                or self._needs_delta and got[-1].get("delta") is None):
             raise _Wait(NO_YESTERDAY, f"the newest minute volume is of {newest if isinstance(newest, str) else 'none'}"
                                       f"{' (its tape did not load)' if isinstance(newest, str) and got[-1].get('vol') is None else ''}")
         return got
@@ -1697,6 +1723,7 @@ class Runner:
         self._silent = False                         # ... more than SILENT_S ago
         self._dates: dict[str, dt.date] = {}         # root -> its session date
         self._tapes: dict[str, tuple] = {}           # root -> that session's prints: (ts_ns, price, size) arrays
+        self._sides: dict[str, array] = {}           # root -> each of those prints' side (+1 / -1 / 0), the chart service's
         self._late: dict[str, _Late] = {}
         self._days: dict[str, _Hosted] = {}
         self._twins: dict[str, _Hosted] = {}         # name -> the shadow copy of its desk-mode day (_sync_twins)
@@ -1765,13 +1792,16 @@ class Runner:
         self._start_matches(now_ms)
 
     def on_rows(self, root: str, rows) -> None:
-        """Fresh prints [[ts_ms, price, size], ...] of one market, in time order."""
+        """Fresh prints [[ts_ms, price, size, side], ...] of one market, in time order (side: the chart service's; a row of
+        three, from an older chart service, has side 0)."""
         ts, px, size = self._tapes.setdefault(root, (array("q"), array("d"), array("q")))
+        sides = self._sides.setdefault(root, array("b"))
         for r in rows:
             ns, price, n = int(r[0]) * 1_000_000, float(r[1]), int(r[2])   # ns: the tester's rule for ms recordings
             ts.append(ns)
             px.append(price)
             size.append(n)
+            sides.append(_side(r))
         if rows and self._live and self._clock_ms is not None:             # as the print arrives (a backlog is not judged)
             self._late.setdefault(root, _Late()).see(self._clock_ms * 1_000_000, ts[-1])
         for h in list(self._days.values()):
@@ -1830,13 +1860,23 @@ class Runner:
                 keep = [i for i, t in enumerate(ts) if lo <= t < hi]
                 self._tapes[root] = (array("q", (ts[i] for i in keep)), array("d", (px[i] for i in keep)),
                                      array("q", (size[i] for i in keep)))
+                sd = self._sides.get(root)
+                if sd is not None:
+                    self._sides[root] = array("b", (sd[i] for i in keep))
         return root
 
+    def _rows(self, root: str, a: int = 0, b: int | None = None):
+        """The held prints a..b of a market as (ts_ns, price, size, side) rows: the one way they reach a day (catch-up and live),
+        so a Strategy.needs_delta day never sees a print without its side."""
+        ts, px, size = self._tapes[root]
+        b = len(ts) if b is None else b
+        sd = self._sides.get(root)
+        return zip(ts[a:b], px[a:b], size[a:b], sd[a:b] if sd is not None and len(sd) == len(ts) else bytes(b - a))
+
     def _feed(self, h: _Hosted, note: bool = True) -> None:
-        ts, px, size = self._tapes[h.root]
-        n = len(ts)
+        n = len(self._tapes[h.root][0])
         if h.fed < n:
-            h.day.on_ticks(zip(ts[h.fed:n], px[h.fed:n], size[h.fed:n]))
+            h.day.on_ticks(self._rows(h.root, h.fed, n))
             h.fed = n
         if note:                                     # (a shadow copy writes its own file, never the journal)
             self._note(h)
@@ -1967,7 +2007,7 @@ class Runner:
         c = self._twins[name] = _Hosted(day, root, h.key, fed=len(ts), rec=rec)
         if self._silent:
             day.no_prices(True)
-        day.on_ticks(zip(ts, px, size))              # catch-up: the session so far
+        day.on_ticks(self._rows(root))               # catch-up: the session so far, each print with its side
         day.on_clock(self._clock_ms)
         log(f"{name}: {date} shadow copy {day.state}, {c.fed} prints to catch up")
 
@@ -2022,7 +2062,7 @@ class Runner:
         h = self._days[name] = _Hosted(day, root, _key(rec), fed=len(ts), rec=rec)
         if self._silent:
             day.no_prices(True)
-        day.on_ticks(zip(ts, px, size))              # catch-up: the session so far
+        day.on_ticks(self._rows(root))               # catch-up: the session so far, each print with its side
         day.on_clock(self._clock_ms)
         self._note(h, quiet=True)
         log(f"{name}: {date} {day.state}{' (' + day.why + ')' if day.why else ''}, {h.fed} prints to catch up")

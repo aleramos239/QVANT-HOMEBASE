@@ -101,6 +101,7 @@ class ShadowFills:
 
     def __init__(self, root: str, date: dt.date, costs: Costs, placement_ms: int, exec_root: str = ""):
         self.ts, self.px, self.size = array("q"), array("d"), array("q")
+        self.side = array("b")                       # each print's aggressor side (+1 / -1 / 0), for Strategy.needs_delta
         self._sim = _LiveSim(root, date, self.ts, self.px, costs, placement_ms, exec_root)
         self._ctx = self._sim._ctx = Ctx(self._sim, 1, [])
         self._orders: dict[int, Order] = {}          # the LiveCtx order id -> the engine's order
@@ -108,16 +109,18 @@ class ShadowFills:
 
     # ---- the tape
     def add_ticks(self, rows) -> None:
-        """Append prints (ts_ns, price, size). Fills nothing. A print older than the newest one held is dropped: the
+        """Append prints (ts_ns, price, size[, side]). Fills nothing. A print older than the newest one held is dropped: the
         tape stays in time order, as the tick client keeps it."""
         last = self.ts[-1] if self.ts else 0
-        for ts_ns, price, size in rows:
+        for r in rows:
+            ts_ns = r[0]
             if ts_ns < last:
                 continue
             last = ts_ns
             self.ts.append(ts_ns)
-            self.px.append(price)
-            self.size.append(size)
+            self.px.append(r[1])
+            self.size.append(r[2])
+            self.side.append(r[3] if len(r) > 3 and r[3] in (1, -1) else 0)
 
     def advance_to(self, t_ns: int) -> None:
         """Process the prints strictly before t_ns (what run_session does before an event)."""

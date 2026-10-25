@@ -26,6 +26,7 @@ import sys
 from ..backtest import drafthost
 from ..backtest.engine import Bar
 from ..contracts import point_value, tick_size
+from ..strategies.base import wants
 from .livectx import LiveCtx
 
 
@@ -48,6 +49,7 @@ def _init(msg: dict):
             "times": list(strategy.times()), "needs_daily": bool(strategy.needs_daily()),
             "needs_hourly": int(strategy.needs_hourly() or 0),
             "needs_minute_volume": int(strategy.needs_minute_volume() or 0),
+            "needs_delta": wants(strategy, "needs_delta"),
             **({"exec_root": ex} if ex else {}),       # only a strategy that trades its market's micro says so
             "trades_on": bool(strategy.trades_on(day))}
     return strategy, ctx, meta
@@ -66,7 +68,12 @@ def _event(strategy, ctx: LiveCtx, msg: dict) -> list[dict]:
         if kind == "session":
             strategy.on_session(ctx)
         elif kind == "bar":
-            strategy.on_bar(ctx, Bar(**msg["arg"]))
+            arg = dict(msg["arg"])
+            flow = {k: arg.pop(k) for k in ("buy", "sell") if k in arg}     # Strategy.needs_delta: plain attributes, as the tester
+            bar = Bar(**arg)
+            for k, v in flow.items():
+                setattr(bar, k, int(v))
+            strategy.on_bar(ctx, bar)
         elif kind == "time":
             strategy.on_time(ctx, msg["arg"])
         else:

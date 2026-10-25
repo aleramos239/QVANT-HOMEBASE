@@ -82,8 +82,10 @@ class Tape:
     path: Path | None = field(default=None, compare=False)   # the .tape file it was read from; None: made in memory
     stamp: tuple = field(default=(), compare=False)          # that file's (st_size, st_mtime_ns) as read: its sidecar carries it
     keep_m1: bool = field(default=False, compare=False)      # a missing sidecar may be built and kept beside the .tape
+    src: Path | None = field(default=None, compare=False)    # the archive file the tape was made from (TapeStore.load)
     _m1: tuple | None = field(default=None, init=False, repr=False, compare=False)
     _m1_read: bool = field(default=False, init=False, repr=False, compare=False)
+    _sides: array | None = field(default=None, init=False, repr=False, compare=False)
 
     def minutes(self) -> tuple | None:
         """The session's 1-minute bars (minutebars.build), once per tape: from a fresh sidecar of its .tape, else built
@@ -92,6 +94,16 @@ class Tape:
             self._m1 = minutebars.load_or_build(self.path, self.stamp, self.ts, self.px, self.size, self.keep_m1)
             self._m1_read = True
         return self._m1
+
+    def sides(self) -> array:
+        """The aggressor side of every print (+1 buy, -1 sell, 0 unknown), worked out once per tape on first ask (only a strategy
+        that needs_delta pays for it): by the quotes when its archive file recorded them, else by the flow builder's rule
+        (backtest/sides.py)."""
+        if self._sides is None:
+            from .sides import order_sides, quote_sides
+            q = quote_sides(self.src, len(self.ts)) if self.src is not None else None
+            self._sides = q if q is not None else order_sides(self.ts, self.px)
+        return self._sides
 
 
 def _inside(p: Path, parent: Path) -> bool:
@@ -377,7 +389,7 @@ class TapeStore:
             px.fromfile(f, n)
             sz.fromfile(f, n)
         return Tape(root, d, head["contract"], ts, px, sz, head["daily"], p, (st.st_size, st.st_mtime_ns),
-                    self.KEEP_M1)
+                    self.KEEP_M1, got[0])
 
     def daily(self, root: str, d: dt.date) -> dict | None:
         """The session's whole-day {"date", "h", "l", "c"} (builds the cache if needed)."""

@@ -23,6 +23,7 @@ Orders (see homebase/backtest/engine.py for the fill law):
   ctx.plot(name, t_ns, value);  ctx.skip(reason);
   ctx.daily (needs_daily) / ctx.hourly (needs_hourly): the bars of the sessions before today, read at the session start;
   ctx.minute_volume (needs_minute_volume): the earlier trade dates' volume per ET minute, read at the session start;
+  bar.buy / bar.sell and ctx.minute_volume[i]["delta"] (needs_delta): the aggressors' volume of a bar and of each earlier minute;
   ctx.hline(name, price, role=...) -> the record -- the levels the strategy PLACED, drawn on the
     chart and never traded: role is one of anchor | entry | sl | tp | level (default "level"), so
     the page styles a level without parsing its name. A strategy may rename a record it kept a
@@ -92,6 +93,12 @@ def resolve_inputs(schema: list[Input], values: dict | None) -> dict:
     return out
 
 
+def wants(strategy, hook: str) -> bool:
+    """A yes / no hook (needs_delta, ...) written as a method or as a plain attribute: True only when it says so."""
+    v = getattr(strategy, hook, False)
+    return bool(v() if callable(v) else v)
+
+
 class Strategy:
     id: str = ""
     name: str = ""
@@ -156,6 +163,13 @@ class Strategy:
         """n > 0 = ctx.hourly must carry the 1-hour closes of the n complete sessions before today, today's contract only, oldest
         first, as [[end_ns, close], ...] (backtest/hourly.py; at most 30 sessions). 0 = none (ctx.hourly is [])."""
         return 0
+
+    def needs_delta(self) -> bool:
+        """True = every bar carries `buy` / `sell`: the volume its prints traded at the ask / at the bid (the aggressors), and each
+        ctx.minute_volume row also carries "delta" (buy minus sell per minute, as "vol"). The tester works the sides out with the
+        flow builder's rule (backtest/sides.py, what the research engine's delta ideas were tested on); the Desk reads them from
+        the chart service, which sees the quotes (charts/tick.py). False (the default) = neither."""
+        return False
 
     def needs_minute_volume(self) -> int:
         """n > 0 = ctx.minute_volume must carry the volume per ET minute of the n trade dates before today (ctx.daily's dates,

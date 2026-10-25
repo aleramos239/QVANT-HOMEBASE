@@ -186,7 +186,7 @@ def test_init_replies_with_the_meta_block(child):
     r = child.init(STRADDLE)
     assert r == {"ok": True, "meta": {"root": "NQ", "session_window": ["09:25", "16:00"], "bar_minutes": 0,
                                       "bar_window": None, "placement_ms": 40, "times": ["09:30:00", "15:55:00"],
-                                      "needs_daily": False, "needs_hourly": 0, "needs_minute_volume": 0,
+                                      "needs_daily": False, "needs_hourly": 0, "needs_minute_volume": 0, "needs_delta": False,
                                       "trades_on": True}}
 
 
