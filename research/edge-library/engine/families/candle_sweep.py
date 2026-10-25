@@ -52,6 +52,10 @@ THE RULE (fixed here, before any run):
     the evening before, owner 2026-10-24) up to the START of the signal bar, as a share of that window's volume, must point
     the trade's way (with) and, for med / p80, reach the median / 80th percentile of |share| of the same clock window on the 20 trade
     dates before (15 needed). A bar that starts at or before 09:30 has no window yet: no trade.
+  * PDELTA (the owner, 2026-10-24, idea D: "net buying over the 5 minutes up to the candle"). `pdelta` = off (the default) | with
+    | med | p80: the net aggressor volume of the 5 whole minutes just BEFORE the signal bar starts (the flow building into the break;
+    on 5-minute bars the previous bar, so it never repeats CDREL's bar), as a share of their volume, must point the trade's way (with)
+    and, for med / p80, reach the median / 80th percentile of |share| of the same clock window on the 20 trade dates before (15 needed).
   * BOTH. A bar that swept both sides and qualifies both ways (it closed back inside both) is no trade.
   * ORDER. A market order placed at that close: it fills at the next bar's open (the first print after the 85 ms placement latency).
     Its structure level is THIS bar's extreme: its low for a long, its high for a short ("stop at the candle extreme"): stop_mode 'struct'
@@ -94,6 +98,7 @@ BACKS = ("range", "body", "far")
 CDREL = {"med": 0.5, "p80": 0.8}                            # cdrel: the quantile of the 20 earlier dates' |share| to reach
 CDREL_N, CDREL_MIN = 20, 15
 CUMD = {"with": None, "med": 0.5, "p80": 0.8}                # cumd: None = the sign only, else the quantile as CDREL
+PRE_S = 300                                                  # pdelta: the seconds before the signal bar it reads
 OPEN930 = 34200                                              # cumd's anchor when no w_start is set: 09:30 ET
 CDELTA = {"with": 0.0, "with_20": 0.20, "with_40": 0.40}    # the least share of the signal bar's volume the trade's way (with = above 0)
 HOUR = 3600 * S.NS
@@ -170,9 +175,9 @@ def signal(po, ph, pl, pc, o, h, l, c, back, turn="off", mode="sweep", body_x=0.
 class CandleSweep(Template):
     """candle_sweep (module docstring). go = +1 / -1 / 0: the signal of the bar (or candle) that has just closed; sx = its (low, high,
     close); with `candle`: cd = the day's candles [slot, o, h, l, c], mi = the 1-minute bars already in them, done = the candles judged."""
-    DEFAULTS = {"mode": "sweep", "back": "body", "ema1h": 0, "candle": 0, "turn": "off", "dir930": "off", "body_x": 0.0, "cdelta": "off", "cdrel": "off", "cumd": "off", "max_tr": 20}
+    DEFAULTS = {"mode": "sweep", "back": "body", "ema1h": 0, "candle": 0, "turn": "off", "dir930": "off", "body_x": 0.0, "cdelta": "off", "cdrel": "off", "cumd": "off", "pdelta": "off", "max_tr": 20}
     SCHEMA = {"mode": ("choice", ("sweep", "break")), "back": ("choice", BACKS), "ema1h": ("int", 0, 500), "candle": ("int", 0, 60), "turn": ("choice", ("off", "on", "same")), "dir930": ("choice", ("off", "with")), "body_x": ("float", 0.0, 10.0),
-              "cdelta": ("choice", ("off", *CDELTA)), "cdrel": ("choice", ("off", *CDREL)), "cumd": ("choice", ("off", *CUMD)), "max_tr": ("int", 1, 20)}
+              "cdelta": ("choice", ("off", *CDELTA)), "cdrel": ("choice", ("off", *CDREL)), "cumd": ("choice", ("off", *CUMD)), "pdelta": ("choice", ("off", *CUMD)), "max_tr": ("int", 1, 20)}
     SCREEN_TFS = ("1", "5", "15", "30")
     FEATURES = ()
 
@@ -236,11 +241,12 @@ class CandleSweep(Template):
         return self.d930
 
     def _win(self, kind):
-        """The clock window (seconds after 00:00 ET) of `kind`: "bar" = the signal bar's minutes, "since" = 09:30 to the bar's start."""
+        """The clock window (seconds after 00:00 ET) of `kind`: "bar" = the signal bar's minutes, "since" = 09:30 (or w_start) to the
+        bar's start, "pre" = the PRE_S seconds before the bar's start."""
         now = (self.M[-1][0] // 60 + 1) * 60                     # the clock close of the 1-minute bar that has just closed
         start = now - 60 * (self.p["candle"] or int(self.p["tf"]))
         a = S.clock_sec(self.p["w_start"]) if self.p.get("w_start") else OPEN930     # the window's own open, else 09:30
-        return (start, now) if kind == "bar" else (a, start)
+        return (start, now) if kind == "bar" else (start - PRE_S, start) if kind == "pre" else (a, start)
 
     def share(self, ctx, a, b, iso=None):
         """Delta / volume of the flow table's whole minutes in [a, b) on the trade date (or `iso`); None: an empty window, no flow
@@ -270,6 +276,8 @@ class CandleSweep(Template):
         if self.go and self.p["cdrel"] != "off" and not self.rel_ok(ctx, "bar", CDREL[self.p["cdrel"]]):
             return
         if self.go and self.p["cumd"] != "off" and not self.rel_ok(ctx, "since", CUMD[self.p["cumd"]]):
+            return
+        if self.go and self.p["pdelta"] != "off" and not self.rel_ok(ctx, "pre", CUMD[self.p["pdelta"]]):
             return
         if self.go and self.p["cdelta"] != "off":
             x, least = self.cdelta(ctx), CDELTA[self.p["cdelta"]]

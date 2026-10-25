@@ -633,3 +633,36 @@ def test_cumd_counts_from_the_open_layers_w_start_when_it_is_set():
         st = cls({**BASE, "tf": "5", "mode": "break", "cumd": "with", "w_start": w})
         st.M = [(sec(9, 39), PX, PX, PX, PX, 40)]                  # the 1-minute bar 09:39-09:40 has just closed: the 5-minute bar is 09:35-09:40
         assert st._win("since") == (want, sec(9, 35)) and st._win("bar") == (sec(9, 35), sec(9, 40)), w
+
+
+# ---- (iv h) pdelta: the 5 minutes just before the signal bar (owner, 2026-10-24, idea D) ---------------------------------------------
+
+def with_pre_flow(monkeypatch, today, ref):
+    """flowtab.window: share `today` on D and ref[k] on the k-th earlier date for the window 09:30-09:35 only (UP5's previous bar)."""
+    shares = dict(zip([r["date"] for r in DAILY[-20:]], ref))
+    asked = []
+
+    def window(root, iso, a, b):
+        asked.append((a, b))
+        if (a, b) != (sec(9, 30), sec(9, 35)):
+            return None
+        s = today if iso == D.isoformat() else shares.get(iso)
+        return None if s is None else (1000, int(round(s * 1000)), 0, 0)
+    monkeypatch.setattr(CS.flowtab, "window", window)
+    return asked
+
+
+@pytest.mark.parametrize("today, w, med, p80", [(0.18, True, True, True), (0.12, True, True, False), (0.05, True, False, False),
+                                               (-0.18, False, False, False), (None, False, False, False)])
+def test_pdelta_reads_the_five_minutes_before_the_signal_bar_never_the_bar(monkeypatch, today, w, med, p80):
+    for mode, want in (("with", w), ("med", med), ("p80", p80)):
+        asked = with_pre_flow(monkeypatch, today, REF20)
+        log, _ = orders({"mode": "break", "tf": "5", "pdelta": mode}, day(UP5))     # signal bar 09:35-09:40: its pre-window 09:30-09:35
+        assert at_0940(log) == ([(sec(9, 40), "long")] if want else []), (today, mode)
+        assert (sec(9, 30), sec(9, 35)) in asked and (sec(9, 35), sec(9, 40)) not in asked
+
+
+def test_pdelta_off_trades_as_before_and_reads_no_flow(monkeypatch):
+    asked = with_pre_flow(monkeypatch, -0.9, REF20)
+    log, _ = orders({"mode": "break", "tf": "5"}, day(UP5))
+    assert at_0940(log) == [(sec(9, 40), "long")] and asked == []
