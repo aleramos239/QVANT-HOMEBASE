@@ -1,0 +1,35 @@
+{
+ "name": "hunt_pb_leg15_adx25",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (angle: pullbacks in the day trend): the 62 % pullback of a fresh 15-minute swing leg (buy an up leg, sell a down leg), traded only while the session trends: ADX(14) of 15-minute bars at least 25. Why it should pay: a higher high (lower low) made while the market trends hard is the trend's own push; its pullback is the trend's holders adding at a better price, and the next push takes out the leg's end. In a range (low ADX) a new swing is noise and its pullback is just the range. Who loses: range traders who fade the leg's end and the late chasers stopped out on the dip. The side is the leg's own; the gate only says the trend is strong."
+ },
+ "market": "NQ",
+ "bars": ["15"],
+ "sessions": ["nyam", "mid", "pm"],
+ "dir": "both",
+ "entry": {
+  "family": "pullback",
+  "settings": {"swing": "15", "level": 0.62, "gate": "adx", "g_n": 14, "g_lvl": 25.0, "g_side": "with"},
+  "words": "NQ 15-minute bars. Swing bars of 15 minutes from 00:00 ET: a swing high is a bar whose high is above both neighbours (known one bar late). A swing high above the swing high before it makes an UP leg, from the lowest low since that earlier swing high; rest a BUY limit 62 % of the way back into it. A lower swing low makes a DOWN leg: a SELL limit, the mirror. The order lives until it fills, price trades beyond the leg's end, price gets to the level without an order, or a newer leg replaces it. Only when Wilder's ADX(14) of the 15-minute bars is at least 25 when the order is placed. Stop at the leg's start, target 1.5 x the stop. Up to two trades a session pass, one at a time, flat 15:58."
+ },
+ "exits": {"stop": "struct", "target_r": 1.5, "max_trades": 2},
+ "taught": [
+  "[owner 2026-10-10, families/pullback.py] the pullback into a swing leg: a higher swing high (lower swing low) of the day's 15-minute swing bars makes the leg; a limit `level` of the way back into it; the structure level is the leg's start",
+  "[owner 2026-10-10, families/pullback.py] level 0.62 = the family's own default; not tuned",
+  "[blocks filter 'adx strong'] only when the trend is strong: Wilder's ADX(14) on the idea's bars is at least 25 (the textbook trend line, the menu's own number)",
+  "[Claude hunt 2026-10-20] trend strength instead of a side gate: the leg gives the side, the ADX says the market is trending; stop at the leg's start, target 1.5 x; two a pass (one per leg)",
+  "[prior knowledge, read 2026-10-20: WHAT_WORKS.md 3.7] the ADX filter lifted the ORB on build days ($38 -> $49) and was never read unseen; regime splits on the 09:30 straddle were all negative. Twin of hunt_pb_leg15_ema20 with the regime gate in place of the side gate."
+ ],
+ "not_run": [
+  "THE GATE: the open layer's adx(14) on 15-minute bars since 00:00 ET (needs 28 bars: open from about 07:00 ET), read when the limit is placed; a working order is not pulled when the ADX falls later.",
+  "THE STOP: the leg's start (structure); its size differs trade to trade and is not known before the run (PREREG asks more than 20 points on average: read it off the result). The engine never puts it nearer than 0.25 x ATR.",
+  "THE RANDOM CONTROL: the lane's random entries take the median stop of the taught trades at the same 1.5R, any bar of the pass; they do not wait for the ADX.",
+  "CAPPED PER SESSION PASS, NOT PER DAY: nyam, mid and pm are three passes, so a day can hold up to 6 trades and a trade of one pass may still be open when another pass enters.",
+  "Shares its entry rule with hunt_pb_leg15_ema20 (only the gate differs): many trades will be the same; a stack should hold at most one of the two.",
+  "Limit fills need a one-tick trade-through (strict_limit); no entry in the last 5 minutes of a pass.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only; the 3:1 block walk-forward comes later under PREREG."
+ ],
+ "control": "random"
+}

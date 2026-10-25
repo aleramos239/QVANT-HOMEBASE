@@ -1,0 +1,46 @@
+{
+ "name": "owner_pzone_match_atr1_r1p5",
+ "source": {
+  "title": "Owner 2026-10-23: trade the chart's Stacked profile zones (cabatrades 'three profiles, one level') on the first touch"
+ },
+ "market": "NQ",
+ "bars": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "pzone",
+  "settings": {
+   "stop_atr": 1.0,
+   "match": "on"
+  },
+  "words": "if we are below a level and we tap it we short and when we are above and tap it we long, lets try 1:1 and 1,2 x atr stop"
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.5,
+  "max_trades": 10
+ },
+ "taught": [
+  "[owner 2026-10-23] the levels = the Stacked profile zones: a delta outlier with a TPO single print and a low volume node next to it",
+  "[owner 2026-10-23] price below a level taps it: short; price above a level taps it: long",
+  "[owner 2026-10-23] target 1:1.5, stop 1 x ATR",
+  "[owner 2026-10-23] colour match: long only at a buyers' zone from above, short only at a sellers' zone from below"
+ ],
+ "not_run": [
+  "THE DELTA: the tape has no aggressor side; each print's side is the tick rule (up = buy, down = sell), an estimate of the chart's vendor delta.",
+  "THE LEVELS: the zones of the 5 trade dates before, 4-tick rows, 30-minute TPO letters, outlier 3x the median row, low volume node under 30 % of the busiest row (the chart's defaults); a zone is used up by its first touch, traded or not.",
+  "THE ORDER: a limit at the near edge of the nearest zone above (sell) and below (buy), placed at each 5-minute close, one OCO pair; a limit fills on a one-tick trade-through.",
+  "THE STOP: stop_atr x ATR(14) of the 5-minute bars at the moment the order is placed, from the entry price.",
+  "PRIOR DAYS IN A SEALED MONTH: their zones are unknown, so the first days of each in-sample block trade fewer levels.",
+  "THE SESSIONS: 09:30-15:58 (nyam, mid, pm), my pick: the owner named none.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, 4 dollars a round turn, tick replay).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

@@ -1,0 +1,4 @@
+open-side FVG                    long : rule $  +100 on 671 trades | random same-side, all days: mean $    -6 (10 seeds, range -21 to +11) | edge $+106 a trade; rule beats 10/10 seeds
+open-side FVG                    short: rule $  +118 on 597 trades | random same-side, all days: mean $   -28 (10 seeds, range -44 to -9) | edge $+146 a trade; rule beats 10/10 seeds
+10:00 displacement, VWAP side    long : rule $  +163 on 293 trades | random same-side, all days: mean $   +31 (10 seeds, range -19 to +72) | edge $+132 a trade; rule beats 10/10 seeds
+10:00 displacement, VWAP side    short: rule $  +178 on 315 trades | random same-side, all days: mean $   -66 (10 seeds, range -119 to -18) | edge $+244 a trade; rule beats 10/10 seeds

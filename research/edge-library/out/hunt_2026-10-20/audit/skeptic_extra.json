@@ -1,0 +1,136 @@
+{
+ "R_per_trade": {
+  "build_r1": 0.069,
+  "test_days_r1": 0.152,
+  "build_median_stop_usd": 610,
+  "test_median_stop_usd": 830
+ },
+ "test_months_r1": {
+  "2025-07": {
+   "n": 33,
+   "net": 6518,
+   "R": 0.26
+  },
+  "2025-08": {
+   "n": 35,
+   "net": 6015,
+   "R": 0.246
+  },
+  "2025-09": {
+   "n": 33,
+   "net": -1252,
+   "R": 0.019
+  },
+  "2025-10": {
+   "n": 39,
+   "net": 13869,
+   "R": 0.325
+  },
+  "2025-11": {
+   "n": 30,
+   "net": 20245,
+   "R": 0.461
+  },
+  "2025-12": {
+   "n": 30,
+   "net": 5745,
+   "R": 0.257
+  },
+  "2026-01": {
+   "n": 32,
+   "net": 4172,
+   "R": 0.217
+  },
+  "2026-02": {
+   "n": 29,
+   "net": 7084,
+   "R": 0.14
+  },
+  "2026-03": {
+   "n": 29,
+   "net": 6334,
+   "R": 0.235
+  },
+  "2026-04": {
+   "n": 32,
+   "net": 11822,
+   "R": 0.305
+  },
+  "2026-05": {
+   "n": 34,
+   "net": -1406,
+   "R": -0.15
+  },
+  "2026-06": {
+   "n": 35,
+   "net": -2660,
+   "R": -0.07
+  },
+  "2026-07": {
+   "n": 31,
+   "net": -7459,
+   "R": 0.026
+  },
+  "2026-08": {
+   "n": 26,
+   "net": -1929,
+   "R": -0.087
+  },
+  "2026-09": {
+   "n": 21,
+   "net": 1581,
+   "R": 0.039
+  }
+ },
+ "last4_whole_months_r1": {
+  "trades": 126,
+  "net": -13454,
+  "avg": -106.8,
+  "win": 0.468,
+  "pf": 0.84,
+  "t": -0.82
+ },
+ "oct_nov_2025_share_of_test_period": 0.497,
+ "odir_unseen_overlap": {
+  "odir_trades": 367,
+  "oside_test_trades": 470,
+  "same_day_side_price": 319,
+  "share_of_odir": 0.869,
+  "share_of_oside": 0.679,
+  "odir_net_r1": 18177
+ },
+ "odir_unseen_by_stop": {
+  "stop_lt20": {
+   "trades": 64,
+   "net": -1896,
+   "avg": -29.6,
+   "win": 0.469,
+   "pf": 0.82,
+   "t": -0.78
+  },
+  "stop_ge20": {
+   "trades": 303,
+   "net": 20073,
+   "avg": 66.2,
+   "win": 0.525,
+   "pf": 1.12,
+   "t": 0.85
+  },
+  "stop_ge30": {
+   "trades": 245,
+   "net": 16695,
+   "avg": 68.1,
+   "win": 0.518,
+   "pf": 1.11,
+   "t": 0.71
+  }
+ },
+ "timeline_local_mtime": {
+  "owner_fvg_odir_15_nl_new/unseen/claim.json": "2026-10-19T19:30",
+  "owner_fvg_oside_15_a1m2_r1/sheet.json": "2026-10-19T19:20",
+  "owner_fvg_oside_15_a1m2p5_r1/sheet.json": "2026-10-19T19:31",
+  "owner_fvg_oside_15_a1m3_r05/sheet.json": "2026-10-19T19:34",
+  "owner_fvg_oside_15_a1m3_r1/sheet.json": "2026-10-19T19:34",
+  "owner_fvg_oside_15_a1m3_nl_r1/sheet.json": "2026-10-19T21:14"
+ }
+}

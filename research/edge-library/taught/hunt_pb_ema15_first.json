@@ -1,0 +1,31 @@
+{
+ "name": "hunt_pb_ema15_first",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (angle: pullbacks in the day trend): the first pullback of a session pass to the 15-minute EMA(20) in the direction of a rising (falling) EMA(50): a 15-minute bar that dips through the EMA(20) and closes back over it, while the EMA(50) slopes up, buys at its close; the mirror sells. 35-point stop, 1:1.5. Why it should pay: in a trending session the 5-hour mean of 15-minute closes is where the trend's holders add; a bar that trades through it and closes back on the trend side shows the dip was bought. Who loses: the sellers who broke the mean and are trapped when the bar closes back above it."
+ },
+ "market": "NQ",
+ "bars": ["15"],
+ "sessions": ["nyam", "mid", "pm"],
+ "dir": "both",
+ "entry": {
+  "family": "ema_pullback",
+  "settings": {"n": 20},
+  "words": "NQ 15-minute bars. When the EMA(50) of 15-minute closes is rising (above its value one bar before) and a bar's low trades at or under the EMA(20) and the bar closes above it, buy at the close by market order; when the EMA(50) is falling and a bar's high trades at or over the EMA(20) and it closes below, sell. Stop 35 points, target 52.5 points (1:1.5). The first such bar of each session pass only (one trade a pass), flat 15:58."
+ },
+ "exits": {"stop_pts": 35, "target_pts": 52.5, "max_trades": 1},
+ "taught": [
+  "[families/port2.py EmaPullback, the library's C rule 7] in a trend (EMA50 slope) a dip that tags EMA20 and closes back on the trend side is a continuation entry",
+  "[Claude hunt 2026-10-20] 15-minute bars (the bar size the repo's leads live on); the FIRST tag of a pass only (one a pass): the first return to the mean is the textbook A+ pullback, later tags are a trend running out",
+  "[Claude hunt 2026-10-20] a fixed 35-point stop and 52.5-point target (1:1.5) in place of the family's structure stop (the pullback bar's own extreme, a 1-candle stop: stops that tight lose in this repo)",
+  "[prior knowledge, read 2026-10-20: WHAT_WORKS.md 2.1, out/library_summary.md] the family failed the old library's 2024 check (0 of 23 units) with its candle stop on 1 / 5-minute bars; the 15-minute, wide-stop, first-tag form has not been run"
+ ],
+ "not_run": [
+  "THE EMAs: the Template's own, on 15-minute closes since 00:00 ET, seeded with the day's first close (an EMA(50) at 10:00 rests on about 40 bars); the slope is the EMA(50) now vs one bar before.",
+  "THE STOP is fixed in points (the family's structure stop, the pullback bar's extreme, is not used).",
+  "CAPPED PER SESSION PASS, NOT PER DAY: nyam, mid and pm are three passes, so a day can hold up to 3 trades and a trade of one pass may still be open when another pass enters; 'first tag' means the first of each pass.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days); no entry in the last 5 minutes of a pass.",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only; the 3:1 block walk-forward comes later under PREREG."
+ ],
+ "control": "random"
+}

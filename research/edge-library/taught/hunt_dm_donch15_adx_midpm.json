@@ -1,0 +1,49 @@
+{
+ "name": "hunt_dm_donch15_adx_midpm",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (designer: momentum / breakouts on a close): the afternoon day-range breakout. Why it should pay: a 15-minute close beyond the high (low) of the 20 bars before it after 11:00 is a new extreme of the last five hours (the pre-market and the whole morning) printed on a CLOSE, in a tape that is trending (ADX(14) of the 15-minute bars at least 25); the buy stops of everyone short the morning's range sit just beyond it and feed the move. Who loses: the traders who sold the morning high (bought the morning low) as the day's range on a trend day, and the afternoon faders of a new extreme."
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "donchian",
+  "settings": {
+   "n": 20,
+   "gate": "adx",
+   "g_n": 14,
+   "g_lvl": 25.0,
+   "g_side": "with"
+  },
+  "words": "From 11:00 ET, a 15-minute bar that closes above the highest high of the 20 bars before it (five hours) is a long at that close; below their lowest low, a short; only while the ADX(14) of the 15-minute bars is at least 25. Stop 40 points, target 60 points (1:1.5). The first such break of each pass only (mid 11:00-13:30, pm 13:30-15:58): up to two a day, flat 15:58."
+ },
+ "exits": {
+  "stop_pts": 40,
+  "target_pts": 60,
+  "max_trades": 1
+ },
+ "taught": [
+  "[family donchian, the library's channel break] a close beyond the prior n-bar channel is followed at market",
+  "[family default] n 20 bars (the library ran 10 / 20 / 40 / 60): on 15-minute bars five hours, so after 11:00 the channel holds the pre-market and the whole morning; not tuned",
+  "[bp.py blocks, filter 'adx strong'] the trend gate: Wilder's ADX(14) of the idea's bars at least 25 (the open layer's gate adx, g_lvl 25, with)",
+  "[Claude hunt 2026-10-20] NQ, mid and pm passes only (trades after the morning legs), both sides, one break per pass, fixed 40 / 60 point bracket (1:1.5)",
+  "[prior knowledge, read before designing: WHAT_WORKS.md 2026-10-20] the pipeline's donchian book boxes (donch_first_nyam / _slow) were one lucky island on their maps (averages $3 / $32 / $42); the round-2 nq_pm_donch_l420 lock (28-bar channel, 2 x ATR5 / 0.75R, no gate) was read unseen; this sheet's channel, gate, sessions and exits differ"
+ ],
+ "not_run": [
+  "THE STOP: the family's structure level (the channel's other side, five hours back) is not used: it would be hundreds of points; the fixed 40 / 60 point bracket is the sheet's.",
+  "THE CHANNEL: the 20 bars before the signal bar on the engine's 15-minute bars since 00:00 ET (the pre-market included), not the regular session alone.",
+  "THE GATE: ADX(14) of the 15-minute bars since 00:00 ET (warm after 28 bars, 07:00 ET), read at the signal close; no value = no trade.",
+  "THE CAP IS PER SESSION PASS, NOT PER DAY: max_trades 1 counts inside each of the 2 passes, so a day can hold up to 2 trades; the passes are independent instances, so a trade of one pass may still be open when the next pass enters (one position at a time holds inside a pass only; the hunt's stack step applies one-at-a-time across legs).",
+  "THE FAMILY'S MONTHS: the round-2 PM Donchian lock (nq_pm_donch_l420) read the unseen days with a different channel and exits: the family's test months are partly seen.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay, 1 NQ).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on an equity half day); no entry in the last 5 minutes of a pass.",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only (2021-09-22 .. 2025-06-30); the 3:1 block walk-forward is a separate, pre-registered read (hunt PREREG Gate 2)."
+ ],
+ "control": "random"
+}

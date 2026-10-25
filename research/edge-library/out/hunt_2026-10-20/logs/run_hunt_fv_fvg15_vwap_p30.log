@@ -1,0 +1,128 @@
+2026-10-20T23:37:14+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers)
+2026-10-20T23:37:14+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 1-60 of 948 (27 instances)
+2026-10-20T23:37:24+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 61-120 of 948 (27 instances)
+2026-10-20T23:37:34+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 121-180 of 948 (27 instances)
+2026-10-20T23:37:45+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 181-240 of 948 (27 instances)
+2026-10-20T23:37:54+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 241-300 of 948 (27 instances)
+2026-10-20T23:38:06+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 301-360 of 948 (27 instances)
+2026-10-20T23:38:13+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 361-420 of 948 (27 instances)
+2026-10-20T23:38:19+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 421-480 of 948 (27 instances)
+2026-10-20T23:38:29+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 481-540 of 948 (27 instances)
+2026-10-20T23:38:43+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 541-600 of 948 (27 instances)
+2026-10-20T23:38:54+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 601-660 of 948 (27 instances)
+2026-10-20T23:39:07+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 661-720 of 948 (27 instances)
+2026-10-20T23:39:21+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 721-780 of 948 (27 instances)
+2026-10-20T23:39:33+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 781-840 of 948 (27 instances)
+2026-10-20T23:39:47+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 841-900 of 948 (27 instances)
+2026-10-20T23:39:58+00:00 taught hunt_fv_fvg15_vwap_p30: pass 1 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30-NQ-tf15; 3 workers): days 901-948 of 948 (27 instances)
+2026-10-20T23:40:10+00:00 bp_build hunt_fv_fvg15_vwap_p30-NQ-tf15: 9 cells, 9,297 trades, 176.27 s of tape (wall 176 s, 3 workers)
+2026-10-20T23:40:10+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers)
+2026-10-20T23:40:10+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 1-60 of 948 (270 instances)
+2026-10-20T23:41:28+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 61-120 of 948 (270 instances)
+2026-10-20T23:42:23+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 121-180 of 948 (270 instances)
+2026-10-20T23:43:09+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 181-240 of 948 (270 instances)
+2026-10-20T23:43:57+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 241-300 of 948 (270 instances)
+2026-10-20T23:44:40+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 301-360 of 948 (270 instances)
+2026-10-20T23:45:23+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 361-420 of 948 (270 instances)
+2026-10-20T23:45:59+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 421-480 of 948 (270 instances)
+2026-10-20T23:46:36+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 481-540 of 948 (270 instances)
+2026-10-20T23:47:15+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 541-600 of 948 (270 instances)
+2026-10-20T23:47:53+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 601-660 of 948 (270 instances)
+2026-10-20T23:48:34+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 661-720 of 948 (270 instances)
+2026-10-20T23:49:17+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 721-780 of 948 (270 instances)
+2026-10-20T23:49:58+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 781-840 of 948 (270 instances)
+2026-10-20T23:50:36+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 841-900 of 948 (270 instances)
+2026-10-20T23:51:14+00:00 taught hunt_fv_fvg15_vwap_p30: pass 2 of 2, NQ 15-minute bars (hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15; 3 workers): days 901-948 of 948 (270 instances)
+2026-10-20T23:51:43+00:00 null_bp hunt_fv_fvg15_vwap_p30__ctl-NQ-tf15: 90 cells, 250,317 trades, 690.42 s of tape (wall 692 s, 3 workers)
+hunt_fv_fvg15_vwap_p30: fvg (min_gap 0.1, mode touch, new_gap replace, w_end 15:00, gate vwap_dev, g_lvl 0, g_side with), both sides, 15-minute bars, stop 30 / target 45 points, up to 1 trades a session pass over 3 passes (nyam mid pm); the sheet leaves out 9 things the video says (listed below); verdict: 15-minute bars make $25 a trade on 1,033 trades and hold 6 of 10 lines (misses 3.3, 3.4, 3.5, P4.2); the neighbours average $15 a trade.
+
+BUILD DAYS 2021-09-22 .. 2025-06-30 (948 session days), 1 contract after costs. The unseen days (2025-07-01 on) were not read.
+
+=== 15-MINUTE BARS ===
+
+                                                    the taught cell (stop 30 / target 45)  average of the 9 cells
+trades                                                                              1,033                   1,033
+net                                                                               $26,298                 $16,953
+win rate                                                                           43.6 %                  43.1 %
+average trade                                                                         $25                     $16
+profit factor                                                                        1.08                    1.05
+average win                                                                          $829                    $818
+average loss                                                                        -$595                   -$591
+average win / average loss                                                           1.39                    1.44
+worst drawdown, daily                                                             $11,114                 $15,086
+worst drawdown, open losses counted                                               $11,688                 $15,669
+Sharpe                                                                               0.59                    0.38
+months won                                                                         58.7 %                  56.3 %
+best month, share of the profit                                                     9.3 %                   9.8 %
+longest run of losing days                                                              8                     8.3
+prop eval odds, 30 days (LucidPro 50K, no DLL)                                     32.5 %                  29.9 %
+prop payout odds (stress, "live is worse", beside)                         19.3 % (7.4 %)          17.0 % (7.1 %)
+prop eval odds, stress                                                             28.5 %                  23.7 %
+
+The neighbours (the 8 others): average trade $15, they hold 4.1 of 10 lines on average (the taught cell holds 6).
+
+THE NINE CELLS: average trade (lines held)
+           target 33.75   target 45  target 56.25
+stop 22.5     $6 (3/10)  $25 (6/10)    $18 (5/10)
+stop 30      $11 (3/10)  $25 (6/10)    $21 (5/10)
+stop 37.5     $8 (4/10)  $20 (5/10)    $14 (2/10)
+
+LINES on the taught cell (the pipeline's own functions and words)
+  P3.2 PASS average trade $25 (need above $0)
+  P3.3 PASS 1,033 trades (need 200)
+  P3.4 held (a label, asks nothing) long $17,673, short $8,625 (need both above $0)
+  P3.7 missed (a label, asks nothing) without its best 5 % of trades (52 of 1033) the box makes -$20,294 (need above $0)
+  P3.8 missed (a label, asks nothing) 27 of 46 months won, 58.7 % (need 70 % or more)
+  P3.9 held (a label, asks nothing) best month 2024-07 is 9.261 % of the profit of the months won (need 10 % or less)
+  P3.10 held (a label, asks nothing) longest run of losing days: 8 (need 8 or fewer)
+  3.3 FAIL default variant: profit factor 1.08 over 1,033 trades (need 1.2 or more)
+  3.4 FAIL default variant: net $26,298 / worst drawdown $11,688 = 2.25, open losses counted (need 3 or more)
+  3.5 FAIL default variant: Sharpe 0.59 on 948 session days (need 1 or more)
+  3.6 PASS default variant: worst drawdown $1,169 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)
+  3.7 PASS default variant: makes money in 87.5 % of 1,000 reshuffled runs (need 80 % or more)
+  3.8 PASS default variant: $7,482 without its best 1 % of days (10 of 948 session days; they made $18,816 of $26,298; need above $0)
+  P4.1 PASS the box's average trade is above $0 in 87.5 % of 1,000 reshuffled runs (need 75 % or more)
+  P4.2 FAIL beats 94.4 % of the random-entry runs of the same box on try 1 (need above 95 % = 100 - 5 / 1 try)
+
+PER YEAR, then combined: the taught cell
+year      trades      net  avg trade     win    PF  drawdown
+2021*         80  -$5,490       -$69  36.2 %  0.81   $10,831
+2022         288   $3,403        $12  42.4 %  1.03    $9,655
+2023         275  $12,645        $46  45.8 %  1.14    $9,968
+2024         271  $19,641        $72  46.9 %  1.23    $9,744
+2025*        119  -$3,901       -$33  38.7 %  0.91   $10,578
+combined   1,033  $26,298        $25  43.6 %  1.08   $11,114
+
+PER YEAR, then combined: the average of the 9 cells
+year      trades      net  avg trade     win    PF  drawdown
+2021*         80  -$6,031       -$75  36.5 %  0.80   $11,039
+2022         288   $2,615         $9  42.2 %  1.03   $10,067
+2023         275   $8,554        $31  45.2 %  1.10   $11,050
+2024         271  $14,561        $54  45.7 %  1.17    $9,781
+2025*        119  -$2,747       -$23  39.2 %  0.93    $9,868
+combined   1,033  $16,953        $16  43.1 %  1.05   $15,086
+
+NOT RUN (the person who wrote the sheet)
+  - THE VWAP: the engine's session VWAP, which restarts at each pass start (09:30, 11:00 and 13:30 ET); the gate reads (close - VWAP) / sigma at the gap's 15-minute close (closed bars only): above 0 for a buy, below 0 for a sell, checked when the order is placed.
+  - THE STOP: 30 points fixed from the entry, not the gap's far edge (the family's own structure level is the gap's far edge, a stop too close for the PREREG).
+  - ENGINE: one instance per session pass; a gap cannot span 11:00 or 13:30 (its three bars must lie in one pass); the newest gap of either side replaces the resting order even when the gate then blocks it.
+  - THE CAP: one trade per session pass; three passes, so a day can hold up to 3 trades, and a trade of one pass may still be open when the next pass enters.
+  - WINDOW: no new order from 15:00 (w_end); an order placed before 15:00 may still fill after it.
+  - PARTLY SEEN, FOR THE FAMILY: plain fvg entries were never walk-forwarded in the taught lane, but the open-side cousin (fvg_oside) used the same gaps on the same months and was read; the VWAP-side subset here is different trades.
+  - COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay, strict limit fills).
+  - THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.
+  - FLAT: every trade is flat by 15:58 ET (13:13 on half days).
+
+ALSO TRUE OF THE RUN (the lane)
+  - CAPPED PER SESSION PASS, NOT PER DAY: max_trades 1 counts inside each pass (3 passes: nyam, mid, pm), so a day can hold up to 3 trades; a family's own loss or trade count (none) counts inside one pass too.
+  - The passes are independent: a trade of one pass may still be open when another pass enters (one position at a time holds inside a pass only).
+  - Every trade is flat by 15:58 ET (13:13 on an equity half day); no entry in the last 5 minutes of a pass.
+  - Costs: $4.00 a round turn and 1 tick of slippage on market and stop fills, 1 contract (the engine's own).
+
+HONEST LIMITS
+  - One video's rule, read on the build days (2021-09-22 .. 2025-06-30): in-sample.
+  - The family's settings and the exits are the video's own: nothing was tuned, searched or picked.
+  - The neighbours are shown to see how fragile the rule is; they are not alternatives to choose from.
+  - The unseen days (2025-07-01 on) were not read: a person has to ask for that, and it is read once.
+  - The random entries are the pipeline's own (any bar of the session pass, matched by day and pass): they do not wait for the family's entry window.
+NEXT: This is the rule as taught, in-sample. The unseen days are read once, and only when a person asks for it.

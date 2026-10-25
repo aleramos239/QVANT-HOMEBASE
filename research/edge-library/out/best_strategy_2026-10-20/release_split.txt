@@ -1,0 +1,12 @@
+== cl_am_disp15_vwap_10to11 trades 608 avg 170.8 | 10:00 release days in build: 170
+   10:00 close, release day         n=  37 avg=  +89.8 net=    +3322 win=0.54
+   10:00 close, no release          n= 248 avg= +281.7 net=   +69853 win=0.57
+   10:15-10:45 closes, release day  n=  74 avg=  +81.2 net=    +6009 win=0.57
+   10:15-10:45 closes, no release   n= 249 avg=  +99.1 net=   +24679 win=0.54
+   ALL BUT 10:00-close-on-release-days: n=571 (0.60/day) avg=+176.1 net=+100541
+== displace_ema15_1r_10to11_k1p5 trades 568 avg 177.2 | 10:00 release days in build: 170
+   10:00 close, release day         n=  31 avg= +332.0 net=   +10291 win=0.61
+   10:00 close, no release          n= 215 avg= +257.1 net=   +55270 win=0.56
+   10:15-10:45 closes, release day  n=  75 avg= +131.7 net=    +9875 win=0.59
+   10:15-10:45 closes, no release   n= 247 avg= +102.1 net=   +25222 win=0.54
+   ALL BUT 10:00-close-on-release-days: n=537 (0.57/day) avg=+168.3 net=+90367

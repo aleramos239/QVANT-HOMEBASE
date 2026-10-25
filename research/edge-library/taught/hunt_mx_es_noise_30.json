@@ -1,0 +1,47 @@
+{
+ "name": "hunt_mx_es_noise_30",
+ "source": {
+  "title": "[Claude hunt 2026-10-20, other markets] ES noise-band momentum, the S&P's own intraday trend. Why it should pay: the S&P 500 carries the largest options market (SPX / SPY, now mostly same-day expiries) and the leveraged S&P ETFs; when the index moves well away from its open, option dealers who are short gamma and the leveraged ETFs that rebalance into the close must buy into rallies and sell into drops, so a move beyond the day's usual noise keeps going (Zarattini, Aziz and Barbon 2024, 'Beat the Market', on SPY; Baltussen, Da, Lammers and Martens 2021, 'Hedging demand and market intraday momentum', JFE). Who loses: the hedgers who must chase (they pay the move) and the traders who fade a break of the noise band as if it were still noise."
+ },
+ "market": "ES",
+ "bars": [
+  "30"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "noise_band",
+  "settings": {
+   "k": 0.3,
+   "anchor": "rth"
+  },
+  "words": "ES, 30-minute bars. The noise band is the 09:30 open plus and minus 0.3 x the daily ATR(14) of the days before, set once and fixed for the day. A 30-minute bar that closes above the upper line and above the VWAP since 09:30 buys at the next bar's open; a close below the lower line and below the VWAP sells. Stop 8 points, target 12 points (1:1.5). The first qualifying close of each session pass (10:00-10:30, 11:30-13:00, 14:00-15:30 closes) is the trade; flat 15:58."
+ },
+ "exits": {
+  "stop_pts": 8,
+  "target_pts": 12,
+  "max_trades": 1
+ },
+ "taught": [
+  "[Zarattini, Aziz, Barbon 2024, SPY] the noise area is the open plus and minus the usual size of the move from the open; trade a break of it with the VWAP on the same side, checked on the half hours from 10:00, both sides",
+  "[Baltussen, Da, Lammers, Martens 2021, JFE] the S&P's intraday momentum is driven by short-gamma option dealers and leveraged-ETF rebalancing, the S&P's own hedging flows",
+  "[engine family noise_band, 2026-10-08] the band = 09:30 open +/- k x the daily ATR(14) of the days before; k 0.3 is the family's default (not tuned here)",
+  "[Claude hunt 2026-10-20] stop 8 ES points = the standard table's ES stop that matches 30-35 NQ points in daily-ATR terms (about 0.13-0.18 of an ES day); target 12 = 1.5 x the stop (the hunt's pre-registered shape)",
+  "[Claude hunt 2026-10-20] prior knowledge (WHAT_WORKS 2026-10-20, read before this sheet): the noise band (nq_noise_gx_mid_long_slow) is the only idea whose ES and GC neighbour maps were both profitable on build days; no number here was taken from it"
+ ],
+ "not_run": [
+  "THE PAPER'S BAND: the paper's noise is the 14-day average of the absolute move from the open at each time of day (it widens through the day); the engine's band is one width for the whole day (k x the daily ATR).",
+  "THE PAPER'S EXITS: a trailing stop at the band or the VWAP and an exit at the close; here a fixed 8-point stop and a 12-point target, else flat 15:58.",
+  "RE-ENTRIES: the paper re-enters after a stop on every half hour; here the first qualifying close of each session pass only (cap 1 a pass).",
+  "CAPPED PER SESSION PASS: three passes (nyam, mid, pm), so up to 3 trades a day, and a trade of one pass may still be open when the next pass enters (one position at a time holds inside a pass only).",
+  "The 11:00 and 13:30 closes fall in the last 5 minutes of their pass (nyam, mid): no entry there (the engine's rule); the decisions are the 30-minute closes 10:00 and 10:30 (nyam), 11:30-13:00 (mid) and 14:00-15:30 (pm).",
+  "SIZING: the paper sizes by volatility and adds leverage; here 1 ES contract.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only."
+ ],
+ "control": "random"
+}

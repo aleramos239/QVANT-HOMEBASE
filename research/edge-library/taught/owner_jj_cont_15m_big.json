@@ -1,0 +1,26 @@
+{
+ "name": "owner_jj_cont_15m_big",
+ "source": {"title": "JJ Simon's opening continuation on the first 15-minute bar, ONLY when the bar is over 25 points (his 50 / 76 line as the rule) -- the reviewers' idea, 2026-10-20", "channel": "owner", "url": "https://www.youtube.com/watch?v=KN7j6NXXAio"},
+ "market": "NQ",
+ "bars": ["1"],
+ "sessions": ["nyam"],
+ "dir": "both",
+ "entry": {
+  "family": "jj_fair",
+  "settings": {"entry": "cont", "cont": "15m", "cont_min": 25.0},
+  "words": "At 09:45 ET read the 09:30 open and the 09:44 close. Only when they differ by more than 25 points: green buy, red sell, market at 09:45, 50-point stop, 76-point target (JJ: 'if the opening candle is larger than 25 points, 50 and 76 with half the contracts'). Once a day, nothing else."
+ },
+ "exits": {"stop_pts": 50, "target_pts": 76, "max_trades": 1},
+ "taught": [
+  "[KN7j6NXXAio 5:36] a candle over 25 points: 76 target, 50 stop, half the contracts",
+  "[KN7j6NXXAio 5:06] the continuation is the opening candle's colour",
+  "[owner_jj_cont_15m, 2026-10-19] the edge of the 15-minute continuation sat in its big-body trades: 568 of 940, 44.9% at 1:1.52, +$123 a trade; the small ones lost"
+ ],
+ "not_run": [
+  "SELECTION: the 25-point split is JJ's own number, but running it alone comes AFTER the 15-minute reading of owner_jj_cont_15m showed it (look 1 of this sheet; ~160 looks of the jj_fair family before it). The walk-forward judges the exit cell only; the blind months (2025-07 on) are the one out-of-sample read.",
+  "The bar size (15 minutes) is the owner's reading of JJ's 1-minute candle. The half size is sizing, not in this 1-contract ledger.",
+  "No bias / gap / wick filters (JJ names them; not run).",
+  "COSTS AND FILLS: the engine's own."
+ ],
+ "control": "random"
+}

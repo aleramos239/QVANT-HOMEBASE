@@ -1,0 +1,41 @@
+{
+ "name": "cl_pm_first_bar_cdl_15",
+ "source": {
+  "title": "Claude design panel 2026-10-20 (lens pm): the owner's 13:30 afternoon first-bar follow (owner_pm_first_bar_15) with the owner's own candle-rule exit, stop at the bar's other extreme and 1:1, in place of the fixed 30 / 30 bracket. Why it should pay: the first 15-minute bar after lunch shows which side the returning afternoon orders took, and a stop at that bar's far end is where that reading is wrong; the bar's own size scales the risk to the day. Who loses: traders who fade the first afternoon push back toward the lunch range."
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "first_bar_mom",
+  "settings": {
+   "k": 0.2
+  },
+  "words": "The first 15-minute bar of the afternoon pass (13:30-13:45 ET) closes up: buy at its close; closes down: sell. Stop at that bar's other extreme (its low for a long, its high for a short), target 1:1. Once a day, flat 15:58."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.0,
+  "max_trades": 1
+ },
+ "taught": [
+  "[owner_pm_first_bar_15 / KN7j6NXXAio 1:33] every session open gets the same first trade: follow the first 15-minute bar; k 0.2 x ATR (the family's floor, effectively every day)",
+  "[owner 2026-10-18, cl_disp15_ema_allday_k1p5] a candle followed at its close: stop = the candle's extreme, target 1:1",
+  "[chat 2026-10-19, owner, cl_fvg_oside_15_mid_r1_t2] stop at the candle's extreme; run the same rule at 1:1",
+  "[Claude design panel 2026-10-20] the owner's candle exit applied to the 13:30 first-bar follow, nothing else changed"
+ ],
+ "not_run": [
+  "THE STOP: the 13:30-13:45 bar's other extreme, floored at 0.25 x ATR when nearer; its size differs from day to day (the 30 / 30 sheet's neighbours showed wider stops doing better: $40 at 30 / 30, $74 at 37.5 / 37.5).",
+  "THE 13:30 START: the engine's afternoon pass, not JJ's 14:00 (as owner_pm_first_bar_15).",
+  "THE UNSEEN DAYS: owner_pm_first_bar_15 (the same entries with a 30 / 30 bracket) had its 3:1 block walk-forward read on 2026-10-20 00:30 ET; these entries are therefore partly seen.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

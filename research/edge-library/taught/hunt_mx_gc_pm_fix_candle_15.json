@@ -1,0 +1,35 @@
+{
+ "name": "hunt_mx_gc_pm_fix_candle_15",
+ "source": {
+  "title": "[Claude hunt 2026-10-20, other markets] GC follow of the London PM gold auction candle (10:00-10:15 ET). Why it should pay: at 15:00 London (10:00 ET) the LBMA Gold Price PM auction sets the benchmark that gold ETFs (their NAV and creations), funds and central banks trade at; the bullion banks that fill the auction's net imbalance hedge it afterwards in COMEX futures, so the side that won the auction window keeps getting bought (or sold) after it. Who loses: the futures traders who fade the fix move as noise, and the late hedgers who buy (or sell) after the price has moved. Exit by 13:30 ET, the COMEX settlement, after which gold's US liquidity thins out."
+ },
+ "market": "GC",
+ "bars": ["15"],
+ "sessions": ["nyam"],
+ "dir": "both",
+ "entry": {
+  "family": "win_candle",
+  "settings": {"start": "10:00", "mode": "follow", "k": 0.0, "body_r": 0.0, "body_pts": 0.0, "vol_m": 0.0},
+  "words": "GC, the 15-minute candle 10:00-10:15 ET (the London PM gold auction). At its close: green = buy, red = sell (a doji = no trade). Stop at the candle's other extreme, target 1.5 x that distance. One trade a day; out after 195 minutes (13:30 ET, the COMEX settlement) if neither is hit."
+ },
+ "exits": {"stop": "struct", "target_r": 1.5, "exit_minutes": 195, "max_trades": 1},
+ "taught": [
+  "[LBMA] the LBMA Gold Price PM auction runs at 15:00 London (10:00 ET) and is the benchmark of gold ETFs and of most gold contracts",
+  "[Caminschi and Heaney 2014, Journal of Futures Markets, 'Fixing a leaky fixing'] gold futures move in the direction of the PM fix around the fixing window",
+  "[engine family win_candle] the tf candle that opens at `start` is followed at its close; structure stop = the candle's other extreme",
+  "[Claude hunt 2026-10-20] the market-specific reason: the 10:00 candle is gold's own auction (the PM fix), not an equity clock; follow it at 1:1.5 (the hunt's pre-registered shape); plain, no candle-size gate (k, body_r, body_pts, vol_m all 0)",
+  "[Claude hunt 2026-10-20] out after 195 minutes (13 bars, at 13:30 ET): the COMEX gold settlement; after it the US gold session thins",
+  "[Claude hunt 2026-10-20] prior knowledge (read before this sheet): the 09:30 15-minute candle follow on GC (gc_0930_candle_follow_15m) lost on build days; this is a different clock with its own cause; no number was taken from it"
+ ],
+ "not_run": [
+  "DAYLIGHT SAVING: in the weeks when London and New York change clocks on different dates (about 3 weeks in March, 1 in late October / early November) the PM auction is at 11:00 ET; the sheet always takes the 10:00 ET candle.",
+  "10:00 US DATA: on days with a 10:00 ET release (ISM, JOLTS, Michigan, new home sales ...) the same candle also holds the release; the engine has no day rule that drops only the 10:00 releases, so those days stay in.",
+  "THE AUCTION'S RESULT: the fix price and the auction's rounds and volumes are not in the data; the candle stands in for the auction's net side.",
+  "THE STOP: the 10:00 candle's other extreme (the structure level), floored at two ticks and 0.25 x ATR; target 1.5 x that distance from the fill.",
+  "THE TIME EXIT: 13 bars of 15 minutes after the fill (exit_minutes 195, about 13:30 ET), not a clock time.",
+  "THE RANDOM CONTROL draws its entries anywhere in the nyam pass (09:30-11:00), not at the 10:15 close.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only."
+ ],
+ "control": "random"
+}

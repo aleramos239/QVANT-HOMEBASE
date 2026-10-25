@@ -1,0 +1,35 @@
+{
+ "name": "hunt_pb_vwaptouch_day40",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (angle: pullbacks in the day trend): in New York, the first return to the whole day's VWAP (from 00:00 ET, overnight volume included) after price has run 40 points away from it, bought (sold) with a limit AT that VWAP on the side price came from; 35-point stop, 1:1.5. Why it should pay: the day's VWAP is the average price of everyone positioned since midnight; when New York has carried price 40 points beyond it, the first pullback to it is where the overnight-and-morning side adds again. The day's side against a since-midnight anchor is the one gate that recurs among this repo's leads (the noise band and the vault break use the VWAP from 01:00). Who loses: the traders who fade the day's move at its average price and are run over when it holds."
+ },
+ "market": "NQ",
+ "bars": ["5"],
+ "sessions": ["nyam", "mid", "pm"],
+ "dir": "both",
+ "entry": {
+  "family": "vwap_touch",
+  "settings": {"anchor": "day", "away": 160, "near": 3},
+  "words": "VWAP from 00:00 ET of the trade date (1-minute typical prices). A 1-minute close at least 40 points (160 ticks) above it arms a LONG; 40 points below arms a SHORT. At each 5-minute close inside New York (09:30-15:58), with an arm set and flat, rest a limit AT that VWAP (re-priced every 5-minute close) to buy (long arm) or sell (short arm). Only the FIRST touch counts: a minute whose range comes within 3 ticks of the VWAP uses the arm up, filled or not; a new 40-point excursion arms again. Stop 35 points, target 52.5 points. One trade a session pass, flat 15:58."
+ },
+ "exits": {"stop_pts": 35, "target_pts": 52.5, "max_trades": 1},
+ "taught": [
+  "[XWJlBBikUc0, Rother, families/vwap_touch.py] away from VWAP, back to VWAP, a reaction: a limit AT the VWAP, moved as it moves; only the FIRST touch is the A+ trade",
+  "[XWJlBBikUc0, families/vwap_touch.py] 'day VWAP' = anchor day (00:00 ET; his starts 18:00, the family's said difference)",
+  "[Conti A0G14JYYVTk / noise band] the VWAP 'calculated from midnight' as the day's side",
+  "[Claude hunt 2026-10-20] away 40 points, 35 / 52.5 exits (1:1.5), New York passes only, one trade a pass: the same numbers as hunt_pb_vwaptouch_us40, only the line differs",
+  "[prior knowledge, read 2026-10-20: result.json of rother_vwap_day_a40, WHAT_WORKS.md 1.2 / 3.7] Rother's day-VWAP tap at 2.5 / 3-point exits lost -$33 a trade; the VWAP from 01:00 as a side is the gate of the only retired-T1 rule (noise band) and of the vault break"
+ ],
+ "not_run": [
+  "THE VWAP: the family's own, volume-weighted (h + l + c) / 3 of the 1-minute bars from 00:00 ET of the trade date (the evening before is not in it); not the 01:00 anchor of the noise band (an hour apart: the family has no 01:00 anchor).",
+  "THE ARM can be set before 09:30 by an overnight 1-minute close; a touch before 09:30 uses it up. Orders are placed only at 5-minute closes inside the New York passes.",
+  "THE ORDER: placed and re-priced only at 5-minute closes, only while the last print is on the passive side; a fill needs a one-tick trade-through (strict_limit).",
+  "CAPPED PER SESSION PASS, NOT PER DAY: nyam, mid and pm are three passes, so a day can hold up to 3 trades and a trade of one pass may still be open when another pass enters.",
+  "Shares its trigger with hunt_pb_vwaptouch_us40 (another line): some touches are the same price on the same minute when the two VWAPs sit together.",
+  "The random control draws its entries on any bar of the pass, matched by day; it does not wait for an armed touch.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only; the 3:1 block walk-forward comes later under PREREG."
+ ],
+ "control": "random"
+}

@@ -1,0 +1,45 @@
+{
+ "name": "owner_jj_mom_allday_25_38",
+ "source": {
+  "title": "JJ Simon's displacement, traded AWAY from the 09:30 open (his continuation idea on every candle) -- the owner's search of 2026-10-19 (batch 4 of 4, 111 versions screened)",
+  "channel": "owner",
+  "url": "https://www.youtube.com/watch?v=KN7j6NXXAio"
+ },
+ "market": "NQ",
+ "bars": [
+  "1"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "jj_fair",
+  "settings": {"entry": "mom", "wick": "off", "min_room": 15.0, "max_loss": 99, "end": "15:00"},
+  "words": "Owner 2026-10-19: work on the strategy until it reaches 40% at 1:1.5 with extremely high trade frequency. This is JJ's displacement candle (the body larger than the previous candle's body, the previous candle the opposite colour) read every minute from 09:35 to 15:00, traded in the candle's OWN direction when price is at least 15 points away from the 09:30 open (his 'unfair move' continued, not faded), 25-point stop, 38-point target, one position at a time, no loss stop."
+ },
+ "exits": {
+  "stop_pts": 25,
+  "target_pts": 38,
+  "max_trades": 20
+ },
+ "taught": [
+  "[KN7j6NXXAio 5:36] 25-point stop loss and 38-point take profit, 1 to 1.5",
+  "[KN7j6NXXAio 6:08] zero discretion displacement: the body of the candle is larger than the body of the previous candle",
+  "[KHEQ5g55dQ4 69:05] a displacement has to displace a candle of the opposite colour",
+  "[KN7j6NXXAio 1:33] no max number of trades; at least 10 a day",
+  "[owner 2026-10-19] trade it all day (09:35-15:00) and never stop after losses: the frequency is the goal",
+  "[owner 2026-10-19, batch 3-4] the direction: AWAY from the open. His reversion toward the open is the 38% base rate of fading on any bar; the same candle traded with its own direction is 40.4-40.7% (the opposite of his taught reversion, closer to his continuation / news-drift idea)"
+ ],
+ "not_run": [
+  "THIS IS NOT HIS REVERSION: the side is the displacement's own direction, away from the open. His taught fade (owner_jj_fair_nyam_25_38) is on file: 36.8%, -$44 a trade.",
+  "SCREENED, NOT TAUGHT: 111 versions were read on the build days before this one was chosen (the 4 batch files taught/jj_screen_batch*.json and the results in the finding). The in-sample number is picked; the 3:1 walk-forward is the judge.",
+  "The close-beyond-the-wick test is off (wick off) and the previous candle must be the opposite colour (opp on).",
+  "Fair = the 09:30 open on every day; no pre-news fair on 08:30 news days; no moving of the line; no opening continuation (a sheet of its own: owner_jj_cont_15m).",
+  "MY PICKS: entry = market at the displacement candle's close; 15 points of room from the open; entries 09:35-15:00 (the sessions nyam / mid / pm are one instance, flat 15:58).",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay)."
+ ],
+ "control": "random"
+}

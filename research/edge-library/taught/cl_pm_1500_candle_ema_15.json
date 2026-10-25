@@ -1,0 +1,50 @@
+{
+ "name": "cl_pm_1500_candle_ema_15",
+ "source": {
+  "title": "Claude design panel 2026-10-20 (lens pm): the last-hour candle with the day's trend on NQ 15-minute bars, after the open-side FVG stops entering at 15:00. Why it should pay: from about 15:00 option-dealer hedging and leveraged-ETF / closing-auction rebalancing trade with the day's move into the close (the repo's 15:00 day-move follow held its unseen read); a 15:00-15:15 candle on the trend's side of the 20-bar EMA shows those flows have started. Who loses: late faders of the day's move and short-gamma hedgers forced to chase."
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "displace",
+  "settings": {
+   "k": 0.1,
+   "mode": "follow",
+   "close_r": 0.0,
+   "gate": "price_ema",
+   "g_n": 20,
+   "g_lvl": 0.0,
+   "g_side": "with",
+   "w_start": "15:15",
+   "w_end": "15:30"
+  },
+  "words": "Only the 15-minute candle of 15:00-15:15 ET is read (the entry window 15:15-15:30 holds its close and no other). It closes up with a body of at least 0.1 x ATR(14) (any real candle, not a doji) and the close is above the 20-bar EMA of 15-minute closes: buy at its close; closes down and below the EMA: sell. Stop at the candle's other extreme, target 1:1. Once a day, flat 15:58."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.0,
+  "max_trades": 1
+ },
+ "taught": [
+  "[owner 2026-10-18, cl_disp15_ema_allday_k1p5] a candle followed at its close: stop = the candle's extreme, target 1:1",
+  "[owner 2026-10-11, families/_flex.py open layer] 'any time window, any indicator': an entry window and an indicator gate on any family",
+  "[Claude 2026-10-20, cl_disp15_ema_allday_k1p5] the EMA20 side gate on 15-minute bars (long only above, short only below)",
+  "[Claude design panel 2026-10-20] the 15:00 candle only: the last hour, after the open-side FVG's 15:00 entry cut-off, the hour where the 15:00 day-move follow (nq_pm_day_move_1500) found its edge; k 0.1 is displace's floor, so the size test only drops dojis"
+ ],
+ "not_run": [
+  "THE FAMILY: win_candle start 15:00 is the plain form of this rule, but `taught check` refuses win_candle outside nyam (it reads the family's passes with its default start 09:30); displace with its floor k 0.1 and a 15:15-15:30 entry window is the same candle follow.",
+  "THE GATE: the open layer's price_ema(20) on the 15-minute closes since 00:00 ET, read at the 15:15 close (above = long side, below = short side); a candle against it is no trade.",
+  "THE SHORT HOLD: entries at 15:15, flat 15:58: a trade that reaches neither stop nor target leaves on the clock.",
+  "THE STOP: the candle's other extreme, floored at 0.25 x ATR when nearer.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

@@ -1,0 +1,42 @@
+{
+ "name": "hunt_dm_stflip15_midpm",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (designer: momentum on a close): the Supertrend flip after the morning. Why it should pay: a Supertrend(10, 3) flip at a 15-minute close needs a close beyond a band about three ATRs from the bar's middle, against the old trend: a real change of side that the old side must cover, and the trend followers then join. Who loses: positions still in the old trend, whose stops sit behind the old band, and the traders who fade the first bar of the new side."
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "supertrend",
+  "settings": {
+   "mult": 3.0
+  },
+  "words": "From 11:00 ET, a 15-minute close that flips the Supertrend(10, 3) of the 15-minute bars up is a long at that close; a flip down is a short. Stop 40 points, target 60 points (1:1.5). The first flip of each pass (mid 11:00-13:30, pm 13:30-15:58): up to two a day, flat 15:58."
+ },
+ "exits": {
+  "stop_pts": 40,
+  "target_pts": 60,
+  "max_trades": 1
+ },
+ "taught": [
+  "[family supertrend, the library's flip] a Supertrend(10, 3) flip at a tf close is a market entry in the new direction",
+  "[family default] mult 3.0 (ATR length 10); not tuned",
+  "[Claude hunt 2026-10-20] NQ 15-minute bars, mid and pm passes only, both sides, one flip per pass, fixed 40 / 60 point bracket (1:1.5)",
+  "[prior knowledge, read before designing: WHAT_WORKS.md 2026-10-20] the pipeline's supertrend_nyam_short book box had a map average of $3 (one lucky island): this sheet's sessions, sides and exits differ"
+ ],
+ "not_run": [
+  "THE STOP: the family's structure level (the Supertrend line, about three ATRs away) is not used; the fixed 40 / 60 point bracket is the sheet's.",
+  "THE BANDS restart each day at 00:00 ET with the engine's bars (ATR(10) of the 15-minute bars since 00:00).",
+  "THE CAP IS PER SESSION PASS, NOT PER DAY: max_trades 1 counts inside each of the 2 passes, so a day can hold up to 2 trades; the passes are independent instances, so a trade of one pass may still be open when the next pass enters (one position at a time holds inside a pass only; the hunt's stack step applies one-at-a-time across legs).",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay, 1 NQ).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on an equity half day); no entry in the last 5 minutes of a pass.",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only (2021-09-22 .. 2025-06-30); the 3:1 block walk-forward is a separate, pre-registered read (hunt PREREG Gate 2)."
+ ],
+ "control": "random"
+}

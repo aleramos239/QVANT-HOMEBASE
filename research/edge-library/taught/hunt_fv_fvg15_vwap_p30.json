@@ -1,0 +1,35 @@
+{
+ "name": "hunt_fv_fvg15_vwap_p30",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (lens: fair value gaps with a volume side): the plain 15-minute fair value gap retest, taken only on the side of the session VWAP, 30-point stop, 45-point target, once in each New York pass. Why it should pay: the VWAP is the average price of the session's volume, so above it the buyers of the session are in profit and in control; a 15-minute up gap above the VWAP is their unfilled buying, and the return to it meets that interest (the mirror below). Who loses: the traders who fade the session's volume side into the gap and whose stops beyond it pay for the continuation."
+ },
+ "market": "NQ",
+ "bars": ["15"],
+ "sessions": ["nyam", "mid", "pm"],
+ "dir": "both",
+ "entry": {
+  "family": "fvg",
+  "settings": {"min_gap": 0.1, "mode": "touch", "new_gap": "replace", "w_end": "15:00", "gate": "vwap_dev", "g_lvl": 0.0, "g_side": "with"},
+  "words": "Any 15-minute fair value gap of the session pass at least 0.1 x ATR(14) tall: a limit at its near edge, with the gap, but a buy only when the gap's close is above the session VWAP and a sell only when below it. The newest gap replaces an older resting order. No new order from 15:00. Stop 30 points, target 45 points. One trade per session pass."
+ },
+ "exits": {"stop_pts": 30, "target_pts": 45, "max_trades": 1},
+ "taught": [
+  "[owner 2026-10-06, family fvg] the fair value gap as an entry trigger: a limit at the gap's near edge, with the gap; the newest gap replaces the resting order",
+  "[chat 2026-10-20, sheet cl_fvg_oside_15_mid_r1_t2_gap0p1] NQ 15-minute bars, gaps at least 0.1 x ATR(14) tall, no new order from 15:00",
+  "[Claude 2026-10-20, sheet cl_am_disp15_vwap_10to11] the session VWAP as the side (gate vwap_dev, line 0, with)",
+  "[owner 2026-10-20, hunt PREREG] a fixed stop of 25-40 points, target 1.5 x the stop: 30 / 45",
+  "[Claude hunt 2026-10-20, prior knowledge read before this sheet: result.json of cl_fx_fvg_noside_15_p37 and cl_fx_fvg_ema20side_15_p37] the plain 15-minute FVG with no side was flat and with the EMA20 side weak at 37/37; this sheet tests the VWAP side, which has not been run on this trigger, at 1.5R. No number was tuned to those results"
+ ],
+ "not_run": [
+  "THE VWAP: the engine's session VWAP, which restarts at each pass start (09:30, 11:00 and 13:30 ET); the gate reads (close - VWAP) / sigma at the gap's 15-minute close (closed bars only): above 0 for a buy, below 0 for a sell, checked when the order is placed.",
+  "THE STOP: 30 points fixed from the entry, not the gap's far edge (the family's own structure level is the gap's far edge, a stop too close for the PREREG).",
+  "ENGINE: one instance per session pass; a gap cannot span 11:00 or 13:30 (its three bars must lie in one pass); the newest gap of either side replaces the resting order even when the gate then blocks it.",
+  "THE CAP: one trade per session pass; three passes, so a day can hold up to 3 trades, and a trade of one pass may still be open when the next pass enters.",
+  "WINDOW: no new order from 15:00 (w_end); an order placed before 15:00 may still fill after it.",
+  "PARTLY SEEN, FOR THE FAMILY: plain fvg entries were never walk-forwarded in the taught lane, but the open-side cousin (fvg_oside) used the same gaps on the same months and was read; the VWAP-side subset here is different trades.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay, strict limit fills).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

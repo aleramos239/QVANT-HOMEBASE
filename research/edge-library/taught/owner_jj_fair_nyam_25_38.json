@@ -1,0 +1,49 @@
+{
+ "name": "owner_jj_fair_nyam_25_38",
+ "source": {
+  "title": "JJ Simon, The Strategy Behind My $1.6M in Prop Firm Payouts (+ Chart Fanatics interview KHEQ5g55dQ4)",
+  "channel": "JJ Simon",
+  "url": "https://www.youtube.com/watch?v=KN7j6NXXAio"
+ },
+ "market": "NQ",
+ "bars": [
+  "1"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "window": "09:35-11:00",
+ "dir": "both",
+ "entry": {
+  "family": "jj_fair",
+  "settings": {},
+  "words": "Fair price is the 9:30 open. After the first 5 minutes I'm only looking for reversion back to fair price for the following 85 minutes. Entry is a displacement candle: the body of the candle is larger than the body of the previous candle and it closes below the wick (it has to displace a candle of the opposite colour). I need at least 30 points in my favor to take the 25/38. No max number of trades. If I lose three in a row, I'm done."
+ },
+ "exits": {
+  "stop_pts": 25,
+  "target_pts": 38,
+  "max_trades": 20
+ },
+ "taught": [
+  "[KN7j6NXXAio 1:33] New York session open; continuation in the first 5 minutes, mean reversion after, 5-90 minutes",
+  "[KN7j6NXXAio 2:33] fair price is 95% of the time the market open (the pre-open price)",
+  "[KN7j6NXXAio 5:36] 25-point stop loss and 38-point take profit, 1 to 1.5, for every trade (evaluations)",
+  "[KHEQ5g55dQ4 5:04, 54:39] displacement: two qualifications, the body must be larger and it must close below (beyond) the wick",
+  "[KHEQ5g55dQ4 69:05] a displacement has to displace a candle of the opposite colour",
+  "[BLvsYJ4sqn8 3:36] I wouldn't take anything if it's not 30 points away (30 points of room for a 38-point target; the 80% rule)",
+  "[KN7j6NXXAio 1:33] no max number of trades; at least 10 a day in New York",
+  "[KHEQ5g55dQ4 34:30] if I'm trying to trade reversion and I lose three in a row, then I'm done",
+  "[KN7j6NXXAio 11:45] 90 minutes and I'm done (11:00), even when it reverts after"
+ ],
+ "not_run": [
+  "THE 09:30 CONTINUATION (opening candle colour, 25/38 or 50/76 when its body is over 25 points): not in this sheet; a sheet of its own.",
+  "BREAK-OF-STRUCTURE ENTRIES (his A+ setup, funded accounts): not run; displacement only (his evaluation entry).",
+  "MOVING THE FAIR LINE (a break of structure away and a new consolidation; unexpected news): by eye, not run: fair is always the 09:30 open.",
+  "08:30 EXPECTED NEWS DAYS (the pre-news price as fair): not run: the 09:30 open is used on every day.",
+  "BREAKEVEN when the opening push stalls, TWO CANDLES COMBINED as one displacement, mid-candle and limit entries: by eye, not run.",
+  "ACCOUNTS: one account takes every trade here (one position at a time); his layering / rotation over many accounts is the prop step, not this ledger.",
+  "MY PICKS: side and the 30-point room read on the displacement candle's close; entry = market at that close; a trade's result counts toward the 3 in a row when it closes (net < 0 after costs).",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay)."
+ ],
+ "control": "random"
+}

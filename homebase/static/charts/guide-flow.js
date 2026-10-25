@@ -344,7 +344,7 @@ G.add({
       'Zones from the last few sessions are kept, five by default.',
     ],
     read: [
-      'A delta outlier: at this price one side traded far more aggressively than at the other prices.',
+      'A delta outlier: in one fast move (3+ single-print rows), a price where one side hit far harder than at the rest.',
       'A single print next to it: price passed through once, fast, so the TPO has one letter there.',
       'A low volume node next to it: little volume traded there compared with the busiest price.',
       'Single prints from the session\'s last letter do not count yet: price has not had the time to come back.',

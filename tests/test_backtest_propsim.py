@@ -70,7 +70,10 @@ def test_rule_files_and_the_unconfirmed_label():
     ids = {r["id"]: r for r in list_rules()}
     assert set(ids) == {"lucid-flex-50k@2026-10-11", "lucid-flex-50k-dll@2026-10-11", "lucid-pro-50k@2026-10-11",
                         "lucid-pro-50k-no-dll@2026-10-11", "apex-legacy-50k@2026-10-11b",
-                        "apex-eod-50k@2026-10-11", "apex-legacy-300k@2026-10-11b"}
+                        "apex-eod-50k@2026-10-11", "apex-legacy-300k@2026-10-11b",
+                        "lucid-flex-25k-dll@2026-10-19", "lucid-pro-25k@2026-10-19"}   # JJ Simon's $1,000 plan (the owner, 2026-10-19)
+    assert ids["lucid-flex-25k-dll@2026-10-19"]["confirmed"] is False           # the $600 limit and the lock are not on Lucid's pages
+    assert ids["lucid-pro-25k@2026-10-19"]["confirmed"] is False                # the lock and the floor after a payout are the 50K reading
     assert ids["lucid-flex-50k@2026-10-11"] == {"id": "lucid-flex-50k@2026-10-11", "name": "LucidFlex 50K",
                                                 "version": "2026-10-11", "confirmed": True}
     assert ids["lucid-pro-50k@2026-10-11"] == {"id": "lucid-pro-50k@2026-10-11", "name": "LucidPro 50K · $1,200 daily limit",

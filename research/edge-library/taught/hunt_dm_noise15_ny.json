@@ -1,0 +1,47 @@
+{
+ "name": "hunt_dm_noise15_ny",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (designer: momentum / displacement / breakouts on a close): the noise-band breakout on NQ 15-minute closes, both sides, every NY pass. Why it should pay: a move away from the 09:30 open larger than 0.3 x the daily ATR, with price on the same side of the day's VWAP, is one-way participation (trend followers, dealers hedging short gamma, late institutional orders) that keeps being chased, while moves inside the band are the noise that market makers fade. Who loses: the mean-reversion traders and market makers who sell a move beyond the day's normal noise (buy the drop) and are stopped out as it extends."
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "noise_band",
+  "settings": {
+   "k": 0.3,
+   "anchor": "rth"
+  },
+  "words": "Mark the 09:30 ET open. The band is the open +/- 0.3 x the daily ATR(14) of the days before, fixed for the day; the VWAP runs from 09:30. A 15-minute bar that closes above the upper band AND above the VWAP is a long at the next bar's open; closes below the lower band AND below the VWAP, a short. Stop 40 points, target 60 points (1:1.5). One trade per session pass (nyam 09:30-11:00, mid 11:00-13:30, pm 13:30-15:58): up to three a day, flat 15:58."
+ },
+ "exits": {
+  "stop_pts": 40,
+  "target_pts": 60,
+  "max_trades": 1
+ },
+ "taught": [
+  "[noise.py docstring: Zarattini / Aziz / Barbon (2024) noise-area intraday momentum; Matteo Conti's vault break, IQCapital A0G14JYYVTk] a close beyond the open +/- k x A with price on the VWAP's side is followed",
+  "[family default and Conti's own value] k 0.3 of the daily ATR(14) (the library ran 0.2 / 0.3 / 0.4); not tuned",
+  "[Claude hunt 2026-10-20] the rth anchor (the 09:30 open and the VWAP from 09:30), both sides, 15-minute closes (the house's bar where NQ rules have held), one trade per NY pass, a fixed 40 / 60 point bracket (1:1.5, the hunt's centre)",
+  "[prior knowledge, read before designing: WHAT_WORKS.md 2026-10-20] the globex-anchored long-only mid version (nq_noise_gx_mid_long, 1m, 30 / 3R) is the only rule that ever passed an unseen read and the random gate (retired form); noise_pm_long_v2 lost unseen; no rth-anchored both-sided 15-minute sheet has run"
+ ],
+ "not_run": [
+  "THE BAND: the papers' noise boundary is the average absolute move from the open at that minute over the last 14 days; the family's band is fixed for the day at k x the daily ATR(14) (Conti's form).",
+  "THE EXIT: the papers exit on a VWAP / boundary trailing stop or at the close; the engine runs the fixed 40 / 60 point bracket instead.",
+  "THE GRID: the papers decide every 30 minutes; here every 15-minute close.",
+  "STATE, NOT EVENT: at the first close of the mid and pm passes (11:15, 13:45) a price that is already beyond the band enters at once (the papers' rule is a state too).",
+  "THE CAP IS PER SESSION PASS, NOT PER DAY: max_trades 1 counts inside each of the 3 passes, so a day can hold up to 3 trades; the passes are independent instances, so a trade of one pass may still be open when the next pass enters (one position at a time holds inside a pass only; the hunt's stack step applies one-at-a-time across legs).",
+  "THE FAMILY'S MONTHS: the globex-anchored long-only noise sheets had unseen reads and a block walk-forward (nq_noise_gx_mid_long): this sheet's anchor, sides and bar differ, but the family's test months are partly seen.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay, 1 NQ).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on an equity half day); no entry in the last 5 minutes of a pass.",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only (2021-09-22 .. 2025-06-30); the 3:1 block walk-forward is a separate, pre-registered read (hunt PREREG Gate 2)."
+ ],
+ "control": "random"
+}

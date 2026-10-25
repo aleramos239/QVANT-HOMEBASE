@@ -1,0 +1,44 @@
+{
+ "name": "hunt_mx_gc_ldn_open_bar_15",
+ "source": {
+  "title": "[Claude hunt 2026-10-20, other markets] GC London-open first bar. Why it should pay: London is the home of the gold market (the LBMA's over-the-counter clearing, the bullion banks, central-bank and European ETF flow); at 03:00 ET the London desks open and the day's first real price discovery replaces the thin Asian afternoon. When the 03:00-03:15 bar is bigger than the Asian bars before it, London flow has arrived on one side and keeps executing that way through the London morning (gold tends to make its one big move of the day at the London open or at the US data). Who loses: the Asian-session range traders and short-volatility positions who fade the overnight range, and the London traders who fade the first push before New York arrives."
+ },
+ "market": "GC",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "london"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "first_bar_mom",
+  "settings": {
+   "k": 1.0
+  },
+  "words": "GC, 15-minute bars. The first bar of the London session (03:00-03:15 ET): when its range is at least 1.0 x the ATR(14) of the 15-minute bars since 00:00 ET (the Asian bars), follow it at its close: closes up = buy, closes down = sell. Stop at the bar's other extreme, target 1.5 x that distance. One trade a day; out after 300 minutes (by 08:15 ET, before the COMEX open at 08:20 and the 08:30 US data) if neither is hit."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.5,
+  "exit_minutes": 300,
+  "max_trades": 1
+ },
+ "taught": [
+  "[engine family first_bar_mom, the old pilot's family C] a session's first tf bar with range >= k x ATR is momentum ignition: follow it at its close, stop at the bar's other extreme",
+  "[Claude memory, AleQuant project note project_gold_intraday_rejected, archived 2026-05-06] gold makes one big move a day, usually at the London open or at the US data release",
+  "[Claude hunt 2026-10-20] the market-specific reason: London (03:00 ET) is gold's home market; k 1.0 = the London open bar at least as big as an average bar of the Asian night (the ATR of the bars since 00:00); the library ran 1.0 / 1.5 / 2.0",
+  "[Claude hunt 2026-10-20] out after 300 minutes (20 bars, by 08:15 ET): the London-only flow ends when New York arrives (COMEX opens 08:20, US data at 08:30)",
+  "[Claude hunt 2026-10-20] prior knowledge (read before this sheet): the same family on NQ in London (owner_london_first_bar_15, 30 / 30 points) and every GC bar rule on file lost on build days; this sheet tests the gold-specific reason, no number was taken from those runs"
+ ],
+ "not_run": [
+  "THE ATR: the engine's ATR(14) of the 15-minute bars since 00:00 ET (12 Asian bars before 03:00: a 12-bar mean, not a full 14), read before the London bar closes.",
+  "THE STOP: the London bar's other extreme (the structure level), floored at two ticks and 0.25 x ATR; target 1.5 x that distance from the fill.",
+  "DAYLIGHT SAVING: in the weeks when London and New York change clocks on different dates (about 3 weeks in March, 1 in late October / early November), the London open is 04:00 or 02:00 ET; the engine's London pass always starts at 03:00 ET.",
+  "THE TIME EXIT: 20 bars of 15 minutes after the fill (exit_minutes 300), not a clock time; a trade not out by then is closed at market.",
+  "THE RANDOM CONTROL draws its entries anywhere in the London pass (03:00-08:25), not at the 03:15 close.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay); London-hour gold is thinner than the COMEX day session.",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only."
+ ],
+ "control": "random"
+}

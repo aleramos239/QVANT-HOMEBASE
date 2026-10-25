@@ -84,4 +84,11 @@ if ! mv "$BUILD" "$APP"; then
   if [ -n "$OLD" ]; then mv "$OLD" "$APP"; fi
   echo "could not install the new app; the previous one was put back" >&2; exit 1
 fi
+if [ "$MODE" = vps ]; then   # a Finder custom icon is not darkened by the macOS 26 dark icon style
+  swift - "$APP" <<'SWIFT' || true
+import Cocoa
+let a = CommandLine.arguments[1]
+_ = NSWorkspace.shared.setIcon(NSImage(contentsOfFile: a + "/Contents/Resources/HomebaseVPS.icns"), forFile: a, options: [])
+SWIFT
+fi
 echo "built: $APP"

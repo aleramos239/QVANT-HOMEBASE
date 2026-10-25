@@ -1,0 +1,43 @@
+{
+ "name": "vwap_i15_flip_rth_wk_5_s40",
+ "source": {
+  "title": "VWAP hunt 2026-10-20 (owner's brief, idea 15): The weekly VWAP side filter: trade the day's flips only with the week's average buyers. Who loses: the side against the week."
+ },
+ "market": "NQ",
+ "bars": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "avwap_flip",
+  "settings": {
+   "line": "rth",
+   "also": "week",
+   "hold": 2
+  },
+  "words": "vwap_flip on the 09:30 VWAP (hold 2), only on the side of the weekly VWAP (from Sunday 18:00). stop 40 / target 60 points; at most 3 a pass; flat 15:58."
+ },
+ "exits": {
+  "stop_pts": 40,
+  "target_pts": 60,
+  "max_trades": 3
+ },
+ "taught": [
+  "[owner 2026-10-20, brief prompt-vwap-5-10-a-day-3to1-blocks, idea 15] vwap_flip on the 09:30 VWAP (hold 2), only on the side of the weekly VWAP (from Sunday 18:00).",
+  "[owner 2026-10-20, brief section 3] versions: bars 1 / 5 / 15, NY cash and London / overnight where the family runs, stops 25 / 30 / 40 and a structure stop, target 1.5 x the stop: this sheet is bars 5, stop 40 / target 60 points"
+ ],
+ "not_run": [
+  "PRE-REGISTERED in out/vwap_hunt_2026-10-20/PREREG.md before any run; nothing tuned on a result.",
+  "1-MINUTE SHEETS run the New York passes only (machine time); 5 / 15-minute sheets every pass the family runs except pre (08:25-09:30), which the brief does not ask for.",
+  "THE SESSION VWAP of the engine restarts at every pass start (09:30, 11:00, 13:30; 03:00 London; 00:00 Asia; 18:00 evening); 'rth' / 'us' anchors stay at 09:30 for the New York passes.",
+  "THE CAP: 3 trades per session pass (several passes: a day can hold more, and a trade of one pass may still be open when the next pass enters).",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS are read only by `bp.py taught wf` (the 3:1 block walk-forward, once), its output sent to a log unread until SELECTION.md is written."
+ ],
+ "control": "random"
+}

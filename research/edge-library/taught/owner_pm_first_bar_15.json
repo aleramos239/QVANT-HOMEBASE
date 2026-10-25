@@ -1,0 +1,24 @@
+{
+ "name": "owner_pm_first_bar_15",
+ "source": {"title": "The 13:30 afternoon first-bar follow on NQ (the reviewers' idea, 2026-10-20): a second opening of the day, uncorrelated with the morning", "channel": "owner", "url": "https://www.youtube.com/watch?v=KN7j6NXXAio"},
+ "market": "NQ",
+ "bars": ["15"],
+ "sessions": ["pm"],
+ "dir": "both",
+ "entry": {
+  "family": "first_bar_mom",
+  "settings": {"k": 0.2},
+  "words": "The first 15-minute bar of the afternoon session (13:30-13:45 ET) closes up: market long at 13:45; closes down: short. Stop 30 points, target 30 points (1:1), once a day, flat 15:58. JJ's opening-candle idea applied to the 14:00 session he also trades, read on the engine's 13:30 afternoon pass."
+ },
+ "exits": {"stop_pts": 30, "target_pts": 30, "max_trades": 1},
+ "taught": [
+  "[KN7j6NXXAio 1:33 / KHEQ5g55dQ4 11:57] every session open gets the same first trade; he trades the 14:00 session too",
+  "[reviewers 2026-10-20] the afternoon leg is ~0-correlated with the morning cluster: a second independent shot a day for the 25K"
+ ],
+ "not_run": [
+  "The 13:30 start is the engine's afternoon pass, not JJ's 14:00; the 30 / 30 exits are the reviewers' pick (1:1, under the $600 daily limit at 10 micros), not JJ's 1:1.5.",
+  "k 0.2 x ATR is the family's floor: effectively every day trades.",
+  "COSTS AND FILLS: the engine's own."
+ ],
+ "control": "random"
+}

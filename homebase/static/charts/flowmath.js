@@ -494,14 +494,15 @@ function rowText(mode, row, o = {}) {
   return {};
 }
 
-/* Stacked profile zones (cabatrades "three profiles, one level"): in each of the last `sessions` sessions (bars grouped by `s`), a row whose delta
-   (buys - sells, from `fp`) is at least `outlier` x the session's median |row delta|, with a TPO single print AND a low volume node (volume <= `lvn`%
-   of the POC row) within one row of it. Rows are `rows` ticks, priced at their bottom, as in tpo(). A single print from the session's last period
+/* Stacked profile zones (cabatrades "three profiles, one level"): in each of the last `sessions` sessions (bars grouped by `s`), a LEG = a run of
+   at least 3 TPO single-print rows next to each other (one fast move), its rows = the run's traded rows; a zone = a row of the leg whose
+   delta (buys - sells, from `fp`) is at least `outlier` x the leg's own median |row delta| ("a delta outlier from the last leg", the owner
+   2026-10-23), with a low volume node (volume <= `lvn`% of the POC row) within one row of it. Rows are `rows` ticks, priced at their bottom, as in tpo(). A single print from the session's last period
    does not count (price has not had the time to come back yet). A zone runs from the first bar that traded its row to the first later bar whose range
    reaches it (`hit`, null while untouched). o: {tick (required), rows 4, period 30, lvn 30, outlier 3, sessions 5}.
    -> [{i, hit, lo, hi, side (1 buyers, -1 sellers), delta}] in time order. */
 function profileZones(bars, o = {}) {
-  const tick = o.tick, rt = Math.max(1, Math.floor(o.rows) || 4), near = 1;
+  const tick = o.tick, rt = Math.max(1, Math.floor(o.rows) || 4), near = 1, legMin = 3;
   if (!(tick > 0) || !bars || !bars.length) return [];
   const row = (px) => Math.floor(key(px, tick) / rt);
   const starts = [];
@@ -520,11 +521,18 @@ function profileZones(bars, o = {}) {
     const pocVol = Math.max(...vol.values()), lvnMax = pocVol * (o.lvn == null ? 30 : o.lvn) / 100;
     const single = new Set(prof.rows.filter((r) => r.n === 1 && r.per[0] < prof.periods - 1).map((r) => row(r.price)));
     const isLvn = (k) => prof.rows.some((r) => row(r.price) === k) && (vol.get(k) || 0) <= lvnMax;
-    const abs = [...del.values()].map(Math.abs).sort((a, b) => a - b), med = abs[Math.floor(abs.length / 2)];
-    if (!(med > 0)) continue;
     const around = (k, f) => { for (let j = k - near; j <= k + near; j++) if (f(j)) return true; return false; };
-    for (const [k, d] of del) {
-      if (Math.abs(d) < (o.outlier || 3) * med || !around(k, (j) => single.has(j)) || !around(k, isLvn)) continue;
+    const ks = [...single].sort((a, b) => a - b), picked = new Set();
+    for (let a = 0, b = 0; a < ks.length; a = b) {
+      for (b = a + 1; b < ks.length && ks[b] === ks[b - 1] + 1;) b++;
+      if (b - a < legMin) continue;
+      const leg = [];
+      for (let k = ks[a]; k <= ks[b - 1]; k++) if (del.has(k)) leg.push(k);
+      const abs = leg.map((k) => Math.abs(del.get(k))).sort((x, y) => x - y), med = abs[Math.floor(abs.length / 2)];
+      if (med > 0) for (const k of leg) if (Math.abs(del.get(k)) >= (o.outlier || 3) * med && around(k, isLvn)) picked.add(k);
+    }
+    for (const k of picked) {
+      const d = del.get(k);
       let i = s0;
       while (i < s1 && !(solid(bars[i]) && row(bars[i].l) <= k && k <= row(bars[i].h))) i++;
       const done = prof.origin + (Math.floor((bars[i].ms - prof.origin) / prof.periodMs) + 1) * prof.periodMs;   // the end of the period that printed it

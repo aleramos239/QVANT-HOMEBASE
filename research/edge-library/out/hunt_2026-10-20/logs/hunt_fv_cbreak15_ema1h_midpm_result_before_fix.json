@@ -1,0 +1,1668 @@
+{
+ "name": "hunt_fv_cbreak15_ema1h_midpm",
+ "smoke": false,
+ "days": null,
+ "headline": "hunt_fv_cbreak15_ema1h_midpm: candle_sweep (mode break, back body, ema1h 50, candle 0, turn off, dir930 off, body_x 0), both sides, 15-minute bars, a structure stop, target 1.5R, up to 1 trades a session pass over 2 passes (mid pm); the sheet leaves out 8 things the video says (listed below); verdict: 15-minute bars make $75 a trade on 1,733 trades and hold 8 of 10 lines (misses 3.3, 3.6); the neighbours average $62 a trade.",
+ "plan": {
+  "name": "hunt_fv_cbreak15_ema1h_midpm",
+  "source": {
+   "title": "Claude hunt 2026-10-20 (lens: structure breaks after the morning): the owner's 15-minute candle break -- a candle that closes beyond the previous candle's wick, entered with it -- in the midday and afternoon passes only, on the side of the 1-hour EMA 50, stop at the breaking candle's extreme, 1:1.5, once a pass. Why it should pay: after lunch the morning's balance breaks; a 15-minute close beyond the previous candle on the side of the hour-chart trend is the trend's buyers (or sellers) coming back with size, and it carries. Who loses: the midday range traders who sold the previous candle's high (or bought its low) expecting the lunch range to hold, and whose stops beyond it feed the break."
+  },
+  "market": "NQ",
+  "tick": 0.25,
+  "point_value": 20.0,
+  "bars": [
+   "15"
+  ],
+  "sessions": [
+   "mid",
+   "pm"
+  ],
+  "window": null,
+  "dir": "both",
+  "family": "candle_sweep",
+  "settings": {
+   "mode": "break",
+   "ema1h": 50
+  },
+  "effective": {
+   "mode": "break",
+   "back": "body",
+   "ema1h": 50,
+   "candle": 0,
+   "turn": "off",
+   "dir930": "off",
+   "body_x": 0.0
+  },
+  "words": "On 15-minute candles, from 11:00: when a candle closes above the previous candle's high and above the 1-hour EMA 50, buy at the next bar's open; when it closes below the previous candle's low and below the EMA, sell. Stop at the breaking candle's extreme (its low for a long, its high for a short), target 1.5 x the stop. One trade in the midday pass (11:00-13:30) and one in the afternoon pass (13:30-15:58).",
+  "exits": {
+   "struct": true,
+   "stop_pts": null,
+   "target_pts": null,
+   "target_r": 1.5,
+   "max_trades": 1,
+   "exit_bars": {
+    "15": 0
+   },
+   "exit_minutes": null,
+   "ok": true
+  },
+  "cells": [
+   {
+    "id": "struct-r1p125",
+    "stop_pts": null,
+    "target_pts": null,
+    "tgt_r": 1.125,
+    "centre": false,
+    "stop_scale": null,
+    "target_scale": 0.75
+   },
+   {
+    "id": "struct-r1p5",
+    "stop_pts": null,
+    "target_pts": null,
+    "tgt_r": 1.5,
+    "centre": true,
+    "stop_scale": null,
+    "target_scale": 1.0
+   },
+   {
+    "id": "struct-r1p875",
+    "stop_pts": null,
+    "target_pts": null,
+    "tgt_r": 1.875,
+    "centre": false,
+    "stop_scale": null,
+    "target_scale": 1.25
+   }
+  ],
+  "engine": {
+   "15": [
+    {
+     "id": "struct-r1p125",
+     "params": {
+      "mode": "break",
+      "ema1h": 50,
+      "tf": "15",
+      "sess": "all",
+      "dir": "both",
+      "max_tr": 1,
+      "exit_bars": 0,
+      "stop_mode": "struct",
+      "tgt_r": 1.125
+     },
+     "sessions": [
+      "mid",
+      "pm"
+     ],
+     "hold_to": "day",
+     "class": "CandleSweep"
+    },
+    {
+     "id": "struct-r1p5",
+     "params": {
+      "mode": "break",
+      "ema1h": 50,
+      "tf": "15",
+      "sess": "all",
+      "dir": "both",
+      "max_tr": 1,
+      "exit_bars": 0,
+      "stop_mode": "struct",
+      "tgt_r": 1.5
+     },
+     "sessions": [
+      "mid",
+      "pm"
+     ],
+     "hold_to": "day",
+     "class": "CandleSweep"
+    },
+    {
+     "id": "struct-r1p875",
+     "params": {
+      "mode": "break",
+      "ema1h": 50,
+      "tf": "15",
+      "sess": "all",
+      "dir": "both",
+      "max_tr": 1,
+      "exit_bars": 0,
+      "stop_mode": "struct",
+      "tgt_r": 1.875
+     },
+     "sessions": [
+      "mid",
+      "pm"
+     ],
+     "hold_to": "day",
+     "class": "CandleSweep"
+    }
+   ]
+  },
+  "taught": [
+   "[owner chat 2026-10-18, sheet owner_candle_break_15_nyam_nocap] if the candle closes over the previous candle's wick we enter; stop at the candle extreme",
+   "[owner chat 2026-10-17, sheet owner_candle_sweep_15_ema50_nyam_1tr] add a 1-hour EMA, only long above and short below (length 50)",
+   "[owner chat 2026-10-18] 1 trade a day (here: one a session pass)",
+   "[owner 2026-10-20, hunt PREREG] target 1.5 x the stop",
+   "[Claude hunt 2026-10-20] the break moved to the midday and afternoon passes, away from the morning legs (09:45, 10:00-10:45) the stack already has",
+   "[Claude hunt 2026-10-20, prior knowledge read before this sheet: result.json of owner_candle_break_15_nyam_* and owner_candle_sweep_15_*] the break (not the sweep fade) is the family's only side that showed anything, in the morning at 0.5R, and its pre-registered read failed; the midday / afternoon break was never run. No number was tuned to those results"
+  ],
+  "not_run": [
+   "PARTLY SEEN: the candle_sweep family's break was read on its unseen months in the NY morning (owner_candle_break_15_nyam_nocap's pre-registered read and walk-forward, 2026-10-18/19). This sheet trades other hours (11:15-15:45 closes), so its trades are different, but the family and the months are the same: its walk-forward is not fully blind.",
+   "THE WICK: 'closes over the previous candle's wick' is read as a close strictly above the previous candle's high (long) or strictly below its low (short); the previous candle may be the last candle of the pass before.",
+   "THE 1-HOUR EMA: EMA(50) of the 1-hour closes (the last print of each whole ET hour that has ended), carried back across days to 150 closes, the contract's first day or 30 sessions; the signal close must be strictly above it (long) or below it (short); with fewer than 50 closes (right after a roll) there is no trade.",
+   "THE STOP: the breaking candle's extreme, measured from its close and placed from the fill at the next bar's open; floored at 0.25 x ATR(14) of the 15-minute bars.",
+   "THE CAP: one trade per session pass; two passes, so a day can hold up to 2 trades, and the midday trade may still be open when the afternoon pass enters.",
+   "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+   "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.",
+   "FLAT: every trade is flat by 15:58 ET (13:13 on half days); no entry in the last 5 minutes of a pass."
+  ],
+  "nothing_left_out": false,
+  "control": {
+   "kind": "random",
+   "p_entry": 0.5,
+   "seeds": 10,
+   "sides": [
+    "both"
+   ]
+  },
+  "struct": true,
+  "family_words": "candle_sweep: a tf bar trades beyond the previous bar's low (high) and closes back above (below) a line of that bar -- back = range: its low (high); body: the bottom (top) of its body; far: the top (bottom) of its body -> market entry against the sweep at the next bar's open: long after a swept low, short after a swept high; both at once = no trade; structure level = the sweeping bar's own extreme; entries inside the idea's session, up to max_tr a session, one position at a time; flat 15:58\ncandle_sweep (module docstring). go = +1 / -1 / 0: the signal of the bar (or candle) that has just closed; sx = its (low, high,\nclose); with `candle`: cd = the day's candles [slot, o, h, l, c], mi = the 1-minute bars already in them, done = the candles judged.",
+  "one_instance": null,
+  "lane_notes": [
+   "CAPPED PER SESSION PASS, NOT PER DAY: max_trades 1 counts inside each pass (2 passes: mid, pm), so a day can hold up to 2 trades; a family's own loss or trade count (none) counts inside one pass too.",
+   "The passes are independent: a trade of one pass may still be open when another pass enters (one position at a time holds inside a pass only).",
+   "Every trade is flat by 15:58 ET (13:13 on an equity half day); no entry in the last 5 minutes of a pass.",
+   "Costs: $4.00 a round turn and 1 tick of slippage on market and stop fills, 1 contract (the engine's own).",
+   "The stop is the family's structure level of each entry (its size differs from trade to trade; the engine never puts it closer than two ticks or 0.25 ATR); `stop_val` is not used."
+  ]
+ },
+ "bars": {
+  "15": {
+   "tf": "15",
+   "store": "runs/hunt_fv_cbreak15_ema1h_midpm-NQ-tf15",
+   "range": {
+    "start": "2021-09-22",
+    "end": "2025-06-30",
+    "sessions": 948
+   },
+   "cells": [
+    {
+     "id": "struct-r1p125",
+     "stop_pts": null,
+     "target_pts": null,
+     "tgt_r": 1.125,
+     "centre": false,
+     "stop_scale": null,
+     "target_scale": 0.75,
+     "metrics": {
+      "trades": 1733,
+      "net": 76218.0,
+      "win": 0.4979803808424697,
+      "avg_trade": 43.98,
+      "pf": 1.1135446771742692,
+      "avg_win": 866.1390498261877,
+      "avg_loss": -771.5632183908046,
+      "win_loss": 1.122576905146714,
+      "max_dd": 35790.0,
+      "sharpe": 0.8714576174413295,
+      "worst_open_loss": 13878.0,
+      "days": 948,
+      "dd_open": 36919.0,
+      "months_won": 0.586956522,
+      "best_month_share": 0.109505607,
+      "losing_day_run": 7
+     },
+     "years": [
+      {
+       "period": "2021*",
+       "trades": 127,
+       "net": 3637.0,
+       "win": 0.47244094488188976,
+       "pf": 1.0858025856374445,
+       "max_dd": 7696.0,
+       "sharpe": 0.6116664131907732,
+       "avg_trade": 28.64,
+       "worst_open_loss": 3493.0,
+       "days": 71,
+       "t": 0.3542499385855023
+      },
+      {
+       "period": "2022",
+       "trades": 460,
+       "net": 61245.0,
+       "win": 0.5347826086956522,
+       "pf": 1.3273890661834278,
+       "max_dd": 10315.0,
+       "sharpe": 2.4993639292119703,
+       "avg_trade": 133.14,
+       "worst_open_loss": 4558.0,
+       "days": 251,
+       "t": 2.5490311965378067
+      },
+      {
+       "period": "2023",
+       "trades": 464,
+       "net": 16159.0,
+       "win": 0.5150862068965517,
+       "pf": 1.1191622727775525,
+       "max_dd": 13279.0,
+       "sharpe": 1.0258852330096817,
+       "avg_trade": 34.83,
+       "worst_open_loss": 2873.0,
+       "days": 251,
+       "t": 1.0676116445413002
+      },
+      {
+       "period": "2024",
+       "trades": 463,
+       "net": 12083.0,
+       "win": 0.4816414686825054,
+       "pf": 1.0716985610443555,
+       "max_dd": 12157.0,
+       "sharpe": 0.6133276441514703,
+       "avg_trade": 26.1,
+       "worst_open_loss": 4178.0,
+       "days": 252,
+       "t": 0.6225026336697432
+      },
+      {
+       "period": "2025*",
+       "trades": 219,
+       "net": -16906.0,
+       "win": 0.4337899543378995,
+       "pf": 0.8771999912835673,
+       "max_dd": 35316.0,
+       "sharpe": -0.9384966264160124,
+       "avg_trade": -77.2,
+       "worst_open_loss": 13878.0,
+       "days": 123,
+       "t": -0.7369565715688227
+      },
+      {
+       "period": "combined",
+       "trades": 1733,
+       "net": 76218.0,
+       "win": 0.4979803808424697,
+       "pf": 1.1135446771742692,
+       "max_dd": 35790.0,
+       "sharpe": 0.8714576174413295,
+       "avg_trade": 43.98,
+       "worst_open_loss": 13878.0,
+       "days": 948,
+       "t": 1.787981847037703
+      }
+     ],
+     "prop": {
+      "account": "LucidPro 50K \u00b7 no daily loss limit",
+      "confirmed": true,
+      "size": 5,
+      "payout_size": 5,
+      "eval": 0.31855,
+      "payout": 0.18405,
+      "label": "helper",
+      "days": 30,
+      "need": {
+       "eval": 0.4,
+       "payout": 0.5
+      },
+      "stress": {
+       "size": 30,
+       "payout_size": 10,
+       "eval": 0.1992,
+       "payout": 0.0737
+      }
+     },
+     "lines": [
+      {
+       "line": "P3.2",
+       "passed": true,
+       "number": 43.98038084246971,
+       "need": 0.0,
+       "text": "P3.2 PASS average trade $44 (need above $0)",
+       "kind": "gate"
+      },
+      {
+       "line": "P3.3",
+       "passed": true,
+       "number": 1733.0,
+       "need": 200,
+       "text": "P3.3 PASS 1,733 trades (need 200)",
+       "kind": "gate"
+      },
+      {
+       "line": "P3.4",
+       "passed": null,
+       "number": 11669.0,
+       "need": 0,
+       "text": "P3.4 held (a label, asks nothing) long $64,549, short $11,669 (need both above $0)",
+       "long": 64549.0,
+       "short": 11669.0,
+       "n_long": 934,
+       "n_short": 799,
+       "held": true,
+       "label": "HELD",
+       "kind": "gate"
+      },
+      {
+       "line": "P3.7",
+       "passed": null,
+       "number": -114824.0,
+       "need": 0,
+       "text": "P3.7 missed (a label, asks nothing) without its best 5 % of trades (87 of 1733) the box makes -$114,824 (need above $0)",
+       "dropped": 87,
+       "held": false,
+       "label": "MISSED",
+       "kind": "gate"
+      },
+      {
+       "line": "P3.8",
+       "passed": null,
+       "number": 0.586956522,
+       "need": 0.7,
+       "text": "P3.8 missed (a label, asks nothing) 27 of 46 months won, 58.7 % (need 70 % or more)",
+       "held": false,
+       "label": "MISSED",
+       "kind": "steadiness"
+      },
+      {
+       "line": "P3.9",
+       "passed": null,
+       "number": 0.109505607,
+       "need": 0.1,
+       "text": "P3.9 missed (a label, asks nothing) best month 2022-02 is 10.95 % of the profit of the months won (need 10 % or less)",
+       "held": false,
+       "label": "MISSED",
+       "kind": "steadiness"
+      },
+      {
+       "line": "P3.10",
+       "passed": null,
+       "number": 7,
+       "need": 8,
+       "text": "P3.10 held (a label, asks nothing) longest run of losing days: 7 (need 8 or fewer)",
+       "held": true,
+       "label": "HELD",
+       "kind": "steadiness"
+      },
+      {
+       "line": "3.3",
+       "passed": false,
+       "number": 1.1135446771742692,
+       "need": 1.2,
+       "text": "3.3 FAIL default variant: profit factor 1.11 over 1,733 trades (need 1.2 or more)",
+       "trades": 1733,
+       "kind": "lock"
+      },
+      {
+       "line": "3.4",
+       "passed": false,
+       "number": 2.064465451393591,
+       "need": 3,
+       "text": "3.4 FAIL default variant: net $76,218 / worst drawdown $36,919 = 2.06, open losses counted (need 3 or more)",
+       "net": 76218.0,
+       "drawdown": 36919.0,
+       "kind": "lock"
+      },
+      {
+       "line": "3.5",
+       "passed": false,
+       "number": 0.8714576174413295,
+       "need": 1,
+       "text": "3.5 FAIL default variant: Sharpe 0.87 on 948 session days (need 1 or more)",
+       "days": 948,
+       "kind": "lock"
+      },
+      {
+       "line": "3.6",
+       "passed": false,
+       "number": 3691.9,
+       "need": 2000,
+       "text": "3.6 FAIL default variant: worst drawdown $3,692 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)",
+       "account": "LucidPro 50K",
+       "kind": "lock"
+      },
+      {
+       "line": "3.7",
+       "passed": true,
+       "number": 0.958,
+       "need": 0.8,
+       "text": "3.7 PASS default variant: makes money in 95.8 % of 1,000 reshuffled runs (need 80 % or more)",
+       "runs": 1000,
+       "kind": "lock"
+      },
+      {
+       "line": "3.8",
+       "passed": true,
+       "number": 24008.0,
+       "need": 0,
+       "text": "3.8 PASS default variant: $24,008 without its best 1 % of days (10 of 948 session days; they made $52,210 of $76,218; need above $0)",
+       "best": [
+        7102.0,
+        6412.0,
+        5962.0,
+        5692.0,
+        5327.0,
+        4532.0,
+        4392.0,
+        4387.0,
+        4232.0,
+        4172.0
+       ],
+       "total": 76218.0,
+       "count": 10,
+       "days": 948,
+       "kind": "lock"
+      },
+      {
+       "line": "P4.1",
+       "passed": true,
+       "number": 0.958,
+       "need": 0.75,
+       "text": "P4.1 PASS the box's average trade is above $0 in 95.8 % of 1,000 reshuffled runs (need 75 % or more)",
+       "runs": 1000,
+       "kind": "proof"
+      },
+      {
+       "line": "P4.2",
+       "passed": true,
+       "number": 0.9998,
+       "need": 0.95,
+       "text": "P4.2 PASS beats 99.98 % of the random-entry runs of the same box on try 1 (need above 95 % = 100 - 5 / 1 try)",
+       "tries": 1,
+       "seeds": 10,
+       "lift": 103408.3,
+       "unmatched": 0,
+       "kind": "proof"
+      }
+     ],
+     "held": 6,
+     "of": 10,
+     "failed": [
+      "3.3",
+      "3.4",
+      "3.5",
+      "3.6"
+     ]
+    },
+    {
+     "id": "struct-r1p5",
+     "stop_pts": null,
+     "target_pts": null,
+     "tgt_r": 1.5,
+     "centre": true,
+     "stop_scale": null,
+     "target_scale": 1.0,
+     "metrics": {
+      "trades": 1733,
+      "net": 129893.0,
+      "win": 0.45066358915175997,
+      "avg_trade": 74.95,
+      "pf": 1.1799862266396741,
+      "avg_win": 1090.3661971830986,
+      "avg_loss": -758.0703781512605,
+      "win_loss": 1.4383442865057234,
+      "max_dd": 30544.0,
+      "sharpe": 1.2963164697820704,
+      "worst_open_loss": 13878.0,
+      "days": 948,
+      "dd_open": 31931.0,
+      "months_won": 0.608695652,
+      "best_month_share": 0.116767002,
+      "losing_day_run": 7
+     },
+     "years": [
+      {
+       "period": "2021*",
+       "trades": 127,
+       "net": 2397.0,
+       "win": 0.4094488188976378,
+       "pf": 1.051520687802257,
+       "max_dd": 10316.0,
+       "sharpe": 0.35215173781803305,
+       "avg_trade": 18.87,
+       "worst_open_loss": 3493.0,
+       "days": 71,
+       "t": 0.21174801629340578
+      },
+      {
+       "period": "2022",
+       "trades": 460,
+       "net": 91410.0,
+       "win": 0.5021739130434782,
+       "pf": 1.4609426607702043,
+       "max_dd": 9137.0,
+       "sharpe": 3.1685818033709032,
+       "avg_trade": 198.72,
+       "worst_open_loss": 4973.0,
+       "days": 251,
+       "t": 3.3444853322695898
+      },
+      {
+       "period": "2023",
+       "trades": 464,
+       "net": 25729.0,
+       "win": 0.46551724137931033,
+       "pf": 1.1756161821619444,
+       "max_dd": 11883.0,
+       "sharpe": 1.4293933414461386,
+       "avg_trade": 55.45,
+       "worst_open_loss": 2873.0,
+       "days": 251,
+       "t": 1.507170853405049
+      },
+      {
+       "period": "2024",
+       "trades": 463,
+       "net": 14488.0,
+       "win": 0.4190064794816415,
+       "pf": 1.078425428719903,
+       "max_dd": 12252.0,
+       "sharpe": 0.643287105134952,
+       "avg_trade": 31.29,
+       "worst_open_loss": 6013.0,
+       "days": 252,
+       "t": 0.6614480931339876
+      },
+      {
+       "period": "2025*",
+       "trades": 219,
+       "net": -4131.0,
+       "win": 0.4018264840182648,
+       "pf": 0.9716285266888273,
+       "max_dd": 30544.0,
+       "sharpe": -0.20522556854016707,
+       "avg_trade": -18.86,
+       "worst_open_loss": 13878.0,
+       "days": 123,
+       "t": -0.16013544546706462
+      },
+      {
+       "period": "combined",
+       "trades": 1733,
+       "net": 129893.0,
+       "win": 0.45066358915175997,
+       "pf": 1.1799862266396741,
+       "max_dd": 30544.0,
+       "sharpe": 1.2963164697820704,
+       "avg_trade": 74.95,
+       "worst_open_loss": 13878.0,
+       "days": 948,
+       "t": 2.6989365912621786
+      }
+     ],
+     "prop": {
+      "account": "LucidPro 50K \u00b7 no daily loss limit",
+      "confirmed": true,
+      "size": 5,
+      "payout_size": 5,
+      "eval": 0.35715,
+      "payout": 0.21005,
+      "label": "helper",
+      "days": 30,
+      "need": {
+       "eval": 0.4,
+       "payout": 0.5
+      },
+      "stress": {
+       "size": 10,
+       "payout_size": 7,
+       "eval": 0.20535,
+       "payout": 0.0812
+      }
+     },
+     "lines": [
+      {
+       "line": "P3.2",
+       "passed": true,
+       "number": 74.9526832083093,
+       "need": 0.0,
+       "text": "P3.2 PASS average trade $75 (need above $0)",
+       "kind": "gate"
+      },
+      {
+       "line": "P3.3",
+       "passed": true,
+       "number": 1733.0,
+       "need": 200,
+       "text": "P3.3 PASS 1,733 trades (need 200)",
+       "kind": "gate"
+      },
+      {
+       "line": "P3.4",
+       "passed": null,
+       "number": 45074.0,
+       "need": 0,
+       "text": "P3.4 held (a label, asks nothing) long $84,819, short $45,074 (need both above $0)",
+       "long": 84819.0,
+       "short": 45074.0,
+       "n_long": 934,
+       "n_short": 799,
+       "held": true,
+       "label": "HELD",
+       "kind": "gate"
+      },
+      {
+       "line": "P3.7",
+       "passed": null,
+       "number": -110414.0,
+       "need": 0,
+       "text": "P3.7 missed (a label, asks nothing) without its best 5 % of trades (87 of 1733) the box makes -$110,414 (need above $0)",
+       "dropped": 87,
+       "held": false,
+       "label": "MISSED",
+       "kind": "gate"
+      },
+      {
+       "line": "P3.8",
+       "passed": null,
+       "number": 0.608695652,
+       "need": 0.7,
+       "text": "P3.8 missed (a label, asks nothing) 28 of 46 months won, 60.87 % (need 70 % or more)",
+       "held": false,
+       "label": "MISSED",
+       "kind": "steadiness"
+      },
+      {
+       "line": "P3.9",
+       "passed": null,
+       "number": 0.116767002,
+       "need": 0.1,
+       "text": "P3.9 missed (a label, asks nothing) best month 2022-02 is 11.68 % of the profit of the months won (need 10 % or less)",
+       "held": false,
+       "label": "MISSED",
+       "kind": "steadiness"
+      },
+      {
+       "line": "P3.10",
+       "passed": null,
+       "number": 7,
+       "need": 8,
+       "text": "P3.10 held (a label, asks nothing) longest run of losing days: 7 (need 8 or fewer)",
+       "held": true,
+       "label": "HELD",
+       "kind": "steadiness"
+      },
+      {
+       "line": "3.3",
+       "passed": false,
+       "number": 1.1799862266396741,
+       "need": 1.2,
+       "text": "3.3 FAIL default variant: profit factor 1.18 over 1,733 trades (need 1.2 or more)",
+       "trades": 1733,
+       "kind": "lock"
+      },
+      {
+       "line": "3.4",
+       "passed": true,
+       "number": 4.067927719144405,
+       "need": 3,
+       "text": "3.4 PASS default variant: net $129,893 / worst drawdown $31,931 = 4.07, open losses counted (need 3 or more)",
+       "net": 129893.0,
+       "drawdown": 31931.0,
+       "kind": "lock"
+      },
+      {
+       "line": "3.5",
+       "passed": true,
+       "number": 1.2963164697820704,
+       "need": 1,
+       "text": "3.5 PASS default variant: Sharpe 1.30 on 948 session days (need 1 or more)",
+       "days": 948,
+       "kind": "lock"
+      },
+      {
+       "line": "3.6",
+       "passed": false,
+       "number": 3193.1,
+       "need": 2000,
+       "text": "3.6 FAIL default variant: worst drawdown $3,193 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)",
+       "account": "LucidPro 50K",
+       "kind": "lock"
+      },
+      {
+       "line": "3.7",
+       "passed": true,
+       "number": 0.993,
+       "need": 0.8,
+       "text": "3.7 PASS default variant: makes money in 99.3 % of 1,000 reshuffled runs (need 80 % or more)",
+       "runs": 1000,
+       "kind": "lock"
+      },
+      {
+       "line": "3.8",
+       "passed": true,
+       "number": 65233.0,
+       "need": 0,
+       "text": "3.8 PASS default variant: $65,233 without its best 1 % of days (10 of 948 session days; they made $64,660 of $129,893; need above $0)",
+       "best": [
+        9472.0,
+        8547.0,
+        7597.0,
+        6677.0,
+        5857.0,
+        5562.0,
+        5357.0,
+        5302.0,
+        5257.0,
+        5032.0
+       ],
+       "total": 129893.0,
+       "count": 10,
+       "days": 948,
+       "kind": "lock"
+      },
+      {
+       "line": "P4.1",
+       "passed": true,
+       "number": 0.993,
+       "need": 0.75,
+       "text": "P4.1 PASS the box's average trade is above $0 in 99.3 % of 1,000 reshuffled runs (need 75 % or more)",
+       "runs": 1000,
+       "kind": "proof"
+      },
+      {
+       "line": "P4.2",
+       "passed": true,
+       "number": 1.0,
+       "need": 0.95,
+       "text": "P4.2 PASS beats 100 % of the random-entry runs of the same box on try 1 (need above 95 % = 100 - 5 / 1 try)",
+       "tries": 1,
+       "seeds": 10,
+       "lift": 167489.49,
+       "unmatched": 0,
+       "kind": "proof"
+      }
+     ],
+     "held": 8,
+     "of": 10,
+     "failed": [
+      "3.3",
+      "3.6"
+     ]
+    },
+    {
+     "id": "struct-r1p875",
+     "stop_pts": null,
+     "target_pts": null,
+     "tgt_r": 1.875,
+     "centre": false,
+     "stop_scale": null,
+     "target_scale": 1.25,
+     "metrics": {
+      "trades": 1733,
+      "net": 140168.0,
+      "win": 0.4218118869013272,
+      "avg_trade": 80.88,
+      "pf": 1.1862022150103684,
+      "avg_win": 1221.533515731874,
+      "avg_loss": -751.2704590818363,
+      "win_loss": 1.6259570717378784,
+      "max_dd": 34145.0,
+      "sharpe": 1.3516412974887844,
+      "worst_open_loss": 13878.0,
+      "days": 948,
+      "dd_open": 35436.0,
+      "months_won": 0.543478261,
+      "best_month_share": 0.126928997,
+      "losing_day_run": 9
+     },
+     "years": [
+      {
+       "period": "2021*",
+       "trades": 127,
+       "net": 4442.0,
+       "win": 0.4015748031496063,
+       "pf": 1.0944423183229153,
+       "max_dd": 9844.0,
+       "sharpe": 0.6363602645372253,
+       "avg_trade": 34.98,
+       "worst_open_loss": 3493.0,
+       "days": 71,
+       "t": 0.37415409488907364
+      },
+      {
+       "period": "2022",
+       "trades": 460,
+       "net": 103955.0,
+       "win": 0.4717391304347826,
+       "pf": 1.5017690187617352,
+       "max_dd": 8177.0,
+       "sharpe": 3.3770478667879256,
+       "avg_trade": 225.99,
+       "worst_open_loss": 4973.0,
+       "days": 251,
+       "t": 3.5552220942111306
+      },
+      {
+       "period": "2023",
+       "trades": 464,
+       "net": 32559.0,
+       "win": 0.4331896551724138,
+       "pf": 1.2125718986465752,
+       "max_dd": 12348.0,
+       "sharpe": 1.6552454212986452,
+       "avg_trade": 70.17,
+       "worst_open_loss": 2873.0,
+       "days": 251,
+       "t": 1.758258031667134
+      },
+      {
+       "period": "2024",
+       "trades": 463,
+       "net": 21883.0,
+       "win": 0.3952483801295896,
+       "pf": 1.1144717913844062,
+       "max_dd": 11352.0,
+       "sharpe": 0.8957822749678608,
+       "avg_trade": 47.26,
+       "worst_open_loss": 6013.0,
+       "days": 252,
+       "t": 0.9399294726527284
+      },
+      {
+       "period": "2025*",
+       "trades": 219,
+       "net": -22671.0,
+       "win": 0.3607305936073059,
+       "pf": 0.8530052518965182,
+       "max_dd": 30354.0,
+       "sharpe": -1.2016067140905704,
+       "avg_trade": -103.52,
+       "worst_open_loss": 13878.0,
+       "days": 123,
+       "t": -0.8725576132410676
+      },
+      {
+       "period": "combined",
+       "trades": 1733,
+       "net": 140168.0,
+       "win": 0.4218118869013272,
+       "pf": 1.1862022150103684,
+       "max_dd": 34145.0,
+       "sharpe": 1.3516412974887844,
+       "avg_trade": 80.88,
+       "worst_open_loss": 13878.0,
+       "days": 948,
+       "t": 2.7662957577300253
+      }
+     ],
+     "prop": {
+      "account": "LucidPro 50K \u00b7 no daily loss limit",
+      "confirmed": true,
+      "size": 5,
+      "payout_size": 5,
+      "eval": 0.35595,
+      "payout": 0.2195,
+      "label": "helper",
+      "days": 30,
+      "need": {
+       "eval": 0.4,
+       "payout": 0.5
+      },
+      "stress": {
+       "size": 7,
+       "payout_size": 5,
+       "eval": 0.2007,
+       "payout": 0.0866
+      }
+     },
+     "lines": [
+      {
+       "line": "P3.2",
+       "passed": true,
+       "number": 80.88170802077323,
+       "need": 0.0,
+       "text": "P3.2 PASS average trade $81 (need above $0)",
+       "kind": "gate"
+      },
+      {
+       "line": "P3.3",
+       "passed": true,
+       "number": 1733.0,
+       "need": 200,
+       "text": "P3.3 PASS 1,733 trades (need 200)",
+       "kind": "gate"
+      },
+      {
+       "line": "P3.4",
+       "passed": null,
+       "number": 56944.0,
+       "need": 0,
+       "text": "P3.4 held (a label, asks nothing) long $83,224, short $56,944 (need both above $0)",
+       "long": 83224.0,
+       "short": 56944.0,
+       "n_long": 934,
+       "n_short": 799,
+       "held": true,
+       "label": "HELD",
+       "kind": "gate"
+      },
+      {
+       "line": "P3.7",
+       "passed": null,
+       "number": -119154.0,
+       "need": 0,
+       "text": "P3.7 missed (a label, asks nothing) without its best 5 % of trades (87 of 1733) the box makes -$119,154 (need above $0)",
+       "dropped": 87,
+       "held": false,
+       "label": "MISSED",
+       "kind": "gate"
+      },
+      {
+       "line": "P3.8",
+       "passed": null,
+       "number": 0.543478261,
+       "need": 0.7,
+       "text": "P3.8 missed (a label, asks nothing) 25 of 46 months won, 54.35 % (need 70 % or more)",
+       "held": false,
+       "label": "MISSED",
+       "kind": "steadiness"
+      },
+      {
+       "line": "P3.9",
+       "passed": null,
+       "number": 0.126928997,
+       "need": 0.1,
+       "text": "P3.9 missed (a label, asks nothing) best month 2022-02 is 12.69 % of the profit of the months won (need 10 % or less)",
+       "held": false,
+       "label": "MISSED",
+       "kind": "steadiness"
+      },
+      {
+       "line": "P3.10",
+       "passed": null,
+       "number": 9,
+       "need": 8,
+       "text": "P3.10 missed (a label, asks nothing) longest run of losing days: 9 (need 8 or fewer)",
+       "held": false,
+       "label": "MISSED",
+       "kind": "steadiness"
+      },
+      {
+       "line": "3.3",
+       "passed": false,
+       "number": 1.1862022150103684,
+       "need": 1.2,
+       "text": "3.3 FAIL default variant: profit factor 1.19 over 1,733 trades (need 1.2 or more)",
+       "trades": 1733,
+       "kind": "lock"
+      },
+      {
+       "line": "3.4",
+       "passed": true,
+       "number": 3.955525454340219,
+       "need": 3,
+       "text": "3.4 PASS default variant: net $140,168 / worst drawdown $35,436 = 3.96, open losses counted (need 3 or more)",
+       "net": 140168.0,
+       "drawdown": 35436.0,
+       "kind": "lock"
+      },
+      {
+       "line": "3.5",
+       "passed": true,
+       "number": 1.3516412974887844,
+       "need": 1,
+       "text": "3.5 PASS default variant: Sharpe 1.35 on 948 session days (need 1 or more)",
+       "days": 948,
+       "kind": "lock"
+      },
+      {
+       "line": "3.6",
+       "passed": false,
+       "number": 3543.6,
+       "need": 2000,
+       "text": "3.6 FAIL default variant: worst drawdown $3,544 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)",
+       "account": "LucidPro 50K",
+       "kind": "lock"
+      },
+      {
+       "line": "3.7",
+       "passed": true,
+       "number": 0.995,
+       "need": 0.8,
+       "text": "3.7 PASS default variant: makes money in 99.5 % of 1,000 reshuffled runs (need 80 % or more)",
+       "runs": 1000,
+       "kind": "lock"
+      },
+      {
+       "line": "3.8",
+       "passed": true,
+       "number": 79918.0,
+       "need": 0,
+       "text": "3.8 PASS default variant: $79,918 without its best 1 % of days (10 of 948 session days; they made $60,250 of $140,168; need above $0)",
+       "best": [
+        6992.0,
+        6922.0,
+        6572.0,
+        5932.0,
+        5842.0,
+        5742.0,
+        5677.0,
+        5622.0,
+        5492.0,
+        5457.0
+       ],
+       "total": 140168.0,
+       "count": 10,
+       "days": 948,
+       "kind": "lock"
+      },
+      {
+       "line": "P4.1",
+       "passed": true,
+       "number": 0.995,
+       "need": 0.75,
+       "text": "P4.1 PASS the box's average trade is above $0 in 99.5 % of 1,000 reshuffled runs (need 75 % or more)",
+       "runs": 1000,
+       "kind": "proof"
+      },
+      {
+       "line": "P4.2",
+       "passed": true,
+       "number": 1.0,
+       "need": 0.95,
+       "text": "P4.2 PASS beats 100 % of the random-entry runs of the same box on try 1 (need above 95 % = 100 - 5 / 1 try)",
+       "tries": 1,
+       "seeds": 10,
+       "lift": 178962.32,
+       "unmatched": 0,
+       "kind": "proof"
+      }
+     ],
+     "held": 8,
+     "of": 10,
+     "failed": [
+      "3.3",
+      "3.6"
+     ]
+    }
+   ],
+   "centre": {
+    "id": "struct-r1p5",
+    "stop_pts": null,
+    "target_pts": null,
+    "tgt_r": 1.5,
+    "centre": true,
+    "stop_scale": null,
+    "target_scale": 1.0,
+    "metrics": {
+     "trades": 1733,
+     "net": 129893.0,
+     "win": 0.45066358915175997,
+     "avg_trade": 74.95,
+     "pf": 1.1799862266396741,
+     "avg_win": 1090.3661971830986,
+     "avg_loss": -758.0703781512605,
+     "win_loss": 1.4383442865057234,
+     "max_dd": 30544.0,
+     "sharpe": 1.2963164697820704,
+     "worst_open_loss": 13878.0,
+     "days": 948,
+     "dd_open": 31931.0,
+     "months_won": 0.608695652,
+     "best_month_share": 0.116767002,
+     "losing_day_run": 7
+    },
+    "years": [
+     {
+      "period": "2021*",
+      "trades": 127,
+      "net": 2397.0,
+      "win": 0.4094488188976378,
+      "pf": 1.051520687802257,
+      "max_dd": 10316.0,
+      "sharpe": 0.35215173781803305,
+      "avg_trade": 18.87,
+      "worst_open_loss": 3493.0,
+      "days": 71,
+      "t": 0.21174801629340578
+     },
+     {
+      "period": "2022",
+      "trades": 460,
+      "net": 91410.0,
+      "win": 0.5021739130434782,
+      "pf": 1.4609426607702043,
+      "max_dd": 9137.0,
+      "sharpe": 3.1685818033709032,
+      "avg_trade": 198.72,
+      "worst_open_loss": 4973.0,
+      "days": 251,
+      "t": 3.3444853322695898
+     },
+     {
+      "period": "2023",
+      "trades": 464,
+      "net": 25729.0,
+      "win": 0.46551724137931033,
+      "pf": 1.1756161821619444,
+      "max_dd": 11883.0,
+      "sharpe": 1.4293933414461386,
+      "avg_trade": 55.45,
+      "worst_open_loss": 2873.0,
+      "days": 251,
+      "t": 1.507170853405049
+     },
+     {
+      "period": "2024",
+      "trades": 463,
+      "net": 14488.0,
+      "win": 0.4190064794816415,
+      "pf": 1.078425428719903,
+      "max_dd": 12252.0,
+      "sharpe": 0.643287105134952,
+      "avg_trade": 31.29,
+      "worst_open_loss": 6013.0,
+      "days": 252,
+      "t": 0.6614480931339876
+     },
+     {
+      "period": "2025*",
+      "trades": 219,
+      "net": -4131.0,
+      "win": 0.4018264840182648,
+      "pf": 0.9716285266888273,
+      "max_dd": 30544.0,
+      "sharpe": -0.20522556854016707,
+      "avg_trade": -18.86,
+      "worst_open_loss": 13878.0,
+      "days": 123,
+      "t": -0.16013544546706462
+     },
+     {
+      "period": "combined",
+      "trades": 1733,
+      "net": 129893.0,
+      "win": 0.45066358915175997,
+      "pf": 1.1799862266396741,
+      "max_dd": 30544.0,
+      "sharpe": 1.2963164697820704,
+      "avg_trade": 74.95,
+      "worst_open_loss": 13878.0,
+      "days": 948,
+      "t": 2.6989365912621786
+     }
+    ],
+    "prop": {
+     "account": "LucidPro 50K \u00b7 no daily loss limit",
+     "confirmed": true,
+     "size": 5,
+     "payout_size": 5,
+     "eval": 0.35715,
+     "payout": 0.21005,
+     "label": "helper",
+     "days": 30,
+     "need": {
+      "eval": 0.4,
+      "payout": 0.5
+     },
+     "stress": {
+      "size": 10,
+      "payout_size": 7,
+      "eval": 0.20535,
+      "payout": 0.0812
+     }
+    },
+    "lines": [
+     {
+      "line": "P3.2",
+      "passed": true,
+      "number": 74.9526832083093,
+      "need": 0.0,
+      "text": "P3.2 PASS average trade $75 (need above $0)",
+      "kind": "gate"
+     },
+     {
+      "line": "P3.3",
+      "passed": true,
+      "number": 1733.0,
+      "need": 200,
+      "text": "P3.3 PASS 1,733 trades (need 200)",
+      "kind": "gate"
+     },
+     {
+      "line": "P3.4",
+      "passed": null,
+      "number": 45074.0,
+      "need": 0,
+      "text": "P3.4 held (a label, asks nothing) long $84,819, short $45,074 (need both above $0)",
+      "long": 84819.0,
+      "short": 45074.0,
+      "n_long": 934,
+      "n_short": 799,
+      "held": true,
+      "label": "HELD",
+      "kind": "gate"
+     },
+     {
+      "line": "P3.7",
+      "passed": null,
+      "number": -110414.0,
+      "need": 0,
+      "text": "P3.7 missed (a label, asks nothing) without its best 5 % of trades (87 of 1733) the box makes -$110,414 (need above $0)",
+      "dropped": 87,
+      "held": false,
+      "label": "MISSED",
+      "kind": "gate"
+     },
+     {
+      "line": "P3.8",
+      "passed": null,
+      "number": 0.608695652,
+      "need": 0.7,
+      "text": "P3.8 missed (a label, asks nothing) 28 of 46 months won, 60.87 % (need 70 % or more)",
+      "held": false,
+      "label": "MISSED",
+      "kind": "steadiness"
+     },
+     {
+      "line": "P3.9",
+      "passed": null,
+      "number": 0.116767002,
+      "need": 0.1,
+      "text": "P3.9 missed (a label, asks nothing) best month 2022-02 is 11.68 % of the profit of the months won (need 10 % or less)",
+      "held": false,
+      "label": "MISSED",
+      "kind": "steadiness"
+     },
+     {
+      "line": "P3.10",
+      "passed": null,
+      "number": 7,
+      "need": 8,
+      "text": "P3.10 held (a label, asks nothing) longest run of losing days: 7 (need 8 or fewer)",
+      "held": true,
+      "label": "HELD",
+      "kind": "steadiness"
+     },
+     {
+      "line": "3.3",
+      "passed": false,
+      "number": 1.1799862266396741,
+      "need": 1.2,
+      "text": "3.3 FAIL default variant: profit factor 1.18 over 1,733 trades (need 1.2 or more)",
+      "trades": 1733,
+      "kind": "lock"
+     },
+     {
+      "line": "3.4",
+      "passed": true,
+      "number": 4.067927719144405,
+      "need": 3,
+      "text": "3.4 PASS default variant: net $129,893 / worst drawdown $31,931 = 4.07, open losses counted (need 3 or more)",
+      "net": 129893.0,
+      "drawdown": 31931.0,
+      "kind": "lock"
+     },
+     {
+      "line": "3.5",
+      "passed": true,
+      "number": 1.2963164697820704,
+      "need": 1,
+      "text": "3.5 PASS default variant: Sharpe 1.30 on 948 session days (need 1 or more)",
+      "days": 948,
+      "kind": "lock"
+     },
+     {
+      "line": "3.6",
+      "passed": false,
+      "number": 3193.1,
+      "need": 2000,
+      "text": "3.6 FAIL default variant: worst drawdown $3,193 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)",
+      "account": "LucidPro 50K",
+      "kind": "lock"
+     },
+     {
+      "line": "3.7",
+      "passed": true,
+      "number": 0.993,
+      "need": 0.8,
+      "text": "3.7 PASS default variant: makes money in 99.3 % of 1,000 reshuffled runs (need 80 % or more)",
+      "runs": 1000,
+      "kind": "lock"
+     },
+     {
+      "line": "3.8",
+      "passed": true,
+      "number": 65233.0,
+      "need": 0,
+      "text": "3.8 PASS default variant: $65,233 without its best 1 % of days (10 of 948 session days; they made $64,660 of $129,893; need above $0)",
+      "best": [
+       9472.0,
+       8547.0,
+       7597.0,
+       6677.0,
+       5857.0,
+       5562.0,
+       5357.0,
+       5302.0,
+       5257.0,
+       5032.0
+      ],
+      "total": 129893.0,
+      "count": 10,
+      "days": 948,
+      "kind": "lock"
+     },
+     {
+      "line": "P4.1",
+      "passed": true,
+      "number": 0.993,
+      "need": 0.75,
+      "text": "P4.1 PASS the box's average trade is above $0 in 99.3 % of 1,000 reshuffled runs (need 75 % or more)",
+      "runs": 1000,
+      "kind": "proof"
+     },
+     {
+      "line": "P4.2",
+      "passed": true,
+      "number": 1.0,
+      "need": 0.95,
+      "text": "P4.2 PASS beats 100 % of the random-entry runs of the same box on try 1 (need above 95 % = 100 - 5 / 1 try)",
+      "tries": 1,
+      "seeds": 10,
+      "lift": 167489.49,
+      "unmatched": 0,
+      "kind": "proof"
+     }
+    ],
+    "held": 8,
+    "of": 10,
+    "failed": [
+     "3.3",
+     "3.6"
+    ]
+   },
+   "neighbours": {
+    "trades": 1733.0,
+    "net": 108193.0,
+    "avg_trade": 62.431044431621466,
+    "held": 7.0,
+    "of": 10
+   },
+   "average": {
+    "trades": 1733.0,
+    "net": 115426.33333333333,
+    "win": 0.45681861896518566,
+    "pf": 1.1599110396081038,
+    "avg_win": 1059.3462542470536,
+    "avg_loss": -760.3013518746338,
+    "win_loss": 1.3956260877967719,
+    "max_dd": 33493.0,
+    "dd_open": 34762.0,
+    "sharpe": 1.173138461570728,
+    "worst_open_loss": 13878.0,
+    "months_won": 0.5797101450000001,
+    "best_month_share": 0.11773386866666667,
+    "losing_day_run": 7.666666666666667,
+    "avg_trade": 66.60492402385074,
+    "held": 7.333333333333333,
+    "prop": {
+     "eval": 0.3438833333333333,
+     "payout": 0.20453333333333334,
+     "stress_eval": 0.20174999999999998,
+     "stress_payout": 0.0805
+    }
+   },
+   "years_average": [
+    {
+     "period": "2021*",
+     "trades": 127.0,
+     "net": 3492.0,
+     "avg_trade": 27.496062992125985,
+     "win": 0.42782152230971127,
+     "pf": 1.0772551972542057,
+     "max_dd": 9285.333333333334
+    },
+    {
+     "period": "2022",
+     "trades": 460.0,
+     "net": 85536.66666666667,
+     "avg_trade": 185.94927536231884,
+     "win": 0.5028985507246377,
+     "pf": 1.4300335819051224,
+     "max_dd": 9209.666666666666
+    },
+    {
+     "period": "2023",
+     "trades": 464.0,
+     "net": 24815.666666666668,
+     "avg_trade": 53.48204022988506,
+     "win": 0.47126436781609193,
+     "pf": 1.1691167845286907,
+     "max_dd": 12503.333333333334
+    },
+    {
+     "period": "2024",
+     "trades": 463.0,
+     "net": 16151.333333333334,
+     "avg_trade": 34.88408927285817,
+     "win": 0.4319654427645789,
+     "pf": 1.0881985937162215,
+     "max_dd": 11920.333333333334
+    },
+    {
+     "period": "2025*",
+     "trades": 219.0,
+     "net": -14569.333333333334,
+     "avg_trade": -66.52663622526636,
+     "win": 0.3987823439878235,
+     "pf": 0.9006112566229709,
+     "max_dd": 32071.333333333332
+    },
+    {
+     "period": "combined",
+     "trades": 1733.0,
+     "net": 115426.33333333333,
+     "avg_trade": 66.60492402385074,
+     "win": 0.45681861896518566,
+     "pf": 1.1599110396081038,
+     "max_dd": 33493.0
+    }
+   ],
+   "lines": [
+    {
+     "line": "P3.2",
+     "passed": true,
+     "number": 74.9526832083093,
+     "need": 0.0,
+     "text": "P3.2 PASS average trade $75 (need above $0)",
+     "kind": "gate"
+    },
+    {
+     "line": "P3.3",
+     "passed": true,
+     "number": 1733.0,
+     "need": 200,
+     "text": "P3.3 PASS 1,733 trades (need 200)",
+     "kind": "gate"
+    },
+    {
+     "line": "P3.4",
+     "passed": null,
+     "number": 45074.0,
+     "need": 0,
+     "text": "P3.4 held (a label, asks nothing) long $84,819, short $45,074 (need both above $0)",
+     "long": 84819.0,
+     "short": 45074.0,
+     "n_long": 934,
+     "n_short": 799,
+     "held": true,
+     "label": "HELD",
+     "kind": "gate"
+    },
+    {
+     "line": "P3.7",
+     "passed": null,
+     "number": -110414.0,
+     "need": 0,
+     "text": "P3.7 missed (a label, asks nothing) without its best 5 % of trades (87 of 1733) the box makes -$110,414 (need above $0)",
+     "dropped": 87,
+     "held": false,
+     "label": "MISSED",
+     "kind": "gate"
+    },
+    {
+     "line": "P3.8",
+     "passed": null,
+     "number": 0.608695652,
+     "need": 0.7,
+     "text": "P3.8 missed (a label, asks nothing) 28 of 46 months won, 60.87 % (need 70 % or more)",
+     "held": false,
+     "label": "MISSED",
+     "kind": "steadiness"
+    },
+    {
+     "line": "P3.9",
+     "passed": null,
+     "number": 0.116767002,
+     "need": 0.1,
+     "text": "P3.9 missed (a label, asks nothing) best month 2022-02 is 11.68 % of the profit of the months won (need 10 % or less)",
+     "held": false,
+     "label": "MISSED",
+     "kind": "steadiness"
+    },
+    {
+     "line": "P3.10",
+     "passed": null,
+     "number": 7,
+     "need": 8,
+     "text": "P3.10 held (a label, asks nothing) longest run of losing days: 7 (need 8 or fewer)",
+     "held": true,
+     "label": "HELD",
+     "kind": "steadiness"
+    },
+    {
+     "line": "3.3",
+     "passed": false,
+     "number": 1.1799862266396741,
+     "need": 1.2,
+     "text": "3.3 FAIL default variant: profit factor 1.18 over 1,733 trades (need 1.2 or more)",
+     "trades": 1733,
+     "kind": "lock"
+    },
+    {
+     "line": "3.4",
+     "passed": true,
+     "number": 4.067927719144405,
+     "need": 3,
+     "text": "3.4 PASS default variant: net $129,893 / worst drawdown $31,931 = 4.07, open losses counted (need 3 or more)",
+     "net": 129893.0,
+     "drawdown": 31931.0,
+     "kind": "lock"
+    },
+    {
+     "line": "3.5",
+     "passed": true,
+     "number": 1.2963164697820704,
+     "need": 1,
+     "text": "3.5 PASS default variant: Sharpe 1.30 on 948 session days (need 1 or more)",
+     "days": 948,
+     "kind": "lock"
+    },
+    {
+     "line": "3.6",
+     "passed": false,
+     "number": 3193.1,
+     "need": 2000,
+     "text": "3.6 FAIL default variant: worst drawdown $3,193 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)",
+     "account": "LucidPro 50K",
+     "kind": "lock"
+    },
+    {
+     "line": "3.7",
+     "passed": true,
+     "number": 0.993,
+     "need": 0.8,
+     "text": "3.7 PASS default variant: makes money in 99.3 % of 1,000 reshuffled runs (need 80 % or more)",
+     "runs": 1000,
+     "kind": "lock"
+    },
+    {
+     "line": "3.8",
+     "passed": true,
+     "number": 65233.0,
+     "need": 0,
+     "text": "3.8 PASS default variant: $65,233 without its best 1 % of days (10 of 948 session days; they made $64,660 of $129,893; need above $0)",
+     "best": [
+      9472.0,
+      8547.0,
+      7597.0,
+      6677.0,
+      5857.0,
+      5562.0,
+      5357.0,
+      5302.0,
+      5257.0,
+      5032.0
+     ],
+     "total": 129893.0,
+     "count": 10,
+     "days": 948,
+     "kind": "lock"
+    },
+    {
+     "line": "P4.1",
+     "passed": true,
+     "number": 0.993,
+     "need": 0.75,
+     "text": "P4.1 PASS the box's average trade is above $0 in 99.3 % of 1,000 reshuffled runs (need 75 % or more)",
+     "runs": 1000,
+     "kind": "proof"
+    },
+    {
+     "line": "P4.2",
+     "passed": true,
+     "number": 1.0,
+     "need": 0.95,
+     "text": "P4.2 PASS beats 100 % of the random-entry runs of the same box on try 1 (need above 95 % = 100 - 5 / 1 try)",
+     "tries": 1,
+     "seeds": 10,
+     "lift": 167489.49,
+     "unmatched": 0,
+     "kind": "proof"
+    }
+   ],
+   "control_stop_pts": 33.75
+  }
+ },
+ "limits": [
+  "One video's rule, read on the build days (2021-09-22 .. 2025-06-30): in-sample.",
+  "The family's settings and the exits are the video's own: nothing was tuned, searched or picked.",
+  "The neighbours are shown to see how fragile the rule is; they are not alternatives to choose from.",
+  "The unseen days (2025-07-01 on) were not read: a person has to ask for that, and it is read once.",
+  "The random entries are the pipeline's own (any bar of the session pass, matched by day and pass): they do not wait for the family's entry window."
+ ],
+ "code": {
+  "l2sim.py": "1dbcf52b331da4dc",
+  "l2ref.py": "51f18fb1b8c84bc1",
+  "families/blocks.py": "e71032d180ca13f9",
+  "families/candle_sweep.py": "fe4484fafd385237",
+  "flowtab.py": "85f67836b33a8d8a",
+  "bpfeat.py": "270e203129d1ccd1",
+  "levels.py": "7d7bfa7e4e22b2b9",
+  "zones.py": "1bd988856da76bba",
+  "indicators.py": "27077557da8671b6",
+  "blueprint/taught.py": "41e6643361529321"
+ },
+ "stores": [
+  {
+   "key": "hunt_fv_cbreak15_ema1h_midpm-NQ-tf15",
+   "kind": "unit",
+   "trades": 5199,
+   "skipped": false,
+   "code_same": true
+  },
+  {
+   "key": "hunt_fv_cbreak15_ema1h_midpm__ctl-NQ-tf15",
+   "kind": "pool",
+   "trades": 56121,
+   "skipped": false,
+   "code_same": true
+  }
+ ],
+ "utc": "2026-10-20T23:29:49+00:00",
+ "text": "hunt_fv_cbreak15_ema1h_midpm: candle_sweep (mode break, back body, ema1h 50, candle 0, turn off, dir930 off, body_x 0), both sides, 15-minute bars, a structure stop, target 1.5R, up to 1 trades a session pass over 2 passes (mid pm); the sheet leaves out 8 things the video says (listed below); verdict: 15-minute bars make $75 a trade on 1,733 trades and hold 8 of 10 lines (misses 3.3, 3.6); the neighbours average $62 a trade.\n\nBUILD DAYS 2021-09-22 .. 2025-06-30 (948 session days), 1 contract after costs. The unseen days (2025-07-01 on) were not read.\n\n=== 15-MINUTE BARS ===\n\n                                                    the taught cell  average of the 3 cells\ntrades                                                        1,733                   1,733\nnet                                                        $129,893                $115,426\nwin rate                                                     45.1 %                  45.7 %\naverage trade                                                   $75                     $67\nprofit factor                                                  1.18                    1.16\naverage win                                                  $1,090                  $1,059\naverage loss                                                  -$758                   -$760\naverage win / average loss                                     1.44                    1.40\nworst drawdown, daily                                       $30,544                 $33,493\nworst drawdown, open losses counted                         $31,931                 $34,762\nSharpe                                                         1.30                    1.17\nmonths won                                                   60.9 %                  58.0 %\nbest month, share of the profit                              11.7 %                  11.8 %\nlongest run of losing days                                        7                     7.7\nprop eval odds, 30 days (LucidPro 50K, no DLL)               35.7 %                  34.4 %\nprop payout odds (stress, \"live is worse\", beside)   21.0 % (8.1 %)          20.5 % (8.1 %)\nprop eval odds, stress                                       20.5 %                  20.2 %\n\nThe neighbours (the 2 others): average trade $62, they hold 7.0 of 10 lines on average (the taught cell holds 8).\n\ncell           average trade  trades       net  lines held  eval odds\ntarget 1.125R            $44   1,733   $76,218     6 of 10     31.9 %\ntarget 1.5R              $75   1,733  $129,893     8 of 10     35.7 %\ntarget 1.875R            $81   1,733  $140,168     8 of 10     35.6 %\n\nLINES on the taught cell (the pipeline's own functions and words)\n  P3.2 PASS average trade $75 (need above $0)\n  P3.3 PASS 1,733 trades (need 200)\n  P3.4 held (a label, asks nothing) long $84,819, short $45,074 (need both above $0)\n  P3.7 missed (a label, asks nothing) without its best 5 % of trades (87 of 1733) the box makes -$110,414 (need above $0)\n  P3.8 missed (a label, asks nothing) 28 of 46 months won, 60.87 % (need 70 % or more)\n  P3.9 missed (a label, asks nothing) best month 2022-02 is 11.68 % of the profit of the months won (need 10 % or less)\n  P3.10 held (a label, asks nothing) longest run of losing days: 7 (need 8 or fewer)\n  3.3 FAIL default variant: profit factor 1.18 over 1,733 trades (need 1.2 or more)\n  3.4 PASS default variant: net $129,893 / worst drawdown $31,931 = 4.07, open losses counted (need 3 or more)\n  3.5 PASS default variant: Sharpe 1.30 on 948 session days (need 1 or more)\n  3.6 FAIL default variant: worst drawdown $3,193 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)\n  3.7 PASS default variant: makes money in 99.3 % of 1,000 reshuffled runs (need 80 % or more)\n  3.8 PASS default variant: $65,233 without its best 1 % of days (10 of 948 session days; they made $64,660 of $129,893; need above $0)\n  P4.1 PASS the box's average trade is above $0 in 99.3 % of 1,000 reshuffled runs (need 75 % or more)\n  P4.2 PASS beats 100 % of the random-entry runs of the same box on try 1 (need above 95 % = 100 - 5 / 1 try)\n\nPER YEAR, then combined: the taught cell\nyear      trades       net  avg trade     win    PF  drawdown\n2021*        127    $2,397        $19  40.9 %  1.05   $10,316\n2022         460   $91,410       $199  50.2 %  1.46    $9,137\n2023         464   $25,729        $55  46.6 %  1.18   $11,883\n2024         463   $14,488        $31  41.9 %  1.08   $12,252\n2025*        219   -$4,131       -$19  40.2 %  0.97   $30,544\ncombined   1,733  $129,893        $75  45.1 %  1.18   $30,544\n\nPER YEAR, then combined: the average of the 3 cells\nyear      trades       net  avg trade     win    PF  drawdown\n2021*        127    $3,492        $27  42.8 %  1.08    $9,285\n2022         460   $85,537       $186  50.3 %  1.43    $9,210\n2023         464   $24,816        $53  47.1 %  1.17   $12,503\n2024         463   $16,151        $35  43.2 %  1.09   $11,920\n2025*        219  -$14,569       -$67  39.9 %  0.90   $32,071\ncombined   1,733  $115,426        $67  45.7 %  1.16   $33,493\n(the random entries used the median stop of the taught trades, 33.75 points, at the same target in R)\n\nNOT RUN (the person who wrote the sheet)\n  - PARTLY SEEN: the candle_sweep family's break was read on its unseen months in the NY morning (owner_candle_break_15_nyam_nocap's pre-registered read and walk-forward, 2026-10-18/19). This sheet trades other hours (11:15-15:45 closes), so its trades are different, but the family and the months are the same: its walk-forward is not fully blind.\n  - THE WICK: 'closes over the previous candle's wick' is read as a close strictly above the previous candle's high (long) or strictly below its low (short); the previous candle may be the last candle of the pass before.\n  - THE 1-HOUR EMA: EMA(50) of the 1-hour closes (the last print of each whole ET hour that has ended), carried back across days to 150 closes, the contract's first day or 30 sessions; the signal close must be strictly above it (long) or below it (short); with fewer than 50 closes (right after a roll) there is no trade.\n  - THE STOP: the breaking candle's extreme, measured from its close and placed from the fill at the next bar's open; floored at 0.25 x ATR(14) of the 15-minute bars.\n  - THE CAP: one trade per session pass; two passes, so a day can hold up to 2 trades, and the midday trade may still be open when the afternoon pass enters.\n  - COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).\n  - THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.\n  - FLAT: every trade is flat by 15:58 ET (13:13 on half days); no entry in the last 5 minutes of a pass.\n\nALSO TRUE OF THE RUN (the lane)\n  - CAPPED PER SESSION PASS, NOT PER DAY: max_trades 1 counts inside each pass (2 passes: mid, pm), so a day can hold up to 2 trades; a family's own loss or trade count (none) counts inside one pass too.\n  - The passes are independent: a trade of one pass may still be open when another pass enters (one position at a time holds inside a pass only).\n  - Every trade is flat by 15:58 ET (13:13 on an equity half day); no entry in the last 5 minutes of a pass.\n  - Costs: $4.00 a round turn and 1 tick of slippage on market and stop fills, 1 contract (the engine's own).\n  - The stop is the family's structure level of each entry (its size differs from trade to trade; the engine never puts it closer than two ticks or 0.25 ATR); `stop_val` is not used.\n\nHONEST LIMITS\n  - One video's rule, read on the build days (2021-09-22 .. 2025-06-30): in-sample.\n  - The family's settings and the exits are the video's own: nothing was tuned, searched or picked.\n  - The neighbours are shown to see how fragile the rule is; they are not alternatives to choose from.\n  - The unseen days (2025-07-01 on) were not read: a person has to ask for that, and it is read once.\n  - The random entries are the pipeline's own (any bar of the session pass, matched by day and pass): they do not wait for the family's entry window."
+}

@@ -1,0 +1,33 @@
+{
+ "name": "hunt_pb_jj_vwap15",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (angle: pullbacks in the day trend): the owner's VWAP pullback (a candle touches the 09:30 session VWAP, the next candle is a displacement away from it in the VWAP's 30-minute direction) read on 15-MINUTE candles with a 35-point stop at 1:1.5, instead of 1-minute candles at 25 / 38. Why it should pay: on 15-minute candles a touch of VWAP is a real pullback to the session's average price and an engulfing candle away from it is the session's side taking control back; on 1-minute candles the same shape is a few ticks of noise. Who loses: the traders who sold the touch of VWAP on an up day (bought it on a down day) expecting the day to turn, trapped by the engulfing candle."
+ },
+ "market": "NQ",
+ "bars": ["15"],
+ "sessions": ["nyam", "mid", "pm"],
+ "dir": "both",
+ "entry": {
+  "family": "jj_fair",
+  "settings": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "opp": "on", "pullback": "on", "vwap_slope": 30},
+  "words": "NQ 15-minute candles, 09:35-15:00 ET. When the previous 15-minute candle touched the session VWAP (anchored 09:30; its low at or under it and its high at or over it) and the next candle is a displacement AWAY from the VWAP (body larger than the previous body, the previous candle the opposite colour, close beyond the previous candle's wick), in the direction the VWAP has moved over the last 30 minutes (longs only while the VWAP is above its value 30 minutes ago and the close is above it; shorts the mirror), enter at the close by market order. Stop 35 points, target 52.5 points (1:1.5). One position at a time, up to three trades a day, flat 15:58."
+ },
+ "exits": {"stop_pts": 35, "target_pts": 52.5, "max_trades": 3},
+ "taught": [
+  "[owner 2026-10-20, owner_vwap_pullback_25_38] VWAP as the line: a pullback to it (the bar before touched it), then go with the VWAP's own direction (30 minutes)",
+  "[KHEQ5g55dQ4 54:39, 69:05] JJ Simon's displacement: the body must be larger, it must close beyond the wick, and the previous candle must be the opposite colour",
+  "[Claude hunt 2026-10-20] read on 15-minute candles (the bar size every lead in this repo lives on); exits 35 / 52.5 (1:1.5, the hunt's centre); three a day",
+  "[prior knowledge, read 2026-10-20: result.json of owner_vwap_pullback_25_38 / _50_76 / _c15_fix and vault finding 2026-10-19-jj-fair-price-111-versions] the 1-minute VWAP pullback is +$14 +- $16 at a real 25-point stop (break-even), its 25 / 38 walk-forward failed, the 50 / 76 walk-forward failed; batch 7's 5-minute version at 25 / 38 lost (38.5 %). The 15-minute reading has never been run: a test of whether the shape works at a bar size where the touch is a real pullback, not a tuning of a seen number"
+ ],
+ "not_run": [
+  "ONE INSTANCE FOR THE DAY (the family's): the cap of 3 is a day cap and one position at a time holds for the whole day; the lane's random control and reads still go pass by pass. The lane's generic note 'entries 10:30-15:30' is the Conti family's window, not this one's (09:35-15:00).",
+  "THE VWAP: the family's rth VWAP, volume-weighted (h + l + c) / 3 of the 1-minute bars from 09:30 ET; the 30-minute slope is the VWAP now vs its value at the 1-minute close 30 minutes before.",
+  "ENTRY WINDOW: signal closes after 09:35 and at or before 15:00 (the family's `end` 15:00; its written taught window is 09:35-11:00, so the 15:00 end is the owner's screening setting, as in owner_vwap_pullback_25_38).",
+  "The family's 3-losses-in-a-row stop is off (max_loss 99), as the owner's VWAP sheets.",
+  "FAMILY'S UNSEEN MONTHS: the owner's 1-minute VWAP pullback sheets had their 3:1 walk-forwards read on 2026-10-20; the 15-minute entries are mostly different trades, but the idea's test months are not blind.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only; the 3:1 block walk-forward comes later under PREREG."
+ ],
+ "control": "random"
+}

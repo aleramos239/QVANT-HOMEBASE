@@ -280,3 +280,26 @@ Exit note for all: his 25-point stop with a 38-point target (1 to 1.5) is not in
 ## 8. VERDICT
 - MAYBE, small. Two things are testable now: open_fade on NQ nyam 1-minute (close to his reversion; check the book for past runs and whether the target-at-open cell is usable) and first_bar_mom at 09:30. Expect thin results: he says the edge is tiny and the profit is in the account maths.
 - The 08:30 news fade to the pre-news price is the one idea worth a build (open_fade with an 08:29 anchor, news days only). His account maths (fixed dollars per account rule, cost per funded = fee / pass rate, test for pass rate) fits our prop sim more than the entry rules do.
+
+## 9. RE-CHECK 2026-10-19 (full transcript re-read + frames)
+Confirmed from frames:
+- Whiteboard [5:00]: 09:30 open line, continuation 38 / 25, then reversions with -$500 / +$750, eval box +3000 / -2000 -> 1:1.5, then 1:2, then 1:3-6 for no-consistency funded. News board: expected vs unexpected; 08:30 spike reverts to the pre-news line; a surprise jump makes a new consolidation = new fair.
+- CPI Tue Jul 14 2026: pre-news line at ~29,690; first short on the break of structure after the spike (target ~175 pts, "copy-traded, strongest setup"); a 94-pt break -> 100-pt target; evals 38 / 25; 09:30 opened at ~29,815 and dropped straight to the pre-news line -> pre-news fair, open deleted. Same days as KN7j6NXXAio (Tue Jul 14 / Wed Jul 15).
+- PPI Wed Jul 15 2026: drawn long box stop 20.25 / target 75.5 back to pre-news (~29,870) from ~29,790 (box ratio 3.73).
+- Live day 1 = Tue Aug 25 2026 (StoneX live chart). Blue fair line = the pre-open consolidation (~29,329), not the open (~29,297). Short 2 contracts from ~29,398, target line +$2,520 then moved to his dashboard's $3,210; second account $1,505. Later long attempts toward the open: both L.
+- Live day 2 = Fri Aug 28 2026, Tradovate, chart clock Pacific (06:30 = 09:30 ET). Blue Sky 50k accounts x3 at $1,000 target (2 contracts x 25 pts); a 150k account with $6,000 target: 6 contracts x 50 pts (limit 50 pts from fair).
+- Wed Aug 26 2026 recap: open bought mid-candle (first second green, no wick), box stop 39.5 / target 65.25 on a later reversion.
+Correction:
+- Idea 17 "volume candle 24-25 min after the open" is wrong: he was on Pacific time; "25 after" = the 09:24-09:25 ET candle, the PRE-OPEN volume spike (same as HlWSP7ajgpQ "09:25 ET volume spike"). He used that candle's level as a possible fair price above the open.
+Rules NOT yet in the rulebook, now added there:
+- 3 losing reversions in a row in one session = done for that session ("fair price is somewhere I don't know").
+- Target first, stop second ("stop is essentially random"); never a stop under 25 pts in New York. Targets come in 25-pt steps (25-200); between two, take the lower (past fair it's random).
+- Evals get the displacement entries (38 / 25); funded get the break-of-structure entries with targets near the full distance. Too many funded shorts open -> send evals instead.
+- Copy-trade only the strongest: the first break of structure after expected news.
+- 09:30 is not a target after 11:00, only a higher-time-frame bias; each session uses its own open. 14:00: if it opens toward the 09:30 price, trade continuation + reversion back to 09:30, ~1:4.
+- Continuation filter: higher-time-frame bias = the opposite of the last 6-12 hours; the first candle must break the structure of the candles before it. He also reads the first SECOND's color.
+- "Short-biased until proven otherwise": two same-color candles together count as displacement when one huge candle is hard to displace.
+- Unexpected-news drift: enter with the jump, the largest stop (below the last consolidation), no target, exit on a break of structure against; add on the break of the pause; later revert to the new consolidation.
+- After a loss on an account, the next trade on THAT account aims bigger (accounts end at their day target or blown); goes past 11:00 only if most accounts are not done.
+- Live account (his own money): only reversions, only breaks of structure, mostly expected-news reversions, chart-based targets.
+- Prop money: test for pass rate on 50 evals; cost per funded = eval price / pass rate; risk of ruin = (1 - pass x payout)^evals affordable, keep < 5%; consistency accounts 1:1.5 (1:4 on a 20% rule needs 20R = 3-6 months); keep sim balance under the live account's worth; Lucid / Tradeify 150k live bonus: stop at +$4,500 until the bonus lands; new firm: one account, take a payout, then five; tilt: trade evals, never a funded near payout.

@@ -1,0 +1,44 @@
+{
+ "name": "hunt_dm_vwflip15_rth_midpm",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (designer: momentum on a close): the day's VWAP flip, held for two closes, after the morning. Why it should pay: the VWAP from 09:30 is the day's benchmark price for institutional execution; a 15-minute close that crosses it and then holds the new side for two more closes shows the day's control has changed hands, and benchmark-tracking algos, hedgers and trend followers then lean the new way. Who loses: the traders still positioned on the old side of the day's average price (the morning's trend holders and the dip buyers / rally sellers at the VWAP), whose stops sit beyond it. Its trades come on turning days, the days the trend-day legs (noise band, day-range break) stand aside."
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "vwap_flip",
+  "settings": {
+   "hold": 2,
+   "anchor": "rth"
+  },
+  "words": "From 11:00 ET, on NQ 15-minute closes against the VWAP anchored at 09:30: a close that crosses from below to above the VWAP and then two more closes that stay above it is a long at the second of those closes; the mirror (cross below, two more closes below) is a short. Stop 40 points, target 60 points (1:1.5). The first such flip of each pass (mid 11:00-13:30, pm 13:30-15:58): up to two a day, flat 15:58."
+ },
+ "exits": {
+  "stop_pts": 40,
+  "target_pts": 60,
+  "max_trades": 1
+ },
+ "taught": [
+  "[family vwap_flip, the library's VWAP reclaim] a close crossing the VWAP that then holds the new side for `hold` more bars is followed at market",
+  "[family default] hold 2 bars (the library ran 1 / 2 / 3); not tuned",
+  "[Claude hunt 2026-10-20] the rth anchor (the VWAP from 09:30, the day's benchmark, not the pass's own VWAP), NQ 15-minute bars, mid and pm passes only, both sides, one flip per pass, fixed 40 / 60 point bracket (1:1.5)",
+  "[prior knowledge, read before designing: bp.py blocks, vwap_ema_x line] the old pilot's vwap_flip did not survive its checks (another anchor, bar and exits; no taught sheet of it has run)"
+ ],
+ "not_run": [
+  "THE STOP: the family has no structure level (ATR fallback): the fixed 40 / 60 point bracket is the sheet's.",
+  "THE PASS START: the family's cross-and-hold count restarts at each pass start (11:00, 13:30), so a cross before 11:00 does not count and the first flip of a pass needs a cross inside it; the VWAP itself runs from 09:30 all day.",
+  "THE ENTRY is at the close of the second bar that held the new side (30 minutes after the crossing close), not at the cross.",
+  "THE CAP IS PER SESSION PASS, NOT PER DAY: max_trades 1 counts inside each of the 2 passes, so a day can hold up to 2 trades; the passes are independent instances, so a trade of one pass may still be open when the next pass enters (one position at a time holds inside a pass only; the hunt's stack step applies one-at-a-time across legs).",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay, 1 NQ).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on an equity half day); no entry in the last 5 minutes of a pass.",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only (2021-09-22 .. 2025-06-30); the 3:1 block walk-forward is a separate, pre-registered read (hunt PREREG Gate 2)."
+ ],
+ "control": "random"
+}

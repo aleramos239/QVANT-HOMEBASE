@@ -1,0 +1,46 @@
+{
+ "name": "cl_pm_first_bar_cdl_ema_15",
+ "source": {
+  "title": "Claude design panel 2026-10-20 (lens pm): the owner's 13:30 afternoon first-bar follow with the candle exit (stop at the bar's other extreme, 1:1) and the day-trend side: long only above the 20-bar EMA of 15-minute closes, short only below. Why it should pay: the first bar after lunch shows which side the returning afternoon orders took; when it agrees with the day's trend the late-day flows (hedging and rebalancing with the day's move) push the same way, and the short side, which loses ungated (owner_pm_first_bar_15: long +$38k, short -$0.9k), is kept only on down-trend days. Who loses: traders who fade the first afternoon push against the day's trend."
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "first_bar_mom",
+  "settings": {
+   "k": 0.2,
+   "gate": "price_ema",
+   "g_n": 20,
+   "g_lvl": 0.0,
+   "g_side": "with"
+  },
+  "words": "The first 15-minute bar of the afternoon pass (13:30-13:45 ET) closes up and its close is above the 20-bar EMA of 15-minute closes: buy at its close; closes down and below the EMA: sell. Stop at that bar's other extreme, target 1:1. Once a day, flat 15:58."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.0,
+  "max_trades": 1
+ },
+ "taught": [
+  "[owner_pm_first_bar_15 / KN7j6NXXAio 1:33] every session open gets the same first trade: follow the first 15-minute bar; k 0.2 x ATR (the family's floor)",
+  "[owner 2026-10-18, cl_disp15_ema_allday_k1p5] a candle followed at its close: stop = the candle's extreme, target 1:1",
+  "[Claude 2026-10-20, cl_disp15_ema_allday_k1p5] the EMA20 side gate on 15-minute bars (long only above, short only below): +$15 a trade and +13 points of months won on the displacement",
+  "[Claude design panel 2026-10-20] the same gate on the 13:30 first-bar follow with the candle exit (the gated twin of cl_pm_first_bar_cdl_15)"
+ ],
+ "not_run": [
+  "THE GATE: the open layer's price_ema(20) on the 15-minute closes since 00:00 ET, read at the 13:45 close; a bar against it is no trade that day.",
+  "THE STOP: the 13:30-13:45 bar's other extreme, floored at 0.25 x ATR when nearer.",
+  "THE 13:30 START: the engine's afternoon pass, not JJ's 14:00 (as owner_pm_first_bar_15).",
+  "THE UNSEEN DAYS: owner_pm_first_bar_15 (the same entries, ungated, with a 30 / 30 bracket) had its 3:1 block walk-forward read on 2026-10-20 00:30 ET; these entries are a subset of those and therefore partly seen.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

@@ -178,6 +178,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     // ---------------------------------------------------------------- launch
     func applicationDidFinishLaunching(_ n: Notification) {
         #if VPS
+        // macOS 26 dark icon style darkens the bundle icon; a set image is shown as drawn (white, black house)
+        if let p = Bundle.main.path(forResource: "HomebaseVPS", ofType: "icns") { NSApp.applicationIconImage = NSImage(contentsOfFile: p) }
         vpsEnsureTunnel()
         WKWebsiteDataStore.default().proxyConfigurations = [vpsProxy]     // before any web view exists
         Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in   // a dropped link comes back by itself

@@ -1,0 +1,41 @@
+{
+ "name": "owner_vwap_pullback_c15",
+ "source": {
+  "title": "The owner's VWAP pullback (owner_vwap_pullback_25_38, body-only displacement) with JJ's 15-minute opening-bar continuation on top -- 2026-10-20",
+  "channel": "owner",
+  "url": "https://www.youtube.com/watch?v=KN7j6NXXAio"
+ },
+ "market": "NQ",
+ "bars": [
+  "1"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "jj_fair",
+  "settings": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "off", "pullback": "on", "vwap_slope": 30, "cont": "15m"},
+  "words": "Two trades in one sheet, both at 1:1.5. (1) At 09:45, the first 15-minute candle's colour: green buy, red sell, stop 25 points when its body is 25 points or less, else 50 (JJ's opening continuation, read on the 15-minute bar). (2) From 09:35 to 15:00, a displacement candle (body larger than the previous body, previous candle the opposite colour) away from the session VWAP right after the previous candle touched it, in the VWAP's 30-minute direction; stop 25 points. Target 1.52 x the stop on both. One position at a time, no loss stop."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.52,
+  "max_trades": 20
+ },
+ "taught": [
+  "[owner 2026-10-20] VWAP pullback + the opening continuation, the two pieces that showed an edge, together for frequency",
+  "[KN7j6NXXAio 5:06, 5:36] the opening candle's colour; 25 / 38, or 50 / 76 when the body is over 25 points",
+  "[batch 6, 2026-10-20] screened: 2,301 trades (2.4 a day), target-vs-stop 41.6%, +$34 a trade, PF 1.10"
+ ],
+ "not_run": [
+  "SCREENED, NOT TAUGHT: 155 versions read before this one; the walk-forward judges the exit cell only; blind months 2025-07 on are the only out-of-sample read.",
+  "The structure stop = the entry close minus 25 points (50 for a big opening bar), target 1.52 x: the random control takes the median stop distance of the taught trades.",
+  "The 15-minute bar is the owner's reading of JJ's 1-minute opening candle; the half size on 50 / 76 is sizing, not in this 1-contract ledger.",
+  "MY PICKS: market at the close; one instance 09:30-15:58; the VWAP slope window 30 minutes.",
+  "COSTS AND FILLS: the engine's own."
+ ],
+ "control": "random"
+}

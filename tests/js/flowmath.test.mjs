@@ -466,3 +466,17 @@ test('profileZones: a delta outlier with single prints and a low volume node nex
   assert.deepEqual(M.profileZones(day.map(({ fp, ...b }) => b), o), [], 'no footprint: nothing');
   assert.deepEqual(M.profileZones([...day, back], {}), [], 'no tick: nothing');
 });
+
+test('profileZones: the outlier is measured against its own leg, not the whole session', () => {
+  const m = 60000, gap = [102, 103, 104, 106, 107, 108].map((p) => [p, 1, 2]);
+  const day = [
+    { s: 'd1', ms: 0, l: 100, h: 101, fp: [[100, 5, 35], [101, 5, 35]] },                               // busy, one-sided balance: big deltas
+    { s: 'd1', ms: 30 * m, l: 101, h: 110, fp: [...gap, [105, 1, 7], [109, 1, 2], [110, 10, 11]] },      // the leg: 105 is 6, the leg's others 1
+    { s: 'd1', ms: 60 * m, l: 109, h: 111, fp: [[109, 5, 20], [110, 5, 20], [111, 5, 35]] },
+    { s: 'd1', ms: 90 * m, l: 109, h: 111, fp: [[109, 5, 20], [110, 5, 20], [111, 5, 35]] },
+  ];
+  // against the session's median |delta| (6) an outlier needs 18 and 105 misses; against the leg's (102 .. 108: 1) it needs 3
+  assert.deepEqual(M.profileZones(day, { tick: 1, rows: 1 }).map((z) => [z.lo, z.delta]), [[105, 6]]);
+  const short = day.map((b, i) => (i === 1 ? { ...b, l: 101, h: 103, fp: [[102, 1, 2], [103, 1, 7]] } : b));   // a 2-row run is no leg
+  assert.deepEqual(M.profileZones(short, { tick: 1, rows: 1 }), []);
+});

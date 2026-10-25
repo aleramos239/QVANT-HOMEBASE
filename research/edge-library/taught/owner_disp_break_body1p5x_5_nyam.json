@@ -1,0 +1,43 @@
+{
+ "name": "owner_disp_break_body1p5x_5_nyam",
+ "source": {
+  "title": "Owner's idea in chat, 2026-10-20: 15-minute displacement, all day: a candle that closes beyond the previous candle's wick AND whose body is at least 2x the previous candle's body, entered with it"
+ },
+ "market": "NQ",
+ "bars": [
+  "5"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "candle_sweep",
+  "settings": {
+   "mode": "break",
+   "body_x": 1.5
+  },
+  "words": "On 5-minute candles, NY morning (09:30-11:00 ET): when a candle closes above the previous candle's high and its body is at least 1.5x the previous candle's body, go long at the close; when it closes below the previous candle's low with a body at least 1.5x the previous body, go short."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1,
+  "max_trades": 20
+ },
+ "taught": [
+  "[chat 2026-10-20] no time window trade all day, lets use displacement, lets try 15 minute frame",
+  "[chat 2026-10-20] every time we close above the previous wicks candle and the candle body is 2x bigger than the previous candles body, then long, vice versa for shorts",
+  "[chat 2026-10-20] try on the 30 minute too, only the NY trades",
+  "[chat 2026-10-20] lets take the 15 minute and test it on GC same thing, only the NY morning and same RR variants",
+  "[chat 2026-10-20] also try 5 minute on NQ with all the new multipliers (NY morning; this sheet: 1.5x)"
+ ],
+ "not_run": [
+  "THE EXITS were not given: Claude used the house candle-break stop (the breaking candle's extreme, floored at 0.25 x ATR(14)) and a 1:1 target; the neighbours are 1:0.75 and 1:1.25.",
+  "THE WICK: a close strictly above the previous high (long) or strictly below the previous low (short).",
+  "THE BODY: |close - open| of the breaking candle >= 1.5 x |close - open| of the previous candle.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days); no trade is held past it.",
+  "THE CAP: none (the lane's 20 a pass); one position at a time inside a pass.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay)."
+ ],
+ "control": "random"
+}

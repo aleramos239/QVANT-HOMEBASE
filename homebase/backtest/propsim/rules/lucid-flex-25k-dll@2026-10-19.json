@@ -1,0 +1,48 @@
+{
+  "name": "LucidFlex 25K · $600 daily limit (JJ Simon's $1,000 plan)",
+  "version": "2026-10-19",
+  "as_of": "2026-10-19",
+  "source": "Owner 2026-10-19: follow JJ Simon's $1,000 plan (video 4Zj4xKiQHQk): 20 LucidFlex 25K evals at $50 with the daily loss limit ON. Read from Lucid's help center 2026-10-19: https://support.lucidtrading.com/en/articles/12945790-lucidflex-evaluation-account ($1,250 target, $1,000 max loss, 40% consistency standard / 50% add-on, max 2 minis or 20 micros), https://support.lucidtrading.com/en/articles/12945795-lucidflex-funded-account (EOD trailing, no consistency, DLL optional), https://support.lucidtrading.com/en/articles/12945796-lucidflex-payouts (5 days of $100, 50% of profit up to $1,000, minimum request $500, up to 5 payouts then live, 90/10), https://support.lucidtrading.com/en/articles/12945808-lucidflex-scaling-plan (1 mini / 10 micros under $1,000 profit, 2 minis / 20 micros from $1,000), https://support.lucidtrading.com/en/articles/16226050-lucidflex-customization (DLL ON = soft lock-out until the next session, cheaper, On Demand Payouts). NOT on Lucid's pages: the $600 daily limit (swissfirmup.com's plan guide; LucidDaily 25K is also $600; the 50K Flex limit on file is $1,200) and the lock (assumed +$1,100 -> +$100, the 50K file's pattern).",
+  "confirmed": false,
+  "account_size": 25000,
+  "eval_target": 1250,
+  "eval_min_days": 2,
+  "consistency": 0.4,
+  "trailing_mll": 1000,
+  "lock_at": 1100,
+  "lock_floor": 100,
+  "win_day": 100,
+  "payout_win_days": 5,
+  "payout_share": 0.5,
+  "payout_cap": 1000,
+  "payout_min": 500,
+  "max_payout_profit": 2000,
+  "daily_loss_limit": 600,
+  "max_days": null,
+  "scaling_micros": {
+    "start": 10,
+    "at_1000": 20
+  },
+  "cap_micros": 20,
+  "mini_point_values": {
+    "NQ": 20,
+    "ES": 50,
+    "GC": 100,
+    "CL": 1000
+  },
+  "flat_by_et": "16:45",
+  "no_overnight": true,
+  "payout_ladder": "every payout: 50% of profit, at least $500 and at most $1,000; up to 5 payouts, then moved to live; 90/10 split",
+  "notes": [
+    "UNCONFIRMED: the $600 daily loss limit (third-party guide, not Lucid's own pages) and the lock at +$1,100 -> +$100 (the 50K file's pattern). Check the checkout page / Lucid support and set confirmed true.",
+    "Consistency 40% is Lucid's standard (cheapest, with DLL ON = JJ's $50 account); 50% is a paid add-on. Third-party guides still quote 50%.",
+    "Contract scaling (funded): 1 mini / 10 micros under +$1,000, 2 minis / 20 micros from +$1,000; the eval allows 2 minis / 20 micros from day one. NOT enforced by the simulator -- surfaced as a warning when a ledger exceeds it.",
+    "Positions are closed by Lucid at 16:45 ET, no overnight holds. NOT enforced by the simulator.",
+    "Only the FIRST payout is simulated; the ladder above is informational.",
+    "Trailing max loss is measured END OF DAY: the floor moves up with EOD peak profit and never moves down.",
+    "Payout requires 5 separate days >= $100 AND net > 0. Payout = 50% of profit, at least $500 (so >= $1,000 profit) and at most $1,000 (so the max payout needs >= $2,000 profit).",
+    "SOFT daily loss limit $600: the moment the day's closed trades plus the open one reach -$600 you are closed out at -$600 and stopped for the day; the account survives.",
+    "Price (not used by the simulator): JJ quotes $50 with DLL ON; guides quote $65-$100 with codes. Fees enter the payouts-minus-fees sum outside the simulator."
+  ],
+  "disclaimer": "Illustrative, versioned snapshot -- verify against LucidFlex's current rulebook before relying on these numbers."
+}

@@ -1,0 +1,45 @@
+{
+ "name": "hunt_mx_es_ctrl_pm_first_bar_ema_15",
+ "source": {
+  "title": "[Claude hunt 2026-10-20, other markets] CONTROL: the NQ leg cl_pm_first_bar_cdl_ema_15 (13:30 first 15-minute bar followed with the EMA20 side, candle stop) copied unchanged to ES at the hunt's 1:1.5. Why it should pay (the NQ leg's cause): the first bar after lunch shows which side the returning afternoon orders took; with the day's trend the late-day flows (hedging and rebalancing with the day's move) push the same way; S&P futures carry the same afternoon index flows. Who loses: traders who fade the first afternoon push against the day's trend. As a control it asks: is the NQ edge an index-wide afternoon effect (then ES should not lose) or NQ-only (a red flag for the NQ leg)?"
+ },
+ "market": "ES",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "first_bar_mom",
+  "settings": {
+   "k": 0.2,
+   "gate": "price_ema",
+   "g_n": 20,
+   "g_lvl": 0.0,
+   "g_side": "with"
+  },
+  "words": "ES (a copy of the NQ leg): the first 15-minute bar of the afternoon pass (13:30-13:45 ET) closes up and its close is above the 20-bar EMA of 15-minute closes: buy at its close; closes down and below the EMA: sell. Stop at that bar's other extreme, target 1.5 x that distance. Once a day, flat 15:58."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.5,
+  "max_trades": 1
+ },
+ "taught": [
+  "[cl_pm_first_bar_cdl_ema_15, Claude design panel 2026-10-20] the NQ leg, every setting unchanged: first_bar_mom k 0.2 (the family's floor), gate price_ema(20) with, line 0, pm pass, 15-minute bars, candle stop, one a day",
+  "[Claude hunt 2026-10-20] the market is ES and the target 1.5R (the hunt's pre-registered shape); it is one of at most two explicit cross-market controls of the strongest NQ legs",
+  "[Claude hunt 2026-10-20] prior knowledge (WHAT_WORKS 2026-10-20): the NQ open-side FVG and the all-day 15-minute displacement already lost on ES and GC (Batch 3); the 13:30 first bar has never been run on ES; no number here was taken from a result"
+ ],
+ "not_run": [
+  "THE GATE: the open layer's price_ema(20) on the 15-minute closes since 00:00 ET, read at the 13:45 close; a bar against it is no trade that day.",
+  "THE STOP: the 13:30-13:45 bar's other extreme, floored at 0.25 x ATR when nearer; target 1.5 x that distance from the fill.",
+  "THE 13:30 START: the engine's afternoon pass (as the NQ leg).",
+  "THE UNSEEN DAYS: the NQ leg's entries were partly seen (owner_pm_first_bar_15's walk-forward, 2026-10-20); ES has not been read for this rule.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

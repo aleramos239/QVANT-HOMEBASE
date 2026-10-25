@@ -1,0 +1,40 @@
+{
+ "name": "owner_london_first_bar_15",
+ "source": {
+  "title": "The london first-bar follow on NQ (Claude, 2026-10-20): JJ's opening-candle idea at the engine's london pass",
+  "channel": "owner",
+  "url": "https://www.youtube.com/watch?v=KN7j6NXXAio"
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "london"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "first_bar_mom",
+  "settings": {
+   "k": 0.2
+  },
+  "words": "The first 15-minute bar of the London session (03:00-03:15 ET) closes up: market long at 03:15; closes down: short. Stop 30 points, target 30 points (1:1), once a day, flat at the pass's end (08:25). JJ's opening-candle idea at the 03:00 open (the vault: the 03:00 candle follows, the 02:00 one fails)."
+ },
+ "exits": {
+  "stop_pts": 30,
+  "target_pts": 30,
+  "max_trades": 1
+ },
+ "taught": [
+  "[KN7j6NXXAio 1:33 / KHEQ5g55dQ4 11:57] every session open gets the same first trade",
+  "[vault 2026-10-11] London 03:00 candle follows (open_candle start 0300), 02:00 fails; NQ 03:00 Candle Body is on the Desk in shadow",
+  "[Claude 2026-10-20] pre-registered as the London leg of a first-bar book (03:00 + 09:30 + 13:30), primary cell pts30-r1"
+ ],
+ "not_run": [
+  "The 30 / 30 exits are the afternoon sheet's (1:1), not JJ's 1:1.5; the cells are the lane's own neighbours.",
+  "k 0.2 x ATR is the family's floor: effectively every day trades.",
+  "The pass's window is the engine's (london 03:00-08:25, mid 11:00-13:30), not a session JJ names.",
+  "COSTS AND FILLS: the engine's own."
+ ],
+ "control": "random"
+}

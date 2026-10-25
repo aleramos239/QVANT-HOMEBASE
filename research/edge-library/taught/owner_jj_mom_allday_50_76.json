@@ -1,0 +1,42 @@
+{
+ "name": "owner_jj_mom_allday_50_76",
+ "source": {
+  "title": "JJ Simon's displacement, traded AWAY from the 09:30 open, at his 50 / 76 size -- the owner's search of 2026-10-19 (batch 4 of 4, 111 versions screened)",
+  "channel": "owner",
+  "url": "https://www.youtube.com/watch?v=KN7j6NXXAio"
+ },
+ "market": "NQ",
+ "bars": [
+  "1"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "jj_fair",
+  "settings": {"entry": "mom", "wick": "on", "min_room": 15.0, "max_loss": 99, "end": "15:00"},
+  "words": "Owner 2026-10-19: the same displacement traded in its own direction away from the 09:30 open, 09:35-15:00, with JJ's two-qualification displacement (body larger than the previous body AND a close beyond the previous candle's wick, the previous candle the opposite colour), at least 15 points from the open, 50-point stop, 76-point target (his size for a candle over 25 points), one position at a time, no loss stop."
+ },
+ "exits": {
+  "stop_pts": 50,
+  "target_pts": 76,
+  "max_trades": 20
+ },
+ "taught": [
+  "[KN7j6NXXAio 6:08] if the opening candle is larger than 25 points, 50-point stop and 76-point take profit (half the contracts)",
+  "[KHEQ5g55dQ4 54:39] displacement: the body must be larger and it must close below (beyond) the wick",
+  "[KHEQ5g55dQ4 69:05] a displacement has to displace a candle of the opposite colour",
+  "[owner 2026-10-19] all day, never stop after losses, direction AWAY from the open (batch 4: 42.6%, 4.7 a day in-sample)"
+ ],
+ "not_run": [
+  "THIS IS NOT HIS REVERSION: the side is the displacement's own direction. His taught fade (owner_jj_fair_nyam_25_38) is on file: 36.8%, -$44 a trade.",
+  "SCREENED, NOT TAUGHT: 111 versions read on the build days before this one was chosen; the 3:1 walk-forward is the judge.",
+  "Fair = the 09:30 open every day; no pre-news fair, no moving of the line, no opening continuation.",
+  "MY PICKS: market at the candle's close; 15 points of room; entries 09:35-15:00 as one instance, flat 15:58.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay)."
+ ],
+ "control": "random"
+}

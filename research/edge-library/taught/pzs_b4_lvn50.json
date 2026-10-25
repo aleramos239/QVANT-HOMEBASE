@@ -1,0 +1,56 @@
+{
+ "name": "pzs_b4_lvn50",
+ "source": {
+  "title": "Owner 2026-10-23: trade the chart's Stacked profile zones (cabatrades 'three profiles, one level') on the first touch"
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "pzone",
+  "settings": {
+   "stop_atr": 3.0,
+   "base": "leg",
+   "match": "on",
+   "back": 10,
+   "outlier": 2.0,
+   "orders": "all",
+   "reuse": "on",
+   "vwap18": "zone",
+   "lvn": 50
+  },
+  "words": "play with it until you get something good and profitable with mimium 1 trade a day, dont just give me the first profitable strategy, play with it until you exhaust it all, vwap, ema, window to trade, timeframe"
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.5,
+  "max_trades": 10
+ },
+ "taught": [
+  "[owner 2026-10-23] the levels = the Stacked profile zones: a delta outlier with a TPO single print and a low volume node next to it",
+  "[owner 2026-10-23] the delta outlier is measured against its own leg (\"a delta outlier from the last leg\"), fix both",
+  "[owner 2026-10-23] trade all day, not only 9:30-4pm",
+  "[owner 2026-10-23] price below a level taps it: short; price above a level taps it: long",
+  "[owner 2026-10-23] target 1:1.5, stop 2 x ATR",
+  "[owner 2026-10-23] colour match: long only at a buyers' zone from above, short only at a sellers' zone from below",
+  "[owner 2026-10-23] keep zones for 10 days, make it 2x, and put an order at every live zone",
+  "[owner 2026-10-24] play with it until you get something good and profitable with minimum 1 trade a day: vwap, ema, window to trade, timeframe"
+ ],
+ "not_run": [
+  "THE DELTA: the tape has no aggressor side; each print's side is the tick rule (up = buy, down = sell), an estimate of the chart's vendor delta.",
+  "THE STOP: stop_atr x ATR(14) of the 5-minute bars at the moment the order is placed, from the entry price.",
+  "PRIOR DAYS IN A SEALED MONTH: their zones are unknown, so the first days of each in-sample block trade fewer levels.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, 4 dollars a round turn, tick replay).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days).",
+  "THE SESSIONS: every Globex pass, 18:00 the evening before to 15:58 ET (eve, asia, london, pre, nyam, mid, pm), flat 15:58; nothing 15:58-18:00.",
+  "THE LEVELS: the zones of the 10 trade dates before, 4-tick rows, 30-minute TPO letters; a leg = 3+ single-print rows next to each other; outlier 2x the leg's median row; low volume node under 30 % of the busiest row; a zone is used up by its first touch, traded or not."
+ ],
+ "control": "random"
+}

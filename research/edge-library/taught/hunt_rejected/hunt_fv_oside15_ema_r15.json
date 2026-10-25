@@ -1,0 +1,36 @@
+{
+ "name": "hunt_fv_oside15_ema_r15",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (lens: fair value gaps with a second side): the owner's 15-minute open-side FVG (middle-candle stop) taken only when the 20-bar EMA of 15-minute closes agrees with the 09:30 open, at 1:1.5, two a day. Why it should pay: the open's side says who took control of the session, the EMA20 says the last five hours of price lean the same way; when both agree the newest gap on that side is unfilled trend buying (or selling) and the return to it is met by the trend's own orders. Who loses: the faders of a day whose open side and trend agree -- they sell the pullback into a gap that the trend defends, and their stops beyond the middle candle carry the move to 1.5R."
+ },
+ "market": "NQ",
+ "bars": ["15"],
+ "sessions": ["nyam", "mid", "pm"],
+ "window": "09:30-15:00",
+ "dir": "both",
+ "entry": {
+  "family": "fvg_oside",
+  "settings": {"min_gap": 0.1, "stop_atr": 0.0, "gate": "price_ema", "g_n": 20, "g_lvl": 0.0, "g_side": "with"},
+  "words": "On 15-minute candles from 09:30: above the 09:30 open AND above the 20-bar EMA of 15-minute closes, rest a buy limit at the near edge of the newest up fair value gap (at least 0.1 x ATR(14) tall); below the open AND below the EMA, a sell limit at the newest down gap. A newer gap or a flip of the side moves the order; no new order from 15:00. Stop at the middle candle's far end, target 1.5 x the stop. Up to 2 trades a day, one at a time. Flat 15:58."
+ },
+ "exits": {"stop": "struct", "target_r": 1.5, "max_trades": 2},
+ "taught": [
+  "[owner chat 2026-10-19, family fvg_oside] NQ 15-minute; above the 09:30 open: longs on the most recent FVG, below: shorts; stop at the middle candle's extreme",
+  "[chat 2026-10-20, sheet cl_fvg_oside_15_mid_r1_t2_gap0p1] gaps at least 0.1 x ATR(14) tall; two a day",
+  "[owner 2026-10-18, sheet cl_disp15_ema_allday_k1p5; Claude 2026-10-20, cl_pm_first_bar_cdl_ema_15] the EMA20 side gate on 15-minute closes (long only above, short only below)",
+  "[owner 2026-10-20, hunt PREREG] target 1.5 x the stop",
+  "[Claude hunt 2026-10-20] the EMA20 side added to the 09:30-open side (both must agree); target 1.5R",
+  "[Claude hunt 2026-10-20, prior knowledge read before this sheet: result.json of cl_fvg_oside_15_mid_r1_t2_gap0p1, cl_fx_fvg_ema20side_15_p37 and owner_fvg_oside_15_a1m3_r15] the 15-minute open-side FVG was the house's strongest build-day lead and failed its walk-forward; the EMA20 side alone (placebo) was weaker than the open side; this sheet asks whether the two sides together hold at 1.5R. No number was tuned to those results"
+ ],
+ "not_run": [
+  "PARTLY SEEN, SAID PLAINLY: this is the 15-minute open-side FVG family, whose unseen months (2025-07 on) were read three times (the 1-a-day sibling's walk-forward, the lane's no-cap walk-forward, the Desk walk-forward) and again in cl_fvg_oside_15_mid_r1_t2_gap0p1's walk-forward (which lost in the blind months). Its trades here are a subset of that sheet's entries with another target; the walk-forward of this sheet is NOT blind and must be read as partly seen.",
+  "THE GATE: the open layer's price_ema(20) on the 15-minute closes since 00:00 ET (seeded with the day's first close), read at the gap's close: (close - EMA20) / ATR(14) above 0 for a long, below 0 for a short. It is checked when the order is placed or moved.",
+  "THE SIDE vs the 09:30 open is read on each 15-minute close, not tick by tick.",
+  "THE STOP: the middle candle's far end (bar 2's low for an up gap, high for a down gap), floored at 0.25 x ATR(14) of the 15-minute bars and two ticks.",
+  "ONE INSTANCE 09:30-15:58: the cap of 2 is a DAY cap and one position at a time holds all day; after a trade only a gap formed after it counts; an unfilled order is cancelled at 15:00.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay, strict limit fills).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

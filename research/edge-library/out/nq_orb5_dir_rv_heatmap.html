@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>nq_orb5_dir_rv: 3:1 in-sample heat map</title>
+<style>
+  body{font:14px -apple-system,system-ui,sans-serif;background:#111;color:#ddd;margin:24px;max-width:900px}
+  h1{font-size:18px;margin:0 0 4px} h2{font-size:15px;margin:28px 0 6px} p{margin:4px 0;color:#999}
+  table{border-collapse:separate;border-spacing:3px}
+  th{font-weight:500;color:#999;font-size:12px;padding:2px 6px}
+  th.row{text-align:right;white-space:nowrap}
+  td{width:118px;height:62px;border-radius:5px;text-align:center;color:#fff;line-height:1.25;vertical-align:middle}
+  td b{font-size:15px;display:block} td small{font-size:11px;opacity:.85}
+  .dim{opacity:.55} .legend{display:flex;align-items:center;gap:8px;margin:10px 0;color:#999;font-size:12px}
+  .bar{width:240px;height:10px;border-radius:5px;background:linear-gradient(90deg,#b3261e,#2a2a2a,#1b8a4b)}
+</style>
+<h1>nq_orb5_dir_rv: 3:1 in-sample heat map</h1>
+<p>NQ, 5-minute ORB, first-candle direction, opening volume ≥ rv × 14-day mean. 1 contract, costs on. In-sample months only, no test month opened. Not picked.</p>
+<div class="legend">loss <span class="bar"></span> profit (shade = net $ over the in-sample months, same scale in both grids)</div>
+
+<h2 id="t1"></h2><p id="s1"></p><div id="g1"></div>
+<h2 id="t2"></h2><p id="s2"></p><div id="g2"></div>
+<h2>rv 2.0</h2><p>0 trades in every box: NQ's opening volume never reached 2× its 14-day mean.</p>
+
+<script>
+// [table #, win %, net $, profit factor]  rows: stop, columns: target (R)
+const T = ["0.5R","0.75R","1R","1.5R","2R"];
+const S = ["ATR × 0.5","ATR × 1","ATR × 1.5","ATR × 2","own stop × 0.5","own stop × 1","own stop × 1.5","own stop × 2"];
+const RV1 = [
+ [[18,66,-2550,.92],[38,58,-2870,.93],[54,49,-3740,.92],[77,38,-5885,.89],[80,30,-12100,.81]],
+ [[16,67,-6050,.90],[39,57,-7040,.91],[53,50,-7520,.92],[72,44,11540,1.11],[78,38,14530,1.13]],
+ [[20,66,-14675,.85],[37,58,-4370,.96],[49,54,12245,1.10],[71,45,19820,1.13],[75,39,30785,1.19]],
+ [[17,67,-9495,.92],[32,62,22585,1.17],[50,54,20315,1.12],[68,45,26555,1.13],[74,39,36655,1.17]],
+ [[19,66,-10820,.89],[34,60,4440,1.04],[47,54,15930,1.12],[57,46,37645,1.25],[73,41,52445,1.31]],
+ [[14,68,790,1.00],[35,60,20385,1.09],[51,54,28350,1.11],[69,45,46575,1.15],[76,39,42380,1.13]],
+ [[13,70,46545,1.19],[36,59,23455,1.07],[48,54,48240,1.13],[56,48,61625,1.15],[70,45,51935,1.12]],
+ [[15,68,61050,1.21],[33,61,91185,1.25],[40,56,88880,1.22],[52,51,92535,1.21],[55,49,113440,1.26]]];
+const RV15 = [
+ [[3,73,341,1.51],[21,64,576,1.69],[41,55,631,1.60],[58,45,431,1.29],[79,36,516,1.31]],
+ [[1,82,1571,3.11],[4,73,1266,1.80],[22,64,1496,1.76],[59,45,796,1.27],[60,45,2046,1.69]],
+ [[5,73,496,1.21],[23,64,1036,1.36],[42,55,456,1.12],[61,45,1056,1.24],[62,45,2911,1.65]],
+ [[6,73,681,1.22],[43,55,-814,.84],[44,55,621,1.12],[63,45,1436,1.24],[64,45,2581,1.43]],
+ [[24,64,-784,.81],[25,64,891,1.22],[65,45,-1034,.83],[66,45,1416,1.24],[67,45,3861,1.65]],
+ [[26,64,-2194,.75],[27,64,1041,1.12],[28,64,4261,1.49],[45,55,5866,1.60],[46,55,8621,1.88]],
+ [[7,73,386,1.04],[8,73,5826,1.56],[29,64,5846,1.48],[30,64,11531,1.94],[31,64,17906,2.47]],
+ [[2,82,4236,1.37],[9,73,6036,1.44],[10,73,10146,1.74],[11,73,19726,2.45],[12,73,25131,2.84]]];
+const MAX = 113440, k = n => (n<0?"-":"")+"$"+Math.abs(Math.round(n)).toLocaleString();
+function color(net){ // sqrt scale so small boxes still show a tint
+  const a = Math.sqrt(Math.min(Math.abs(net)/MAX,1)), g = 42;
+  const [r,gg,b] = net<0 ? [179,38,30] : [27,138,75];
+  return `rgb(${Math.round(g+(r-g)*a)},${Math.round(g+(gg-g)*a)},${Math.round(g+(b-g)*a)})`;
+}
+function grid(id, data, dim){
+  let h = `<table class="${dim?"dim":""}"><tr><th></th>${T.map(t=>`<th>target ${t}</th>`).join("")}</tr>`;
+  data.forEach((row,i)=>{ h += `<tr><th class="row">${S[i]}</th>` + row.map(([n,w,net,pf])=>
+    `<td style="background:${color(net)}" title="table #${n}"><b>${k(net)}</b><small>#${n} · win ${w}% · PF ${pf.toFixed(2)}</small></td>`).join("") + "</tr>"; });
+  document.getElementById(id).innerHTML = h + "</table>";
+}
+const all1 = RV1.flat(), pos = all1.filter(c=>c[2]>0).length, avg = all1.reduce((a,c)=>a+c[2],0)/all1.length;
+document.getElementById("t1").textContent = "rv 1.0 (the paper's 100%): 380 trades per box";
+document.getElementById("s1").textContent = `${pos} of ${all1.length} boxes profitable · average box ${k(avg)} · numbers # are the in-sample table's rank (win rate first), the number you pick by.`;
+document.getElementById("t2").textContent = "rv 1.5: only 11 trades per box (too few to judge)";
+document.getElementById("s2").textContent = "Shown faded. Do not read these as edge.";
+grid("g1", RV1, false); grid("g2", RV15, true);
+</script>

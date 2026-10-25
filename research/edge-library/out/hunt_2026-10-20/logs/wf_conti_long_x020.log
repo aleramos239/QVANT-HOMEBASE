@@ -1,0 +1,22 @@
+conti_long_x020: 3:1 walk-forward in blocks, 15 test months (2022-01 .. 2026-09), 5 stood aside; test days read 2025-07-01 .. 2026-09-22
+stitched: 345 trades, net $24,035, avg $70, win 66.1 %, PF 1.15, worst DD $19,882; build-day months $26,686 (271), test-day months $-2,651 (74)
+  P6.1 PASS the 3:1 walk-forward made $24,035 on its test months, one contract after costs (need above $0)
+  P6.2 FAIL beats 93.67 % of 4,000 random tables, each month its pick's exit cell (need above 95 %)
+  P6.3 PASS win rate 66.09 % on 345 trades at a realized reward-to-risk of 0.59 (average win $808, average loss $1,370): breakeven 62.89 %, need 65.89 % or more (+3 points) (row P3.15 on the stitched months)
+  P6.4 PASS 345 trades on the test months (need 200)
+  2022-01  pts60-r0p833333  38  $10,678
+  2022-05  stood aside      0  $0
+  2022-09  pts80-r0p5      40  $2,035
+  2023-01  stood aside      0  $0
+  2023-05  pts100-r0p5     28  $6,988
+  2023-09  stood aside      0  $0
+  2024-01  pts60-r0p833333  32  $4,432
+  2024-05  pts100-r0p4     30  $6,080
+  2024-09  pts100-r0p3     33  $2,873
+  2025-01  pts100-r0p5     34  $-1,136
+  2025-05  pts100-r0p5     36  $-5,264
+  2025-09  stood aside      0  $0
+  2026-01  pts100-r0p3     28  $-4,722
+  2026-05  pts80-r0p5      46  $2,071
+  2026-09  stood aside      0  $0
+next month (2026-10): stand aside

@@ -1,0 +1,44 @@
+{
+ "name": "owner_disp_break_body3x_5_0945_r1p5",
+ "source": {
+  "title": "Owner's idea in chat, 2026-10-20: 15-minute displacement, all day: a candle that closes beyond the previous candle's wick AND whose body is at least 2x the previous candle's body, entered with it"
+ },
+ "market": "NQ",
+ "bars": [
+  "5"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "candle_sweep",
+  "settings": {
+   "mode": "break",
+   "body_x": 3.0,
+   "w_start": "09:45:01",
+   "w_end": "10:00:01"
+  },
+  "words": "On 5-minute NQ candles, entries decided 09:45:01-10:00:00 ET only (the three 5-minute candles 09:45, 09:50, 09:55): when a candle closes above the previous candle's high and its body is at least 3x the previous candle's body, go long at the close; below the previous low with a body at least 3x, go short."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.5,
+  "max_trades": 20
+ },
+ "taught": [
+  "[chat 2026-10-20] no time window trade all day, lets use displacement, lets try 15 minute frame",
+  "[chat 2026-10-20] every time we close above the previous wicks candle and the candle body is 2x bigger than the previous candles body, then long, vice versa for shorts",
+  "[chat 2026-10-20] try 9:45-10am on 1 minute and 5 minute (this sheet: 5-minute, 3x, centre 1:1.5)"
+ ],
+ "not_run": [
+  "THE EXITS were not given: Claude used the house candle-break stop (the breaking candle's extreme, floored at 0.25 x ATR(14)) and a 1:1.5 target; the neighbours are 1:1.125 and 1:1.875.",
+  "THE WICK: a close strictly above the previous high (long) or strictly below the previous low (short).",
+  "THE BODY: |close - open| of the breaking candle >= 3 x |close - open| of the previous candle.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days); no trade is held past it.",
+  "THE CAP: none (the lane's 20 a pass); one position at a time inside a pass.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE WINDOW 09:45-10:00 is the open layer's w_start 09:45:01 / w_end 10:00:01 (an entry decided at a 5-minute close from 09:46 (1m) or 09:50 (5m) to 10:00:00); the trade then runs to its stop, target or 15:58. The random control does not wait for the window (the lane's own limit)."
+ ],
+ "control": "random"
+}

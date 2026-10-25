@@ -1,0 +1,35 @@
+{
+ "name": "hunt_fv_cbreak15_ema1h_midpm",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (lens: structure breaks after the morning): the owner's 15-minute candle break -- a candle that closes beyond the previous candle's wick, entered with it -- in the midday and afternoon passes only, on the side of the 1-hour EMA 50, stop at the breaking candle's extreme, 1:1.5, once a pass. Why it should pay: after lunch the morning's balance breaks; a 15-minute close beyond the previous candle on the side of the hour-chart trend is the trend's buyers (or sellers) coming back with size, and it carries. Who loses: the midday range traders who sold the previous candle's high (or bought its low) expecting the lunch range to hold, and whose stops beyond it feed the break."
+ },
+ "market": "NQ",
+ "bars": ["15"],
+ "sessions": ["mid", "pm"],
+ "dir": "both",
+ "entry": {
+  "family": "candle_sweep",
+  "settings": {"mode": "break", "ema1h": 50},
+  "words": "On 15-minute candles, from 11:00: when a candle closes above the previous candle's high and above the 1-hour EMA 50, buy at the next bar's open; when it closes below the previous candle's low and below the EMA, sell. Stop at the breaking candle's extreme (its low for a long, its high for a short), target 1.5 x the stop. One trade in the midday pass (11:00-13:30) and one in the afternoon pass (13:30-15:58)."
+ },
+ "exits": {"stop": "struct", "target_r": 1.5, "max_trades": 1},
+ "taught": [
+  "[owner chat 2026-10-18, sheet owner_candle_break_15_nyam_nocap] if the candle closes over the previous candle's wick we enter; stop at the candle extreme",
+  "[owner chat 2026-10-17, sheet owner_candle_sweep_15_ema50_nyam_1tr] add a 1-hour EMA, only long above and short below (length 50)",
+  "[owner chat 2026-10-18] 1 trade a day (here: one a session pass)",
+  "[owner 2026-10-20, hunt PREREG] target 1.5 x the stop",
+  "[Claude hunt 2026-10-20] the break moved to the midday and afternoon passes, away from the morning legs (09:45, 10:00-10:45) the stack already has",
+  "[Claude hunt 2026-10-20, prior knowledge read before this sheet: result.json of owner_candle_break_15_nyam_* and owner_candle_sweep_15_*] the break (not the sweep fade) is the family's only side that showed anything, in the morning at 0.5R, and its pre-registered read failed; the midday / afternoon break was never run. No number was tuned to those results"
+ ],
+ "not_run": [
+  "PARTLY SEEN: the candle_sweep family's break was read on its unseen months in the NY morning (owner_candle_break_15_nyam_nocap's pre-registered read and walk-forward, 2026-10-18/19). This sheet trades other hours (11:15-15:45 closes), so its trades are different, but the family and the months are the same: its walk-forward is not fully blind.",
+  "THE WICK: 'closes over the previous candle's wick' is read as a close strictly above the previous candle's high (long) or strictly below its low (short); the previous candle may be the last candle of the pass before.",
+  "THE 1-HOUR EMA: EMA(50) of the 1-hour closes (the last print of each whole ET hour that has ended), carried back across days to 150 closes, the contract's first day or 30 sessions; the signal close must be strictly above it (long) or below it (short); with fewer than 50 closes (right after a roll) there is no trade.",
+  "THE STOP: the breaking candle's extreme, measured from its close and placed from the fill at the next bar's open; floored at 0.25 x ATR(14) of the 15-minute bars.",
+  "THE CAP: one trade per session pass; two passes, so a day can hold up to 2 trades, and the midday trade may still be open when the afternoon pass enters.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days); no entry in the last 5 minutes of a pass."
+ ],
+ "control": "random"
+}

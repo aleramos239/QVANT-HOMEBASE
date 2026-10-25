@@ -1,0 +1,36 @@
+{
+ "name": "hunt_fv_oside5_a1m3_vwap",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (lens: fair value gaps at higher frequency): the owner's open-side FVG moved to 5-minute bars, with the session VWAP as a second side that must agree with the 09:30 open, a 3 x 1-minute-ATR stop and 1:1.5, up to 3 a day. Why it should pay: above both the 09:30 open and the VWAP the day's buyers are in control by price and by volume, and the newest 5-minute up gap is their buying that was left unfilled; the first return to it meets that resting interest and the move resumes (the mirror below both). Who loses: the traders who fade the day's side into the gap -- shorts sold above the open and the VWAP, dip-buyers below both -- whose stops beyond the gap pay for the continuation."
+ },
+ "market": "NQ",
+ "bars": ["5"],
+ "sessions": ["nyam", "mid", "pm"],
+ "window": "09:30-15:00",
+ "dir": "both",
+ "entry": {
+  "family": "fvg_oside",
+  "settings": {"min_gap": 0.1, "atr1": 3.0, "gate": "vwap_dev", "g_lvl": 0.0, "g_side": "with"},
+  "words": "On 5-minute candles from 09:30: above the 09:30 open AND above the session VWAP, rest a buy limit at the near edge of the newest up fair value gap (at least 0.1 x ATR(14) tall); below the open AND below the VWAP, a sell limit at the newest down gap. A newer gap or a flip of the side moves the order; no new order from 15:00. Stop 3 x the average true range of the last 14 one-minute bars from the entry, target 1.5 x the stop. Up to 3 trades a day, one at a time; after a trade only a gap formed after it counts. Flat 15:58."
+ },
+ "exits": {"stop": "struct", "target_r": 1.5, "max_trades": 3},
+ "taught": [
+  "[owner chat 2026-10-19, family fvg_oside] above the 09:30 open: longs on the most recent FVG; below: shorts; a limit at the gap's near edge",
+  "[owner chat 2026-10-19, sheets owner_fvg_oside_15_a1m3_*] the stop measured on the 1-minute ATR (14 bars), 3 x",
+  "[chat 2026-10-20, sheet cl_fvg_oside_15_mid_r1_t2_gap0p1] gaps at least 0.1 x ATR(14) tall (the middle value the family's library ran)",
+  "[owner 2026-10-20, hunt PREREG] target 1.5 x the stop",
+  "[Claude hunt 2026-10-20] 5-minute bars for more gaps a day; the session VWAP (gate vwap_dev, line 0, with) must be on the trade's side as well as the 09:30 open; up to 3 a day (one instance, a day cap)",
+  "[Claude hunt 2026-10-20, prior knowledge read before this sheet: result.json of owner_fvg_oside_5_r1 and owner_fvg_oside_5_atr1] the 5-minute open-side FVG with no second side and a narrow stop was near break-even at 1R on build days (about 1 a day); this sheet changes the stop to the wide 3 x 1m-ATR and adds the VWAP side for reasons of the rule, and no number was tuned to those results"
+ ],
+ "not_run": [
+  "PARTLY SEEN: the fvg_oside family's unseen months (2025-07 on) were read three times on 15-minute bars (the 1-a-day sibling's walk-forward, the lane's no-cap walk-forward, the Desk walk-forward) and again in cl_fvg_oside_15_mid_r1_t2_gap0p1's walk-forward. This 5-minute sheet with a VWAP side makes different trades on the same months: its walk-forward is not fully blind.",
+  "THE VWAP: the engine's session VWAP, which restarts at each session pass start (09:30, 11:00 and 13:30 ET), not one VWAP from 09:30; the gate reads (close - VWAP) / sigma at the gap's 5-minute close (closed bars only): above 0 for a long, below 0 for a short. The gate is checked when the order is placed or moved.",
+  "THE SIDE vs the 09:30 open is read on each 5-minute close, not tick by tick.",
+  "THE STOP: 3 x the mean true range of the 14 newest completed 1-minute bars at the gap's close, measured from the near edge, without the engine's 0.25 x tf-ATR floor (two ticks only).",
+  "ONE INSTANCE 09:30-15:58: the cap of 3 is a DAY cap and one position at a time holds all day; an unfilled order is cancelled at 15:00.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay, strict limit fills).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

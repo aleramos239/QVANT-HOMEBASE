@@ -1,0 +1,53 @@
+{
+ "name": "owner_vwap_pullback_50_76",
+ "source": {
+  "title": "The owner's VWAP idea (2026-10-20): a pullback to the session VWAP, then JJ Simon's displacement candle away from it in the VWAP's own direction, 25 / 38",
+  "channel": "owner",
+  "url": "https://www.youtube.com/watch?v=KN7j6NXXAio"
+ },
+ "market": "NQ",
+ "bars": [
+  "1"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "jj_fair",
+  "settings": {
+   "entry": "mom",
+   "fair": "vwap",
+   "min_room": 0.0,
+   "max_loss": 99,
+   "end": "15:00",
+   "wick": "on",
+   "pullback": "on",
+   "vwap_slope": 30
+  },
+  "words": "Owner 2026-10-20: 'i think vwap is really good and can really help'. The rule: from 09:35 to 15:00, when the previous 1-minute candle touched the session VWAP (its low at or under the VWAP, its high at or over it) and the next candle is a displacement (body larger than the previous body, the previous candle the opposite colour, close beyond the previous candle's wick) AWAY from the VWAP, in the direction the VWAP itself has moved over the last 30 minutes (longs only while the VWAP is above its value 30 minutes ago, shorts only while below), enter at the close: 25-point stop, 38-point target, one position at a time, no loss stop. JJ's displacement, Conti's pullback shape, the owner's VWAP."
+ },
+ "exits": {
+  "stop_pts": 50,
+  "target_pts": 76,
+  "max_trades": 20
+ },
+ "taught": [
+  "[owner 2026-10-20] VWAP as the line; a pullback to it, then go with the day's direction",
+  "[KHEQ5g55dQ4 54:39] displacement: the body must be larger and it must close beyond the wick; [69:05] of the opposite colour",
+  "[KN7j6NXXAio 5:36] 25-point stop, 38-point target, 1 to 1.5",
+  "[owner 2026-10-19] all day, no loss stop; frequency matters",
+  "[batch 6, 2026-10-20] screened: 1,288 trades (1.4 a day), target-vs-stop 42.0%, +$22 a trade, PF 1.08, every year 40-48%; the bare VWAP touch without the displacement is 38.8%"
+ ],
+ "not_run": [
+  "SCREENED, NOT TAUGHT: 155 versions of JJ's rule were read on the build days before this one (batches 1-6); the 3:1 walk-forward judges the exit cell only and its blind months (2025-07 on) are the only out-of-sample read.",
+  "The VWAP slope window (30 minutes) and the touch definition (low <= VWAP <= high of the bar before) are the owner's / Claude's picks: 15 and 60 minutes and the body-only displacement were screened too (41.3-41.6%).",
+  "The 'direction' is the VWAP's own slope, not JJ's 6-12 hour bias; no news-day rule; no moving of the line.",
+  "MY PICKS: market at the displacement candle's close; entries 09:35-15:00 as one instance (flat 15:58); a trade's result counts when it closes.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "50 / 76 (JJ's size for a bigger move), the batch-6 screen row pullback-slope30-50_76 (+$64 a trade, target-vs-stop 41.5 % vs a 41.6 % break-even): sent to its first walk-forward on the 2026-10-20 review's advice before the VWAP idea is closed."
+ ],
+ "control": "random"
+}

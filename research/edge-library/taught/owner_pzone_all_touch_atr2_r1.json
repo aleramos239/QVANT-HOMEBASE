@@ -1,0 +1,55 @@
+{
+ "name": "owner_pzone_all_touch_atr2_r1",
+ "source": {
+  "title": "Owner 2026-10-23: trade the chart's Stacked profile zones (cabatrades 'three profiles, one level') on the first touch"
+ },
+ "market": "NQ",
+ "bars": [
+  "5"
+ ],
+ "sessions": [
+  "eve",
+  "asia",
+  "london",
+  "pre",
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "pzone",
+  "settings": {
+   "stop_atr": 2.0,
+   "base": "leg",
+   "back": 10,
+   "outlier": 2.0,
+   "orders": "all"
+  },
+  "words": "if we are below a level and we tap it we short and when we are above and tap it we long, lets try 1:1 and 1,2 x atr stop"
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1,
+  "max_trades": 10
+ },
+ "taught": [
+  "[owner 2026-10-23] the levels = the Stacked profile zones: a delta outlier with a TPO single print and a low volume node next to it",
+  "[owner 2026-10-23] the delta outlier is measured against its own leg (\"a delta outlier from the last leg\"), fix both",
+  "[owner 2026-10-23] trade all day, not only 9:30-4pm",
+  "[owner 2026-10-23] price below a level taps it: short; price above a level taps it: long",
+  "[owner 2026-10-23] target 1:1, stop 2 x ATR",
+  "[owner 2026-10-23] keep zones for 10 days, make it 2x, and put an order at every live zone"
+ ],
+ "not_run": [
+  "THE DELTA: the tape has no aggressor side; each print's side is the tick rule (up = buy, down = sell), an estimate of the chart's vendor delta.",
+  "THE STOP: stop_atr x ATR(14) of the 5-minute bars at the moment the order is placed, from the entry price.",
+  "PRIOR DAYS IN A SEALED MONTH: their zones are unknown, so the first days of each in-sample block trade fewer levels.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, 4 dollars a round turn, tick replay).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days).",
+  "THE SESSIONS: every Globex pass, 18:00 the evening before to 15:58 ET (eve, asia, london, pre, nyam, mid, pm), flat 15:58; nothing 15:58-18:00.",
+  "THE LEVELS: the zones of the 10 trade dates before, 4-tick rows, 30-minute TPO letters; a leg = 3+ single-print rows next to each other; outlier 2x the leg's median row; low volume node under 30 % of the busiest row; a zone is used up by its first touch, traded or not.",
+  "THE ORDERS: a limit at every live zone (a sell at the low of each zone above, a buy at the high of each zone below), placed at each 5-minute close, one OCO group: the first fill cancels the rest; a limit fills on a one-tick trade-through."
+ ],
+ "control": "random"
+}

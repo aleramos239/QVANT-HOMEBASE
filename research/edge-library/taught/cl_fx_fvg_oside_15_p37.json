@@ -1,0 +1,48 @@
+{
+ "name": "cl_fx_fvg_oside_15_p37",
+ "source": {
+  "title": "Claude design panel 2026-10-20, falsify lens: CONTROL for the open-side FVG leader -- the leader's exact entries with a FIXED 37-point stop and target instead of the middle candle. Its random control used a fixed 37-point stop while the leader's own stop moves with volatility (trades with stops under 25 points lose, trades over 50 points make $237): this asks whether the edge is in the entry (buyers above the open, the faders pay) or only in the volatility-weighted stop."
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "window": "09:30-15:00",
+ "dir": "both",
+ "entry": {
+  "family": "fvg_oside",
+  "settings": {
+   "min_gap": 0.1,
+   "stop_atr": 0.0
+  },
+  "words": "Above the 09:30 open: a limit at the near edge of the most recent 15-minute up fair value gap; below the open: the most recent down gap; gaps at least 0.1 x ATR(14) high. Stop 37 points, target 37 points (1:1). Up to two trades a day."
+ },
+ "exits": {
+  "stop_pts": 37,
+  "target_pts": 37,
+  "max_trades": 2
+ },
+ "taught": [
+  "[chat 2026-10-19] NQ, 15-minute bars",
+  "[chat 2026-10-19] above the 09:30 open: longs on the most recent FVG; below: shorts",
+  "[chat 2026-10-19] owner: run the same rule at 1:1",
+  "[Claude 2026-10-20, sheet cl_fvg_oside_15_mid_r1_t2_gap0p1] gaps at least 0.1 x ATR(14) high; two a day",
+  "[Claude design panel 2026-10-20] CONTROL: the middle-candle stop is REPLACED by a fixed 37 points (the leader's median stop and the size its random control used); the same gaps are traded (a middle candle not beyond the near edge still gives no order)"
+ ],
+ "not_run": [
+  "THE STOP: 37 points fixed, NOT the middle candle's extreme (the owner's stop): this is a control, not a strategy.",
+  "THE CAP: two a day (one instance for the whole window).",
+  "SIDE: price vs the 09:30 open is read on each 15-minute close, not tick by tick.",
+  "THE ENTRY: a limit at the gap's near edge; a newer gap or a flip of the side moves the order.",
+  "WINDOW: entries 09:30-15:00, an unfilled order cancelled at 15:00.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

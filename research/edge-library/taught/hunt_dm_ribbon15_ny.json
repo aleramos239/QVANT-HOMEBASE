@@ -1,0 +1,43 @@
+{
+ "name": "hunt_dm_ribbon15_ny",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (designer: momentum on a close): the EMA ribbon stack on NQ 15-minute closes, both sides, every NY pass. Why it should pay: the bar at which EMA 8, 21 and 55 of the 15-minute closes become fully stacked for the first time is where the short, medium and slow trend first agree: a fresh trend leg that trend-following and systematic money then add to. Who loses: traders still positioned for the old range or the old trend, whose stops sit on the far side of the new leg, and the faders of the first push."
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "ema_ribbon",
+  "settings": {
+   "slow": 55
+  },
+  "words": "On NQ 15-minute closes, the bar at which EMA 8 > EMA 21 > EMA 55 becomes true (it was not at the bar before) is a long at its close; EMA 8 < 21 < 55 becoming true, a short. Stop 40 points, target 60 points (1:1.5). One trade per session pass (nyam, mid, pm): up to three a day, flat 15:58."
+ },
+ "exits": {
+  "stop_pts": 40,
+  "target_pts": 60,
+  "max_trades": 1
+ },
+ "taught": [
+  "[family ema_ribbon, the library's ribbon] EMA 8 / 21 / 55 becoming fully stacked at a tf close is a market entry with the stack",
+  "[family default] slow EMA 55; not tuned",
+  "[Claude hunt 2026-10-20] NQ, 15-minute bars, both sides, one stack per NY pass, fixed 40 / 60 point bracket (1:1.5)",
+  "[prior knowledge] no ema_ribbon sheet has run in the taught lane; the house lessons used: NQ only, NY cash session, with the move, 15-minute bars, stops wider than 20 points"
+ ],
+ "not_run": [
+  "THE STOP: the family has no structure level (ATR fallback): the fixed 40 / 60 point bracket is the sheet's.",
+  "THE EMAs restart each day at 00:00 ET, seeded with the first close (the engine's own): at 09:30 the EMA 55 holds 38 bars of the night and is not a full 55-bar average.",
+  "THE CAP IS PER SESSION PASS, NOT PER DAY: max_trades 1 counts inside each of the 3 passes, so a day can hold up to 3 trades; the passes are independent instances, so a trade of one pass may still be open when the next pass enters (one position at a time holds inside a pass only; the hunt's stack step applies one-at-a-time across legs).",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay, 1 NQ).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on an equity half day); no entry in the last 5 minutes of a pass.",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only (2021-09-22 .. 2025-06-30); the 3:1 block walk-forward is a separate, pre-registered read (hunt PREREG Gate 2)."
+ ],
+ "control": "random"
+}

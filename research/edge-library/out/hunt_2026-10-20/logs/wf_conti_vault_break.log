@@ -1,0 +1,22 @@
+conti_vault_break: 3:1 walk-forward in blocks, 15 test months (2022-01 .. 2026-09), 1 stood aside; test days read 2025-07-01 .. 2026-09-22
+stitched: 252 trades, net $8,582, avg $34, win 64.7 %, PF 1.08, worst DD $12,783; build-day months $13,601 (171), test-day months $-5,019 (81)
+  P6.1 PASS the 3:1 walk-forward made $8,582 on its test months, one contract after costs (need above $0)
+  P6.2 PASS beats 99.15 % of 4,000 random tables, each month its pick's exit cell (need above 95 %)
+  P6.3 FAIL win rate 64.68 % on 252 trades at a realized reward-to-risk of 0.59 (average win $721, average loss $1,224): breakeven 62.93 %, need 65.93 % or more (+3 points) (row P3.15 on the stitched months)
+  P6.4 PASS 252 trades on the test months (need 200)
+  2022-01  pts56p25-r0p888889  21  $-1,789
+  2022-05  pts75-r0p533333  15  $5,555
+  2022-09  pts75-r0p533333  16  $-754
+  2023-01  pts93p75-r0p32  24  $6,279
+  2023-05  pts93p75-r0p32  19  $4,024
+  2023-09  pts56p25-r0p533333   9  $-2,871
+  2024-01  pts93p75-r0p426667  20  $-2,830
+  2024-05  stood aside      0  $0
+  2024-09  pts75-r0p533333  16  $-2,019
+  2025-01  pts75-r0p666667  17  $1,227
+  2025-05  pts75-r0p533333  14  $6,779
+  2025-09  pts93p75-r0p426667  16  $-4,694
+  2026-01  pts93p75-r0p426667  21  $-4,879
+  2026-05  pts93p75-r0p426667  29  $-76
+  2026-09  pts56p25-r0p533333  15  $4,630
+next month (2026-10): pts56p25-r0p533333

@@ -1,0 +1,30 @@
+{
+ "name": "cl_am_orb30_close15",
+ "source": {
+  "title": "Claude design panel 2026-10-20 (lens morning): the 09:30-10:00 opening range broken on a 15-minute close, followed. Cause: the first half-hour is a two-sided auction; a 15-minute close outside its range after 10:00 shows one side won it, and the side that sold the high or bought the low of the range is trapped, its stops beyond the range feeding the move (a measured move: stop at the other edge, target one range)."
+ },
+ "market": "NQ",
+ "bars": ["15"],
+ "sessions": ["nyam"],
+ "dir": "both",
+ "entry": {
+  "family": "win_break",
+  "settings": {"r_start": "09:30", "r_end": "10:00", "mode": "follow", "entry": "market", "wait": "0"},
+  "words": "Mark the high and low of 09:30-10:00 ET. The first 15-minute candle after 10:00 that closes above the high is a long at that close; below the low, a short. Stop at the other edge of the range, target 1:1 (one range from the entry). One signal a day, traded or not."
+ },
+ "exits": {"stop": "struct", "target_r": 1, "max_trades": 1},
+ "taught": [
+  "[owner 2026-10-12 indicator study, CLAUDE_NOTES / synth_frequency_simplicity] the 15-minute opening range continues; every other indicator was flat",
+  "[owner 2026-10-08 pipeline card nq_orb_close_nyam] a close beyond the opening range after 09:30 shows the auction has found a side; follow it",
+  "[Claude design panel 2026-10-20] range 09:30-10:00, 15-minute closes, market entry at the close, stop at the other edge of the range, target 1:1, one a day"
+ ],
+ "not_run": [
+  "THE SIGNAL: the first 15-minute close beyond the range after 10:00 (closes at 10:15, 10:30, 10:45) is the day's one signal; a break after 10:55 is not traded (the family runs in the nyam pass only).",
+  "THE STOP: the other edge of the 09:30-10:00 range, measured from the signal close (the range plus the overshoot); no cap on its size.",
+  "A stop floor of 0.25 x ATR applies when the edge is nearer than that.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: build days only."
+ ],
+ "control": "random"
+}

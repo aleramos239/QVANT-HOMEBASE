@@ -1,0 +1,3 @@
+done wf hunt_fv_cbreak15_ema1h_midpm exit=2 20:19
+done wf hunt_dm_hurst15_ny exit=0 20:19
+done wf hunt_pb_leg15_ema20 exit=0 20:19

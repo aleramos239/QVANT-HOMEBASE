@@ -1,0 +1,92 @@
+hunt_fv_cbreak15_ema1h_midpm: candle_sweep (mode break, back body, ema1h 50, candle 0, turn off, dir930 off, body_x 0), both sides, 15-minute bars, a structure stop, target 1.5R, up to 1 trades a session pass over 2 passes (mid pm); the sheet leaves out 8 things the video says (listed below); verdict: 15-minute bars make $75 a trade on 1,733 trades and hold 8 of 10 lines (misses 3.3, 3.6); the neighbours average $62 a trade.
+
+BUILD DAYS 2021-09-22 .. 2025-06-30 (948 session days), 1 contract after costs. The unseen days (2025-07-01 on) were not read.
+
+=== 15-MINUTE BARS ===
+
+                                                    the taught cell  average of the 3 cells
+trades                                                        1,733                   1,733
+net                                                        $129,893                $115,426
+win rate                                                     45.1 %                  45.7 %
+average trade                                                   $75                     $67
+profit factor                                                  1.18                    1.16
+average win                                                  $1,090                  $1,059
+average loss                                                  -$758                   -$760
+average win / average loss                                     1.44                    1.40
+worst drawdown, daily                                       $30,544                 $33,493
+worst drawdown, open losses counted                         $31,931                 $34,762
+Sharpe                                                         1.30                    1.17
+months won                                                   60.9 %                  58.0 %
+best month, share of the profit                              11.7 %                  11.8 %
+longest run of losing days                                        7                     7.7
+prop eval odds, 30 days (LucidPro 50K, no DLL)               35.7 %                  34.4 %
+prop payout odds (stress, "live is worse", beside)   21.0 % (8.1 %)          20.5 % (8.1 %)
+prop eval odds, stress                                       20.5 %                  20.2 %
+
+The neighbours (the 2 others): average trade $62, they hold 7.0 of 10 lines on average (the taught cell holds 8).
+
+cell           average trade  trades       net  lines held  eval odds
+target 1.125R            $44   1,733   $76,218     6 of 10     31.9 %
+target 1.5R              $75   1,733  $129,893     8 of 10     35.7 %
+target 1.875R            $81   1,733  $140,168     8 of 10     35.6 %
+
+LINES on the taught cell (the pipeline's own functions and words)
+  P3.2 PASS average trade $75 (need above $0)
+  P3.3 PASS 1,733 trades (need 200)
+  P3.4 held (a label, asks nothing) long $84,819, short $45,074 (need both above $0)
+  P3.7 missed (a label, asks nothing) without its best 5 % of trades (87 of 1733) the box makes -$110,414 (need above $0)
+  P3.8 missed (a label, asks nothing) 28 of 46 months won, 60.87 % (need 70 % or more)
+  P3.9 missed (a label, asks nothing) best month 2022-02 is 11.68 % of the profit of the months won (need 10 % or less)
+  P3.10 held (a label, asks nothing) longest run of losing days: 7 (need 8 or fewer)
+  3.3 FAIL default variant: profit factor 1.18 over 1,733 trades (need 1.2 or more)
+  3.4 PASS default variant: net $129,893 / worst drawdown $31,931 = 4.07, open losses counted (need 3 or more)
+  3.5 PASS default variant: Sharpe 1.30 on 948 session days (need 1 or more)
+  3.6 FAIL default variant: worst drawdown $3,193 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)
+  3.7 PASS default variant: makes money in 99.3 % of 1,000 reshuffled runs (need 80 % or more)
+  3.8 PASS default variant: $65,233 without its best 1 % of days (10 of 948 session days; they made $64,660 of $129,893; need above $0)
+  P4.1 PASS the box's average trade is above $0 in 99.3 % of 1,000 reshuffled runs (need 75 % or more)
+  P4.2 PASS beats 100 % of the random-entry runs of the same box on try 1 (need above 95 % = 100 - 5 / 1 try)
+
+PER YEAR, then combined: the taught cell
+year      trades       net  avg trade     win    PF  drawdown
+2021*        127    $2,397        $19  40.9 %  1.05   $10,316
+2022         460   $91,410       $199  50.2 %  1.46    $9,137
+2023         464   $25,729        $55  46.6 %  1.18   $11,883
+2024         463   $14,488        $31  41.9 %  1.08   $12,252
+2025*        219   -$4,131       -$19  40.2 %  0.97   $30,544
+combined   1,733  $129,893        $75  45.1 %  1.18   $30,544
+
+PER YEAR, then combined: the average of the 3 cells
+year      trades       net  avg trade     win    PF  drawdown
+2021*        127    $3,492        $27  42.8 %  1.08    $9,285
+2022         460   $85,537       $186  50.3 %  1.43    $9,210
+2023         464   $24,816        $53  47.1 %  1.17   $12,503
+2024         463   $16,151        $35  43.2 %  1.09   $11,920
+2025*        219  -$14,569       -$67  39.9 %  0.90   $32,071
+combined   1,733  $115,426        $67  45.7 %  1.16   $33,493
+(the random entries used the median stop of the taught trades, 33.75 points, at the same target in R)
+
+NOT RUN (the person who wrote the sheet)
+  - PARTLY SEEN: the candle_sweep family's break was read on its unseen months in the NY morning (owner_candle_break_15_nyam_nocap's pre-registered read and walk-forward, 2026-10-18/19). This sheet trades other hours (11:15-15:45 closes), so its trades are different, but the family and the months are the same: its walk-forward is not fully blind.
+  - THE WICK: 'closes over the previous candle's wick' is read as a close strictly above the previous candle's high (long) or strictly below its low (short); the previous candle may be the last candle of the pass before.
+  - THE 1-HOUR EMA: EMA(50) of the 1-hour closes (the last print of each whole ET hour that has ended), carried back across days to 150 closes, the contract's first day or 30 sessions; the signal close must be strictly above it (long) or below it (short); with fewer than 50 closes (right after a roll) there is no trade.
+  - THE STOP: the breaking candle's extreme, measured from its close and placed from the fill at the next bar's open; floored at 0.25 x ATR(14) of the 15-minute bars.
+  - THE CAP: one trade per session pass; two passes, so a day can hold up to 2 trades, and the midday trade may still be open when the afternoon pass enters.
+  - COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).
+  - THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.
+  - FLAT: every trade is flat by 15:58 ET (13:13 on half days); no entry in the last 5 minutes of a pass.
+
+ALSO TRUE OF THE RUN (the lane)
+  - CAPPED PER SESSION PASS, NOT PER DAY: max_trades 1 counts inside each pass (2 passes: mid, pm), so a day can hold up to 2 trades; a family's own loss or trade count (none) counts inside one pass too.
+  - The passes are independent: a trade of one pass may still be open when another pass enters (one position at a time holds inside a pass only).
+  - Every trade is flat by 15:58 ET (13:13 on an equity half day); no entry in the last 5 minutes of a pass.
+  - Costs: $4.00 a round turn and 1 tick of slippage on market and stop fills, 1 contract (the engine's own).
+  - The stop is the family's structure level of each entry (its size differs from trade to trade; the engine never puts it closer than two ticks or 0.25 ATR); `stop_val` is not used.
+
+HONEST LIMITS
+  - One video's rule, read on the build days (2021-09-22 .. 2025-06-30): in-sample.
+  - The family's settings and the exits are the video's own: nothing was tuned, searched or picked.
+  - The neighbours are shown to see how fragile the rule is; they are not alternatives to choose from.
+  - The unseen days (2025-07-01 on) were not read: a person has to ask for that, and it is read once.
+  - The random entries are the pipeline's own (any bar of the session pass, matched by day and pass): they do not wait for the family's entry window.
+NEXT: This is the rule as taught, in-sample. The unseen days are read once, and only when a person asks for it.

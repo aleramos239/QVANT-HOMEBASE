@@ -66,6 +66,7 @@ from . import W
 from . import rules as R
 
 PERIOD = S.ALLOW_BP                                 # 'bp_build': the range's name AND the engine's switch for it
+VOLUME_FAMILIES = frozenset({"orb_dir_rv"})            # families that read the minute-volume cache themselves (no volume filter): its cache is built for the run's days too
 RUNS = W / "runs_bp"                                # the stores of the blueprint ranges (the old stores stay where they are)
 RUNS_WF = W / "runs_wf"                             # the stores of the 3:1 walk-forward months (blueprint/hmwf.py)
 STAGE = {"unit": "bp_build", "pool": "null_bp"}     # ledger stages: a unit's cells are candidate cells, a pool's are not
@@ -627,7 +628,7 @@ def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who,
             n = RM.auto_workers(default_workers() if workers is None else int(workers))
             spans = _months(days) if wf else [PERIOD]                   # the ranges the caches below are opened for
             with _prep(out):                                            # the caches below are shared files: one run builds them at a time
-                for root in dict.fromkeys(p["root"] for p in pend if p["filter"] and _blocks().reads(p["filter"], ("volume", "rvol")) and (days is None or wf)):
+                for root in dict.fromkeys(p["root"] for p in pend if (p["family"] in VOLUME_FAMILIES or p["filter"] and _blocks().reads(p["filter"], ("volume", "rvol"))) and (days is None or wf)):
                     S.wait_compute_window()                                 # the volume block's minute-volume cache, opened for the build range
                     for rg in spans:
                         say(f"volume block {root}: {_blocks().build_minvol(root, rg, n, allow_holdout=period)}")

@@ -1,0 +1,41 @@
+{
+ "name": "hunt_fv_openfvg5_oc15",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (lens: structure entries at the open and after), from Casper Trading's FVG day trade: on 5-minute bars the first fair value gap whose push breaks the high or low of the 09:30-09:45 candle, a limit at the gap, stop beyond the gap's first candle, 1:1.5; once in each New York pass. Why it should pay: a push through the first 15-minute candle that leaves a gap is one side taking control of the open with orders that had to fill at any price; the return to the gap meets the rest of those orders. Who loses: the traders who sold the opening candle's high (or bought its low) expecting the range to hold, and who must buy back above it.",
+  "video": "WEhmadJArQo",
+  "channel": "Jesse Rogers / Casper Trading",
+  "url": "https://youtu.be/WEhmadJArQo"
+ },
+ "market": "NQ",
+ "bars": ["5"],
+ "sessions": ["nyam", "mid", "pm"],
+ "dir": "both",
+ "entry": {
+  "family": "open_fvg",
+  "settings": {"oc_min": "15", "min_gap": 0.1},
+  "words": "Mark the 09:30-09:45 candle. On 5-minute bars, when a fair value gap forms whose middle candle breaks through that candle's high (long) or low (short), put a limit at the gap's near edge; the stop sits beyond the first candle of the gap pattern; the target is 1.5R. One signal in each New York session pass (morning, midday, afternoon)."
+ },
+ "exits": {"stop": "struct", "target_r": 1.5, "max_trades": 1},
+ "taught": [
+  "[video WEhmadJArQo 5:00-7:50] the day trade uses the first 15-minute candle of the session (09:30-09:45)",
+  "[video WEhmadJArQo 5:00-7:50] on 5-minute bars a fair value gap forms through that candle's high (long) or low (short)",
+  "[video WEhmadJArQo 5:00-7:50] a limit order at the gap",
+  "[video WEhmadJArQo 5:00-7:50] the stop goes beyond the first candle of the fair value gap pattern",
+  "[video WEhmadJArQo 5:00-7:50] the target is 2R -- replaced by 1.5R (owner 2026-10-20, hunt PREREG)",
+  "[Claude hunt 2026-10-20] the same rule also in the midday and afternoon passes (one signal each): a later push back through the opening candle's level that leaves a gap is the same break, and it puts trades at hours the morning legs do not trade",
+  "[Claude hunt 2026-10-20] gaps at least 0.1 x ATR(14) tall (the family's default); the sheet casper_open_fvg_daytrade (nyam only, 2R) was written but never run, so nothing of this family's results was read"
+ ],
+ "not_run": [
+  "THE STOP is bar 1's far extreme (an up gap's bar-1 low, a down gap's bar-1 high), exactly on it with no extra tick; the video does not say how far beyond it. Floored at 0.25 x ATR(14) of the 5-minute bars and two ticks.",
+  "THE ORDER rests at the gap's near edge until it fills, a bar closes beyond the gap's far edge, or the pass's last 5 minutes (10:55, 13:25, 15:53); the video does not say how long it waits.",
+  "'A gap forms through the candle': the engine counts the gap when its middle bar trades at the candle's level and closes beyond it; the gap's own zone may lie above, around or below the level.",
+  "THE CAP: one SIGNAL per session pass (the first gap that counts, either side, whether or not it fills); three passes (09:30-11:00, 11:00-13:30, 13:30-15:58), so a day can hold up to 3 trades, and a midday or afternoon trade may start while an earlier pass's trade is still open.",
+  "MIDDAY AND AFTERNOON: the video teaches the morning only; in those passes the gap's three bars must all lie inside that pass, and the levels are the morning candle's.",
+  "The 1-minute SCALP of the same video is NOT this sheet.",
+  "FULLY BLIND: no open_fvg sheet or card has ever been run, so no month of this family was read.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay, strict limit fills).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

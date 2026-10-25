@@ -1,0 +1,40 @@
+{
+ "name": "owner_jj_cont_15m",
+ "source": {
+  "title": "JJ Simon's opening continuation on the first 15-minute bar -- the owner's search of 2026-10-19 (batch 4 of 4, 111 versions screened)",
+  "channel": "owner",
+  "url": "https://www.youtube.com/watch?v=KN7j6NXXAio"
+ },
+ "market": "NQ",
+ "bars": [
+  "1"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "jj_fair",
+  "settings": {"entry": "cont", "cont": "15m"},
+  "words": "JJ: the first trade of every session is a continuation in the direction of the opening candle; 25-point stop and 38-point target, and when the candle is larger than 25 points, 50 and 76 with half the contracts. Owner 2026-10-19: read the opening candle on the first 15 MINUTES (09:30-09:45) instead of the first minute, enter at its close at 09:45 with its colour, once a day, nothing else."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.52,
+  "max_trades": 1
+ },
+ "taught": [
+  "[KN7j6NXXAio 5:06] the entry criteria for the continuation is just the opening candle colour: green buy, red sell",
+  "[KN7j6NXXAio 5:36] 25-point stop and 38-point take profit; a candle over 25 points: 76 and 50 with half the contracts",
+  "[KHEQ5g55dQ4 3:48] the first trade once a day, every session, a continuation",
+  "[owner 2026-10-19] the first 15-minute bar instead of the first minute (batch 3-4: 1-minute 40.0%, 5-minute 41.0%, 15-minute 42.9% in-sample)"
+ ],
+ "not_run": [
+  "THE BAR SIZE IS THE OWNER'S: JJ reads the first 1-minute candle (40.0% in-sample on file in the screen); the 5- and 15-minute readings were screened and this one picked. The 3:1 walk-forward is the judge.",
+  "The structure stop here = the entry close minus 25 points (a body of 25 points or less) or 50 points (a larger body), the target 1.52 x the stop: the random control takes the median stop distance of the taught trades.",
+  "No reversions, no bias filter, no gap filter (his filters: skip when a wick rejects the side, when against the gap, against the 6-12 hour bias: not run; cbias was screened and cut the trades in half for no gain).",
+  "The contract halving for a 50-point stop is sizing, not in this 1-contract ledger.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay)."
+ ],
+ "control": "random"
+}

@@ -1,0 +1,56 @@
+{
+ "name": "cl_os_jjmom15_t2",
+ "source": {
+  "title": "Claude design panel 2026-10-20, lens oside: JJ Simon's displacement traded WITH the side of the 09:30 open on 15-minute bars, at market, two a day, 40 / 40. Cause: above the open buyers are in control; a red pullback candle and then a bigger green candle that closes through its high shows the pullback's sellers caught and the buyers back in charge, so price runs on while those sellers cover (the mirror below the open); a market order at the candle's close needs no resting limit, which the Desk cannot book yet."
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "jj_fair",
+  "settings": {
+   "entry": "mom",
+   "fair": "open",
+   "min_room": 0.0,
+   "opp": "on",
+   "wick": "on",
+   "max_loss": 99,
+   "start": "10:00",
+   "end": "15:00"
+  },
+  "words": "From the 10:00 close to the 15:00 close, on 15-minute candles: above the 09:30 open, a green candle whose body is bigger than the red candle before it and that closes above that candle's high = buy at its close; below the open, a red candle bigger than the green candle before it that closes below its low = sell. Stop 40 points, target 40 points (1:1). Up to two trades a day, one at a time; flat 15:58."
+ },
+ "exits": {
+  "stop_pts": 40,
+  "target_pts": 40,
+  "max_trades": 2
+ },
+ "taught": [
+  "[JJ Simon, KHEQ5g55dQ4 54:39] displacement: the body must be larger and it must close beyond the previous candle's wick",
+  "[JJ Simon, KHEQ5g55dQ4 69:05] a displacement has to displace a candle of the opposite colour",
+  "[JJ Simon, KN7j6NXXAio] fair price = the 09:30 open",
+  "[owner sheet owner_jj_mom_allday_50_76, 2026-10-19] the same displacement traded AWAY from the open (with the open's side), all day, no loss stop",
+  "[owner, chat 2026-10-19, fvg_oside] above the 09:30 open longs only, below shorts only (the leader's side)",
+  "[Claude design panel 2026-10-20] 15-minute bars (the owner's 1-minute run broke even; the 15-minute bar is where the lane's edges live), entries 10:00-15:00, no room minimum, two a day, one fixed 40 / 40 bracket (the leader's typical stop)"
+ ],
+ "not_run": [
+  "NOT JJ'S RULE: his taught trade fades toward the open (owner_jj_fair_nyam_25_38 lost). This is the momentum side of his displacement, an owner screen reading, on 15-minute bars.",
+  "SCREENED FAMILY: 174 versions of jj_fair were read on the build days (1- and 5-minute bars); none on 15-minute bars with the momentum entry. The neighbours and the random control are the guard.",
+  "NO ROOM MINIMUM: JJ's 30 points from fair (the owner's 15) is dropped; the side of the open is the only gate.",
+  "NO LOSS STOP: JJ stops after 3 losses in a row; this sheet does not (max_loss 99).",
+  "START 10:00: the first signal is the 09:45-10:00 candle against the 09:30-09:45 candle, so both candles are inside the cash session.",
+  "STOP AND TARGET: a fixed 40 / 40 bracket from the fill, not the candle's extreme (the family has no candle stop for this entry).",
+  "MARKET at the signal candle's close; one position at a time; one instance 09:30-15:58, so the cap of two is a day cap.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

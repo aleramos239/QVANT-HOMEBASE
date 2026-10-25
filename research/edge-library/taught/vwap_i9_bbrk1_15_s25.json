@@ -1,0 +1,47 @@
+{
+ "name": "vwap_i9_bbrk1_15_s25",
+ "source": {
+  "title": "VWAP hunt 2026-10-20 (owner's brief, idea 9): The momentum twin of the fade: a close beyond the 1-sigma band is one side taking control. Who loses: the faders of the band."
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "asia",
+  "london",
+  "nyam",
+  "mid",
+  "pm",
+  "eve"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "ind_signal",
+  "settings": {
+   "ind": "vwap_dev",
+   "lvl": 1.0,
+   "mode": "follow",
+   "edge": "enter"
+  },
+  "words": "BAND BREAK: (close - session VWAP) / sigma crosses above +1 at a bar close -> market long; below -1 -> short. stop 25 / target 37.5 points; at most 3 a pass; flat 15:58."
+ },
+ "exits": {
+  "stop_pts": 25,
+  "target_pts": 37.5,
+  "max_trades": 3
+ },
+ "taught": [
+  "[owner 2026-10-20, brief prompt-vwap-5-10-a-day-3to1-blocks, idea 9] BAND BREAK: (close - session VWAP) / sigma crosses above +1 at a bar close -> market long; below -1 -> short.",
+  "[owner 2026-10-20, brief section 3] versions: bars 1 / 5 / 15, NY cash and London / overnight where the family runs, stops 25 / 30 / 40 and a structure stop, target 1.5 x the stop: this sheet is bars 15, stop 25 / target 37.5 points"
+ ],
+ "not_run": [
+  "PRE-REGISTERED in out/vwap_hunt_2026-10-20/PREREG.md before any run; nothing tuned on a result.",
+  "1-MINUTE SHEETS run the New York passes only (machine time); 5 / 15-minute sheets every pass the family runs except pre (08:25-09:30), which the brief does not ask for.",
+  "THE SESSION VWAP of the engine restarts at every pass start (09:30, 11:00, 13:30; 03:00 London; 00:00 Asia; 18:00 evening); 'rth' / 'us' anchors stay at 09:30 for the New York passes.",
+  "THE CAP: 3 trades per session pass (several passes: a day can hold more, and a trade of one pass may still be open when the next pass enters).",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS are read only by `bp.py taught wf` (the 3:1 block walk-forward, once), its output sent to a log unread until SELECTION.md is written."
+ ],
+ "control": "random"
+}

@@ -1,0 +1,37 @@
+{
+ "name": "hunt_pb_conti_both5_40",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (angle: pullbacks in the day trend): Matteo Conti's drift VWAP pullback, both sides in one day instance (the close on the trend side of a 09:30 VWAP that is sloping that way over 15 minutes, price moved 0.1 %+ that way over the last hour, then the first candle against it = the pullback, market at the next open), with the hunt's exits: 40-point stop, 60-point target on both sides (1:1.5) in place of the video's 80 / 40-50. Why it should pay: when price holds above a rising session VWAP and is up on the hour, the day's buyers are in profit and the first red candle is the dip they buy; 1:1.5 asks the trend for a new push, not a 0.5R bounce. Who loses: counter-trend traders who short the first red candle of an up day (buy the first green candle of a down day)."
+ },
+ "market": "NQ",
+ "bars": ["5"],
+ "sessions": ["nyam", "mid", "pm"],
+ "window": "10:30-15:30",
+ "dir": "both",
+ "entry": {
+  "family": "vwap_trend_both",
+  "settings": {"x": 0.1, "max_loss": 2, "slope_min": 15, "short_tgt_x": 1.0},
+  "words": "Long when the trend is true -- the 5-minute close above the VWAP anchored at the 09:30 open, the VWAP higher than 15 minutes ago, and the price up at least 0.1 % over the last hour -- and a red candle (the first one, the pullback) comes: buy at the next bar's open by market order. Short is the mirror. Entries 10:30-15:30 ET, one position at a time, at most 4 trades a day over both sides, stop for the day after 2 losing trades in a row. Stop 40 points, target 60 points on both sides."
+ },
+ "exits": {"stop_pts": 40, "target_pts": 60, "max_trades": 4},
+ "taught": [
+  "[wm4A6qo0g3I 14:18-16:00] trend = the close above VWAP (09:30 anchor), VWAP higher than 15 minutes ago, price up at least 0.1 % over the last hour; short = the mirror",
+  "[wm4A6qo0g3I 17:01-18:04] trigger: the first red (green) candle once the trend is true = the pullback; market at the next bar's open",
+  "[wm4A6qo0g3I 16:00-23:00] no trades 09:30-10:30 ET, none after 15:30; one position at a time, at most 4 trades a day, stop after 2 losing trades in a row (owner 2026-10-10: in a row)",
+  "[wm4A6qo0g3I, the video's charts] 5-minute candles: the bar size on which 'VWAP higher than 15 minutes ago' is exactly 3 bars",
+  "[Claude hunt 2026-10-20] exits 40-point stop / 60-point target on BOTH sides (short_tgt_x 1.0), the hunt's 1:1.5; the target stays near the video's 40-50 points, the stop is half its 80",
+  "[prior knowledge, read 2026-10-20: result.json of conti_day_both / conti_day_long / conti_day_short, WHAT_WORKS.md 2.1] at the video's 80 / 40-50 the both-sided rule made $47 a trade on 5-minute bars on build days and -$19 on 999 unseen trades; long-only is drift (random longs 0 %), short-only loses. The 1:1.5 shape has never been run."
+ ],
+ "not_run": [
+  "ONE INSTANCE FOR THE DAY (the family's): 10:30-15:30 entries, the cap of 4 and the stop after 2 losses in a row count over the whole day and both sides.",
+  "The video's short target is 1.25 x the long target (80 to make 40 long, 80 to make 50 short); here both sides take 1.5 x the stop (short_tgt_x 1.0), the hunt's centre.",
+  "'First red candle once the trend is true' = the first down bar after a bar that was not down, while the state holds; it can fire again later the same day within the cap.",
+  "THE VWAP: the family's own, volume-weighted (h + l + c) / 3 of the 1-minute bars from 09:30 ET.",
+  "FAMILY'S UNSEEN MONTHS: conti_day_both (the same entries at 80 / 40-50) had an unseen read (-$19 on 999 trades): this idea's test months are not blind.",
+  "THE RANDOM CONTROL goes pass by pass (nyam, mid, pm), matched by day; it does not wait for the 10:30-15:30 window or share the day cap: a rough guide only.",
+  "Flat time: the engine flattens at 15:58 ET (13:13 on half days); the video says 15:55.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only; the 3:1 block walk-forward comes later under PREREG."
+ ],
+ "control": "random"
+}

@@ -1,0 +1,34 @@
+{
+ "name": "hunt_pb_vwaptouch_us40",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (angle: pullbacks in the day trend): the first return to the 09:30 session VWAP after price has run 40 points away from it, bought (sold) with a limit AT the VWAP on the side price came from; 35-point stop, 1:1.5. Why it should pay: 40 points from the session's volume-weighted price means one side has carried the session; the first pullback to that average price is where the side in control adds (desks benchmarked to VWAP buy at or under it on an up day), and the trend resumes. Who loses: the traders who short the first dip to VWAP as the top of the day and are squeezed when the session's buyers defend their average. Not Rother's tiny-exit tap: a real trend first (40 points, not 3-10), a stop wider than the noise around VWAP."
+ },
+ "market": "NQ",
+ "bars": ["5"],
+ "sessions": ["nyam", "mid", "pm"],
+ "dir": "both",
+ "entry": {
+  "family": "vwap_touch",
+  "settings": {"anchor": "us", "away": 160, "near": 3},
+  "words": "VWAP from 09:30 ET (1-minute typical prices). A 1-minute close at least 40 points (160 ticks) above the VWAP arms a LONG; 40 points below arms a SHORT. At each 5-minute close, with an arm set and flat, rest a limit AT the VWAP (re-priced every 5-minute close) to buy (long arm) or sell (short arm). Only the FIRST touch counts: a minute whose range comes within 3 ticks of the VWAP uses the arm up, filled or not; a new 40-point excursion arms again. Stop 35 points, target 52.5 points. One trade a session pass, flat 15:58."
+ },
+ "exits": {"stop_pts": 35, "target_pts": 52.5, "max_trades": 1},
+ "taught": [
+  "[XWJlBBikUc0, Rother, families/vwap_touch.py] the market moves away from VWAP, comes back to VWAP, then a reaction: a limit AT the VWAP, moved as the VWAP moves; only the FIRST touch is the A+ trade; within 2-3 ticks without a fill the order is pulled",
+  "[XWJlBBikUc0] 'US session VWAP' = anchored at 09:30 (anchor us)",
+  "[Claude hunt 2026-10-20] away 40 points (160 ticks): the excursion that makes it a trend day's first pullback, not a tap in a range; one number, the same as the stop scale",
+  "[Claude hunt 2026-10-20] exits 35-point stop / 52.5-point target (1:1.5, the hunt's centre); one trade a session pass (the first touch)",
+  "[prior knowledge, read 2026-10-20: result.json of rother_vwap_us_a24 / rother_vwap_day_a40, WHAT_WORKS.md 2.1] the taught Rother runs (away 3-10 points, 2.5 / 3-point exits) lost -$24 to -$35 a trade; VWAP taps and VWMA limits had no real cell. This sheet changes the two things those runs had in common with every losing tap: a tiny excursion and a stop inside the VWAP noise."
+ ],
+ "not_run": [
+  "THE VWAP: the family's own, volume-weighted (h + l + c) / 3 of the 1-minute bars from 09:30 ET; it does not restart at 11:00 or 13:30 (each pass computes it from 09:30).",
+  "THE ORDER: placed and re-priced only at 5-minute closes, at the VWAP of that close, and only while the last print is on the passive side; between closes the VWAP moves and the order does not. A fill needs a one-tick trade-through (strict_limit).",
+  "THE FIRST TOUCH: judged on 1-minute bars against the VWAP before the minute (3 ticks); a touch that does not fill uses the arm up. Rother's 'bad feeling' early exit and his order-book check are not run.",
+  "CAPPED PER SESSION PASS, NOT PER DAY: nyam, mid and pm are three passes, so a day can hold up to 3 trades and a trade of one pass may still be open when another pass enters.",
+  "The random control draws its entries on any bar of the pass, matched by day; it does not wait for an armed VWAP touch.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only; the 3:1 block walk-forward comes later under PREREG."
+ ],
+ "control": "random"
+}

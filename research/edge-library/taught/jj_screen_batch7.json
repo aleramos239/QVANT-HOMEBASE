@@ -1,0 +1,22 @@
+{
+ "_": "Batch 7, pre-registered 2026-10-20 ~01:40 ET: frequency for the VWAP pullback (batch 6: 42.0% at 1.4 a day). The touch widened to a band of N points around the VWAP (near), the slope window, both bar sizes, the 15-minute continuation on top, and the wick rule on/off. Every variant 1:1.5 at 25/38 (struct = 25 for the c15 combos).",
+ "pb-touch-wick": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 30},
+ "pb-near5-wick": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 30, "near": 5.0},
+ "pb-near10-wick": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 30, "near": 10.0},
+ "pb-near20-wick": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 30, "near": 20.0},
+ "pb-near40-wick": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 30, "near": 40.0},
+ "pb-near10": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "off", "pullback": "on", "vwap_slope": 30, "near": 10.0},
+ "pb-near20": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "off", "pullback": "on", "vwap_slope": 30, "near": 20.0},
+ "pb-near10-slope15": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 15, "near": 10.0},
+ "pb-near10-slope60": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 60, "near": 10.0},
+ "pb-near10-noslope": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "near": 10.0},
+ "pb-near10-wick-c15": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 30, "near": 10.0, "cont": "15m", "stop_mode": "struct", "tgt_r": 1.52},
+ "pb-near20-wick-c15": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 30, "near": 20.0, "cont": "15m", "stop_mode": "struct", "tgt_r": 1.52},
+ "pb-tf5-near10-wick": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 30, "near": 10.0, "tf": "5"},
+ "pb-tf5-near20-wick": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 30, "near": 20.0, "tf": "5"},
+ "pb-near10-wick-body1": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 30, "near": 10.0, "min_body": 1.0},
+ "pb-near10-wick-am": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 30, "near": 10.0, "hours": "am"},
+ "pb-near10-wick-pm": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 30, "near": 10.0, "hours": "pm"},
+ "pb-near10-wick-loss3": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 3, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 30, "near": 10.0},
+ "diag-near10-any": {"entry": "any", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "pullback": "on", "vwap_slope": 30, "near": 10.0}
+}

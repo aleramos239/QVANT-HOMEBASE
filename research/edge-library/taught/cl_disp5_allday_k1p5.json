@@ -1,0 +1,42 @@
+{
+ "name": "cl_disp5_allday_k1p5",
+ "source": {
+  "title": "Claude's variant 2026-10-20 of the pipeline's nq_displace_nyam (5-minute displacement follow, k 1.5): candle stop and 1:1 instead of the table, 09:30 to 15:00, one trade per session pass"
+ },
+ "market": "NQ",
+ "bars": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "displace",
+  "settings": {
+   "k": 1.5,
+   "mode": "follow",
+   "close_r": 0.0
+  },
+  "words": "A 5-minute candle whose body is at least 1.5 x ATR(14) of the candles before it is a displacement: enter at its close in its direction. Stop at the candle's other extreme, target 1:1. One trade per session pass (morning, midday, afternoon)."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1,
+  "max_trades": 1
+ },
+ "taught": [
+  "[pipeline card nq_displace_nyam] a candle with a body well over the recent typical size is orders filled at any price, and the push tends to carry on",
+  "[Claude 2026-10-20] candle stop, 1:1, all three New York passes"
+ ],
+ "not_run": [
+  "THE CAP: one per session pass (nyam, mid, pm): up to three trades a day.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: build days only.",
+  "A stop floor of 0.25 x ATR applies when the candle's extreme is nearer than that.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

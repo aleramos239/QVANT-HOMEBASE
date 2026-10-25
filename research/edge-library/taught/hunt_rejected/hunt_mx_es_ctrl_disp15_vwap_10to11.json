@@ -1,0 +1,48 @@
+{
+ "name": "hunt_mx_es_ctrl_disp15_vwap_10to11",
+ "source": {
+  "title": "[Claude hunt 2026-10-20, other markets] CONTROL: the NQ leg cl_am_disp15_vwap_10to11 (a 15-minute candle with a body of 1.5 x ATR between 10:00 and 11:00, on the side of the session VWAP, candle stop) copied unchanged to ES at the hunt's 1:1.5. Why it should pay (the NQ leg's cause): a candle that big after the opening half hour, on the VWAP's side, is the day's winning side adding size at any price; the faders and the trapped side of the open pay for the follow-through. As a control it asks whether the 10:00-hour displacement is an index-wide effect or NQ-only. It differs from the ES copy already run (cl_disp15_ema_allday_k1p5_es: EMA20 side, 10:00-15:00) in the window (the 10:00 hour, where all the NQ money was) and the VWAP side."
+ },
+ "market": "ES",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "displace",
+  "settings": {
+   "k": 1.5,
+   "mode": "follow",
+   "close_r": 0.0,
+   "gate": "vwap_dev",
+   "g_lvl": 0.0,
+   "g_side": "with",
+   "w_start": "10:00",
+   "w_end": "11:00"
+  },
+  "words": "ES (a copy of the NQ leg): from 10:00 to 11:00 ET, a 15-minute candle whose body is at least 1.5 x ATR(14) of the candles before it is a displacement. Enter at its close in its direction, long only when the close is above the session VWAP (anchored at 09:30) and short only when below it. Stop at the displacement candle's other extreme, target 1.5 x that distance. One trade a day."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.5,
+  "max_trades": 1
+ },
+ "taught": [
+  "[cl_am_disp15_vwap_10to11, Claude design panel 2026-10-20] the NQ leg, every setting unchanged: displace k 1.5, follow, gate vwap_dev with, line 0, decisions 10:00-11:00, 15-minute bars, candle stop, one a day",
+  "[Claude hunt 2026-10-20] the market is ES and the target 1.5R (the hunt's pre-registered shape); it is one of at most two explicit cross-market controls of the strongest NQ legs",
+  "[Claude hunt 2026-10-20] prior knowledge (WHAT_WORKS 2026-10-20 and cl_disp15_ema_allday_k1p5_es, read before this sheet): the all-day EMA20 version lost on ES; the NQ leg's own 3:1 walk-forward failed (2026-10-20); no number here was taken from a result"
+ ],
+ "not_run": [
+  "THE VWAP: the engine's session VWAP of the nyam pass, anchored at 09:30 ET, read at the signal close (closed bars only).",
+  "WINDOW: decisions at the 15-minute closes 10:00, 10:15, 10:30 and 10:45; the nyam pass ends 11:00.",
+  "THE CAP: the first displacement on the VWAP's side is the trade; one a day.",
+  "THE STOP: the displacement candle's other extreme, floored at 0.25 x ATR when nearer; target 1.5 x that distance from the fill.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only."
+ ],
+ "control": "random"
+}

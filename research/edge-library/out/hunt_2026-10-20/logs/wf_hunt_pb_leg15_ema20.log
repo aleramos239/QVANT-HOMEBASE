@@ -1,0 +1,22 @@
+hunt_pb_leg15_ema20: 3:1 walk-forward in blocks, 15 test months (2022-01 .. 2026-09), 8 stood aside; test days read 2025-07-01 .. 2026-09-22
+stitched: 101 trades, net $-21,104, avg $-209, win 41.6 %, PF 0.66, worst DD $21,392; build-day months $-18,251 (94), test-day months $-2,853 (7)
+  P6.1 FAIL the 3:1 walk-forward made $-21,104 on its test months, one contract after costs (need above $0)
+  P6.2 FAIL beats 0.27 % of 4,000 random tables, each month its pick's exit cell (need above 95 %)
+  P6.3 FAIL win rate 41.58 % on 101 trades at a realized reward-to-risk of 0.92 (average win $960, average loss $1,041): breakeven 52.02 %, need 55.02 % or more (+3 points) (row P3.15 on the stitched months)
+  P6.4 FAIL 101 trades on the test months (need 200)
+  2022-01  struct-r1p5     18  $-4,172
+  2022-05  stood aside      0  $0
+  2022-09  struct-r1p125   16  $-2,389
+  2023-01  struct-r1p875   13  $3,678
+  2023-05  stood aside      0  $0
+  2023-09  stood aside      0  $0
+  2024-01  stood aside      0  $0
+  2024-05  struct-r1p5     21  $-4,264
+  2024-09  struct-r1p875   12  $-4,948
+  2025-01  stood aside      0  $0
+  2025-05  struct-r1p125   14  $-6,156
+  2025-09  stood aside      0  $0
+  2026-01  stood aside      0  $0
+  2026-05  stood aside      0  $0
+  2026-09  struct-r1p5      7  $-2,853
+next month (2026-10): struct-r1p125

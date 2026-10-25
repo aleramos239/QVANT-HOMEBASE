@@ -1,0 +1,49 @@
+{
+ "name": "cl_disp15_ema50_allday_k1p5",
+ "source": {
+  "title": "Claude 2026-10-20: 15m displacement k 1.5 with an EMA50 side gate instead of EMA20"
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "displace",
+  "settings": {
+   "k": 1.5,
+   "mode": "follow",
+   "close_r": 0.0,
+   "gate": "price_ema",
+   "g_n": 50,
+   "g_lvl": 0.0,
+   "g_side": "with",
+   "w_start": "10:00",
+   "w_end": "15:00"
+  },
+  "words": "From 10:00 to 15:00 ET, a 15-minute candle whose body is at least 1.5 x ATR(14) of the candles before it is a displacement. Enter at its close in its direction, long only above the 50-bar EMA of 15-minute closes and short only below it. Stop at the displacement candle's other extreme, target 1:1. One trade per session pass: up to three a day."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1,
+  "max_trades": 1
+ },
+ "taught": [
+  "[owner 2026-10-18] displacement = body >= k x ATR(14) of prior candles, follow it at the close",
+  "[owner 2026-10-18] stop = the displacement candle's extreme; target 1:1",
+  "[Claude 2026-10-20] EMA 50 instead of 20, k 1.5, window 10:00-15:00, one per session pass"
+ ],
+ "not_run": [
+  "THE CAP: one per session pass (nyam, mid, pm), not one a day: up to three trades a day.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: build days only.",
+  "A stop floor of 0.25 x ATR applies when the candle's extreme is nearer than that.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

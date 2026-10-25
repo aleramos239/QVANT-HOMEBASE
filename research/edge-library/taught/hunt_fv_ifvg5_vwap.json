@@ -1,0 +1,36 @@
+{
+ "name": "hunt_fv_ifvg5_vwap",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (lens: structure entries at higher frequency): the inversion fair value gap on 5-minute bars -- a close through a whole gap, against it, entered at market with the close -- only when that close is on the session VWAP's side, 30-point stop, 45-point target. Why it should pay: the traders who bought inside an up gap (or sold inside a down gap) expected it to hold; a close through the whole gap puts all of them under water at once, and their forced exits push price on in the new direction, which the VWAP side says is also the side the session's volume is on. Who loses: the trapped gap traders, whose stops sit just beyond the gap, and whoever fades the break back into it."
+ },
+ "market": "NQ",
+ "bars": ["5"],
+ "sessions": ["nyam", "mid", "pm"],
+ "dir": "both",
+ "entry": {
+  "family": "ifvg",
+  "settings": {"min_gap": 0.25, "age": 30, "gate": "vwap_dev", "g_lvl": 0.0, "g_side": "with"},
+  "words": "On 5-minute candles, a fair value gap of the session pass at least 0.25 x ATR(14) tall stays open for 30 bars. A candle that closes below the whole of an open up gap: sell at the next bar's open; a candle that closes above the whole of an open down gap: buy. Only a sell below the session VWAP and only a buy above it. Each gap is used once. Stop 30 points, target 45 points. One trade per session pass."
+ },
+ "exits": {"stop_pts": 30, "target_pts": 45, "max_trades": 1},
+ "taught": [
+  "[owner 2026-10-09, family ifvg; videos 9O6JU5_xTd8 and 3LrXQDS187Y] the inversion fair value gap: a close through the whole gap against it is an entry with that close",
+  "[owner 2026-10-09, family ifvg] gaps at least 0.25 x ATR tall, open for 30 bars (the family's defaults)",
+  "[owner 2026-10-20, hunt PREREG] a fixed stop of 25-40 points (the family passes no structure level), target 1.5 x the stop: 30 / 45",
+  "[Claude hunt 2026-10-20, from cl_am_disp15_vwap_10to11] the session VWAP as the side (gate vwap_dev, line 0, with)",
+  "[Claude hunt 2026-10-20] 5-minute bars, all three New York passes, one trade each",
+  "[Claude hunt 2026-10-20] no ifvg sheet or card was ever run (the pipeline cards nq_ifvg_* were created and never started), so nothing of this family's results was read"
+ ],
+ "not_run": [
+  "THE STOP: 30 points fixed, not a level of the gap: ifvg passes no structure level with its order. The video's stop (beyond the inversion candle) is not run.",
+  "THE GAP lives only inside its own session pass: a gap of the morning is gone at 11:00 (the engine restarts the pass), so 'open 30 bars' is at most the rest of the pass.",
+  "THE VWAP: the engine's session VWAP, which restarts at each pass start (09:30, 11:00 and 13:30 ET); the gate reads (close - VWAP) / sigma at the inversion close (closed bars only): above 0 for a long, below 0 for a short.",
+  "ONCE: an inverted gap is used up at that close whether or not a trade is taken (a trade is open, the cap is reached, the gate says no).",
+  "THE CAP: one trade per session pass; three passes, so a day can hold up to 3 trades, and a trade of one pass may still be open when the next pass enters.",
+  "FULLY BLIND: no month of this family was ever read.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay); the entry is a market order at the next bar's open.",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days); no entry in the last 5 minutes of a pass."
+ ],
+ "control": "random"
+}

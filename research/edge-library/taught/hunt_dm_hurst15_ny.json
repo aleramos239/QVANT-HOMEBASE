@@ -1,0 +1,54 @@
+{
+ "name": "hunt_dm_hurst15_ny",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (designer: breakouts on a close): the trend-regime 5-bar breakout in the NY cash session, both sides. Why it should pay: when the 15-minute closes have moved persistently (Hurst proxy above 50: k-bar moves larger than a random walk's), a close beyond the high (low) of the last five bars is the trend resuming after a pause, not noise; the stops of the traders who sold the pause's high sit just above it. Who loses: the counter-trend traders who fade the pause's edge in a persistent tape."
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "hurst_ac_break",
+  "settings": {
+   "h_min": 50.0,
+   "h_win": 20,
+   "h_k": 5,
+   "brk_n": 5,
+   "atr_n": 20,
+   "stop_atr": 2.0,
+   "use_h": "on",
+   "use_ac": "off",
+   "trail": "off",
+   "w_start": "10:00",
+   "w_end": "15:30"
+  },
+  "words": "From 10:00 to 15:30 ET, while the Hurst proxy of the last 20 15-minute closes (5-bar changes against 1-bar changes) is above 50, a 15-minute bar that closes above the highest high of the 5 bars before it is a long at that close; below their lowest low, a short. Stop 2 x the mean true range of the last 20 bars, target 1.5 x the stop, no trailing. At most two trades a day, one at a time, flat 15:58."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.5,
+  "max_trades": 2
+ },
+ "taught": [
+  "[IQCapital O4ASr0fh7O8, RULE_SHEET_O4ASr0fh7O8_2026-10-11.md] the Hurst proxy above 50 and a close beyond the previous 5 bars' high is a market entry with the break; the stop is a multiple of ATR(20) set at the signal",
+  "[family defaults] h_min 50, h_win 20, h_k 5, brk_n 5, atr_n 20",
+  "[Claude hunt 2026-10-20] the autocorrelation dip filter OFF (one filter only: the Hurst trend regime), both sides, NY cash hours 10:00-15:30 only (the house lesson: London, Asia and the evening fail), stop 2 x ATR(20) (about the 15-minute candle stops that held) with no trailing, target 1.5R, at most two a day",
+  "[prior knowledge, read before designing: ~/.homebase/taught result.json] the video's version (long only, 00:00-15:58, 4 x ATR trailing, 1.25R) lost about $68 a trade at 0.44 a day; the bare 5-bar break (both filters off, long, 00:00-15:58) was break-even (44.4 % vs 44.0 % needed): the reason to keep the trend filter and move to the NY hours, not a number tuned to"
+ ],
+ "not_run": [
+  "ONE INSTANCE FOR THE DAY: the family runs one instance 00:00-15:58 ET; the open layer's w_start / w_end clip the entries to decisions at the 10:00 .. 15:15 closes; the cap of 2 is a DAY cap and one position at a time holds all day. The passes only name the clock for the random control and the reads. (The lane's generic one-instance note says 'entries 10:30-15:30'; this family's own window is 00:00-15:58 and the sheet's w_start / w_end make it 10:00-15:30.)",
+  "THE AUTOCORRELATION FILTER of the video (AC <= -0.1, the 'dip') is switched off on purpose (one filter).",
+  "THE STOP: 2 x the simple mean of the last 20 true ranges of the 15-minute bars, frozen at the signal bar (early in the day this window still holds pre-market bars, so stops are smaller then); the video's trailing stop is off.",
+  "THE INDICATORS restart at 00:00 ET and need 26 bars (06:30 ET) before any value.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay, 1 NQ).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on an equity half day); no entry in the last 5 minutes of a pass.",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only (2021-09-22 .. 2025-06-30); the 3:1 block walk-forward is a separate, pre-registered read (hunt PREREG Gate 2)."
+ ],
+ "control": "random"
+}

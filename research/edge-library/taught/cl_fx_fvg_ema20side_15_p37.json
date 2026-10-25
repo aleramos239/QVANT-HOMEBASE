@@ -1,0 +1,52 @@
+{
+ "name": "cl_fx_fvg_ema20side_15_p37",
+ "source": {
+  "title": "Claude design panel 2026-10-20, falsify lens: PLACEBO-ANCHOR control for the open-side FVG leader -- the plain 15-minute FVG retest (cl_fx_fvg_noside_15_p37) with ONE change: a generic trend side (the 20-bar EMA of 15-minute closes, the displacement rule's gate) instead of the 09:30 open. The owner's cause says the 09:30 open marks who took control of the day, so the faders of the open's side pay; if any trend side buys the same edge, the 09:30 open is not the cause and the rule is just 'FVGs with the short trend'."
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "fvg",
+  "settings": {
+   "min_gap": 0.1,
+   "mode": "touch",
+   "new_gap": "replace",
+   "w_end": "15:00",
+   "gate": "price_ema",
+   "g_n": 20,
+   "g_lvl": 0.0,
+   "g_side": "with"
+  },
+  "words": "Any 15-minute fair value gap of the session pass at least 0.1 x ATR(14) high: a limit at its near edge, with the gap, but a long only when the gap's close is above the 20-bar EMA of 15-minute closes and a short only below it. The newest gap replaces an older resting order. No new order from 15:00. Stop 37 points, target 37 points (1:1). One trade per session pass."
+ },
+ "exits": {
+  "stop_pts": 37,
+  "target_pts": 37,
+  "max_trades": 1
+ },
+ "taught": [
+  "[owner 2026-10-06, families/fvg.py] the fair value gap as an entry trigger: a limit at the gap's near edge, with the gap",
+  "[chat 2026-10-19, sheet cl_fvg_oside_15_mid_r1_t2_gap0p1] NQ, 15-minute bars, 1:1, gaps at least 0.1 x ATR",
+  "[owner 2026-10-18, sheet cl_disp15_ema_allday_k1p5] the EMA20 side gate of the 15-minute displacement rule",
+  "[Claude design panel 2026-10-20] PLACEBO CONTROL: the 09:30-open side is replaced by the EMA20 side on the plain fvg control (one gate added to cl_fx_fvg_noside_15_p37, nothing else changed); stop and target fixed at 37 points"
+ ],
+ "not_run": [
+  "THE SIDE IS THE EMA20's, NOT THE 09:30 OPEN'S, ON PURPOSE: this is a placebo control, not a strategy.",
+  "THE STOP: 37 points fixed, not the middle candle's extreme (the leader's median stop, the size its random control used).",
+  "ENGINE DIFFERENCES FROM THE LEADER (fvg, not fvg_oside): one instance per session pass, a gap cannot span 11:00 or 13:30, one per pass (up to three a day), the newest gap of either side replaces the resting order even when the gate then blocks it.",
+  "THE GATE: (close - EMA20) / ATR(14) above 0 for a long, below 0 for a short, read at the gap's close on closed 15-minute bars; the EMA restarts at 00:00 ET (seeded with the day's first close).",
+  "WINDOW: no new order from 15:00 (w_end); an order placed before 15:00 may still fill after it.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay, strict limit fills).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

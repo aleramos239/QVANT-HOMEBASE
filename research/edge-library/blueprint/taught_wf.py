@@ -128,8 +128,10 @@ def each(name: str, root=None, workers=None) -> dict:
 def _sheet(name: str, root):
     base = TA.where(root) / str(name)
     f = base / "result.json"
+    if not f.exists():                              # a sheet never read on the build days: its smoke run's plan (the 3:1 months stay blind)
+        f = base / "smoke" / "result.json"
     if not f.exists():
-        raise J.Refuse(f"{name}: no full result under {base.parent}: bp.py taught run <sheet> first")
+        raise J.Refuse(f"{name}: no result under {base.parent}: bp.py taught run <sheet> (a smoke run on named in-sample days is enough) first")
     plan = json.loads(f.read_text())["plan"]
     if len(plan["bars"]) != 1:
         raise J.Refuse(f"{name}: {len(plan['bars'])} bar sizes; the walk-forward reads one (write a sheet per bar size)")
@@ -163,7 +165,10 @@ def _old(base: Path, name: str):
 
 def _built(base: Path):
     """The day `taught run` read every cell on the build days (its full result), or None."""
-    doc = json.loads((base / "result.json").read_text())
+    f = base / "result.json"
+    if not f.exists():
+        return None
+    doc = json.loads(f.read_text())
     return None if doc.get("smoke") else str(doc.get("utc") or "")[:10] or "on file"
 
 

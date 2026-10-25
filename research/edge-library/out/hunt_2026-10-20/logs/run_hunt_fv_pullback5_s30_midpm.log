@@ -1,0 +1,129 @@
+2026-10-20T23:42:10+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers)
+2026-10-20T23:42:10+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 1-60 of 948 (6 instances)
+2026-10-20T23:42:14+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 61-120 of 948 (6 instances)
+2026-10-20T23:42:19+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 121-180 of 948 (6 instances)
+2026-10-20T23:42:23+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 181-240 of 948 (6 instances)
+2026-10-20T23:42:26+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 241-300 of 948 (6 instances)
+2026-10-20T23:42:30+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 301-360 of 948 (6 instances)
+2026-10-20T23:42:32+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 361-420 of 948 (6 instances)
+2026-10-20T23:42:36+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 421-480 of 948 (6 instances)
+2026-10-20T23:42:38+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 481-540 of 948 (6 instances)
+2026-10-20T23:42:42+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 541-600 of 948 (6 instances)
+2026-10-20T23:42:45+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 601-660 of 948 (6 instances)
+2026-10-20T23:42:49+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 661-720 of 948 (6 instances)
+2026-10-20T23:42:52+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 721-780 of 948 (6 instances)
+2026-10-20T23:42:56+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 781-840 of 948 (6 instances)
+2026-10-20T23:43:00+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 841-900 of 948 (6 instances)
+2026-10-20T23:43:03+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm-NQ-tf5; 2 workers): days 901-948 of 948 (6 instances)
+2026-10-20T23:43:05+00:00 bp_build hunt_fv_pullback5_s30_midpm-NQ-tf5: 3 cells, 951 trades, 55.26 s of tape (wall 55 s, 2 workers)
+2026-10-20T23:43:05+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers)
+2026-10-20T23:43:05+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 1-60 of 948 (60 instances)
+2026-10-20T23:43:26+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 61-120 of 948 (60 instances)
+2026-10-20T23:43:49+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 121-180 of 948 (60 instances)
+2026-10-20T23:44:11+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 181-240 of 948 (60 instances)
+2026-10-20T23:44:28+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 241-300 of 948 (60 instances)
+2026-10-20T23:44:47+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 301-360 of 948 (60 instances)
+2026-10-20T23:45:08+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 361-420 of 948 (60 instances)
+2026-10-20T23:45:27+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 421-480 of 948 (60 instances)
+2026-10-20T23:45:44+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 481-540 of 948 (60 instances)
+2026-10-20T23:46:00+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 541-600 of 948 (60 instances)
+2026-10-20T23:46:17+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 601-660 of 948 (60 instances)
+2026-10-20T23:46:35+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 661-720 of 948 (60 instances)
+2026-10-20T23:46:52+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 721-780 of 948 (60 instances)
+2026-10-20T23:47:10+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 781-840 of 948 (60 instances)
+2026-10-20T23:47:27+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 841-900 of 948 (60 instances)
+2026-10-20T23:47:43+00:00 taught hunt_fv_pullback5_s30_midpm: pass 1 of 1, NQ 5-minute bars (hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5; 2 workers): days 901-948 of 948 (60 instances)
+2026-10-20T23:47:56+00:00 null_bp hunt_fv_pullback5_s30_midpm__ctl-NQ-tf5: 30 cells, 56,250 trades, 290.13 s of tape (wall 291 s, 2 workers)
+hunt_fv_pullback5_s30_midpm: pullback (level 0.5, swing 30), both sides, 5-minute bars, a structure stop, target 1.5R, up to 1 trades a session pass over 2 passes (mid pm); the sheet leaves out 9 things the video says (listed below); verdict: 5-minute bars make $299 a trade on 317 trades and hold 9 of 10 lines (misses 3.6); the neighbours average $280 a trade.
+
+BUILD DAYS 2021-09-22 .. 2025-06-30 (948 session days), 1 contract after costs. The unseen days (2025-07-01 on) were not read.
+
+=== 5-MINUTE BARS ===
+
+                                                    the taught cell  average of the 3 cells
+trades                                                          317                     317
+net                                                         $94,782                 $90,834
+win rate                                                     59.0 %                  59.0 %
+average trade                                                  $299                    $287
+profit factor                                                  1.58                    1.55
+average win                                                  $1,383                  $1,364
+average loss                                                -$1,260                 -$1,262
+average win / average loss                                     1.10                    1.08
+worst drawdown, daily                                       $23,128                 $22,561
+worst drawdown, open losses counted                         $23,698                 $23,131
+Sharpe                                                         1.62                    1.57
+months won                                                   60.9 %                  61.6 %
+best month, share of the profit                              14.6 %                  14.3 %
+longest run of losing days                                        7                     6.7
+prop eval odds, 30 days (LucidPro 50K, no DLL)               39.6 %                  38.8 %
+prop payout odds (stress, "live is worse", beside)   17.5 % (9.9 %)         17.3 % (10.1 %)
+prop eval odds, stress                                       28.3 %                  29.2 %
+
+The neighbours (the 2 others): average trade $280, they hold 9.0 of 10 lines on average (the taught cell holds 9).
+
+cell           average trade  trades      net  lines held  eval odds
+target 1.125R           $250     317  $79,402     9 of 10     37.2 %
+target 1.5R             $299     317  $94,782     9 of 10     39.6 %
+target 1.875R           $310     317  $98,317     9 of 10     39.7 %
+
+LINES on the taught cell (the pipeline's own functions and words)
+  P3.2 PASS average trade $299 (need above $0)
+  P3.3 PASS 317 trades (need 200)
+  P3.4 held (a label, asks nothing) long $43,271, short $51,511 (need both above $0)
+  P3.7 held (a label, asks nothing) without its best 5 % of trades (16 of 317) the box makes $30,711 (need above $0)
+  P3.8 missed (a label, asks nothing) 28 of 46 months won, 60.87 % (need 70 % or more)
+  P3.9 missed (a label, asks nothing) best month 2022-01 is 14.55 % of the profit of the months won (need 10 % or less)
+  P3.10 held (a label, asks nothing) longest run of losing days: 7 (need 8 or fewer)
+  3.3 PASS default variant: profit factor 1.58 over 317 trades (need 1.2 or more)
+  3.4 PASS default variant: net $94,782 / worst drawdown $23,698 = 4.00, open losses counted (need 3 or more)
+  3.5 PASS default variant: Sharpe 1.62 on 948 session days (need 1 or more)
+  3.6 FAIL default variant: worst drawdown $2,370 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)
+  3.7 PASS default variant: makes money in 99.9 % of 1,000 reshuffled runs (need 80 % or more)
+  3.8 PASS default variant: $50,007 without its best 1 % of days (10 of 948 session days; they made $44,775 of $94,782; need above $0)
+  P4.1 PASS the box's average trade is above $0 in 99.9 % of 1,000 reshuffled runs (need 75 % or more)
+  P4.2 PASS beats 100 % of the random-entry runs of the same box on try 1 (need above 95 % = 100 - 5 / 1 try)
+
+PER YEAR, then combined: the taught cell
+year      trades      net  avg trade     win    PF  drawdown
+2021*         20    -$145        -$7  55.0 %  0.99    $3,795
+2022          84  $43,254       $515  61.9 %  1.89   $14,916
+2023          80   $8,485       $106  52.5 %  1.23   $14,738
+2024          89  $23,504       $264  61.8 %  1.61    $5,582
+2025*         44  $19,684       $447  61.4 %  1.66   $11,574
+combined     317  $94,782       $299  59.0 %  1.58   $23,128
+
+PER YEAR, then combined: the average of the 3 cells
+year      trades      net  avg trade     win    PF  drawdown
+2021*         20    -$283       -$14  55.0 %  0.97    $3,795
+2022          84  $41,127       $490  61.5 %  1.84   $14,487
+2023          80   $8,635       $108  52.9 %  1.23   $14,186
+2024          89  $22,314       $251  61.8 %  1.58    $5,477
+2025*         44  $19,041       $433  61.4 %  1.64   $11,574
+combined     317  $90,834       $287  59.0 %  1.55   $22,561
+(the random entries used the median stop of the taught trades, 86 points, at the same target in R)
+
+NOT RUN (the person who wrote the sheet)
+  - THE SWINGS are 30-minute candles built from the day's 1-minute bars from 00:00 ET; a swing high is known one swing candle late (when the candle after it has closed). Legs are followed from the first bar of the day, so a leg made in the morning can still be traded at 11:00 if it is live.
+  - A LEG ENDS when its order fills, when price trades beyond its extreme, when price reaches the entry while no order works, or when a newer leg replaces it.
+  - THE STOP is the leg's start (the lowest low between the two swing highs for an up leg), floored at 0.25 x ATR(14) of the 5-minute bars and two ticks; at level 0.5 it lies half the leg below the entry.
+  - THE CAP: one trade per session pass; two passes, so a day can hold up to 2 trades, and the midday trade may still be open when the afternoon pass enters.
+  - NO SIDE GATE other than the leg itself: the broken swing is the side.
+  - FULLY BLIND: no month of this family was ever read.
+  - COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay, strict limit fills).
+  - THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.
+  - FLAT: every trade is flat by 15:58 ET (13:13 on half days); no entry in the last 5 minutes of a pass.
+
+ALSO TRUE OF THE RUN (the lane)
+  - CAPPED PER SESSION PASS, NOT PER DAY: max_trades 1 counts inside each pass (2 passes: mid, pm), so a day can hold up to 2 trades; a family's own loss or trade count (none) counts inside one pass too.
+  - The passes are independent: a trade of one pass may still be open when another pass enters (one position at a time holds inside a pass only).
+  - Every trade is flat by 15:58 ET (13:13 on an equity half day); no entry in the last 5 minutes of a pass.
+  - Costs: $4.00 a round turn and 1 tick of slippage on market and stop fills, 1 contract (the engine's own).
+  - The stop is the family's structure level of each entry (its size differs from trade to trade; the engine never puts it closer than two ticks or 0.25 ATR); `stop_val` is not used.
+
+HONEST LIMITS
+  - One video's rule, read on the build days (2021-09-22 .. 2025-06-30): in-sample.
+  - The family's settings and the exits are the video's own: nothing was tuned, searched or picked.
+  - The neighbours are shown to see how fragile the rule is; they are not alternatives to choose from.
+  - The unseen days (2025-07-01 on) were not read: a person has to ask for that, and it is read once.
+  - The random entries are the pipeline's own (any bar of the session pass, matched by day and pass): they do not wait for the family's entry window.
+NEXT: This is the rule as taught, in-sample. The unseen days are read once, and only when a person asks for it.

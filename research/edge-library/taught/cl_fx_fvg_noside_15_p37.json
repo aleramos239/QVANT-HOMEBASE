@@ -1,0 +1,46 @@
+{
+ "name": "cl_fx_fvg_noside_15_p37",
+ "source": {
+  "title": "Claude design panel 2026-10-20, falsify lens: CONTROL for the open-side FVG leader -- the same 15-minute FVG retest with NO side rule. If the 09:30 open's side is the edge, gaps bought and sold on both sides earn far less than the leader; if they earn as much, the side is decoration and the plain FVG retest (unfilled orders left in the gap, the faders pay) carries it."
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "fvg",
+  "settings": {
+   "min_gap": 0.1,
+   "mode": "touch",
+   "new_gap": "replace",
+   "w_end": "15:00"
+  },
+  "words": "Any 15-minute fair value gap of the session pass, up or down, at least 0.1 x ATR(14) high: a limit at its near edge, with the gap (an up gap is bought, a down gap sold), whatever side of the 09:30 open price is on. The newest gap replaces an older resting order. No new order from 15:00. Stop 37 points, target 37 points (1:1, the leader's median middle-candle stop). One trade per session pass."
+ },
+ "exits": {
+  "stop_pts": 37,
+  "target_pts": 37,
+  "max_trades": 1
+ },
+ "taught": [
+  "[owner 2026-10-06, families/fvg.py] the fair value gap as an entry trigger: a limit at the gap's near edge, with the gap",
+  "[chat 2026-10-19, sheet cl_fvg_oside_15_mid_r1_t2_gap0p1] NQ, 15-minute bars, 1:1, gaps at least 0.1 x ATR",
+  "[Claude design panel 2026-10-20] CONTROL: the open-side rule is REMOVED (both sides traded); stop and target fixed at 37 points = the leader's median stop and the stop its random control used; one per session pass; no new order from 15:00"
+ ],
+ "not_run": [
+  "THE SIDE RULE IS REMOVED ON PURPOSE: this is a control, not a strategy.",
+  "THE STOP: 37 points fixed, not the middle candle's extreme (fvg's own structure stop is the gap's far edge, a much tighter stop; a fixed stop keeps the size equal to the leader's median and to its random control).",
+  "ENGINE DIFFERENCES FROM THE LEADER (fvg, not fvg_oside): one instance per session pass (nyam 09:30-11:00, mid 11:00-13:30, pm 13:30 on), so a gap's three candles must lie inside one pass and a gap cannot span 11:00 or 13:30; the cap is one per pass (up to three a day) instead of two a day; the newest gap of EITHER side replaces the resting order.",
+  "WINDOW: no new order from 15:00 (w_end); an order placed before 15:00 may still fill after it (fvg has no 15:00 cancel).",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay, strict limit fills).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

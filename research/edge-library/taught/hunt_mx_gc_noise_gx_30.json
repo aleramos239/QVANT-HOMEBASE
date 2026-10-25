@@ -1,0 +1,33 @@
+{
+ "name": "hunt_mx_gc_noise_gx_30",
+ "source": {
+  "title": "[Claude hunt 2026-10-20, other markets] GC noise-band momentum from the 01:00 ET open, in the COMEX day hours. Why it should pay: gold trades around the clock and its day's move is built in London and carried into New York; the 01:00 ET open (midnight Chicago) sits before London's 03:00 open, so a move beyond the day's usual noise from it, with price on the same side of the VWAP since 01:00, is the Western day's one-way flow (European and US funds, ETF creations, the trend-following CTAs that trade gold futures in COMEX hours), which keeps pushing the same way until the COMEX settlement. Who loses: the traders who fade the day's gold move back to its overnight level, and the late hedgers who chase it."
+ },
+ "market": "GC",
+ "bars": ["30"],
+ "sessions": ["nyam", "mid"],
+ "dir": "both",
+ "entry": {
+  "family": "noise_band",
+  "settings": {"k": 0.3, "anchor": "globex"},
+  "words": "GC, 30-minute bars. The noise band is the 01:00 ET open plus and minus 0.3 x the daily ATR(14) of the days before, fixed for the day. In the COMEX day hours (the 30-minute closes 10:00 and 10:30, then 11:30 to 13:00), a close above the upper line and above the VWAP since 01:00 buys at the next bar's open; a close below the lower line and below the VWAP sells. Stop 5 points, target 7.5 points (1:1.5). The first qualifying close of each pass; flat 15:58."
+ },
+ "exits": {"stop_pts": 5, "target_pts": 7.5, "max_trades": 1},
+ "taught": [
+  "[engine family noise_band, 2026-10-08; Zarattini, Aziz, Barbon 2024; Conti's vault break] a close beyond the anchor's open +/- k x the daily ATR and beyond the anchored VWAP is followed at the next bar's open; k 0.3 is the family's default (not tuned here); globex anchor = 01:00 ET",
+  "[Baltussen, Da, Lammers, Martens 2021, JFE] market intraday momentum is found across futures markets, not only in equity indices",
+  "[Claude hunt 2026-10-20] the market-specific reason: gold's day starts before New York; the 01:00 ET anchor measures the London + New York move; passes nyam and mid = the COMEX day hours up to the 13:30 settlement",
+  "[Claude hunt 2026-10-20] stop 5 GC points (the standard table's GC stop; about 0.1-0.2 of a gold day in 2021-2024), target 7.5 = 1.5 x the stop (the hunt's pre-registered shape)",
+  "[Claude hunt 2026-10-20] prior knowledge (WHAT_WORKS 2026-10-20, read before this sheet): the globex noise band (nq_noise_gx_mid_long_slow) is the only idea whose ES and GC neighbour maps were both profitable on build days; this sheet is both sides, 30-minute bars, nyam + mid; no number was taken from it"
+ ],
+ "not_run": [
+  "THE BAND is one width for the whole day (k x the daily ATR(14) of the engine's Globex daily bars), not the paper's time-of-day noise.",
+  "CAPPED PER SESSION PASS: two passes (nyam, mid), so up to 2 trades a day, and a trade of the nyam pass may still be open when the mid pass enters.",
+  "The 11:00 and 13:30 closes fall in the last 5 minutes of their pass: no entry there (the engine's rule).",
+  "NO EXIT AT THE COMEX SETTLEMENT: a trade still open at 13:30 runs to its stop, its target or 15:58 (a clock exit inside the day is not a lane exit).",
+  "EXITS: a fixed 5-point stop and 7.5-point target, not the paper's trailing stop at the band / VWAP.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only."
+ ],
+ "control": "random"
+}

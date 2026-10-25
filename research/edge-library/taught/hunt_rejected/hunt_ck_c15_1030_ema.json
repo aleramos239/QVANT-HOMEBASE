@@ -1,0 +1,53 @@
+{
+ "name": "hunt_ck_c15_1030_ema",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (angle: clock candles across the NY day), slot 10:30. Uniform rule, pre-registered on every half-hour 15-minute candle 10:30-14:30 (13:30 and 15:00 left out: already run as cl_pm_first_bar_cdl_ema_15 and cl_pm_1500_candle_ema_15): follow the slot's candle at its close only when it closes on its own side of the 20-bar EMA of 15-minute closes; stop at its other extreme, 1.5R, once a day. Why it should pay: intraday time-series momentum -- the side that has held the day (EMA20 of 15-minute closes, about the last five hours) is worked by institutions splitting big orders over the whole day (VWAP / TWAP schedules), so a candle that closes WITH that side at a clock turn is the schedule still executing, and the push carries past the candle's own range. Who loses: the mean-reversion traders and liquidity providers who fade the day's side at each clock turn and get run over by the next slice of the schedule. This slot: the first candle after the opening hour (the 10:00 data and the first pullback are behind it); a with-trend close here is the opening drive resuming, and those who faded the open at its first pullback pay."
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "displace",
+  "settings": {
+   "k": 0.1,
+   "mode": "follow",
+   "close_r": 0.0,
+   "gate": "price_ema",
+   "g_n": 20,
+   "g_lvl": 0.0,
+   "g_side": "with",
+   "w_start": "10:45",
+   "w_end": "11:00"
+  },
+  "words": "Only the 15-minute candle of 10:30-10:45 ET is read (the entry window 10:45-11:00 holds its close and no other). It closes up with a body of at least 0.1 x ATR(14) (any real candle, not a doji) and the close is above the 20-bar EMA of 15-minute closes: buy at its close; it closes down and below the EMA: sell. Stop at the candle's other extreme, target 1.5 times the stop distance. Once a day, flat 15:58."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.5,
+  "max_trades": 1
+ },
+ "taught": [
+  "[owner 2026-10-18, cl_disp15_ema_allday_k1p5] a candle followed at its close: stop = the candle's other extreme",
+  "[Claude 2026-10-20, cl_disp15_ema_allday_k1p5 / cl_pm_first_bar_cdl_ema_15] the EMA20 side gate on 15-minute closes (long only above, short only below)",
+  "[hunt PREREG 2026-10-20] target 1.5 x the stop; one direction at a time; control random",
+  "[Claude hunt 2026-10-20] ONE uniform rule on the 15-minute candles of 10:30, 11:00, 11:30, 12:00, 12:30, 13:00, 14:00 and 14:30, each its own sheet; this sheet is the 10:30 slot; no slot's settings were chosen by its own past result",
+  "[Claude hunt 2026-10-20, prior knowledge: old result.json headlines read before writing] cl_pm_first_bar_cdl_15 (13:30 candle, no gate, 1R) $64 on 930 trades vs cl_pm_first_bar_cdl_ema_15 (EMA20 gate) $93 on 598: the gate is kept and its pass rate (about 0.6 a day) is the frequency estimate; cl_pm_1500_candle_ema_15 (15:00 slot) lost -$42 and owner_mid_first_bar_15 (11:00, 30 / 30, no gate) made $9: both read, neither changed a number here (k 0.1, EMA 20, 1.5R and the candle stop are the house's and the PREREG's)"
+ ],
+ "not_run": [
+  "THE FAMILY: candle930 / win_candle with start 10:30 would run here (nyam), but the ladder runs ONE family on every slot (the later slots can only be built with displace), so this slot is displace with its floor k 0.1 and an entry window holding only this candle's close: the same candle follow (a candle with a body under 0.1 x ATR(14) counts as a doji: no trade).",
+  "THE GATE: the open layer's price_ema(20) on the 15-minute closes since 00:00 ET, read at the candle's close (above = long side, below = short side); a candle against it is no trade that day.",
+  "THE STOP: the candle's other extreme, floored at 0.25 x ATR when nearer.",
+  "THE CAP: one trade a day; the nyam pass (09:30-11:00) is the only pass and the window holds one candle close.",
+  "THE HOLD: a trade that reaches neither stop nor target leaves on the clock at 15:58 ET (13:13 on an equity half day; on a half day a slot after the half-day cut-off places no trade).",
+  "RELATED ENTRIES ALREADY READ: the cl_disp15_*_allday sheets hold the big-bodied subset of these candles (10:00-15:00) on the build days; owner_jj_mom_allday_* and the first-bar sheets (owner_mid_first_bar_15: the 11:00 candle) had 3:1 walk-forwards read, so the test months are not wholly blind for candle-follow entries.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days)."
+ ],
+ "control": "random"
+}

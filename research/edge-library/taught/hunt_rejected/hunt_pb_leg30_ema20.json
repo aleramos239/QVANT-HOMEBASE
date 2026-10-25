@@ -1,0 +1,36 @@
+{
+ "name": "hunt_pb_leg30_ema20",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (angle: pullbacks in the day trend): the 62 % pullback of a fresh 30-minute swing leg (the session's half-hour structure), on the side of the 15-minute EMA(20). Why it should pay: a higher high on 30-minute swings is a break of the session's own structure, not a 15-minute wiggle; its pullback is the bigger players adding, and its stop (the leg's start) is a wide structural stop, the kind that has held in this repo. Who loses: the traders who fade the session's new high and those who chased it and are shaken out on the retrace."
+ },
+ "market": "NQ",
+ "bars": ["15"],
+ "sessions": ["nyam", "mid", "pm"],
+ "dir": "both",
+ "entry": {
+  "family": "pullback",
+  "settings": {"swing": "30", "level": 0.62, "gate": "price_ema", "g_n": 20, "g_lvl": 0.0, "g_side": "with"},
+  "words": "NQ, decisions at 15-minute closes. Swing bars of 30 minutes from 00:00 ET: a swing high is a 30-minute bar whose high is above both neighbours (known one bar late). A swing high above the swing high before it makes an UP leg, from the lowest low since that earlier swing high; rest a BUY limit 62 % of the way back into it. A lower swing low: the mirror, a SELL limit. The order lives until it fills, price trades beyond the leg's end, price gets to the level without an order, or a newer leg replaces it. Only when the 15-minute close at placement is on the trade's side of the EMA(20) of 15-minute closes. Stop at the leg's start, target 1.5 x the stop. One trade a session pass, flat 15:58."
+ },
+ "exits": {"stop": "struct", "target_r": 1.5, "max_trades": 1},
+ "taught": [
+  "[owner 2026-10-10, families/pullback.py] the pullback into a swing leg, swing bars of `swing` minutes (15 / 30 / 60); a limit `level` of the way back; the structure level is the leg's start",
+  "[owner 2026-10-10, families/pullback.py] level 0.62 = the family's own default; not tuned",
+  "[Claude 2026-10-20, cl_disp15_ema_allday_k1p5] the side gate on 15-minute bars: long only above the EMA(20) of 15-minute closes, short only below",
+  "[Claude hunt 2026-10-20] 30-minute swings = the session's half-hour structure: bigger legs, wider structural stops, fewer trades; one a pass (a pass holds about one such leg)",
+  "[prior knowledge, read 2026-10-20: WHAT_WORKS.md 3.5] stops of 20 points or less lose in every store; 30-110 point stops are where the edges were. The 30-minute swing is chosen for the stop width, not from any pullback result (none is on file)."
+ ],
+ "not_run": [
+  "THE GATE: the open layer's price_ema(20) on 15-minute closes since 00:00 ET, read when the limit is placed; a working order is not pulled when the close later crosses the EMA.",
+  "THE STOP: the leg's start (structure); its size differs trade to trade and is not known before the run (PREREG asks more than 20 points on average). The engine never puts it nearer than 0.25 x ATR.",
+  "THE RANDOM CONTROL: the lane's random entries take the median stop of the taught trades at the same 1.5R, any bar of the pass.",
+  "CAPPED PER SESSION PASS, NOT PER DAY: nyam, mid and pm are three passes, so a day can hold up to 3 trades and a trade of one pass may still be open when another pass enters.",
+  "A leg needs two 30-minute swings: the first can be known at 02:30 ET; legs known before 09:30 can trade at the first close of the nyam pass if still live.",
+  "Overlaps hunt_pb_leg15_ema20 (same family and gate, bigger swings): some legs are the same; the entries differ in price.",
+  "Limit fills need a one-tick trade-through (strict_limit); no entry in the last 5 minutes of a pass.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only; the 3:1 block walk-forward comes later under PREREG."
+ ],
+ "control": "random"
+}

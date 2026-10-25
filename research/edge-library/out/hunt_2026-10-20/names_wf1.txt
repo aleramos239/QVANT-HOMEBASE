@@ -1,0 +1,3 @@
+hunt_fv_cbreak15_ema1h_midpm
+hunt_dm_hurst15_ny
+hunt_pb_leg15_ema20

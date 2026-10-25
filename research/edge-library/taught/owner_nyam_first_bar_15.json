@@ -1,0 +1,39 @@
+{
+ "name": "owner_nyam_first_bar_15",
+ "source": {
+  "title": "The 09:30 first-bar follow on NQ at 1:1 (Claude, 2026-10-20): the afternoon sheet's exits on the opening bar, so the two legs of the first-bar book share one shape",
+  "channel": "owner",
+  "url": "https://www.youtube.com/watch?v=KN7j6NXXAio"
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "first_bar_mom",
+  "settings": {
+   "k": 0.2
+  },
+  "words": "The first 15-minute bar of the New York morning (09:30-09:45 ET) closes up: market long at 09:45; closes down: short. Stop 30 points, target 30 points (1:1), once a day, flat at the pass's end (11:00). The same bar as owner_jj_cont_15m (JJ's 25/38 - 50/76 exits) with the afternoon leg's exits."
+ },
+ "exits": {
+  "stop_pts": 30,
+  "target_pts": 30,
+  "max_trades": 1
+ },
+ "taught": [
+  "[KN7j6NXXAio 1:33 / KHEQ5g55dQ4 11:57] every session open gets the same first trade",
+  "[Claude 2026-10-20] pre-registered as the morning leg of the first-bar book at the afternoon leg's 30/30; owner_jj_cont_15m is the same bar at JJ's exits (940 tr, 42.9 %, +$70; WF fails P6.2 / P6.4); primary cell pts30-r1"
+ ],
+ "not_run": [
+  "The 30 / 30 exits are the afternoon sheet's (1:1), not JJ's 1:1.5; the cells are the lane's own neighbours.",
+  "k 0.2 x ATR is the family's floor: effectively every day trades.",
+  "The pass ends 11:00 (the engine's nyam pass), so an open trade is flat at 11:00, not 15:58.",
+  "COSTS AND FILLS: the engine's own."
+ ],
+ "control": "random"
+}

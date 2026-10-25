@@ -1,0 +1,23 @@
+{
+ "_": "Batch 6, pre-registered 2026-10-20 ~01:10 ET: VWAP (the owner: 'i think vwap is really good and can really help'). On the momentum side (mom, fair open, room 15, no loss stop, 09:35-15:00, wick off): the day's VWAP slope as the trend (longs only while the VWAP is above its value N minutes ago), the VWAP pullback shape (the bar before touched the VWAP, the signal bar displaces away in the trend's direction = Conti's pullback at JJ's 1:1.5), the VWAP as the fair line with the slope, 5-minute versions and the 12.5/19 and 50/76 sizes. Every variant 1:1.5.",
+ "mom-slope15": {"entry": "mom", "fair": "open", "min_room": 15.0, "max_loss": 99, "end": "15:00", "wick": "off", "vwap_slope": 15},
+ "mom-slope30": {"entry": "mom", "fair": "open", "min_room": 15.0, "max_loss": 99, "end": "15:00", "wick": "off", "vwap_slope": 30},
+ "mom-slope60": {"entry": "mom", "fair": "open", "min_room": 15.0, "max_loss": 99, "end": "15:00", "wick": "off", "vwap_slope": 60},
+ "mom-slope30-vwapdir": {"entry": "mom", "fair": "open", "min_room": 15.0, "max_loss": 99, "end": "15:00", "wick": "off", "vwap_slope": 30, "vwap_dir": "on"},
+ "mom-slope30-body1": {"entry": "mom", "fair": "open", "min_room": 15.0, "max_loss": 99, "end": "15:00", "wick": "off", "vwap_slope": 30, "min_body": 1.0},
+ "vwapfair-slope30": {"entry": "mom", "fair": "vwap", "min_room": 15.0, "max_loss": 99, "end": "15:00", "wick": "off", "vwap_slope": 30},
+ "vwapfair-slope30-room0": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "off", "vwap_slope": 30},
+ "pullback": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "off", "pullback": "on"},
+ "pullback-slope30": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "off", "pullback": "on", "vwap_slope": 30},
+ "pullback-slope15": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "off", "pullback": "on", "vwap_slope": 15},
+ "pullback-slope30-wick": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "on", "pullback": "on", "vwap_slope": 30},
+ "pullback-slope30-12_19": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "off", "pullback": "on", "vwap_slope": 30, "stop_val": 12.5, "tgt_r": 1.52},
+ "pullback-slope30-50_76": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "off", "pullback": "on", "vwap_slope": 30, "stop_val": 50.0, "tgt_r": 1.52},
+ "pullback-slope30-any": {"entry": "any", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "pullback": "on", "vwap_slope": 30},
+ "pullback-tf5-slope15": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "off", "pullback": "on", "vwap_slope": 15, "tf": "5"},
+ "pullback-tf5-slope30": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "off", "pullback": "on", "vwap_slope": 30, "tf": "5"},
+ "pullback-tf5-slope30-50_76": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "off", "pullback": "on", "vwap_slope": 30, "tf": "5", "stop_val": 50.0, "tgt_r": 1.52},
+ "mom-tf5-slope30": {"entry": "mom", "fair": "open", "min_room": 15.0, "max_loss": 99, "end": "15:00", "wick": "off", "vwap_slope": 30, "tf": "5"},
+ "vwapdir-slope30-room0": {"entry": "mom", "fair": "open", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "off", "vwap_slope": 30, "vwap_dir": "on"},
+ "pullback-slope30-c15": {"entry": "mom", "fair": "vwap", "min_room": 0.0, "max_loss": 99, "end": "15:00", "wick": "off", "pullback": "on", "vwap_slope": 30, "cont": "15m", "stop_mode": "struct", "tgt_r": 1.52}
+}

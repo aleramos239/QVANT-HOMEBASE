@@ -1,0 +1,50 @@
+{
+ "name": "cl_fx_disp15_vwap_10to11_long",
+ "source": {
+  "title": "Claude 2026-10-20 control: the 10:00-11:00 15m displacement with the VWAP-side gate, LONG side only, against random long entries (drift control)"
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "dir": "long",
+ "entry": {
+  "family": "displace",
+  "settings": {
+   "k": 1.5,
+   "mode": "follow",
+   "close_r": 0.0,
+   "gate": "vwap_dev",
+   "g_lvl": 0.0,
+   "g_side": "with",
+   "w_start": "10:00",
+   "w_end": "11:00"
+  },
+  "words": "From 10:00 to 11:00 ET, a 15-minute candle whose body is at least 1.5 x ATR(14) of the candles before it is a displacement. Enter at its close in its direction, long only when the close is above the session VWAP (anchored at 09:30) and short only when below it. Stop at the displacement candle's other extreme, target 1:1. One trade a day."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1,
+  "max_trades": 1
+ },
+ "taught": [
+  "[owner 2026-10-15, sheet displace_ema15_1r_10to11_k1p5] displacement = body >= k x ATR(14) of the candles before, followed at its close",
+  "[owner 2026-10-15, same sheet] stop = the displacement candle's other extreme; target 1:1; one trade a day",
+  "[owner 2026-10-19, sheet cl_fvg_oside_15_mid_r1_t2_gap0p1] trade on the day's side (there: the 09:30 open)",
+  "[Claude design panel 2026-10-20] the side = the session VWAP since 09:30 (gate vwap_dev, line 0) in place of the 15-minute EMA20; k 1.5; entries 10:00-11:00",
+  "[Claude 2026-10-20] control: long side only"
+ ],
+ "not_run": [
+  "THE VWAP: the engine's session VWAP of the nyam pass, anchored at 09:30 ET, read at the signal close (closed bars only).",
+  "WINDOW: decisions at the 15-minute closes 10:00, 10:15, 10:30 and 10:45; the nyam pass ends 11:00.",
+  "THE CAP: the first displacement on the VWAP's side is the trade; one a day.",
+  "A stop floor of 0.25 x ATR applies when the candle's extreme is nearer than that.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: build days only."
+ ],
+ "control": "random"
+}

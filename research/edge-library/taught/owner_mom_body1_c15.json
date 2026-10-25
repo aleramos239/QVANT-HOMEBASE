@@ -1,0 +1,54 @@
+{
+ "name": "owner_mom_body1_c15",
+ "source": {
+  "title": "Screened row sent to the taught lane on the owner's bar (40 %+ target-vs-stop at 1:1.5, 2+ a day), 2026-10-20 12:30 alarm: batch 5 row mom-body1-c15 (5.1 a day, target-vs-stop 40.5 %, +$11): JJ's displacement traded AWAY from the 09:30 open, body at least 1 ATR, 15+ points from the open, the 09:45 continuation on top",
+  "channel": "owner",
+  "url": "https://www.youtube.com/watch?v=KN7j6NXXAio"
+ },
+ "market": "NQ",
+ "bars": [
+  "1"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "jj_fair",
+  "settings": {
+   "entry": "mom",
+   "fair": "open",
+   "min_room": 15.0,
+   "max_loss": 99,
+   "end": "15:00",
+   "wick": "off",
+   "pullback": "off",
+   "vwap_slope": 0,
+   "cont": "15m",
+   "min_body": 1.0,
+   "near": 0.0
+  },
+  "words": "Two trades in one sheet, both at 1:1.5. (1) At 09:45, the first 15-minute candle's colour: green buy, red sell, stop 25 points when its body is 25 points or less, else 50 (JJ's opening continuation, read on the 15-minute bar). (2) From 09:35 to 15:00, a displacement candle (body larger than the previous body, previous candle the opposite colour) away from the session VWAP right after the previous candle touched it, in the VWAP's 30-minute direction; stop 25 points. Target 1.52 x the stop on both. One position at a time, no loss stop."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.52,
+  "max_trades": 20
+ },
+ "taught": [
+  "[owner 2026-10-20] VWAP pullback + the opening continuation, the two pieces that showed an edge, together for frequency",
+  "[KN7j6NXXAio 5:06, 5:36] the opening candle's colour; 25 / 38, or 50 / 76 when the body is over 25 points",
+  "[batch 6, 2026-10-20] screened: 2,301 trades (2.4 a day), target-vs-stop 41.6%, +$34 a trade, PF 1.10"
+ ],
+ "not_run": [
+  "SCREENED, NOT TAUGHT: 155 versions read before this one; the walk-forward judges the exit cell only; blind months 2025-07 on are the only out-of-sample read.",
+  "The 15-minute bar is the owner's reading of JJ's 1-minute opening candle; the half size on 50 / 76 is sizing, not in this 1-contract ledger.",
+  "MY PICKS: market at the close; one instance 09:30-15:58; the VWAP slope window 30 minutes.",
+  "COSTS AND FILLS: the engine's own.",
+  "The structure stop = 25 points for the VWAP pullbacks (JJ's 25 / 38) and the entry close minus 25 points (50 for a big opening bar) for the 09:45 continuation, target 1.52 x. RE-RUN 2026-10-20: the first run (owner_vwap_pullback_c15) gave the pullbacks the Template's 1.5-point default stop (a jj_fair bug, fixed with a test).",
+  "SCREENED, NOT TAUGHT: picked from ~180 screened versions on the build days by the owner's bar; the walk-forward is the out-of-sample read."
+ ],
+ "control": "random"
+}

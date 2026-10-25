@@ -1,0 +1,31 @@
+{
+ "name": "hunt_mx_es_orb30_close_5",
+ "source": {
+  "title": "[Claude hunt 2026-10-20, other markets] ES opening-range break on a close. Why it should pay: the first 30 minutes of the S&P cash session are the NYSE opening auction plus the index-arbitrage and portfolio desks working the day's institutional orders through ES; a 5-minute close outside that range shows the side whose orders were not finished in the auction, and those desks keep executing that way through the morning. Who loses: the traders who sell the top (or buy the bottom) of the opening range expecting it to hold, and late hedgers who chase the break. Prior: the Quant-Portfolio book tile orb_ES (09:30-10:00 ET range, first close beyond it, stop at the other side; lockbox 2026-06-09: 681 trades, PF 1.16) and the pipeline card es_or_long (the only ES card past stage 1)."
+ },
+ "market": "ES",
+ "bars": ["5"],
+ "sessions": ["nyam"],
+ "dir": "both",
+ "entry": {
+  "family": "win_break",
+  "settings": {"r_start": "09:30", "r_end": "10:00", "mode": "follow", "entry": "market", "wait": "0"},
+  "words": "ES. The opening range is the high and low of 09:30-10:00 ET. The first 5-minute bar after 10:00 that closes above the high buys at its close; below the low sells. Stop at the other side of the range, target 1.5 x that distance. One trade a day, flat 15:58."
+ },
+ "exits": {"stop": "struct", "target_r": 1.5, "max_trades": 1},
+ "taught": [
+  "[vault Tile-orb-ES, Quant-Portfolio 2026-06-09] S&P opening-range break: 08:30-09:00 CT (09:30-10:00 ET) range, first close beyond it, stop at the opposite side, one a day (the tile's target was 2R and its last entry 12:00 CT)",
+  "[pipeline card es_or_long, WHAT_WORKS 2026-10-20] the only ES card past stage 1 is an opening-range idea (read before this sheet as prior knowledge; no number taken from it)",
+  "[Claude hunt 2026-10-20] target 1.5 x the range (the hunt's pre-registered shape) instead of the tile's 2R; both sides"
+ ],
+ "not_run": [
+  "THE ENTRY WINDOW: win_break trades only inside the pass that holds the first close after 10:00 (nyam), so a break is taken on the 5-minute closes 10:05-10:50; the tile allowed a first break up to 13:00 ET. A first break after 10:55 is not traded.",
+  "THE FIRST BREAK IS THE DAY'S SIGNAL: a close that breaks one side and then the other is one trade (the first), never a reversal.",
+  "THE STOP: the other side of the 30-minute range (the structure level), floored at two ticks and 0.25 x ATR; target 1.5 x that distance from the fill.",
+  "SIZING: the tile sized by dollar risk; here 1 ES contract.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage on market and stop fills, $4 a round turn, tick replay).",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only."
+ ],
+ "control": "random"
+}

@@ -1,0 +1,36 @@
+{
+ "name": "hunt_fv_pullback5_s30_midpm",
+ "source": {
+  "title": "Claude hunt 2026-10-20 (lens: structure entries after the morning): the pullback into a fresh swing leg -- a higher 30-minute swing high (or lower swing low) breaks structure, and a limit waits half way back into the leg -- traded on 5-minute bars in the midday and afternoon passes, stop at the leg's start, 1:1.5. Why it should pay: a broken swing is the side that is winning adding to its position; the first half-way pullback is where the late traders who chased the break are shaken out and the trend's patient buyers (or sellers) step in again. Who loses: the counter-trend traders who read the pullback as a reversal and sell (or buy) it, and whose stops sit above the swing high (or below the swing low) the target heads for."
+ },
+ "market": "NQ",
+ "bars": ["5"],
+ "sessions": ["mid", "pm"],
+ "dir": "both",
+ "entry": {
+  "family": "pullback",
+  "settings": {"swing": "30", "level": 0.5},
+  "words": "Mark the swings of 30-minute candles. When a new swing high is above the swing high before it (structure broke up), the leg runs from its lowest low since that earlier swing high to the new high: rest a buy limit half way back into the leg. Mirror for a lower swing low (sell half way back up). Stop at the start of the leg, target 1.5 x the stop. One trade in the midday pass and one in the afternoon pass, on 5-minute bars."
+ },
+ "exits": {"stop": "struct", "target_r": 1.5, "max_trades": 1},
+ "taught": [
+  "[owner 2026-10-10, family pullback] a higher swing high makes an up leg; a buy limit part of the way back into the leg (the optimal-trade-entry / Fibonacci pullback); stop at the leg's start",
+  "[owner 2026-10-10, family pullback] swing bars of 15 / 30 / 60 minutes; depth 0.5 / 0.62 / 0.79 of the leg",
+  "[owner 2026-10-20, hunt PREREG] target 1.5 x the stop; stops wider than 20 NQ points on average",
+  "[Claude hunt 2026-10-20] 30-minute swings and a half-way pullback (level 0.5): both picked so the stop (half the leg) is wide, per the PREREG stop rule, before any run",
+  "[Claude hunt 2026-10-20] the midday and afternoon passes only (11:00-15:58), hours the morning legs do not trade; one trade a pass",
+  "[Claude hunt 2026-10-20] no pullback sheet or card was ever run (the pipeline cards nq_pullback_* were created and never started), so nothing of this family's results was read"
+ ],
+ "not_run": [
+  "THE SWINGS are 30-minute candles built from the day's 1-minute bars from 00:00 ET; a swing high is known one swing candle late (when the candle after it has closed). Legs are followed from the first bar of the day, so a leg made in the morning can still be traded at 11:00 if it is live.",
+  "A LEG ENDS when its order fills, when price trades beyond its extreme, when price reaches the entry while no order works, or when a newer leg replaces it.",
+  "THE STOP is the leg's start (the lowest low between the two swing highs for an up leg), floored at 0.25 x ATR(14) of the 5-minute bars and two ticks; at level 0.5 it lies half the leg below the entry.",
+  "THE CAP: one trade per session pass; two passes, so a day can hold up to 2 trades, and the midday trade may still be open when the afternoon pass enters.",
+  "NO SIDE GATE other than the leg itself: the broken swing is the side.",
+  "FULLY BLIND: no month of this family was ever read.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay, strict limit fills).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ by this sheet: build days only.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days); no entry in the last 5 minutes of a pass."
+ ],
+ "control": "random"
+}
