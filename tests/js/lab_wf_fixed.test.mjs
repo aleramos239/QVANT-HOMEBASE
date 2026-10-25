@@ -29,7 +29,7 @@ test('the default range is the 3:1 blocks, and its Run sends the fixed scheme', 
   assert.match(LAB, /if \(fresh\) f\.range = \{ \.\.\.X\.LAB_RANGE \}/);
   // the Range list: the 3:1 choices first, the fixed windows after
   const opts = LAB.slice(LAB.indexOf('function settingsHtml'), LAB.indexOf('const inputRow'));
-  assert.ok(opts.indexOf('WF_RANGE_OPTS.map') < opts.indexOf('X.RANGES.map'), 'the 3:1 options come first');
+  assert.ok(opts.indexOf('WF_RANGE_OPTS.map') < opts.indexOf('X.RANGES.filter'), 'the 3:1 options come first');
   const f = { ...X.defaults(STRAT), range: { ...X.LAB_RANGE } };
   const b = X.wfFixedBody(f, X.HM40_AXES);
   assert.equal(b.scheme, 'fixed');

@@ -375,38 +375,27 @@ def test_bp_wf_run_show_pick_oos(cli, capsys, wf):
     assert rc == 2 and len(_log()) == 1
 
 
-def test_blueprint_test_refuses_new_idea(wf, capsys, monkeypatch):
-    IS, NEW = api.ideastore(), "new ideas use the 3:1 walk-forward: bp.py wf (blueprint_wf)"
-    assert IS.OLD_ROUTE_END == "2026-10-21" and IS.old_route("2026-10-20T23:59:59+00:00") and not IS.old_route("2026-10-21T00:00:00+00:00")
-    assert not IS.old_route(None) and not IS.old_route("")
-    IS.create("hwt_new")
-    IS.write_card("hwt_new", "# hwt_new -- idea card")
-    IS.write_spec("hwt_new", {"name": "hwt_new", "version": 1, "card": {}, "run": {}})
-    d = IS.idea_dir("hwt_new")
-
-    def created(day):
-        j = json.loads((d / "idea.json").read_text())
-        (d / "idea.json").write_text(json.dumps({**j, "created": day}))
-
-    def no(*more):
-        rc, r = _bp(capsys, "test", "hwt_new", "--confirm", *more)
-        assert rc == 2 and NEW in r["error"], r["error"]
-        return r["error"]
-    no()                                                                      # no lock: a new idea
-    created("2026-10-21T08:00:00+00:00")
-    assert "created 2026-10-21" in no("--early-look")                        # an early look of an idea created on the cutoff day
-    (d / "lock.json").write_text(json.dumps({"locked_utc": "2026-10-21T09:00:00+00:00", "hash": "x"}))
-    assert "locked 2026-10-21" in no()                                       # card -> build -> lock today -> test: refused
-    (d / "lock.json").write_text(json.dumps({"locked_utc": "2026-10-19T09:00:00+00:00", "hash": "x"}))
-    rc, r = _bp(capsys, "test", "hwt_new", "--confirm")                       # an old lock passes the gate (and is refused further on)
-    assert rc == 2 and NEW not in r["error"]
-    monkeypatch.setattr(IS, "OLD_ROUTE_END", "2026-10-01")                    # the one constant moves every gate
-    assert "locked 2026-10-19" in no()
+def test_the_old_split_is_retired_for_every_idea(wf, capsys):
+    """The owner, 2026-10-25: only the 3:1 block walk-forward, for every idea, old or new. The build, the lock, the one read
+    and the early look are refused whenever the idea was created or locked."""
+    IS = api.ideastore()
+    for day in ("2026-10-19T09:00:00+00:00", "2026-10-21T00:00:00+00:00", None, ""):
+        assert not IS.old_route(day)
+    assert not IS.old_split_open()
+    IS.create("hwt_old")
+    IS.write_card("hwt_old", "# hwt_old -- idea card")
+    IS.write_spec("hwt_old", {"name": "hwt_old", "version": 1, "card": {}, "run": {}})
+    d = IS.idea_dir("hwt_old")
+    j = json.loads((d / "idea.json").read_text())
+    (d / "idea.json").write_text(json.dumps({**j, "created": "2026-10-01T08:00:00+00:00"}))        # an old idea
+    (d / "lock.json").write_text(json.dumps({"locked_utc": "2026-10-02T09:00:00+00:00", "hash": "x"}))   # with an old lock
+    for cmd in (("test", "hwt_old", "--confirm"), ("test", "hwt_old", "--confirm", "--early-look"),
+                ("build", "hwt_old", "--reason=r", "--owner-said=build it"), ("lock", "hwt_old"), ("pools",)):
+        rc, r = _bp(capsys, *cmd)
+        assert rc == 2 and "the old split" in r["error"] and "is retired" in r["error"], cmd
     assert not IS.reads()
-    with pytest.raises(J.Refuse, match="3:1 walk-forward"):                   # the runner holds the same gate (oos.start passes the lock day)
-        RUN.run_test("hwt_new", {"version": 1, "lock": "x"}, SPEC, "k", "nyam", [], "s", "2026-01-30", dry=True)
-    rc, r = _bp(capsys, "build", "hwt_new", "--reason=the plain idea")        # a build runs a heat map: only on the owner's words
-    assert rc == 2 and "owner" in r["error"]
+    with pytest.raises(J.Refuse, match="3:1 walk-forward"):                   # the runner holds the same gate
+        RUN.run_test("hwt_old", {"version": 1, "lock": "x"}, SPEC, "k", "nyam", [], "s", "2026-01-30", dry=True)
 
 
 def test_build_and_lock_refuse_a_new_idea(wf):
@@ -565,17 +554,15 @@ def test_downstream_refuses_before_the_read(down, monkeypatch):
     no("stopped and is not run again")                                        # a read that stopped: nothing to read, ever
 
 
-def test_old_idea_downstream_unchanged(down):
+def test_every_idea_old_or_new_reads_its_3to1_record(down):
     from blueprint import propodds as PO
     root, IS = down["root"], api.ideastore()
-    _idea("hwt_old", root, created="2026-10-19T09:00:00+00:00")               # created before the cutoff, no 3:1 store: the old route
-    assert not H.route("hwt_old", root)
-    with pytest.raises(J.Refuse, match="out-of-sample test is not on file"):
-        PO.sim("hwt_old", PRO, 3, 345.0, root, paths=200)
-    _idea("hwt_new", root)
-    assert H.route("hwt_new", root)
-    (IS.idea_dir("hwt_new", root) / "test.json").write_text(json.dumps({"lines": []}))      # the one read of the test days on file: old
-    assert not H.route("hwt_new", root)
+    _idea("hwt_old", root, created="2026-10-19T09:00:00+00:00")               # created before the old cutoff: the 3:1 route all the same
+    assert H.route("hwt_old", root)
+    (IS.idea_dir("hwt_old", root) / "test.json").write_text(json.dumps({"lines": []}))      # an old read on file is history only
+    assert H.route("hwt_old", root)
+    with pytest.raises(J.Refuse):
+        PO.sim("hwt_old", PRO, 3, 345.0, root, paths=200)                     # no picked box, no test months: nothing to sim
     assert not H.route("nobody", root) and not H.route("Not A Name", root)
 
 
@@ -655,4 +642,4 @@ def test_status_next_step_and_wording_of_a_wf_idea(down):
     s = REC.status("hwt_sweep", root)
     assert "bp.py sim hwt_sweep" in s["next"] and "bp.py build" not in s["next"] and "(the sim and the eval card read these)" in s["text"]
     (IS.idea_dir("hwt_sweep", root) / "test.json").write_text(json.dumps({"lines": []}))      # an old read on file: the old route reads that one
-    assert "(the sim and the eval card read the old test record)" in REC.status("hwt_sweep", root)["text"]
+    assert "(the sim and the eval card read these)" in REC.status("hwt_sweep", root)["text"]   # history only: the 3:1 record still counts

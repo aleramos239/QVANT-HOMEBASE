@@ -861,35 +861,28 @@ print(json.dumps(out))
 
 def test_the_apps_connector_against_this_toolkit():
     """The other side of the contract: homebase/claude_mcp/blueprint_tools.py (the app's Python) starts THIS bp.py with the
-    engine's Python. The same tiny run through BP_TEST_RUN; the idea folder, the Lab and the tester's runs are temp folders."""
+    engine's Python. blueprint_card saves the idea; blueprint_build is gone (the old split is retired, the owner 2026-10-25).
+    The idea folder, the Lab and the tester's runs are temp folders."""
     if not APP_PYTHON.exists():
         import pytest
         pytest.skip(f"the app's Python is not there: {APP_PYTHON}")
-    if S.compute_window_end() is not None:
-        import pytest
-        pytest.skip("no heavy run starts 09:18-09:36 ET on weekdays")
     life(1)
     root, name = tmp() / "ideas_app", NAME
     calls = [("blueprint_card", {"name": name, "card": CARD, "settings": SETTINGS}), ("blueprint_card", {"name": name, "card": {**CARD, "neighbors": []}, "settings": SETTINGS}),
-             ("blueprint_build", {"name": name, "owner_said": "build it", "reason": "the plain idea, as carded", "wait_s": 600}), ("blueprint_status", {}), ("blueprint_status", {"name": name}),
-             ("blueprint_build", {"name": "bpi_nobody", "owner_said": "build it", "reason": "x"})]
+             ("blueprint_build", {"name": name, "owner_said": "build it", "reason": "the plain idea, as carded"}), ("blueprint_status", {}), ("blueprint_status", {"name": name})]
     env = {**os.environ, "HOMEBASE_IDEAS_ROOT": str(root), "HOMEBASE_DRAFTS_DIR": str(tmp() / "drafts_app"), "HOMEBASE_BP": str(W / "bp.py"),
            "HOMEBASE_BP_PYTHON": sys.executable, REC.TEST_RUN: json.dumps({**TINY, "tester": str(tmp() / "tester_app")})}
     q = subprocess.run([str(APP_PYTHON), "-B", "-c", CONNECTOR, str(S.REPO), json.dumps(calls)], capture_output=True, text=True, timeout=900, cwd=str(tmp()), env=env)
     assert q.returncode == 0, q.stderr[-2000:]
-    card, bad, build, every, one, nobody = json.loads(q.stdout)
-    _T["connector"] = {"blueprint_card": card, "blueprint_build": build, "blueprint_status": every, "blueprint_status(name)": one}
+    card, bad, build, every, one = json.loads(q.stdout)
+    _T["connector"] = {"blueprint_card": card, "blueprint_status": every, "blueprint_status(name)": one}
     assert card.split("\n")[0] == f"Blueprint card · {name} · IDEA · phase 0" and "0.6 PASS" in card and "0.7 PASS" in card and "Lines: 7 passed · 0 FAILED" in card
     assert "Lab: draft_bpi_orb is filed under Ideas." in card.split("\n") and card.count("Next: ") == 1 and "Saved: " in card
     assert bad.startswith("ToolError: Refused (blueprint card): ") and "0.4" in bad and "Nothing was run." in bad
-    status = IS.status(name, root)
-    assert build.split("\n")[0] == f"Blueprint build · {name} · {status.upper()} · phase 2 · round 1" and "2.9 PASS round 1 of at most 5" in build
-    assert all(build.count(f"\n2.{i} ") == 1 for i in range(1, 10)) and "Lines: " in build and build.count("Next: ") == 1 and "Lab: the saved results read" not in build
-    assert every.split("\n")[0] == "Blueprint status" and f"{name}: {status.upper()} · phase 2 · round 1 of 5" in every
-    assert one.split("\n")[0] == f"Blueprint status · {name} · {status.upper()} · phase 2 · round 1" and "ROUNDS" in one and "the plain idea, as carded" in one
-    assert nobody.startswith("ToolError: Refused (blueprint build): ") and "no card" in nobody
-    assert (root / name / "rounds/1/build.json").is_file() and (tmp() / "drafts_app" / f"{name}.py").is_file()
-    assert read(tmp() / "drafts_app" / "groups.json")["members"] == {f"draft_{name}": IS.group_for(status)}
+    assert build == "ToolError: unknown tool 'blueprint_build'" and not (root / name / "rounds").exists()
+    assert every.split("\n")[0] == "Blueprint status" and name in every
+    assert one.split("\n")[0].startswith(f"Blueprint status · {name}")
+    assert read(tmp() / "drafts_app" / "groups.json")["members"] == {f"draft_{name}": IS.group_for(IS.status(name, root))}
 
 
 # ================================================================ nothing outside the temp folder

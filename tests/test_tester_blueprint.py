@@ -27,9 +27,8 @@ if argv[:1] == ["blockcode"]:
                       "error": None, "counts": {"filters": len(log.read_text())}, "sources": {"x.py:1-2": {"file": "x.py", "start": 1, "end": 2, "code": "a\nb"}},
                       "groups": [{"id": "filters", "title": "Filters", "words": "", "items": [{"id": "filter:f", "name": "f", "parts": [{"label": "L", "src": "x.py:1-2"}]}]}]}))
     sys.exit(0)
-job = {"id": "j1", "state": "running", "progress": "pass 1 of 2"} if argv[:1] == ["build"] and "--wait=0" in argv else None
 print(json.dumps({"ok": True, "command": argv[0], "name": None, "status": None, "phase": None, "round": None, "lines": [],
-                  "text": "RAN " + " ".join(argv), "next": "", "job": job, "saved": [], "error": None}))
+                  "text": "RAN " + " ".join(argv), "next": "", "job": None, "saved": [], "error": None}))
 '''
 
 
@@ -50,7 +49,7 @@ def run(c, tool, args=None, **kw):
 
 def test_the_lab_lists_the_tools_every_chat_has_and_the_ideas_on_file(c):
     r = c.get("/api/tester/blueprint").json()
-    assert [t["name"] for t in r["tools"]] == [s["name"] for s in blueprint_tools.SPECS] and len(r["tools"]) == 15
+    assert [t["name"] for t in r["tools"]] == [s["name"] for s in blueprint_tools.SPECS] and len(r["tools"]) == 12
     by = {t["name"]: t for t in r["tools"]}
     for s in blueprint_tools.SPECS:                 # the same definition, split into its phase and its words
         t = by[s["name"]]
@@ -58,8 +57,9 @@ def test_the_lab_lists_the_tools_every_chat_has_and_the_ideas_on_file(c):
             assert t["phase"] == t["description"] == s["description"] and t["inputs"] == s["inputSchema"]
             continue
         assert t["inputs"] == s["inputSchema"] and s["description"] == f"{t['phase']}: {t['description']}" and t["phase"].startswith("Blueprint")
-    assert by["blueprint_build"]["phase"].startswith("Blueprint phase 2, the build") and by["blueprint_portfolio"]["inputs"]["required"] == ["names", "account"]
-    assert r["ideas"] == [] and r["wait_s"] == tester_api.LAB_WAIT_S == 20
+    assert by["blueprint_wf"]["phase"].startswith("Blueprint, the 3:1 walk-forward") and by["blueprint_portfolio"]["inputs"]["required"] == ["names", "account"]
+    assert "blueprint_build" not in by and "blueprint_test" not in by and "blueprint_lock" not in by    # retired (the owner, 2026-10-25)
+    assert r["ideas"] == []
     ideastore.create("nq_orb_pre")
     got = c.get("/api/tester/blueprint").json()["ideas"]
     assert [i["name"] for i in got] == ["nq_orb_pre"] and got[0]["status"] == "idea"
@@ -76,15 +76,6 @@ def test_a_tool_runs_as_a_chat_runs_it_and_answers_in_its_own_words(c, ideas_roo
     assert r.status_code == 200 and r.json()["ok"] is False and "no such idea" in r.json()["text"]
     r = run(c, "blueprint_status", {"name": "Not A Name"})                        # the connector's own input check
     assert r.status_code == 200 and r.json()["ok"] is False and "name" in r.json()["text"]
-
-
-def test_a_long_job_answers_with_its_id_after_twenty_seconds_at_most(c):
-    for sent, want in ((None, 20), (3600, 20), (5, 5), (0, 0), (True, 20), ("soon", 20)):
-        args = {"name": "nq_orb_pre", "owner_said": "build it", "reason": "the plain idea", **({} if sent is None else {"wait_s": sent})}
-        text = run(c, "blueprint_build", args).json()["text"]
-        assert (f"--wait={want}" in text) or (want == 0 and "job j1 is still going" in text), (sent, text)
-    going = run(c, "blueprint_build", {"name": "nq_orb_pre", "owner_said": "build it", "reason": "the plain idea", "wait_s": 0}).json()["text"]
-    assert "is still going" in going and "job_id='j1'" in going                  # the page's "Keep waiting" reads the id off this
 
 
 def test_what_the_route_refuses(c, monkeypatch):

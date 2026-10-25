@@ -327,19 +327,7 @@ function fillRangeMenu(m) {
     if (r.id === 'custom') continue;
     m.appendChild(page.menuItem(r.label, '', () => setRange({ id: r.id, start: '', end: '' }), form.range.id === r.id));
   }
-  m.appendChild(page.mk('div', 'menu-sep'));
-  m.appendChild(page.mk('div', 'set-cap tst-menu-cap', 'Walk-forward'));
-  for (const n of X.WF_RATIOS) {
-    const on = form.range.wf === n;
-    m.appendChild(page.menuItem(`Walk-forward 1:${n}`, `select on 1 month, test on the next ${n}`,
-      () => setRange({ wf: on ? null : n }), on));       // picking the active one again turns it off
-  }
-  const rollOn = form.range.wf === X.WF_ROLL;
-  m.appendChild(page.menuItem(`Walk-forward ${X.WF_ROLL}`, 'blocks: select on 3 months, test the next 1, then the next block',
-    () => setRange({ wf: rollOn ? null : X.WF_ROLL }), rollOn));
-  const cmpOn = form.range.wf === X.WF_COMPARE;
-  m.appendChild(page.menuItem('Walk-forward compare 1:1 · 1:2 · 1:3', 'one grid run, the three out-of-sample results side by side',
-    () => setRange({ wf: cmpOn ? null : X.WF_COMPARE }), cmpOn));
+  // the walk-forwards here were the pick scheme, retired (owner, 2026-10-25): the 3:1 block walk-forward lives in the Lab
   m.appendChild(page.mk('div', 'menu-sep'));
   m.appendChild(page.menuItem('Custom date range…', '', () => { page.closeMenu(); openDatesDialog(); },
     form.range.id === 'custom'));

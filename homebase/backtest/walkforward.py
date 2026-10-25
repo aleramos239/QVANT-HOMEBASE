@@ -1,4 +1,5 @@
-"""Walk-forward. Two schemes: `fixed` (the DEFAULT since 2026-10-20) and `pick` (the old ones, below).
+"""Walk-forward: `fixed` 3:1 blocks only (the owner, 2026-10-25). Rolling and `pick` (below) are RETIRED: their code stays so
+old jobs on file still read, and validate_wf refuses to start them (OLD_SCHEMES opens them for their own tests only).
 
 FIXED (the owner, 2026-10-20; spec docs/superpowers/specs/2026-10-20-heatmap-40-and-fixed-box-walkforward-design.md 4.2-4.5).
 Every cell of the grid (the hm40 exit cells when the body sends no axes) runs ONCE, as set, on the in-sample months of the
@@ -13,11 +14,11 @@ results are never served") does not apply to `fixed`. The test months are not ru
                                refused, never read twice;
                                then the cell runs on each test month (range wf_oos, one month a run) as its own job under
                                <base>/walkforward-oos/<job>/; oos_view() reads it back (oos.json once it is over).
-Rolling (step_months 1) stays an opt-in: the pick windows step a month, every cell still fixed; its cells run on every
+Rolling (step_months 1, RETIRED 2026-10-25) was an opt-in: the pick windows step a month, every cell still fixed; its cells run on every
 window's pick months (all but the last month), so a test month there is a later window's pick month: it has no unseen
 test months and oos() refuses it. Looks: the table counts each cell once.
 
-PICK -- the user's old scheme: 1 month to SELECT, the next N months to TEST, stepping monthly, over
+PICK (RETIRED 2026-10-25) -- the user's old scheme: 1 month to SELECT, the next N months to TEST, stepping monthly, over
 whatever window the request names (the range picker's preset; the build days, 2021-09-22 -> 2025-06-30,
 by default). A body with no scheme that sends test_months / select_months / compare / metric / min_trades, or a range other
 than wf_is, is this one.
@@ -126,6 +127,12 @@ STAT_KEYS = ("net_profit", "trades", "win_rate", "profit_factor", "sharpe", "max
              "rr", "rr_label", "skipped_by_error")
 TIE_BREAK = "best metric (equal to 6 decimals = a tie) → more trades that month → lowest cell index"
 SCHEMES = ("fixed", "pick")
+# The owner, 2026-10-25: in-sample and out-of-sample are ONLY the 3:1 blocks, every cell fixed. The pick scheme (1:1 / 1:2 / 1:3, the
+# code's own pick) and rolling (step 1) start no more; their code stays below so the old jobs on file still read. The one pick-path
+# body still allowed is the Desk's own: 3 in, 1 out, blocks, no axes (a promoted strategy as set, nothing searched).
+OLD_SCHEMES = False        # TEST ONLY: True lets the old code's own tests start a pick / rolling job
+RETIRED = ("only the 3:1 block walk-forward runs (the owner, 2026-10-25): every cell fixed on the in-sample months of the 3:1 blocks; "
+           "rolling and the pick scheme (1:1 / 1:2 / 1:3, the code's own pick) are retired -- send it with scheme fixed, no step_months")
 PICK_FIELDS = ("test_months", "select_months", "compare", "metric", "min_trades")   # the old scheme's own fields
 LOCK, CLAIM, OOS = "lock.json", "oos-claim.json", "oos.json"
 READS_LOG = "wf-oos-reads.jsonl"     # in the shared folder (slots.shared_dir), beside the looks counter
@@ -621,6 +628,9 @@ def validate_wf(body) -> dict:
         raise ValueError("compare runs 1:1, 1:2 and 1:3 together: send it without select_months")
     select_months = select_window(select_months, test_months)
     step_months = step_window(b.pop("step_months", None), select_months)
+    # Only the Desk's own run of a promoted strategy as set stays: 3 months in, the next 1 out, blocks, no axes (nothing searched)
+    if not OLD_SCHEMES and (compare or (select_months, test_months, step_months) != (3, 1, 4) or b.get("axes")):
+        raise ValueError(RETIRED)
     if isinstance(b.get("range"), dict) and b["range"].get("kind") == "is_months":
         raise ValueError("a walk-forward steps whole calendar months, so it cannot run on IS months only "
                          "(Jan/Apr/Jul/Oct): pick a continuous window")
@@ -679,6 +689,8 @@ def validate_fixed(b: dict) -> dict:
     if bad:
         raise ValueError(f"{', '.join(bad)}: the fixed walk-forward picks nothing (the owner picks a cell): send it without them")
     step = b.pop("step_months", ROLL_STEP)
+    if step != ROLL_STEP and not OLD_SCHEMES:
+        raise ValueError(RETIRED)
     if type(step) is not int or step not in ROLL_STEPS:
         raise ValueError("step_months: 4 (blocks) or 1 (rolling)")
     rng = b.get("range")

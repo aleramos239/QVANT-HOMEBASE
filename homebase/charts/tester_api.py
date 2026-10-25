@@ -38,8 +38,7 @@
                                           inputs: its JSON schema}], ideas: [each idea's idea.json]} -- THE SAME tool
                                           definitions every chat has (claude_mcp.blueprint_tools.SPECS)
     POST /api/tester/blueprint/run       {tool, args} -> {ok, text}: that tool run as a chat runs it (the research
-                                          toolkit bp.py as a child process; it saves in the app itself). A long job
-                                          answers after LAB_WAIT_S at most with its job id: send it again with job_id
+                                          toolkit bp.py as a child process; it saves in the app itself)
     GET  /api/tester/pipeline            the strategy pipeline as the Lab shows it (its Queue, Book and Guide):
                                           {runner: {running, paused}, counts: {label: n}, ideas: [the toolkit's state
                                           rows, each with the page's `label`], book: [the book cards], stages: [{n,
@@ -218,7 +217,6 @@ from . import DEFAULT_ROOTS, deskgroups, deskresults, lab_forms, lab_templates, 
 from .paperbook import DESK_ORIGINS, _cors, desk_origin_refusal
 
 MC_CACHE = 64            # Monte Carlo results kept per service (review I3)
-LAB_WAIT_S = 20          # the longest a blueprint tool started from the Lab waits for a job before it hands back its id
 PIPE_CACHE_S = 2.0       # the pipeline's Queue / Book answer is kept this long: a page asks every 5 s, and several may be open
 pipe_clock = time.monotonic      # ... by this clock (a test moves it)
 CURVE_CACHE_S = 30.0     # an idea's equity curve is kept this long
@@ -619,7 +617,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         for s in blueprint_tools.SPECS:
             head, _, text = s["description"].partition(": ")
             tools.append({"name": s["name"], "phase": head, "description": text or head, "inputs": s["inputSchema"]})
-        return {"tools": tools, "ideas": ideastore.list_ideas(), "wait_s": LAB_WAIT_S}
+        return {"tools": tools, "ideas": ideastore.list_ideas()}
 
     code_cache: dict = {"stamp": None, "body": None}
     code_lock = threading.Lock()
@@ -647,9 +645,6 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             raise HTTPException(400, "{tool: one of " + ", ".join(bp_specs) + ", args: {...}}")
         if Slots().quiet():       # a quiet window of the tester: nothing is started from the page then
             raise HTTPException(409, "paused for a quiet window of the tester (tester_slots.json): run it later")
-        if "wait_s" in bp_specs[tool]["inputSchema"]["properties"]:      # a page never holds a request for an hour
-            w = args.get("wait_s", LAB_WAIT_S)
-            args = {**args, "wait_s": LAB_WAIT_S if isinstance(w, bool) or not isinstance(w, int) else max(0, min(w, LAB_WAIT_S))}
         fn = getattr(box, f"t_{tool}")
         try:
             inspect.signature(fn).bind(**args)

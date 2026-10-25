@@ -24,19 +24,20 @@ Evidence: `out/blueprint/gate_backtest.md`, `protocol_gates.md`, `mc_gates.md`, 
 | Phase | Days used | What it answers | Passing it gives |
 |---|---|---|---|
 | 0. Idea card | none | Why should it make money, and who loses? | Permission to test |
-| 1. Code check | build days only | Does the code do what the card says? | Numbers that can be trusted |
-| 2. Build | 22 Sep 2021 → 30 Jun 2025 (45 months, 75 %) | Is there anything here at all? | **LEAD** — approved for the out-of-sample test |
-| 3. Pick and freeze | build days only | Is the one variant that would be traded good enough on its own? | Nothing may change after this |
-| 4. Out-of-sample test | 1 Jul 2025 → latest complete session, Sep 2026 (15 months, 25 %), one read | Does it hold on days it has never seen? | **PROVEN ON HISTORY** — approved for a real eval |
+| 1. Code check | the 3:1 in-sample months only | Does the code do what the card says? | Numbers that can be trusted |
+| 2. In-sample table | the 3:1 in-sample months: 3 months in each block (75 %) | Is there anything here at all? | The table the owner picks from |
+| 3. The owner's pick (the lock) | the in-sample table only | Which box would be traded? | Nothing may change after this |
+| 4. Out-of-sample test | the 3:1 test months: the 1 month after each 3 (25 %), the picked box, one read, only on the owner's word | Does it hold on days it has never seen? | **PROVEN ON HISTORY** — approved for a real eval |
 | 5. Before the eval is bought | the test-period trades | Is the account worth buying, for one strategy and for the portfolio? | The eval, with its attempts and fee budget |
 | 6. The eval | live | Do real fills and results match the test? | **PROVEN LIVE** |
 
 ## 2. Written requirements for each phase
 
-> **THE ROUTE OF EVERY NEW IDEA since 2026-10-20 (the owner): the hm40 heat map and the 3:1 block walk-forward, each box fixed.**
+> **THE ONLY ROUTE, FOR EVERY IDEA, OLD OR NEW (the owner, 2026-10-20; the only one since 2026-10-25): the hm40 heat map and the 3:1 block walk-forward, each box fixed.**
 > "any new agent will automatically use the 3:1 block walk forward and only touch OOS when i say and will only use the heatmap
 > when i say." Spec `docs/superpowers/specs/2026-10-20-heatmap-40-and-fixed-box-walkforward-design.md`. It replaces phases 2 to 4
-> below for every idea created from 2026-10-21 on; where a line below says otherwise, this note wins.
+> below for every idea (the owner, 2026-10-25: "we only use the 3:1 block month walk forward for in and out sample"); where a line
+> below says otherwise, this note wins.
 >
 > | What | The rule |
 > |---|---|
@@ -48,8 +49,8 @@ Evidence: `out/blueprint/gate_backtest.md`, `protocol_gates.md`, `mc_gates.md`, 
 > | In place of the lock (3) | the OWNER picks a box from that table, by its number. No code and no agent picks for him. The pick is the lock: the box, its settings and the code stamp, written once, never changed (another box = a new idea name) |
 > | In place of the test (4) | the picked box's out-of-sample months, stitched, the same columns, plus block by block. Run ONCE, logged (who, when, box, code stamp, his words), never run again; a box with its test months on file is shown, not run |
 > | The owner's word | a heat map runs ONLY when the owner says so, and the test months ONLY when he says so: every tool that runs one takes his words, verbatim, in `owner_said` and refuses without them. Views of what is saved need none |
-> | Rolling | the windows step a month: only when the owner asks; per box, fixed too; it gives the in-sample table only (a rolling month is in-sample for a later window, so none is purely out-of-sample) |
-> | Months already seen | an idea tuned on the build days or read on the test days runs too; its table says "months already seen: <which>" |
+> | Months already seen | an idea once tuned on the old build days or read on the old test days runs too; its table says "months already seen: <which>" |
+> | No rolling | removed (the owner, 2026-10-25): the blocks are the only windows |
 >
 > The tools: `blueprint_card` (exits `hm40`, the default) → `blueprint_wf` (owner_said) → `blueprint_wf_pick` (the box he names) →
 > `blueprint_wf_oos` (owner_said); `blueprint_heatmap` shows the table and runs nothing. By hand: `bp.py wf run | show | pick | oos`;
@@ -57,10 +58,11 @@ Evidence: `out/blueprint/gate_backtest.md`, `protocol_gates.md`, `mc_gates.md`, 
 > Connector `heatmap` / `walkforward` (fixed, pick, oos) and the Lab run the same law; connector `backtest` runs on its market's
 > 3:1 in-sample months unless the owner says to run a range (owner_said). Phase 0 is unchanged but for line 0.2 (exits: hm40).
 >
-> **The old route, kept for old results:** ideas created before 2026-10-21 keep phases 2-4 below as written (the test: a lock dated before it) (the 48-cell table, the
-> build days 2021-09-22 → 2025-06-30, the test days read once: `blueprint_build` / `blueprint_lock` / `blueprint_test`). A new idea
-> is refused there. `blueprint_build` runs a heat map, so it too needs `owner_said`. The old tables (standard 48, open 60, extended,
-> own) stay in the code so old results still read; none is a default. The pipeline is OFF and refuses to start on the old split.
+> **The old split is RETIRED for every idea (the owner, 2026-10-25: "Retire it fully").** No idea, old or new, is tuned on the
+> build days (2021-09-22 → 2025-06-30), locked on them or read once on the test days (2025-07-01 on); there is no early look and
+> no rolling. `blueprint_build` / `blueprint_lock` / `blueprint_test` are gone from the connector; `bp.py build | pools | lock | test`
+> refuse. Old results stay on file as history and still read. Phases 2-4 below are kept as the record of the old route only: every
+> idea runs the note above. An old idea needs its own 3:1 run before the sim or the eval card.
 
 A phase is passed only when **every** line is true. Variants = the standard exit table (8 stops × 6 targets) × the 3-4 values of
 the idea's main setting. Random tables = the same exits, session and days with random entries: 4,000 draws from 10 seeds.
@@ -82,7 +84,7 @@ variant of line 3.1 (is this strategy good enough?).
 | 0.6 | Whether it trades both sides or one side only, and why |
 | 0.7 | When it should lose: one stretch or kind of market in which the idea must lose money. A build without that loss is a red flag, and no filter is added only to erase it |
 
-### Phase 1 — Code check (on build days only; never on the test period)
+### Phase 1 — Code check (on the 3:1 in-sample months only; never on a test month)
 | # | Requirement |
 |---|---|
 | 1.1 | Every trade is entered inside the stated session window |
@@ -92,7 +94,7 @@ variant of line 3.1 (is this strategy good enough?).
 | 1.5 | 10 trades are looked at on the chart (the first 5 and 5 at random): entry and exit sit where the rule says. *(10 is my number; the course gives none)* |
 | 1.6 | After any change to the code, the earlier trade list is reproduced exactly before a new run counts |
 
-### Phase 2 — Build, 22 Sep 2021 → 30 Jun 2025. Approved for the out-of-sample test when all of these are true
+### Phase 2 — Build, 22 Sep 2021 → 30 Jun 2025 (RETIRED 2026-10-25: history only; every idea takes the 3:1 in-sample table)
 | # | Requirement | The number |
 |---|---|---|
 | 2.1 | Most settings make money | more than 60 % of variants profitable |
@@ -120,7 +122,7 @@ so nothing that used to pass or fail changes. A pool already on disk is reused. 
 Shown on the card, never a pass line: Sharpe of the table, the win rate next to the break-even win rate of its stop and target,
 the equity curve (the course gives no number for the last two).
 
-### Phase 3 — Pick and freeze (on build days; before the test period is touched)
+### Phase 3 — Pick and freeze (RETIRED 2026-10-25: history only; the owner's pick of a 3:1 box is the lock)
 | # | Requirement |
 |---|---|
 | 3.1 | Saved: the rule, the variant list, the default variant (the middle survivor, never the best), the control and the costs |
@@ -146,7 +148,7 @@ It says early whether the idea fits the account. It proves nothing: line 5.5 is 
 
 Not passed → back to phase 2 as a new round when one is left (it counts), otherwise shelved.
 
-> **In the pipeline since 2026-10-18 (the owner): phase 4 is a 3:1 walk-forward.** "The 3 month is the new build days and the 1
+> **History (the pipeline is OFF; rolling removed 2026-10-25): in the pipeline since 2026-10-18, phase 4 was a 3:1 walk-forward.** "The 3 month is the new build days and the 1
 > month is the new unseen days, it should still be 75% in and 25% out of sample." The pipeline still runs the one read below (so
 > every box has its trades on the test days), then in BLOCKS, always the default (the owner, 2026-10-18: "make the block the default
 > always but keep the rolling as an option"): a box is picked on 3 months and traded in the 4th, and the next block starts after it
@@ -159,7 +161,7 @@ Not passed → back to phase 2 as a new round when one is left (it counts), othe
 > out-of-sample method is the 3:1 walk-forward over all data, in blocks (rolling only when the owner asks). `bp.py test` stays in the code because the pipeline uses it
 > to get the test-day trades. `blueprint/pipe_wf.py`; spec `docs/superpowers/specs/2026-10-18-one-pipeline-two-tags-design.md`.
 
-### Phase 4 — Out-of-sample test, 1 Jul 2025 → Sep 2026, one read. Approved for a real eval when all of these are true
+### Phase 4 — Out-of-sample test, 1 Jul 2025 → Sep 2026, one read (RETIRED 2026-10-25: history only; the test months are the 3:1 ones)
 | # | Requirement | The number |
 |---|---|---|
 | 4.1 | Both parts make money on their own: Jul-Dec 2025 and Jan-Sep 2026 | average variant above $0 in each |

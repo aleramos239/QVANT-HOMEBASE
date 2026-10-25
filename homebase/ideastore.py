@@ -127,18 +127,24 @@ def _now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
 
-# The owner, 2026-10-20: an idea created (an early look) or locked (a test) from this UTC day on takes the 3:1 walk-forward
-# (bp.py wf); build -> lock -> the one read of the test days is for the older ones. The toolkit and the connector both read it here.
+# The old split (build days -> lock -> the one read of the test days) is RETIRED for every idea (the owner, 2026-10-25: only the
+# 3:1 block walk-forward is in-sample and out-of-sample). Its saved results stay on file as history. OLD_ROUTE_END is kept as the
+# day new ideas stopped taking it (2026-10-20), for the words of old records.
 OLD_ROUTE_END = "2026-10-21"
-ENV_ROUTE_END = "HOMEBASE_OLD_ROUTE_END"            # TEST ONLY: another day, never for the app's own idea folder
+ENV_ROUTE_END = "HOMEBASE_OLD_ROUTE_END"            # TEST ONLY: opens the old code on a temp idea folder, never the app's own
+RETIRED = "the old split (build days, lock, the one read of the test days) is retired (the owner, 2026-10-25): every idea, old or new, " \
+          "takes the 3:1 block walk-forward (blueprint_wf / bp.py wf); old results stay on file as history"
+
+
+def old_split_open(root=None) -> bool:
+    """Retired: False, but in tests (ENV_ROUTE_END set, an idea folder other than the app's own) so the old code's own tests still run."""
+    return bool(os.environ.get(ENV_ROUTE_END)) and \
+        ideas_root(root).resolve() != (Path.home() / ".homebase" / "ideas").resolve()
 
 
 def old_route(utc, root=None) -> bool:
-    """Is a time (an idea's `created`, a lock's `locked_utc`) before OLD_ROUTE_END? No time = no."""
-    end = OLD_ROUTE_END
-    if os.environ.get(ENV_ROUTE_END) and ideas_root(root).resolve() != (Path.home() / ".homebase" / "ideas").resolve():
-        end = os.environ[ENV_ROUTE_END]
-    return isinstance(utc, str) and len(utc) >= 10 and utc[:10] < end
+    """May this idea (its `created`, or a lock's `locked_utc`) take the old split? Never since 2026-10-25 (old_split_open)."""
+    return old_split_open(root) and isinstance(utc, str) and len(utc) >= 10 and utc[:10] < os.environ[ENV_ROUTE_END]
 
 
 def _plain(o):

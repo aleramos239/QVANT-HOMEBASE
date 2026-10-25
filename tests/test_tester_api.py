@@ -9,7 +9,9 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from homebase.backtest import runner
+import pytest
+
+from homebase.backtest import runner, walkforward
 from homebase.charts.server import create_app
 from tests.backtest_util import D1, nq_archive
 
@@ -320,7 +322,13 @@ def poll_wf(c, wid, s=120.0):
     raise AssertionError("walk-forward never finished")
 
 
-def test_a_walkforward_goes_from_post_to_a_stitched_result_and_counts_cells_x_steps(tmp_path):
+@pytest.fixture
+def old_schemes(monkeypatch):
+    """The pick scheme and rolling are retired (owner 2026-10-25); these tests read their old code."""
+    monkeypatch.setattr(walkforward, "OLD_SCHEMES", True)
+
+
+def test_a_walkforward_goes_from_post_to_a_stitched_result_and_counts_cells_x_steps(tmp_path, old_schemes):
     with client(tmp_path) as c:
         wid = c.post("/api/tester/walkforward", json=WF, headers={"origin": "http://localhost:8852"}).json()["id"]
         st = poll_wf(c, wid)
@@ -342,7 +350,7 @@ def test_a_walkforward_goes_from_post_to_a_stitched_result_and_counts_cells_x_st
         assert c.get("/api/tester/runs").json() == []
 
 
-def test_walkforward_requests_the_rules_refuse(tmp_path):
+def test_walkforward_requests_the_rules_refuse(tmp_path, old_schemes):
     with client(tmp_path) as c:
         for bad, word in (({**WF, "range": {"kind": "custom", "start": "2022-01-01", "end": "2022-03-31"}}, "too short"),
                           ({**WF, "holdout": {"reason": "x"}}, "unknown field"),
@@ -359,7 +367,7 @@ def test_walkforward_requests_the_rules_refuse(tmp_path):
         assert c.get("/api/tester/walkforwards", headers=REBIND_HOST).status_code == 403
 
 
-def test_a_queued_walkforward_can_be_cancelled_and_has_no_result(tmp_path, monkeypatch):
+def test_a_queued_walkforward_can_be_cancelled_and_has_no_result(tmp_path, monkeypatch, old_schemes):
     from homebase.backtest import slots
     monkeypatch.setattr(slots.Slots, "try_acquire", lambda self: None)        # every slot busy: the job queues and waits
     with client(tmp_path) as c:
@@ -479,7 +487,7 @@ def test_rescoring_a_heatmap_cell(tmp_path):
         assert c.post("/api/tester/propsim", json={"grid_id": gid, "prop_rules": PRO}).status_code == 400
 
 
-def test_a_compare_walkforward_serves_three_schemes_and_their_oos_side_by_side(tmp_path):
+def test_a_compare_walkforward_serves_three_schemes_and_their_oos_side_by_side(tmp_path, old_schemes):
     with client(tmp_path) as c:
         wid = c.post("/api/tester/walkforward", json={**WF, "compare": True}).json()["id"]
         st = poll_wf(c, wid)

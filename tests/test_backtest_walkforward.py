@@ -19,6 +19,20 @@ from homebase.backtest.discipline import DisciplineError
 from homebase.backtest.runner import read_json, write_json
 from homebase.backtest.walkforward import WalkForwardManager
 
+
+@pytest.fixture(autouse=True)
+def _old_schemes(monkeypatch):
+    """The pick scheme and rolling are retired (the owner, 2026-10-25) but their code still reads old jobs: these tests open it."""
+    monkeypatch.setattr(wf, "OLD_SCHEMES", True)
+
+
+def test_the_app_refuses_rolling_and_the_pick_scheme(monkeypatch):
+    monkeypatch.setattr(wf, "OLD_SCHEMES", False)
+    for body in ({"strategy": "x", "scheme": "pick"}, {"strategy": "x", "test_months": 3}, {"strategy": "x", "compare": True},
+                 {"strategy": "x", "scheme": "fixed", "step_months": 1}):
+        with pytest.raises(ValueError, match="only the 3:1 block walk-forward"):
+            wf.validate_wf(body)
+
 AXES = [{"key": "offset_pts", "values": [10, 12]}, {"key": "sl_pts", "values": [5]}]      # 2 cells
 
 

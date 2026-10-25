@@ -1047,45 +1047,28 @@ print(json.dumps(out))
 
 
 def test_the_apps_connector_against_this_toolkit():
-    """homebase/claude_mcp/blueprint_tools.py (the app's Python) starts THIS bp.py: blueprint_lock freezes the idea and
-    answers with the hash, the default and the test range; blueprint_test without the owner's word is refused by the tool
-    itself, and for an old saved strategy by the toolkit (the tool has no second look to offer). The idea folder, the Lab
-    and the stores are temp folders; no test day is opened."""
+    """homebase/claude_mcp/blueprint_tools.py (the app's Python) starts THIS bp.py. The old split is retired (the owner,
+    2026-10-25): blueprint_lock and blueprint_test are gone from the connector, so no idea can be frozen or read once on the
+    old test days through it; a finished read on file is still worded by the tool (history). Temp folders only."""
     if not F.APP_PYTHON.exists():
         import pytest
         pytest.skip(f"the app's Python is not there: {F.APP_PYTHON}")
-    if S.compute_window_end() is not None:
-        import pytest
-        pytest.skip("no heavy run starts 09:18-09:36 ET on weekdays")
     F.fbm()
     root, name = F.fresh(F.FBM, "app"), F.FBM
     done = F.tmp() / "a_finished_read.json"
     done.write_text(json.dumps(_passed()[2]))
-    calls = [("blueprint_status", {"name": name}), ("blueprint_lock", {"name": name}), ("blueprint_lock", {"name": name}), ("blueprint_lock", {"name": "bpl_nobody"}),
-             ("blueprint_test", {"name": name, "confirm": False}), ("blueprint_test", {"name": name, "confirm": True, "wait_s": 30}), ("blueprint_status", {"name": name})]
+    calls = [("blueprint_status", {"name": name}), ("blueprint_lock", {"name": name}), ("blueprint_test", {"name": name, "confirm": True})]
     env = {**os.environ, "HOMEBASE_IDEAS_ROOT": str(root), "HOMEBASE_DRAFTS_DIR": str(F.tmp() / "drafts_app"), "HOMEBASE_BP": str(F.W / "bp.py"),
-           "HOMEBASE_BP_PYTHON": sys.executable,
-           REC.TEST_RUN: json.dumps({**F.TINY, **F.settings(name), "test_days": F.REAL_DAYS, "test_out": str(F.tmp() / "runs_test_app")})}
+           "HOMEBASE_BP_PYTHON": sys.executable}
     import subprocess
     q = subprocess.run([str(F.APP_PYTHON), "-B", "-c", CONNECTOR, str(S.REPO), json.dumps(calls), str(done)], capture_output=True, text=True, timeout=900, cwd=str(F.tmp()), env=env)
     assert q.returncode == 0, q.stderr[-2000:]
-    before, lock, again, nobody, unconfirmed, refused, after, worded = json.loads(q.stdout)
-    _T["blueprint_lock"], _T["blueprint_lock (again)"], _T["blueprint_test (an old saved strategy)"] = lock, again, refused
+    before, lock, test, worded = json.loads(q.stdout)
     _T["blueprint_test (a read that passed, as the tool words it)"] = worded
-    saved = F.read(root / name / "lock.json")
-    assert "before the freeze" in before or "freeze is next" in before
-    head = lock.split("\n")
-    assert head[0] == f"Blueprint lock · {name} · LEAD · phase 3 · round 1" and head[1].startswith(f"FROZEN now: {name} · lock {saved['hash']} · version 1 · round 1 · home NQ midday")
-    assert lock.count("\n3.1 PASS ") == 1 and lock.count("\n3.2 PASS ") == 1 and f"DEFAULT VARIANT {saved['default']}" in lock and all(lock.count(f"\n3.{i} ") == 1 for i in range(3, 9))
-    assert f"TEST RANGE NQ 2025-07-01 .. {saved['test_range']['NQ']['end']}" in lock and lock.count("Next: ") == 1 and "--confirm" in lock and "Saved: " in lock
-    assert again.split("\n")[1].startswith(f"FROZEN already: {name} · lock {saved['hash']}") and "The lock matches the files on disk" in again and "Saved: " not in again
-    assert nobody.startswith("ToolError: Refused (blueprint lock): ") and "no card" in nobody and "Nothing was run." in nobody
-    assert unconfirmed.startswith("ToolError: confirm: must be true")             # the tool's own word: the toolkit is not even started
-    assert refused.startswith("ToolError: Refused (blueprint test): ") and "old saved strategies whose history is used" in refused and "--second-look" in refused
-    assert "Nothing was run." in refused and reads(root) == [] and not (root / name / "test.json").exists() and not (F.tmp() / "runs_test_app").exists()
-    assert after.split("\n")[0] == f"Blueprint status · {name} · LEAD · phase 3 · round 1" and "FROZEN" in after
-    assert worded.split("\n")[0] == "Blueprint test · bpl_orb · PROVEN ON HISTORY · phase 4 · round 1" and all(worded.count(f"\n4.{i} PASS ") == 1 for i in range(1, 10))
-    assert "Lines: 9 passed · 0 FAILED" in worded and worded.count("Next: ") == 1 and "RESULT: PROVEN ON HISTORY" in worded
+    assert before.split("\n")[0].startswith(f"Blueprint status · {name}")
+    assert lock == "ToolError: unknown tool 'blueprint_lock'" and test == "ToolError: unknown tool 'blueprint_test'"
+    assert not (root / name / "lock.json").exists() and not (F.tmp() / "runs_test_app").exists()
+    assert worded.split("\n")[0] == "Blueprint test · bpl_orb · PROVEN ON HISTORY · phase 4 · round 1" and "RESULT: PROVEN ON HISTORY" in worded
 
 
 # ================================================================ nothing outside the temp folder

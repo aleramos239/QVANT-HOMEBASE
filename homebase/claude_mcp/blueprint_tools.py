@@ -10,19 +10,16 @@ the toolkit plan's section 8 (research/edge-library/out/blueprint/toolkit_plan.m
       blocks                                   what an idea can be built from                 before the card
       card <name> --spec=-                     stdin: {"name", "card", "run"}                 phase 0
       code-check <name> [--store=KEY | --trades=FILE | --run-id=ID] [--looked]                phase 1
-      build <name> --reason=TEXT --wait=S                                                     phase 2
-      lock <name>                                                                             phase 3
-      test <name> --confirm [--early-look] --wait=S                                           phase 4
       sim <name> --account=ID --attempts=N --fee-budget=USD                                   phase 5
       eval-card <name> [--account=ID] [--fills=-]     stdin: {"fills": [...]}                 phase 6
       status [<name>]
-      heatmap <name> [--place=home|1|2|...|not_here] [--round=N]     a build round's heat map, as saved
-      mc <name> [--on=build|test]              the Monte Carlo tables of the build or the test, as saved
-      wf run <name>|- --owner-said=TEXT [--workers=N] --wait=S   THE 3:1 WALK-FORWARD (a new idea's route, 2026-10-20): every
+      heatmap <name> [--place=home|1|2|...|not_here] [--round=N]     an old build round's heat map, as saved (history)
+      mc <name> [--on=build|test]              the old Monte Carlo tables of a build or a test, as saved (history)
+      wf run <name>|- --owner-said=TEXT [--workers=N] --wait=S   THE 3:1 WALK-FORWARD (every idea's ONLY route, 2026-10-25): every
                                                hm40 box on the in-sample months (stdin: a spec in run_idea's format)
       wf pick <name> <box>                     the owner's box, written once
       wf oos <name> <box> --owner-said=TEXT --wait=S   the picked box's test months, once
-      job <id> --wait=S                        keep waiting on a build or a test
+      job <id> --wait=S                        keep waiting on a job (a walk-forward, its test months)
       pipe <sub> ...                           the strategy pipeline's commands (pipeline_tools.py): the ONE command
                                                of two words, and --root is the PIPELINE's own folder there
 
@@ -39,15 +36,11 @@ directory was deleted); HOMEBASE_BP and HOMEBASE_BP_PYTHON move them. A toolkit 
 there is a plain error. The child runs in the toolkit's own folder and never gets this server's stdin (the
 JSON-RPC stream): it reads the JSON handed to it, or nothing.
 
-Long commands (build, test) follow the tester tools' wait: the toolkit waits `wait_s` (--wait) and then answers
-job.state = running; the same tool called with that job_id keeps waiting (`job <id>`).
+The old split (build, lock, test, the early look) is retired (the owner, 2026-10-25): the toolkit refuses those
+commands and no tool here offers them. Long commands (wf run, wf oos) wait DEFAULT_WAIT_S and then answer
+job.state = running; blueprint_status(job_id) keeps waiting (`job <id>`).
 
-heatmap and mc are views: they read what a build or a test saved, run nothing and count no round.
-
-An early look (test --early-look) reads the test days for an idea that is NOT locked, on the owner's clear yes
-(his decision of 2026-10-06: "warn, then run if I say yes"). The toolkit labels its answer ("early_look": true,
-EARLY LOOK) and keeps it beside the idea's own files (early_look/test.json), never as its test.json. It can
-never prove the idea: homebase.ideastore reads no status there, and counts no result that says it is one.
+heatmap and mc are views: they read what an old build or test saved, run nothing and count no round.
 
 After a command the app's own copies of the idea are brought up to date (homebase.ideastore.sync): idea.json,
 the record block on its Lab draft, the Lab group of its status. That is a mirror, never a gate: a Lab file that
@@ -112,10 +105,6 @@ _SAID = {"type": "string", "minLength": 1,
          "description": "The owner's words in chat that say to run it, word for word (never your own words)."}
 _BOX = {"type": ["integer", "string"],
         "description": "The box: its row number n in the in-sample table, or its id (e.g. ema1h50_own1p5-r0p75)."}
-_WAIT = {"type": "integer", "minimum": 0, "maximum": MAX_WAIT_S,
-         "description": f"Seconds to wait for the job (default {DEFAULT_WAIT_S}); 0 = start it and return the id."}
-_JOB = {"type": "string", "description": "A job id an earlier call returned: keep waiting on that job instead of "
-                                         "starting again."}
 _CARD = {
     "type": "object", "description": "The idea card, lines 0.1 to 0.7, in plain words.",
     "properties": {
@@ -220,7 +209,7 @@ SPECS = [
           "home table: the others are neighbors), the evening session, and limits.trail_atr / limits.exit_bars (exits "
           "of their own): blueprint_blocks lists everything it refuses.",
           {"name": _NAME, "card": _CARD, "settings": _SETTINGS}, ["name", "card", "settings"]),
-    _spec("blueprint_code_check", "Blueprint phase 1, the code check (build days only; a 3:1 idea: its in-sample months only): do the trades do what the card "
+    _spec("blueprint_code_check", "Blueprint phase 1, the code check (on the 3:1 in-sample months only): do the trades do what the card "
           "says? It counts entries outside the session window, more than one position at a time or a trade not flat "
           "by 15:58 ET, a trade count the rule does not imply, winners and losers that do not pay about the target "
           "and the stop, and a trade list that no longer reproduces after a code change -- and names 10 trades to "
@@ -236,59 +225,13 @@ SPECS = [
                                                         "and each entry and exit sits where the rule says (line 1.5). "
                                                         "Default false."}},
           ["name"]),
-    _spec("blueprint_build", f"Blueprint phase 2, the build. OLD ROUTE: only for an idea created before {ideastore.OLD_ROUTE_END} "
-          "(a newer one is refused: it takes the 3:1 walk-forward, blueprint_wf). On the build days (2021-09-22 to 2025-06-30), only when "
-          "the owner says so (it runs a heat map: quote his words in owner_said): runs "
-          "the idea's table and its random-entry control when they are missing, then reads lines 2.1 to 2.9, each "
-          "pass or fail with its number. All pass = a LEAD, approved for the out-of-sample test. Every call is one "
-          "round: at most 5, each with its reason written before the run. Long: after wait_s it returns a job id -- "
-          "call it again with that job_id to keep waiting. Refused without a card, without a reason, at round 6. "
-          f"For old ideas: a new idea uses the 3:1 walk-forward (blueprint_wf), and its test is refused unless locked before "
-          f"{ideastore.OLD_ROUTE_END}.",
-          {"name": _NAME,
-           "reason": {"type": "string", "description": "Why this round is run, in a sentence or two: it is saved "
-                                                       "before the run. Needed to start a round; not with job_id."},
-           "owner_said": {**_SAID, "description": _SAID["description"] + " Needed to start a round; not with job_id."},
-           "wait_s": _WAIT, "job_id": _JOB}, ["name"]),
-    _spec("blueprint_lock", f"Blueprint phase 3, the freeze. OLD ROUTE: only for an idea created before {ideastore.OLD_ROUTE_END} "
-          "(a newer one is refused: its lock is the owner's pick, blueprint_wf_pick). The freeze saves the rule, the variant list, the default variant (the "
-          "middle survivor, never the best), the random control and the costs, and returns the lock's hash, the "
-          "default and the test range. BEFORE the freeze the default variant is read on its own on the build days "
-          "(lines 3.3 to 3.7: profit factor 1.2, net / worst drawdown 3, Sharpe 1, its drawdown at 1 micro under "
-          "$2,000, money in 90% of 1,000 reshuffled runs; the drawdown counts open losses): one not met = no "
-          "freeze, back to the build. It also SHOWS the default variant's prop odds on the build days (LucidPro "
-          "50K; a number, never a pass line). From here "
-          "nothing may change: a change is a new version, back to the build. "
-          "Refused while any build line fails.", {"name": _NAME}, ["name"]),
-    _spec("blueprint_test", "Blueprint phase 4, the out-of-sample test (2025-07-01 on). THE TEST DAYS ARE READ ONCE: "
-          "the read is logged before it starts and is never repeated -- not for this idea, not for a relative of it, "
-          "not after a failure (a strategy that fails is not re-tuned and re-tested). Run it only for a locked idea "
-          "and only when the owner has said to: confirm must be true. Reads lines 4.1 to 4.9; all pass = PROVEN ON "
-          "HISTORY, approved for a real eval. Long: after wait_s it returns a job id -- call it again with that "
-          "job_id to keep waiting (nothing is read again). Refused when the idea is not locked, its lock no longer "
-          "matches, or a read is already on file. The one exception is AN EARLY LOOK (early_look: true), for an "
-          f"idea created before {ideastore.OLD_ROUTE_END} only: it reads the test days for an idea that is NOT locked, uses them up for that idea, is labelled EARLY LOOK, can "
-          "never prove the idea, and needs the owner's clear yes in chat first -- warn him, then ask (confirm is "
-          "still required). "
-          f"Only for ideas locked before {ideastore.OLD_ROUTE_END}: a new idea is refused here and uses the 3:1 "
-          "walk-forward (blueprint_wf, then blueprint_wf_oos).",
-          {"name": _NAME,
-           "confirm": {"type": "boolean", "description": "Must be true: the owner has said to run the one read. The "
-                                                         "test days are read once for an idea, and a read cannot be "
-                                                         "taken back."},
-           "early_look": {"type": "boolean", "description": "true = an EARLY LOOK at the test days for an idea that "
-                                                            f"is not locked (created before {ideastore.OLD_ROUTE_END}): only after the owner, warned that it "
-                                                            "uses the test days up for this idea and can never "
-                                                            "prove it, said a clear yes in chat. Default false."},
-           "wait_s": _WAIT, "job_id": _JOB}, ["name", "confirm"]),
-    _spec("blueprint_sim", "Blueprint phase 5, before the eval is bought: the prop simulator on the test-period trades "
+    _spec("blueprint_sim", "Blueprint phase 5, before the eval is bought: the prop simulator on the picked box's test-month trades "
           "of ONE strategy for one account -- per size, the odds of a pass before a bust and of a first payout before "
           "a bust (no day limit), on the plain row and on the \"live is worse\" row (win rate -5 points, winners "
           "-15%). One strategy's bar is line 5.5: 50% or more on each. The 60% within 10 days / 75% within 20 days "
           "bar (line 5.3) is the PORTFOLIO's (blueprint_portfolio); for one strategy it is said, not judged. Open "
           "losses count against the drawdown here, which the tester's own prop tile does not do. attempts and "
-          "fee_budget are the owner's numbers (line 5.4): ask him, never guess. Refused until the test is passed. A 3:1 idea "
-          "reads the picked box's test months (refused until blueprint_wf_pick and blueprint_wf_oos are done).",
+          "fee_budget are the owner's numbers (line 5.4): ask him, never guess. Refused until blueprint_wf_pick and blueprint_wf_oos are done.",
           {"name": _NAME,
            "account": {"type": "string", "description": "The account in question: a rule set id from list_prop_rules, "
                                                         "e.g. lucid-pro-50k@2026-09-27b."},
@@ -296,12 +239,12 @@ SPECS = [
            "fee_budget": {"type": "number", "minimum": 0, "description": "The owner's total fee budget, in dollars."}},
           ["name", "account", "attempts", "fee_budget"]),
     _spec("blueprint_portfolio", "Blueprint phase 5 for SEVERAL strategies on one account: two or more ideas that are "
-          "each proven on history, each at its default variant, every member at the same size, their test-period "
-          "days drawn together. Lines 5.2 (the \"live is worse\" row), 5.3 (eval pass within 10 trading days 60% or "
+          "each proven on history, each at its default variant, every member at the same size, their test months "
+          "drawn together. Lines 5.2 (the \"live is worse\" row), 5.3 (eval pass within 10 trading days 60% or "
           "more; maximum payout within 20 trading days 75% or more), 5.6 (no two members are the same idea on the "
           "same market) and 5.7 (every member raises the portfolio's eval odds; one that lowers them stays out). "
-          "Open losses count. Refused when a member's out-of-sample test is not passed. A 3:1 idea takes part with the picked "
-          "box's test months (refused until blueprint_wf_pick and blueprint_wf_oos are done).",
+          "Open losses count. Each member takes part with its picked box's test months (refused until "
+          "blueprint_wf_pick and blueprint_wf_oos are done for it).",
           {"names": {"type": "array", "items": {"type": "string"}, "minItems": 2,
                      "description": "The ideas of the portfolio: two or more names, each proven on history."},
            "account": {"type": "string", "description": "The account in question: a rule set id from list_prop_rules, "
@@ -336,10 +279,10 @@ SPECS = [
     _spec("blueprint_status", "Blueprint, any phase: where things stand -- every idea with its status (idea, lead, "
           "proven on history, proven live, shelved), phase, round and next step; or one idea (name); or one job "
           "(job_id). A 3:1 idea also shows its picked box and its test months (what the sim and the eval card read). Runs nothing.",
-          {"name": _NAME, "job_id": {"type": "string", "description": "A job id a build or a test returned."}}),
-    _spec("blueprint_heatmap", "Blueprint, a view of what is saved: the heat map of an idea's build -- one table of a "
-          "build round as a grid: the table of its home, of a neighbor its card names, or of the place it should not "
-          "work. An idea with a 3:1 in-sample table (blueprint_wf) shows that table instead, when place and round are left out. "
+          {"name": _NAME, "job_id": {"type": "string", "description": "A job id blueprint_wf or blueprint_wf_oos returned."}}),
+    _spec("blueprint_heatmap", "Blueprint, a view of what is saved: an idea's 3:1 in-sample table (blueprint_wf), "
+          "or, for an old idea, a table of one of its old build rounds (history: the old split is retired) as a grid: the table of its home, of a neighbor its card names, or of the place it should not "
+          "work. place and round left out: the 3:1 in-sample table when there is one. "
           "It only reads saved results: it runs nothing and counts no round.",
           {"name": _NAME,
            "place": {"type": ["string", "integer"],
@@ -348,13 +291,13 @@ SPECS = [
            "round": {"type": "integer", "minimum": 1, "maximum": ideastore.MAX_ROUNDS,
                      "description": f"A build round that is on file, 1 to {ideastore.MAX_ROUNDS}. Left out: the "
                                     "latest round."}}, ["name"]),
-    _spec("blueprint_mc", "Blueprint, a view of what is saved: the Monte Carlo tables of an idea -- the reshuffled "
-          "runs of its build, or of its test. It only reads saved results: it runs nothing and counts no round.",
+    _spec("blueprint_mc", "Blueprint, a view of what is saved: the old Monte Carlo tables of an idea -- the "
+          "reshuffled runs of its old build, or of its old test (history: the old split is retired). It only reads saved results: it runs nothing and counts no round.",
           {"name": _NAME,
            "on": {"type": "string", "enum": list(MC_ON),
                   "description": "build = the tables of the build that is on file; test = the tables of the test that "
                                  "is on file (this tool never reads the test days itself)."}}, ["name"]),
-    _spec("blueprint_wf", "Blueprint, the 3:1 walk-forward (the route of every NEW idea, 2026-10-20): runs every box of the idea's "
+    _spec("blueprint_wf", "Blueprint, the 3:1 walk-forward (the ONLY in-sample / out-of-sample route, for every idea, old or new: the owner, 2026-10-25): runs every box of the idea's "
           "hm40 heat map -- each value of its main setting x the 40 exit cells -- fixed on the in-sample months of the 3:1 blocks "
           "only, then shows the in-sample table, one row a box, best win rate first. No test month is run. ONLY when the owner "
           "says so in chat: quote his words in owner_said. Give name (an idea on file: its home table) or card (the settings in "
@@ -426,14 +369,6 @@ def _object(v, key: str) -> dict:
     if not isinstance(v, dict):
         raise ToolError(f"{key}: an object")
     return v
-
-
-def _wait_s(wait_s) -> int:
-    if wait_s is None:
-        return DEFAULT_WAIT_S
-    if isinstance(wait_s, bool) or not isinstance(wait_s, (int, float)):
-        raise ToolError("wait_s: seconds, a whole number")
-    return max(0, min(int(wait_s), MAX_WAIT_S))
 
 
 # ---------------------------------------------------------------- the toolkit's answer
@@ -620,44 +555,6 @@ class BlueprintMixin:
         if not isinstance(looked, bool):
             raise ToolError("looked: true or false")
         return self._finish(self._bp(args + ["--looked"] if looked else args))
-
-    # ---- phase 2: the build
-
-    def t_blueprint_build(self, name: str, reason=None, owner_said=None, wait_s=None, job_id=None) -> str:
-        _name(name)
-        wait = _wait_s(wait_s)
-        if job_id is not None:
-            args = ["job", _job_id(job_id)]                 # (keeps waiting: nothing new is run)
-        elif not isinstance(reason, str) or not reason.strip():
-            raise ToolError("reason: why this round is run, in a sentence or two -- it is written before the run "
-                            "(line 2.9). To keep waiting on a build already started, pass its job_id.")
-        else:
-            args = ["build", name, f"--reason={reason.strip()}", f"--owner-said={_said(owner_said)}"]
-        r = self._bp([*args, f"--wait={wait}"], timeout=wait + self._bp_grace_s)
-        return self._finish(r, f"Call blueprint_build(name={name!r}, job_id={{id}}) to keep waiting.")
-
-    # ---- phase 3: the freeze
-
-    def t_blueprint_lock(self, name: str) -> str:
-        return self._finish(self._bp(["lock", _name(name)]))
-
-    # ---- phase 4: the one read of the test days
-
-    def t_blueprint_test(self, name: str, confirm, early_look=False, wait_s=None, job_id=None) -> str:
-        _name(name)
-        if not isinstance(early_look, bool):
-            raise ToolError("early_look: true or false")
-        if confirm is not True:
-            raise ToolError("confirm: must be true. The test days are read ONCE for an idea, and a read cannot be "
-                            "taken back: run this only for a locked idea, when the owner has said to"
-                            + (" -- or as an early look, after his clear yes in chat." if early_look else "."))
-        wait = _wait_s(wait_s)
-        args = ["job", _job_id(job_id)] if job_id is not None else ["test", name, "--confirm"]
-        if early_look and job_id is None:               # a job that is waited on was started as what it is
-            args.append("--early-look")
-        r = self._bp([*args, f"--wait={wait}"], timeout=wait + self._bp_grace_s)
-        return self._finish(r, f"Call blueprint_test(name={name!r}, confirm=true, job_id={{id}}) to keep waiting: "
-                               "nothing is read again.")
 
     # ---- phase 5: before the eval is bought
 

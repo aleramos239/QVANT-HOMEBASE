@@ -2027,7 +2027,7 @@ function settingsHtml(b) {
   const ins = meta.inputs || [];
   const wfSel = wfRangeVal(f.range);
   const rangeOpts = `<optgroup label="Walk-forward · all data">${WF_RANGE_OPTS.map(([v, l]) => `<option value="${v}"${wfSel === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>`
-    + `<optgroup label="One run">${X.RANGES.map((r) => `<option value="${r.id}"${!wfSel && f.range.id === r.id ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</optgroup>`;
+    + `<optgroup label="One run">${X.RANGES.filter((r) => r.id === 'all' || r.id === 'custom').map((r) => `<option value="${r.id}"${!wfSel && f.range.id === r.id ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</optgroup>`;
   const inputRow = (i) => {
     const v = f.inputs[i.key], bad = X.inputError(i, v);
     if (i.type === 'bool') return `<label>${esc(i.label)}</label><input type="checkbox" data-in="${esc(i.key)}"${v ? ' checked' : ''}>`;
@@ -2468,7 +2468,7 @@ async function propRun() {
 const WF_EMPTY = '<div class="rs-empty"><h3>No walk-forward yet</h3><p>Run it to try every Heat map box on the in-sample months: 3 months in, the next 1 out, then the next block. You pick one box from the table; its test months run only when you say.</p></div>';
 /* The Range list's two 3:1 choices (the owner, 2026-10-18): one walk-forward over all the data, seen from either side --
    in-sample = the 3-month windows the picks were made on, out-of-sample = each next month, traded on that pick. */
-const WF_RANGE_OPTS = [['wf31_is', '3:1 blocks'], ['wf31r_both', '3:1 rolling']];    // 2026-10-20: every box fixed; the old views open old results
+const WF_RANGE_OPTS = [['wf31_is', '3:1 blocks']];    // the only walk-forward (owner, 2026-10-25: rolling retired); the old views open old results
 const WF_SIDE_TEXT = { is: 'in-sample', oos: 'out-of-sample', both: 'in + out-of-sample' };
 const wfSide = (f) => (WF_SIDE_TEXT[f.range.side] ? f.range.side : 'oos');
 const wfRolling = (r) => !!(r && r.wf === X.WF_ROLL && r.step === 1);

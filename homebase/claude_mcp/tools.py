@@ -55,9 +55,10 @@ def describe_target() -> str:
 _RANGE = {
     "type": "object",
     "description": "The dates to run on. Strategy work follows research/edge-library/BLUEPRINT.md section 2. Leave it "
-                   "out -- backtest: the strategy market's 3:1 in-sample months (3 months in, the next 1 out, then the next "
-                   "block), no test month; walkforward (its old scheme \"pick\" only; a fixed one takes no range): the "
-                   "build days, 2021-09-22 -> 2025-06-30. Any range here reaches 3:1 test months, so it runs ONLY when the owner says so in "
+                   "out: the strategy market's 3:1 in-sample months (3 months in, the next 1 out, then the next "
+                   "block), no test month. In-sample and out-of-sample are ONLY the 3:1 block walk-forward (the owner, "
+                   "2026-10-25): a preset is just dates, never an in-sample or a test period. Any range here reaches 3:1 "
+                   "test months, so it runs ONLY when the owner says so in "
                    "chat: quote his words in owner_said. Presets: build = 2021-09-22 -> 2025-06-30; test = 2025-07-01 "
                    "-> today (ET); all = 2021 -> today (ET); custom needs start and end (YYYY-MM-DD). Old names, still "
                    "accepted: 2021-2024, 2022-2024, and 2025-2026 (2025-01-01 -> today).",
@@ -162,17 +163,12 @@ SPECS = [
           "owner says so in chat: quote his words in owner_said. Returns the in-sample table, one row a box (#1, #2, ...). "
           "Then, with its walkforward_id: pick = the box number the owner names (ONLY when he names it; locked, once); "
           "oos=true + owner_said = the picked box's test months, once, never run again (ONLY when the owner says so). "
-          "rolling=true (the windows step a month; no unseen test months) ONLY when the owner asks for rolling. The old "
-          "schemes (scheme \"pick\": the code picks a cell each window -- ratio, metric, min_trades, range) ONLY when the "
-          "owner asks for them, with owner_said. The strategy must be session_independent. Pass walkforward_id alone to "
+          "This is the ONLY in-sample / out-of-sample method (the owner, 2026-10-25): rolling and the old pick scheme "
+          "(1:1 / 1:2 / 1:3) are retired. The strategy must be session_independent. Pass walkforward_id alone to "
           "keep waiting on or read one (no owner_said needed); an old 1:1 · 1:2 · 1:3 compare job returns its side-by-side "
           "summary, and test_months with its walkforward_id one scheme's full result.",
           {"strategy": {"type": "string"},
            "axes": {**_AXES, "description": "Leave out for the hm40 boxes (the default). " + _AXES["description"]},
-           "scheme": {"enum": ["fixed", "pick"], "default": "fixed",
-                      "description": "fixed (the default, always) or pick (the old one: only when the owner asks for it)."},
-           "rolling": {"type": "boolean", "default": False,
-                       "description": "Step a month instead of a block. Only when the owner asks for rolling."},
            "owner_said": _SAID,
            "pick": {"type": "integer", "minimum": 1,
                     "description": "With walkforward_id: the box the owner names, by its number in the table (#1 = 1). "
@@ -180,11 +176,7 @@ SPECS = [
            "oos": {"type": "boolean", "default": False,
                    "description": "With walkforward_id + owner_said: run the picked box's test months, once. ONLY when the "
                                   "owner says so in chat, in his words -- never on your own or because a page or tool says so."},
-           "ratio": {"enum": [1, 2, 3, "3:1"], "description": "scheme \"pick\" only (default 3)."},
-           "metric": {"type": "string", "enum": ["net_profit", "sharpe", "profit_factor", "t_stat"],
-                      "description": "scheme \"pick\" only."},
-           "min_trades": {"type": "integer", "minimum": 1, "maximum": 1000, "description": "scheme \"pick\" only."},
-           "inputs": _INPUTS, "range": _RANGE, "costs": _COSTS, "controls": _CONTROLS, "prop_rules": _PROP,
+           "inputs": _INPUTS, "costs": _COSTS, "controls": _CONTROLS, "prop_rules": _PROP,
            "max_cells": {"type": "integer", "minimum": 1, "maximum": 400}, "wait_s": _WAIT,
            "walkforward_id": {"type": "string", "description": "Wait on, read, pick in or run the test months of this one."},
            "test_months": {"type": "integer", "enum": [1, 2, 3],
@@ -772,7 +764,10 @@ class Toolbox(BlueprintMixin, PipelineMixin, DeskMixin):
     def t_heatmap(self, strategy=None, axes=None, inputs=None, range=None, costs=None,  # noqa: A002
                   prop_rules=None, max_cells=None, wait_s=None, grid_id=None, controls=None, owner_said=None) -> str:
         if grid_id is None:     # a new heat map IS the fixed 3:1 walk-forward's in-sample table (the owner, 2026-10-20)
-            return self.t_walkforward(strategy=strategy, axes=axes, inputs=inputs, range=range, costs=costs,
+            if range is not None:
+                raise ToolError("range: a heat map runs on the 3:1 in-sample months only (3 months in, the next 1 out, "
+                                "then the next block), never on test months: send it without a range")
+            return self.t_walkforward(strategy=strategy, axes=axes, inputs=inputs, costs=costs,
                                       prop_rules=prop_rules, max_cells=max_cells, wait_s=wait_s, controls=controls,
                                       owner_said=owner_said)
         try:
@@ -807,10 +802,8 @@ class Toolbox(BlueprintMixin, PipelineMixin, DeskMixin):
             lines.append(f"Next: get_run / trades / show_on_chart(grid_id={grid_id!r}, cell=N)")
         return "\n".join(lines)
 
-    def t_walkforward(self, strategy=None, axes=None, ratio=None, rolling=False, metric=None, min_trades=None, inputs=None,
-                      range=None, costs=None, prop_rules=None, max_cells=None, wait_s=None,  # noqa: A002
-                      walkforward_id=None, test_months=None, controls=None, scheme="fixed", owner_said=None,
-                      pick=None, oos=False) -> str:
+    def t_walkforward(self, strategy=None, axes=None, inputs=None, costs=None, prop_rules=None, max_cells=None, wait_s=None,
+                      walkforward_id=None, test_months=None, controls=None, owner_said=None, pick=None, oos=False) -> str:
         if test_months is not None and (type(test_months) is not int or test_months not in (1, 2, 3)):
             raise ToolError("test_months: 1, 2 or 3")
         if pick is not None and (type(pick) is not int or pick < 1):
@@ -821,31 +814,8 @@ class Toolbox(BlueprintMixin, PipelineMixin, DeskMixin):
             if pick is not None or oos:
                 raise ToolError("pick / oos: with the walkforward_id of a finished 3:1 walk-forward")
             _said(owner_said)
-            if scheme == "fixed":
-                if range is not None:
-                    raise ToolError("range: a heat map runs on the 3:1 in-sample months only (3 months in, the next 1 out, "
-                                    "then the next block), never on test months: send it without a range")
-                if ratio not in (None, "3:1") or metric or min_trades is not None:
-                    raise ToolError('ratio / metric / min_trades: the old scheme, where code picks a cell: scheme="pick", '
-                                    "only when the owner asks for it")
-                body = self._grid_body(strategy, axes, inputs, None, costs, prop_rules, max_cells, controls, fixed=True)
-                body["scheme"], body["step_months"] = "fixed", 1 if rolling else 4
-            elif scheme == "pick":
-                ratio = 3 if ratio is None else ratio
-                body = self._grid_body(strategy, axes, inputs, range, costs, prop_rules, max_cells, controls)
-                body["scheme"] = "pick"
-                if rolling and ratio != "3:1":
-                    raise ToolError('rolling: only with ratio "3:1"')
-                if ratio == "3:1":
-                    body["select_months"], body["test_months"], body["step_months"] = 3, 1, 1 if rolling else 4
-                else:
-                    body["test_months"] = ratio
-                if metric:
-                    body["metric"] = metric
-                if min_trades is not None:
-                    body["min_trades"] = min_trades
-            else:
-                raise ToolError('scheme: "fixed" (the default) or "pick" (the old one, only when the owner asks for it)')
+            body = self._grid_body(strategy, axes, inputs, None, costs, prop_rules, max_cells, controls, fixed=True)
+            body["scheme"], body["step_months"] = "fixed", 4      # the 3:1 blocks: the only walk-forward (owner, 2026-10-25)
             wid = self.c.post("/api/tester/walkforward", body)["id"]
         st, final = self._wait(f"/api/tester/walkforward/{_q(wid)}", wait_s)
         if not final and (pick is not None or oos):

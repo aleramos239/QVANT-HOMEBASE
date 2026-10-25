@@ -376,15 +376,17 @@ FIRST = "pick a box and run its test months first (blueprint_wf_pick, blueprint_
 
 
 def route(name: str, root=None) -> bool:
-    """Do the sim, the portfolio and the eval card of this idea read its 3:1 record? Not for the old route: an idea with the one read
-    of the test days on file (test.json), or one created before ideastore.OLD_ROUTE_END with no 3:1 store. No idea on file: no."""
+    """Do the sim, the portfolio and the eval card of this idea read its 3:1 record? Yes for every idea on file: the old split is retired
+    (the owner, 2026-10-25), so an old one's test.json is history and it needs its 3:1 pick and test months too. No idea on file: no.
+    (Tests that open the old code, ideastore.old_split_open, keep the old answer.)"""
     IS = api.ideastore()
     try:
         d = IS.idea_dir(name, root)
         created = IS.read_idea(name, root).get("created") if d.is_dir() else None
     except (ValueError, FileNotFoundError):
         return False
-    return d.is_dir() and not (d / "test.json").is_file() and (api.wf_on_file(name) or not IS.old_route(created, root))
+    old_test = IS.old_split_open(root) and (d / "test.json").is_file()
+    return d.is_dir() and not old_test and (api.wf_on_file(name) or not IS.old_route(created, root))
 
 
 def picked(name: str) -> Path:

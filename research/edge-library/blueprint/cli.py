@@ -544,6 +544,16 @@ def _said(r: dict) -> str:
                                                                     or str(cmd).startswith("taught ") or "idea" in r) else "")
 
 
+def _old_split(a) -> None:
+    """The old split is retired (the owner, 2026-10-25): build (every form), the control pools of the build range, lock, test, a taught
+    sheet's full read of the build days and its old per-block walk-forward are refused. Views of saved results still answer."""
+    old = a.cmd in ("build", "pools", "lock", "test") or \
+        a.cmd == "taught" and (a.sub == "wf-each" or a.sub == "run" and not getattr(a, "days", None))
+    IS = api.ideastore()
+    if old and not IS.old_split_open(getattr(a, "root", None) if a.cmd != "taught" else None):
+        raise J.Refuse(IS.RETIRED + (" (a taught sheet: `taught run --days=...` on in-sample days, then `taught wf`)" if a.cmd == "taught" else ""))
+
+
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
     if len(argv) == 2 and argv[0] == "_job":        # the detached child of a job (jobs.start): no command of the toolkit's users
@@ -551,6 +561,7 @@ def main(argv=None) -> int:
     a = None
     try:
         a = _parser().parse_args(argv)
+        _old_split(a)
         if a.cmd == "build":
             r = _build(a)
         elif a.cmd == "card":

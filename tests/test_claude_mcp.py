@@ -280,16 +280,15 @@ def test_every_chat_reads_the_blueprints_dates():
     desc = tools._RANGE["description"]
     for t in (text, desc):
         assert "research/edge-library/BLUEPRINT.md section 2" in t and "research window" not in t
-        assert "2021-09-22" in t and "2025-06-30" in t and "2025-07-01" in t
-    assert "once and only for a locked strategy, never for a quick look or \"all data\"" in text     # old ideas' route
-    assert "once and only for a locked strategy" not in desc                                           # retired for runs
+        assert "ONLY the 3:1 block walk-forward" in t                   # the old split is retired (the owner, 2026-10-25)
+    assert "the old split (build days, lock, the one read of the test days), rolling and the old pick scheme are retired" in text
+    assert "2025-06-30" not in text and "locked before" not in text
     assert "3:1 in-sample months" in desc and "ONLY when the owner says so" in desc and "owner_said" in desc
-    assert ("walkforward (its old scheme \"pick\" only; a fixed one takes no range): the build days, 2021-09-22 -> 2025-06-30"
-            in desc)                                                     # true for both tools (final review, 2026-10-21)
+    assert "a preset is just dates, never an in-sample or a test period" in desc
     listed = {t["name"]: t for t in rpc(srv, "tools/list")["result"]["tools"]}
-    for name in ("backtest", "walkforward"):            # walkforward: its old scheme ("pick") only
-        assert listed[name]["inputSchema"]["properties"]["range"]["description"] == desc
-    assert "range" not in listed["heatmap"]["inputSchema"]["properties"]   # a heat map runs on the 3:1 in-sample months only
+    assert listed["backtest"]["inputSchema"]["properties"]["range"]["description"] == desc
+    for name in ("heatmap", "walkforward"):             # both run on the 3:1 in-sample months only
+        assert "range" not in listed[name]["inputSchema"]["properties"]
 
 
 def test_a_run_that_read_the_test_days_says_so():
@@ -313,10 +312,7 @@ def test_heatmap_walkforward_mc_prop_and_lists(fake):
                                          "scheme": "fixed", "step_months": 4}
     text = b.call("heatmap", {"grid_id": GID})                              # an old heat map still reads
     assert "Best net: cell 1" in text and "Looks this strategy: 40" in text
-    text = b.call("walkforward", {"strategy": "nq930", "axes": axes, "scheme": "pick", "ratio": 2, "metric": "sharpe",
-                                  "min_trades": 3, "owner_said": "use the old 1:2 one"})
-    assert fake.last("POST")["body"] == {"strategy": "nq930", "inputs": {}, "axes": axes, "range": {"kind": "research"},
-                                         "scheme": "pick", "test_months": 2, "metric": "sharpe", "min_trades": 3}
+    text = b.call("walkforward", {"walkforward_id": WID})                   # an old pick-scheme job still reads
     assert "stitched OOS" in text and "Drop IS->OOS" in text
     text = b.call("montecarlo", {"run_id": RID, "paths": 500})
     assert fake.last("POST")["body"] == {"run_id": RID, "paths": 500} and "P(prop pass" in text
@@ -455,7 +451,7 @@ def test_no_tool_can_trade():
     assert names == ["list_strategies", "read_strategy", "backtest", "heatmap", "walkforward", "montecarlo",
                      "prop_eval", "list_prop_rules", "list_runs", "get_run", "trades", "show_on_chart",
                      "cancel", "write_strategy", "delete_draft", "set_group", "blueprint_blocks", "blueprint_card",
-                     "blueprint_code_check", "blueprint_build", "blueprint_lock", "blueprint_test", "blueprint_sim", "blueprint_portfolio",
+                     "blueprint_code_check", "blueprint_sim", "blueprint_portfolio",
                      "blueprint_eval_card", "blueprint_status", "blueprint_heatmap", "blueprint_mc",
                      "blueprint_wf", "blueprint_wf_pick", "blueprint_wf_oos", "desk_status",
                      "desk_journal", "desk_readiness", "data_coverage", "services_health", "account_reconnect",
@@ -607,20 +603,18 @@ def test_walkforward_tool_default_fixed_blocks(fixed):
     text = b.call("walkforward", {"strategy": "nq930", "owner_said": "run the walk-forward"})
     assert fixed.last("POST")["body"] == {"strategy": "nq930", "inputs": {}, "scheme": "fixed", "step_months": 4}
     assert "| #1 |" in text and "pick=" in text
-    b.call("walkforward", {"strategy": "nq930", "owner_said": "use rolling", "rolling": True})
-    assert fixed.last("POST")["body"]["step_months"] == 1
     n = len(fixed.requests)
-    for bad, says in (({"range": {"preset": "build"}}, "3:1 in-sample months"), ({"metric": "sharpe"}, 'scheme="pick"'),
-                      ({"ratio": 2}, 'scheme="pick"'), ({"scheme": "best"}, 'scheme: "fixed" \\(the default\\) or "pick"')):
-        with pytest.raises(ToolError, match=says):
-            b.call("walkforward", {"strategy": "nq930", "owner_said": "run it", **bad})
+    for bad in ("rolling", "range", "metric", "ratio", "scheme", "min_trades"):     # retired (the owner, 2026-10-25)
+        with pytest.raises(ToolError, match="unexpected keyword argument"):
+            b.call("walkforward", {"strategy": "nq930", "owner_said": "run it", bad: True})
     assert len(fixed.requests) == n
     spec = {s["name"]: s for s in tools.SPECS}["walkforward"]
     assert "ALWAYS the default" in spec["description"] and "ONLY when the owner says so" in spec["description"]
-    assert spec["inputSchema"]["properties"]["scheme"]["default"] == "fixed"
+    assert "rolling and the old pick scheme" in spec["description"] and "are retired" in spec["description"]
+    assert not {"scheme", "rolling", "ratio", "metric", "min_trades", "range"} & set(spec["inputSchema"]["properties"])
     text = rpc(protocol.Server(b), "initialize", {"protocolVersion": "2025-06-18"})["result"]["instructions"]
     assert "The backtest, heatmap and walkforward tools follow the same law" in text
-    assert "heatmap and walkforward run the 3:1 block walk-forward by default" in text
+    assert "heatmap and walkforward run the 3:1 block walk-forward (heatmap = its in-sample table" in text
     assert "walkforward oos (the test months) ONLY when he says so (owner_said)" in text
 
 
@@ -708,9 +702,9 @@ def test_pick_or_oos_on_an_unfinished_walkforward_is_refused(fixed):
     assert not [r for r in fixed.requests if r["method"] == "POST"]
 
 
-def test_an_old_scheme_start_needs_owner_said_too(fixed):
+def test_a_walkforward_start_needs_owner_said_even_with_axes(fixed):
     with pytest.raises(ToolError, match="owner_said"):
-        box(fixed).call("walkforward", {"strategy": "nq930", "scheme": "pick", "ratio": 2,
+        box(fixed).call("walkforward", {"strategy": "nq930",
                                         "axes": [{"key": "sl_pts", "values": [4, 5]}, {"key": "tp_pts", "values": [10]}]})
     assert not [r for r in fixed.requests if r["method"] == "POST"]
 

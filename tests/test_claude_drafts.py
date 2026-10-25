@@ -164,7 +164,8 @@ def test_the_catalog_never_runs_a_draft(tmp_path, sentinel):
     assert not any(draftstore.is_draft_id(k) for k in strategies.REGISTRY)
 
 
-def test_validation_uses_the_static_stub_and_snapshots_the_source(sentinel):
+def test_validation_uses_the_static_stub_and_snapshots_the_source(sentinel, monkeypatch):
+    monkeypatch.setattr(walkforward, "OLD_SCHEMES", True)      # the code's own pick over axes is retired (owner 2026-10-25); its code still reads
     write_template()
     req = runner.validate({"strategy": "draft_my_orb", "range": MARCH})
     assert req["strategy"] == "draft_my_orb" and req["inputs"]["offset_pts"] == 10.0

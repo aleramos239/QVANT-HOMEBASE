@@ -28,7 +28,7 @@ Never bring the payout pipeline back or write its lock file (`payout_enabled`).
 Any request to build, test, backtest, optimize or judge a strategy or a strategy idea follows
 `research/edge-library/BLUEPRINT.md`, section 2 (skill: `strategy-blueprint`). Read it before the first run.
 
-**The defaults, every route, every chat, every agent** (owner, 2026-10-20; spec
+**The only route, every idea old or new, every chat, every agent** (owner, 2026-10-20; the only one since 2026-10-25; spec
 `docs/superpowers/specs/2026-10-20-heatmap-40-and-fixed-box-walkforward-design.md`):
 
 | What | Default |
@@ -37,7 +37,6 @@ Any request to build, test, backtest, optimize or judge a strategy or a strategy
 | In-sample / out-of-sample | the **3:1 block walk-forward**: 3 whole months in, the next 1 out, then the next block (Oct-Dec 2021 → Jan 2022, Feb-Apr → May, ...), 2021-09-22 → the last whole month. Each box runs FIXED, the same in every block |
 | The pick | the owner picks the box from the in-sample table. No code and no agent picks for him |
 | Test months | only the picked box, once, only when the owner says so |
-| Rolling | only when the owner asks for it |
 
 - Phases, in order: idea card → code check → the 3:1 in-sample table → the owner's pick (the lock) → the test months → before the
   eval → the eval.
@@ -50,8 +49,9 @@ Any request to build, test, backtest, optimize or judge a strategy or a strategy
 - **"Check it OOS" / "test it out-of-sample" ALWAYS means the 3:1 block walk-forward** (owner, 2026-10-19), every route: the taught
   lane, by-hand engine runs and one-off checks too. If a route has no walk-forward yet, say so and build it; never fall back to a single
   read. (2026-10-19 a single read was run on `owner_fvg_odir_15_nl_new` by mistake: those months are no longer blind for that rule.)
-- Every month is in-sample OR out-of-sample, never both. The old split (tune on the build days 2021-09-22 → 2025-06-30, then the test
-  days read once) is retired: only ideas created before 2026-10-21 keep it (`blueprint_build` / `lock`; `test` needs a lock dated before it). The Desk card's
+- Every month is in-sample OR out-of-sample, never both. **In-sample and out-of-sample are ONLY the 3:1 blocks** (owner, 2026-10-25):
+  the old split (build days 2021-09-22 → 2025-06-30, lock, one read of the test days, early look) is retired for EVERY idea, old or
+  new, and rolling is removed. `blueprint_build` / `lock` / `test` are gone; old results stay as history. The Desk card's
   "Unseen days" is the old per-window walk-forward record (old route); nothing on the Desk switches by itself.
 - Judge the average of all boxes, never the best one.
 - Use the connector's `blueprint_*` tools for every phase. They run `research/edge-library/bp.py` and save each idea in the app
