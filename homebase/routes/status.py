@@ -66,6 +66,7 @@ def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapter
             "accounts": accounts,
             "notices": notices[::-1],      # newest first, one line each, page wording
             "book": labdesk.book_view(),   # cfg.book; for a Lab strategy only the rows of this desk's accounts
+            "groups": engine.groups_view(),     # account cycle groups: {id: {name, members, accounts, risk_usd, max_minis, on, next}}
             "strategies": {
                 name: {
                     "cfg": {"symbol": s.symbol, "qty": s.qty,

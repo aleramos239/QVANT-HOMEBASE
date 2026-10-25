@@ -49,6 +49,7 @@ from .dayrules import LOCK_LOCK, LOCK_TAKE, DayBook, DayRules, merge_rules, stan
 from .daystate import (KILL_POLL_N, KILL_POLL_S, MARKET_OUT_FAILED, PLACING_UNKNOWN, TERMINAL, WORKING, DayState,
                        _hhmm, _to_tick)
 # The Lab half of the engine. labdesk.py and the tests read the Lab words as engine.LAB_* / engine.LabLeg.
+from .engine_groups import GroupMixin
 from .engine_lab import (LAB, LAB_ACCOUNT_STOPPED, LAB_BAD_ORDER, LAB_CANNOT_CHECK, LAB_CLEAR_REJECTS,  # noqa: F401
                          LAB_CLOCK_POLLS, LAB_CLOSE_UNCONFIRMED, LAB_DISARMED, LAB_KILLED, LAB_NO_BLOCK,
                          LAB_NO_POSITION_READ, LAB_NO_STOP, LAB_NOT_A_PAIR, LAB_NOT_CONNECTED, LAB_NOT_ON_DESK,
@@ -77,7 +78,7 @@ def _bracket_ids(r: OrderResult) -> tuple[Optional[str], Optional[str]]:
 
 
 
-class Engine(LabMixin):
+class Engine(LabMixin, GroupMixin):
     """Signals + broker fills + a clock -> DayStates and orders, per account.
 
     `adapters` maps account id -> BrokerAdapter (may grow at runtime as
@@ -119,6 +120,9 @@ class Engine(LabMixin):
         self.rotation: dict[str, dict] = {}
         self._load_today()
         self._load_rotation()
+        # account cycle groups: {group id: {name, members, accounts, risk_usd, max_minis, on, last}}; kept across days
+        self.groups: dict[str, dict] = {}
+        self._load_groups()
 
     # --- time & persistence -------------------------------------------------
     def now_et(self) -> dt.datetime:

@@ -2011,8 +2011,71 @@ function groupView(id) {
     ${members.length ? `<div class="sec"><h2>Strategies</h2><div class="agroup feed static">
       <div class="feed-row"><span class="h dim">Strategy</span><span class="t dim">Build</span><span class="t dim">Unseen</span></div>${members.join("")}</div></div>` : ""}
     ${out.length ? `<div class="sec"><h2>Left out of the sum</h2><div class="agroup feed static">${out.join("")}</div></div>` : ""}
+    ${labSafe(() => cycleHtml(g), "")}
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openGroupMgr()">Manage groups</button>
       <button class="btn btn-outline btn-sm" onclick="deleteGroup(${jsArg(g.id)})" title="The strategies stay on the Desk, in no group.">Delete group</button></div>`;
+}
+/* Account cycle (the owner, 2026-10-25): the group's strategies share ONE turn over the ticked accounts -- each trade goes to
+   the next ticked account that is free, so two trades may be open at once but only on separate accounts; a trade opposite
+   to one open on another of these accounts is skipped (no long on one while a short is on another); with a risk set,
+   every order is sized to that many dollars at its own stop. Off by default. The engine keeps it (POST /api/groups).
+   Each strategy must still be booked on the accounts (its own Accounts section): an account it is not booked on is
+   not in its turn. */
+function cycleMembers(g) {
+  return (g.members || []).filter(m => ST.strategies[m] && ST.strategies[m].cfg.kind === "lab");
+}
+function cycleHtml(g) {
+  const cyc = ((ST && ST.groups) || {})[g.id] || null, mem = cycleMembers(g);
+  if (!mem.length && !cyc) return "";
+  const on = !!(cyc && cyc.on), chosen = new Set(cyc ? cyc.accounts : []);
+  const boxes = Object.keys(ST.accounts || {}).map(a => `<label class="feed-row" style="cursor:pointer">
+      <span class="h"><input type="checkbox" class="cyc-acct" data-acct="${esc(a)}" ${chosen.has(a) ? "checked" : ""}
+        onchange="saveCycle(${jsArg(g.id)})"> ${esc(acctShort(a))}${isDemoAcct(a) ? ' <span class="dim">· paper/demo</span>' : ""}</span></label>`).join("");
+  const missing = cyc ? mem.flatMap(m => cyc.accounts.filter(a => !((ST.book || {})[m] || []).some(r => r.account === a))
+      .map(a => `${stratLabel(m)} is not booked on ${acctShort(a)}`)) : [];
+  const out = cyc ? cyc.members.filter(m => !mem.includes(m)) : [], add = cyc ? mem.filter(m => !cyc.members.includes(m)) : [];
+  const num = (cls, v, ph) => `<input class="${cls}" type="text" inputmode="decimal" autocomplete="off" value="${esc(String(v))}"
+      placeholder="${ph}" style="width:90px" onfocus="FREEZE=true" onblur="FREEZE=false" onchange="FREEZE=false;saveCycle(${jsArg(g.id)})">`;
+  return `<div class="sec"><h2>Account cycle</h2><div class="agroup feed static">
+    <div class="feed-row"><span class="h">Take turns across these accounts</span>
+      <button class="switch" role="switch" aria-label="Account cycle" aria-checked="${on}"
+        title="${on ? "ON — each trade goes to the next account below" : "OFF — each strategy trades its own booked accounts"}"
+        onclick="setCycle(${jsArg(g.id)}, ${!on})"></button></div>
+    ${on && cyc.next ? `<div class="feed-row"><span class="h">Next account: ${esc(acctShort(cyc.next))}</span></div>` : ""}
+    <div class="feed-row"><span class="h">Risk per trade ($)</span><span class="t">${num("cyc-risk", cyc ? cyc.risk_usd : 1000, "1000")}</span></div>
+    <div class="feed-row"><span class="h">Most per trade (full contracts)</span><span class="t">${num("cyc-minis", cyc ? cyc.max_minis : 17, "17")}</span></div>
+    ${boxes}</div>
+    <div class="mcap">One trade goes to one account, the next ticked one that is free. A trade the opposite way to one open on
+      another of these accounts is skipped. Risk 0 = each strategy's own size.</div>
+    ${missing.length ? `<div class="mcap warn">${esc(missing.join(" · "))}.</div>` : ""}
+    ${out.length || add.length ? `<div class="mcap warn">The group's strategies changed: tick an account (or change a number) to update the cycle.</div>` : ""}</div>`;
+}
+function cycleBody(id) {
+  const g = groupOf(id), root = document.querySelector("#viewStrat");
+  const val = (sel, d) => { const el = root && root.querySelector(sel); return el ? Number(String(el.value).replace(/[$,\s]/g, "")) : d; };
+  return {id, name: g ? g.name : id, members: g ? cycleMembers(g) : [],
+          accounts: [...(root ? root.querySelectorAll(".cyc-acct") : [])].filter(b => b.checked).map(b => b.dataset.acct),
+          risk_usd: val(".cyc-risk", 0), max_minis: Math.round(val(".cyc-minis", 17))};
+}
+async function saveCycle(id, extra) {
+  const body = {...cycleBody(id), ...(extra || {})};
+  let r, err = null;
+  try { r = await post("/api/groups", body); } catch (e) { err = e || new Error("no answer"); }
+  refresh();
+  if (DEMO) return false;
+  const why = answerWhy(r, err);
+  if (why) toast(`Account cycle NOT changed — ${why}.`, 8000);
+  return !why;
+}
+async function setCycle(id, on) {
+  if (switchBounced("cycle:" + id)) return;
+  const b = cycleBody(id);
+  if (on) {
+    const live = b.accounts.filter(a => !isDemoAcct(a)).length;
+    if (!await confirmDlg(`Start the account cycle?`, `${b.members.length} strateg${b.members.length === 1 ? "y" : "ies"} take turns across ${b.accounts.length} account${b.accounts.length === 1 ? "" : "s"}${live ? ` (${live} LIVE)` : ""}` +
+        (b.risk_usd > 0 ? `, each trade sized to $${b.risk_usd.toLocaleString("en-US")} at risk.` : ", each at its own size."), "Start", false)) { refresh(); return; }
+  }
+  if (await saveCycle(id, {on})) toast(on ? "Account cycle ON: one account a trade." : "Account cycle OFF.");
 }
 async function deleteGroup(id) {
   const g = groupOf(id);

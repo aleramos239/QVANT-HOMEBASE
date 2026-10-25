@@ -719,7 +719,8 @@ def test_the_pages_chart_reads_go_to_the_private_chart_service_and_nothing_else_
 def test_the_status_has_the_real_routes_keys_three_accounts_and_the_lab_block(desk):
     s = desk.get("/api/status").json()
     assert set(s) == {"armed", "chart_trading", "et_now", "readiness", "timer", "levels", "feed", "accounts", "notices",
-                      "book", "strategies", "journal"}
+                      "book", "groups", "strategies", "journal"}
+    assert s["groups"] == {}                                          # account cycle groups: none until made
     assert {a: v["env"] for a, v in s["accounts"].items()} == {A1: "demo", A2: "demo", LIVE: "live"}
     assert all(v["connected"] is True and v["label"].startswith(("SIM", "FAKELIVE")) for v in s["accounts"].values())
     assert s["armed"] is True and s["et_now"].startswith("2026-09-14T10:00:00")
@@ -1301,3 +1302,16 @@ def test_the_config_guard_reads_the_configs_own_mark_never_an_attribute_made_up_
     with pytest.raises(RuntimeError, match="practice Desk's config is never saved"):
         config_mod.save(marked)
     assert saved == [mock] and not (tmp_path / "config.json").exists()
+
+
+def test_an_account_cycle_group_is_made_switched_and_deleted(desk):
+    """POST /api/groups (routes/strategies.py `group_set`, copied line for line): made off, switched on, refused when wrong."""
+    r = desk.post("/api/groups", json={"id": "g1", "name": "Apex", "members": [LAB], "accounts": [A1, A2],
+                                       "risk_usd": 1000, "max_minis": 17})
+    assert r.status_code == 200 and r.json()["on"] is False
+    r = desk.post("/api/groups", json={"id": "g1", "on": True})
+    assert r.json()["on"] is True and r.json()["next"] == A1
+    assert desk.get("/api/status").json()["groups"]["g1"]["accounts"] == [A1, A2]
+    assert desk.post("/api/groups", json={"id": "g1", "accounts": ["nope"]}).status_code == 400
+    assert desk.post("/api/groups/delete", json={"id": "g1"}).json() == {"ok": True}
+    assert desk.post("/api/groups/delete", json={"id": "g1"}).status_code == 404

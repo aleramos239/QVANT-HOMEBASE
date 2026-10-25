@@ -78,6 +78,7 @@ LAB_CLEAR_REJECTS = (
     "bracketed stop entries need a broker OSO",                     # base.py place_bracket (legged fallback): not sent
 )
 LAB_BAD_ORDER = "The Desk cannot check this order."
+GROUP_HEDGE = "Opposite to a trade open on another account of its group."    # engine_groups (no hedging)
 LAB_NO_STOP = "Every entry needs a stop held at the broker."
 LAB_WRONG_SIDE = "The stop must sit on the losing side of the entry."
 LAB_NOT_A_PAIR = "Only a buy-stop and sell-stop pair can be linked."
@@ -1045,6 +1046,10 @@ class LabMixin:
         cfg, why = self._lab_may_enter(name)
         if why is None:
             why = self._lab_sits_out(name, cfg, account, qty, max_rounds)
+        if why is None:                             # asked again here, with no await before the round is written:
+            grp = self.group_of(name)               # another member may have opened a trade meanwhile
+            if grp is not None and self.group_hedged(grp[1], cfg.symbol, legs):
+                why = GROUP_HEDGE
         if why is not None:
             if why == LAB_DISARMED:                 # written down only, as the disarmed path of lab_enter does
                 self.journal("shadow_signal" if (self.cfg.armed and cfg.shadow) else "dry_run", strategy=name,
@@ -1202,6 +1207,9 @@ class LabMixin:
         self._lab_roll()
         t0 = time.time()
         order = list(sizes)
+        grp = self.group_of(name)
+        if grp is not None:                          # an account cycle group: its turn, never against an open trade
+            return await self._group_enter(grp, name, cfg, legs, sizes, max_rounds, source, t0)
         if self.rotating(name):
             # one account takes it: the first in turn that opens a round (one that sits out, or whose position is
             # not flat, passes the turn on). The door's refusals never got here: those accounts are not in `sizes`.

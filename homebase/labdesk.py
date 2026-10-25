@@ -108,6 +108,7 @@ TOO_MANY = "Too many orders at once."
 FIRE_FIRST = "The 9:30 orders go first."
 PRICE_PAST = "The price is already past this entry."
 UNEVEN_PAIR = "A linked pair must be the same size on both sides."
+GROUP_NO_SIZE = "The stop is too wide for the group's dollars at risk."     # engine_groups: risk per trade
 LAST_TRADE = "The Desk cannot check the last trade's orders."     # the engine's own (LAB_CANNOT_CHECK)
 BOTH_FILLED = "Both entries filled."     # why the desk stops a strategy whose pair filled on both sides
 NOT_PLACED = "The entry was not placed. Check it."     # the page's words for a row whose `why` is a raw engine note:
@@ -1295,6 +1296,28 @@ class LabDesk:
         rec = labcfg.record_of(self.cfg, name) or {}
         return int(ev.intents[unit[0]]["qty"]) if rec.get("own_size") is True else None
 
+    def _group_size(self, name: str, rec: dict, ev, unit: list, last, cap_usd: float = 0.0) -> tuple:
+        """For a member of an ON account cycle group with dollars at risk: (contracts, None) = round(risk / (stop
+        distance x point value)) in the contract the orders go to, at most the group's `max_minis` full contracts'
+        worth and never more dollars than the strategy's own "at risk per trade" limit (`cap_usd`, when set);
+        (None, GROUP_NO_SIZE) when not one contract fits or the stop cannot be measured (fail closed).
+        (None, None): no such group -- the Desk's own sizes stand. A pair is sized on its wider stop."""
+        grp = self.engine.group_of(name)
+        if grp is None or not grp[1].get("risk_usd") or not rec.get("root"):
+            return None, None
+        g = grp[1]
+        pv, full = point_value(labcfg.exec_symbol(rec)), point_value(rec["root"])
+        try:
+            dist = max(abs(door._entry_price(ev.intents[j], {"last_price": last}) - ev.intents[j]["sl"]) for j in unit)
+            n = round(g["risk_usd"] / (dist * pv))
+            if cap_usd and cap_usd > 0:
+                n = min(n, int(cap_usd // (dist * pv)))
+        except (TypeError, ValueError, ZeroDivisionError):
+            return None, GROUP_NO_SIZE
+        if not full or n < 1:
+            return None, GROUP_NO_SIZE
+        return min(n, max(1, int(g["max_minis"] * full / pv))), None
+
     @staticmethod
     def _takers(unit: list, per: dict, booked: list, want: int | None = None) -> tuple:
         """({account: the sentence that refuses this entry there | None}, {account: size} of the ones that may take
@@ -1327,6 +1350,11 @@ class LabDesk:
         limits = labcfg.limits_of(self.cfg, name)
         rec = labcfg.record_of(self.cfg, name) or {}
         last, tick = self._last_price(ev), (tick_size(rec["root"]) if rec.get("root") else None)
+        size, no = self._group_size(name, rec, ev, unit, last, limits.max_risk_usd)
+        if no is not None:
+            return self._no_entry(name, ev, d, ids, no, accounts)
+        if size is not None:                         # an account cycle group sizes every member's order itself
+            sizes = {a: size for a in sizes}
         legs = [self._leg(ev.intents[j], last, tick) for j in unit]
         unknown = False
         try:
