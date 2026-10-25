@@ -205,9 +205,9 @@ def _parser() -> _Parser:
     c.add_argument("--store", metavar="KEY", help="a store of the engine: its key in the store folder, or its path")
     c.add_argument("--trades", metavar="FILE", help="a trades file: a JSON list of trades")
     c.add_argument("--run-id", metavar="ID", help="a tester run (not built yet)")
-    c.add_argument("--looked", action="store_true", help="the owner looked at the 10 trades on the chart (line 1.5)")
+    c.add_argument("--looked", action="store_true", help="the owner looked at the 3 trades on the chart (line 1.5)")
     c.add_argument("--same-as", metavar="STORE|FILE", help="the earlier store or file: line 1.6")
-    c.add_argument("--cell", help="the store's cell the 10 trades are taken from")
+    c.add_argument("--cell", help="the store's cell the 3 trades are taken from")
     c.add_argument("--market", help="NQ, ES or GC (a trades file)")
     c.add_argument("--sessions", help="the stated sessions, e.g. nyam,mid")
     c.add_argument("--window", metavar="HH:MM-HH:MM", help="the stated window on the New York clock")
@@ -308,6 +308,7 @@ def _parser() -> _Parser:
     wfs["run"].add_argument("--no-worse", action="store_true", help="a screening pass: leave the worse-fills stores out (a later run adds only them)")
     for name in ("show", "pick", "oos"):
         wfs[name].add_argument("name", help="the idea's name (or its 3:1 store's)")
+    wfs["show"].add_argument("--tries", type=int, default=1, help="how many ideas / versions were tried for this edge: the t bar rises 0.25 a try")
     for name in ("pick", "oos"):
         wfs[name].add_argument("box", help="the box: its row number in the in-sample table, or its id")
         wfs[name].add_argument("--who", metavar="TEXT", help="who picks / reads (default: owner; Claude under the owner's standing word says so)")
@@ -511,7 +512,7 @@ def _wf(a) -> dict:
     if a.root:
         os.environ[JOBS.ENV] = str(a.root)          # hmwf keeps the one-read log in the ideas root (a job's child inherits it)
     if a.sub == "show":
-        return api.wf_show(a.name)
+        return api.wf_show(a.name, tries=getattr(a, "tries", 1) or 1)
     if a.sub == "pick":
         return api.wf_pick(a.name, a.box, getattr(a, "who", None) or "owner")
     api._said(a.owner_said)

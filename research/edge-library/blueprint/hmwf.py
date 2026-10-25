@@ -126,10 +126,14 @@ def numbers(x: dict, days) -> dict:
         if len(t) >= 3:
             wr.append(float((t > 0).mean()))
     side = np.asarray(x["side"])
+    yr = np.array([dt.date.fromordinal(int(d)).year for d in x["date"]])
+    ynet = [float(net[yr == y].sum()) for y in sorted(set(yr))]
     return {"win_rate": m["win"], "breakeven": be, "wr_minus_be": None if be is None or m["win"] is None else m["win"] - be,
             "trades": m["trades"], "per_week": m["trades"] / (len(days) / 5) if days else None, "avg_trade": m["avg_trade"],
             "avg_r": m["avg_trade"] / al if m["avg_trade"] is not None and al else None,     # R = the average loss (pipe_stages' avg_r)
             "net": m["net"], "pf": m["pf"], "sharpe": m["sharpe"], "max_dd": m["max_dd"],
+            "t_stat": m.get("t"), "years_n": len(ynet), "years_green": sum(v > 0 for v in ynet),      # (real.py: the real-or-luck lines)
+            "best_year_share": max(ynet) / sum(ynet) if ynet and sum(ynet) > 0 else None,
             "months_pos": sum(pos) / len(pos) if pos else None, "months_wr60": sum(w >= 0.6 for w in wr) / len(wr) if wr else None,
             "worst_month_wr": min(wr) if wr else None, "long_net": round(float(net[side > 0].sum()), 2), "short_net": round(float(net[side < 0].sum()), 2)}
 

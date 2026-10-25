@@ -54,6 +54,13 @@ Any request to build, test, backtest, optimize or judge a strategy or a strategy
   new, and rolling is removed. `blueprint_build` / `lock` / `test` are gone; old results stay as history. The Desk card's
   "Unseen days" is the old per-window walk-forward record (old route); nothing on the Desk switches by itself.
 - Judge the average of all boxes, never the best one.
+- **Real or luck: six lines, nothing else blocks (owner, 2026-10-25: "just enough for the strategy to be real robust and not luck or
+  fake").** Printed under every `wf` / `blueprint_wf*` result (`research/edge-library/blueprint/real.py`): 60 % of the boxes make money;
+  200+ in-sample trades (60+ on the test months); t-statistic 2+ and net above $0 after costs (the bar rises 0.25 a try, `--tries`);
+  4 of 6 years green and no year over half the net; still positive with worse fills; the test months positive in the same direction.
+  No average-trade dollar floor, no $30 line; PF, Sharpe and drawdown are shown, never block. The prop sim and eval card (phase 5) are
+  OFF until the owner asks. Card lines 0.4 and 0.7 are optional; the code check looks at 3 chart trades, not 10; the 5-round cap is
+  replaced by counting tries.
 - Use the connector's `blueprint_*` tools for every phase. They run `research/edge-library/bp.py` and save each idea in the app
   (`~/.homebase/ideas`, a Lab draft, a tester run, a Lab group). Never write one-off test code for a strategy.
 - `research/edge-library/judge.py` still scores the old rules (v2). A v2 verdict is not a blueprint verdict.

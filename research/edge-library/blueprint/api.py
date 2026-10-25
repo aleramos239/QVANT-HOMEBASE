@@ -31,6 +31,7 @@ import l2sim as S
 import library as LB
 
 from . import checks as CH
+from . import real as Real
 from . import lines as L
 from . import rules as R
 from . import runner as RUN
@@ -196,13 +197,13 @@ def code_check(name: str, store=None, trades=None, run_id=None, same_as=None, lo
     """`bp.py code-check <name> [--store=K | --trades=FILE] [--looked]`: PHASE 1, lines 1.1 to 1.6 (checks.py) on a store
     of the research engine (its key in the store folder `out`, or its path) or on a plain trades file.
       same_as      the earlier store or file line 1.6 holds the list against (after a change to the code)
-      looked       the owner looked at the 10 trades line 1.5 named, and each sits where the rule says
-      cell         the store's cell those 10 trades are taken from (default: its first cell with 10 trades)
+      looked       the owner looked at the 3 trades line 1.5 named, and each sits where the rule says
+      cell         the store's cell those 3 trades are taken from (default: its first cell with 3 trades)
       market, sessions, window, max_per_day     what a trades file does not state itself (a store states its own)
     THE IDEA'S RECORD. When the app has the idea on file (homebase/ideastore.py, idea folder `root`), the result is saved as
     its check.json; an idea that is not on file is only printed. `asked` = the source and what was stated: with no source
     named, the one of the idea's check on file is read again -- so the owner's later `--looked` needs nothing repeated.
-    Beyond the agreed keys: source, asked, look (the 10 trades), failed, not_applicable, passed. passed = lines 1.1-1.5
+    Beyond the agreed keys: source, asked, look (the 3 trades), failed, not_applicable, passed. passed = lines 1.1-1.5
     all TRUE and 1.6 not failed (1.6 waits for a change to the code; a line that cannot be read is not a pass).
     Refused: any day on or after 2025-07-01 (checks.seal, runner.guard); no source; a tester run id (not built yet).
     A 3:1 idea: no source = its in-sample store (runs_wf/<store>/is); a trades file or an old store is refused (_wf_sources); a 3:1 store
@@ -249,7 +250,7 @@ def code_check(name: str, store=None, trades=None, run_id=None, same_as=None, lo
                              + (f"  (trade date {k['date']})" if " " in k["entry_et"] else "") + (f"  ({k['list']})" if t["kind"] == "store" else "") for k in look]
                           + [f"RESULT: {res}"])
     r["next"] = ("Phase 1 is passed: the numbers of this code can be trusted. The build is next (bp.py build)." if passed else
-                 "Look at the 10 trades on the chart, then run the code check again with --looked." if failed == ["1.5"] and not [x for x in na if x != "1.6"] else
+                 "Look at the 3 trades on the chart, then run the code check again with --looked." if failed == ["1.5"] and not [x for x in na if x != "1.6"] else
                  "Fix what fails, state what is not read, and run the code check again: nothing is built on numbers that are not checked.")
     if file:                                        # the idea is on file: the result is its check.json (it carries its own path)
         r["saved"] = [str(file)]
@@ -328,7 +329,7 @@ def _usd(v) -> str:
     return "-" if v is None else f"{v:,.0f}"
 
 
-def _wf_text(name: str, s: dict) -> str:
+def _wf_text(name: str, s: dict, tries: int = 1) -> str:
     """The in-sample table (one row a box), the pick, the test months: short, for a person."""
     rows, lock, oos = s["is"], s["lock"], s["oos"]
     out = [f"3:1 IN-SAMPLE TABLE of {name}: {len(rows)} boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.",
@@ -345,14 +346,14 @@ def _wf_text(name: str, s: dict) -> str:
         x = oos["record"]
         out.append(f"TEST MONTHS of box {x['box']}: {x['trades']} trades, win {_pct(x['win_rate'])}, net {_usd(x['net'])}, {len(oos['blocks'])} months")
         out += [f"  {b['oos']}  {b['trades']:3d} trades  win {_pct(b['win_rate'])}  net {_usd(b['net'])}" for b in oos["blocks"]]
-    return "\n".join(out)
+    return "\n".join(out + [Real.text(Real.check(s, tries))])
 
 
-def wf_show(name: str, command: str = "wf show") -> dict:
+def wf_show(name: str, command: str = "wf show", tries: int = 1) -> dict:
     """`bp.py wf show <name>`: the in-sample table, the pick, the test-month record if it was read. Runs nothing."""
     from . import hmwf as H                         # (hmwf imports this module)
     s = H.show(name)
-    r = result(command, name, wf=s, text=_wf_text(name, s))
+    r = result(command, name, wf=s, real=Real.check(s, tries), text=_wf_text(name, s, tries))
     r["next"] = (f"The owner picks a box by its number: bp.py wf pick {name} <n> (blueprint_wf_pick)." if s["lock"] is None else
                  f"The test months run only when the owner says so: bp.py wf oos {name} {s['lock']['box']} --owner-said=\"...\" (blueprint_wf_oos)."
                  if s["oos"] is None else "")

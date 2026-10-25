@@ -32,7 +32,7 @@ SPEC = {"name": "hwt_sweep", "reason": "a swept candle extreme that fails to hol
         "family": "candle_sweep", "markets": ["NQ"], "bar_sizes": ["15"], "sessions": ["nyam"], "params": {"ema1h": [0, 50, 100]},
         "exits": "standard"}
 COLUMNS = ["n", "box", "settings", "win_rate", "breakeven", "wr_minus_be", "trades", "per_week", "avg_trade", "avg_r", "net", "pf", "sharpe",
-           "max_dd", "months_pos", "months_wr60", "worst_month_wr", "long_net", "short_net", "worse_fills_net", "beats_random", "random_vs", "seen"]
+           "max_dd", "t_stat", "years_n", "years_green", "best_year_share", "months_pos", "months_wr60", "worst_month_wr", "long_net", "short_net", "worse_fills_net", "beats_random", "random_vs", "seen"]
 
 
 def _fake_run_many(calls):

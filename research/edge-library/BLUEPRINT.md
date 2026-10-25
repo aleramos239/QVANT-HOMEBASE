@@ -45,7 +45,7 @@ Evidence: `out/blueprint/gate_backtest.md`, `protocol_gates.md`, `mc_gates.md`, 
 > | hm60 (opt-in) | hm40 + the market's 4 fixed-point stops (NQ 15/25/40/60, ES 4/6/10/15, GC 2.5/4/6.5/10 points) x the same 5 targets: 60 cells (40 without its own stop). Only when the owner asks for it (a card with exits `hm60`); hm40 stays the default |
 > | Own stop | max(\|entry reference − the family's structure level\| x the multiplier, 0.25 x ATR), then at least 2 ticks |
 > | The months | 2021-09-22 → the last whole month a complete session of the market follows. A gappy day (its session not `complete` in the archive, or NQ with no tape) is skipped, in-sample and out-of-sample alike: no trades on bad data, and its month still counts (the owner, 2026-10-21: "Skip those days"). Blocks: 3 in-sample months, the next 1 out-of-sample, the next block starts after it (Oct-Dec 2021 → Jan 2022, Feb-Apr → May, Jun-Aug → Sep, ...). Sep 2021, the current month and a trailing part-block are in no block. Every month is in-sample OR out-of-sample, never both |
-> | In place of the build (2) | every box runs ONCE, FIXED (the same box in every block), on the in-sample months only, at 1 contract after costs, flat 15:58 ET. The in-sample table, one row a box, win rate first: win rate, breakeven of its realised reward:risk, the gap, trades, trades a week, average trade $ and R, net, profit factor, daily Sharpe, worst drawdown, % months positive, % months at 60 % win or more, worst month's win rate, long and short net; worse fills and beats-random (10 seeds, on the in-sample months) as labels; and each box block by block. No line passes or fails it |
+> | In place of the build (2) | every box runs ONCE, FIXED (the same box in every block), on the in-sample months only, at 1 contract after costs, flat 15:58 ET. The in-sample table, one row a box, win rate first: win rate, breakeven of its realised reward:risk, the gap, trades, trades a week, average trade $ and R, net, profit factor, daily Sharpe, worst drawdown, % months positive, % months at 60 % win or more, worst month's win rate, long and short net; worse fills and beats-random (10 seeds, on the in-sample months) as labels; and each box block by block, with its t-statistic, years green and best year's share. No table line passes or fails it: the six REAL OR LUCK lines below read it |
 > | In place of the lock (3) | the OWNER picks a box from that table, by its number. No code and no agent picks for him. The pick is the lock: the box, its settings and the code stamp, written once, never changed (another box = a new idea name) |
 > | In place of the test (4) | the picked box's out-of-sample months, stitched, the same columns, plus block by block. Run ONCE, logged (who, when, box, code stamp, his words), never run again; a box with its test months on file is shown, not run |
 > | The owner's word | a heat map runs ONLY when the owner says so, and the test months ONLY when he says so: every tool that runs one takes his words, verbatim, in `owner_said` and refuses without them. Views of what is saved need none |
@@ -63,6 +63,24 @@ Evidence: `out/blueprint/gate_backtest.md`, `protocol_gates.md`, `mc_gates.md`, 
 > no rolling. `blueprint_build` / `blueprint_lock` / `blueprint_test` are gone from the connector; `bp.py build | pools | lock | test`
 > refuse. Old results stay on file as history and still read. Phases 2-4 below are kept as the record of the old route only: every
 > idea runs the note above. An old idea needs its own 3:1 run before the sim or the eval card.
+>
+> **REAL OR LUCK: the only lines that block a 3:1 idea (the owner, 2026-10-25: "make the requirements just enough for the strategy to
+> be real robust and not luck or fake, but other than that ... removing or making it not strict").** Code: `blueprint/real.py`; the
+> checklist prints under every `wf show | run | pick | oos` and `blueprint_wf*` result. Six lines, nothing else passes or fails an idea:
+>
+> | # | Line | The number |
+> |---|---|---|
+> | R1 | The average of the boxes, not the best | 60 % of all boxes make money in-sample |
+> | R2 | Enough trades | 200 or more in-sample for the picked box; 60 or more on its test months |
+> | R3 | Not luck | t-statistic of the per-trade net 2 or more in-sample, net above $0 after costs (and above 95 % of random entries shown beside it); the t bar rises 0.25 for each earlier try of the same edge (`--tries`) |
+> | R4 | Not one lucky year | 2/3 of the years green (4 of 6), no year more than half the net |
+> | R5 | Still positive with worse fills | worse-fills net above $0 |
+> | R6 | It holds on days it never saw | the test months: net above $0, same direction as in-sample, 60 or more trades |
+>
+> Shown, never blocking: average trade size (the old $70 NQ / $75 ES / $140 gold floors and the $30 line are gone: profit after costs
+> and the t-statistic are the test), profit factor, Sharpe, drawdown. Phase 5 (prop sim, eval card) is OFF until the owner asks. The
+> idea card needs 0.1, 0.2, 0.3, 0.5 and 0.6; 0.4 and 0.7 are optional. The code check keeps its automatic lines and looks at 3
+> trades on the chart (1.5). The 5-round limit (2.9) is replaced by counting tries (R3).
 
 A phase is passed only when **every** line is true. Variants = the standard exit table (8 stops × 6 targets) × the 3-4 values of
 the idea's main setting. Random tables = the same exits, session and days with random entries: 4,000 draws from 10 seeds.
@@ -79,10 +97,10 @@ variant of line 3.1 (is this strategy good enough?).
 | 0.1 | The reason, in one sentence: why it should make money and who is on the losing side |
 | 0.2 | The rule: one entry trigger, at most 2 filters, exits from the standard table only |
 | 0.3 | Its home: market, session and bar size (or "all" when the reason does not single one out) |
-| 0.4 | Where else it should work (its neighbors). A place it should NOT work is no longer asked for (owner, 2026-10-07: "remove the test when it should not"): a card that names one still has it run and shown, no line reads it |
+| 0.4 | Where else it should work (its neighbors): optional since 2026-10-25 (owner: a lighter card). A place it should NOT work is no longer asked for (owner, 2026-10-07: "remove the test when it should not"): a card that names one still has it run and shown, no line reads it |
 | 0.5 | The main setting and its 3-4 values |
 | 0.6 | Whether it trades both sides or one side only, and why |
-| 0.7 | When it should lose: one stretch or kind of market in which the idea must lose money. A build without that loss is a red flag, and no filter is added only to erase it |
+| 0.7 | When it should lose: one stretch or kind of market in which the idea must lose money (optional since 2026-10-25: the owner reads it if it is there). A build without that loss is a red flag, and no filter is added only to erase it |
 
 ### Phase 1 — Code check (on the 3:1 in-sample months only; never on a test month)
 | # | Requirement |
@@ -91,10 +109,10 @@ variant of line 3.1 (is this strategy good enough?).
 | 1.2 | One position at a time, and every trade is flat by 15:58 ET (13:13 on half days) |
 | 1.3 | The number of trades is what the rule implies (for example, never more than the stated maximum per day) |
 | 1.4 | With a stop and a target on, winners pay about the target and losers cost about the stop, in dollars; exceptions are listed |
-| 1.5 | 10 trades are looked at on the chart (the first 5 and 5 at random): entry and exit sit where the rule says. *(10 is my number; the course gives none)* |
+| 1.5 | 3 trades are looked at on the chart (the first 1 and 2 at random): entry and exit sit where the rule says. *(3 is my number since 2026-10-25, was 10; the course gives none)* |
 | 1.6 | After any change to the code, the earlier trade list is reproduced exactly before a new run counts |
 
-### Phase 2 — Build, 22 Sep 2021 → 30 Jun 2025 (RETIRED 2026-10-25: history only; every idea takes the 3:1 in-sample table)
+### Phase 2 — Build, 22 Sep 2021 → 30 Jun 2025 (45 months, 75 %) (RETIRED 2026-10-25: history only; every idea takes the 3:1 in-sample table)
 | # | Requirement | The number |
 |---|---|---|
 | 2.1 | Most settings make money | more than 60 % of variants profitable |
@@ -161,7 +179,7 @@ Not passed → back to phase 2 as a new round when one is left (it counts), othe
 > out-of-sample method is the 3:1 walk-forward over all data, in blocks (rolling only when the owner asks). `bp.py test` stays in the code because the pipeline uses it
 > to get the test-day trades. `blueprint/pipe_wf.py`; spec `docs/superpowers/specs/2026-10-18-one-pipeline-two-tags-design.md`.
 
-### Phase 4 — Out-of-sample test, 1 Jul 2025 → Sep 2026, one read (RETIRED 2026-10-25: history only; the test months are the 3:1 ones)
+### Phase 4 — Out-of-sample test, 1 Jul 2025 → latest complete session, Sep 2026 (15 months, 25 %), one read (RETIRED 2026-10-25: history only; the test months are the 3:1 ones)
 | # | Requirement | The number |
 |---|---|---|
 | 4.1 | Both parts make money on their own: Jul-Dec 2025 and Jan-Sep 2026 | average variant above $0 in each |
@@ -176,7 +194,7 @@ Not passed → back to phase 2 as a new round when one is left (it counts), othe
 
 Not passed → NOT PROVEN. It is not re-tuned and re-tested on this period.
 
-### Phase 5 — Before the eval is bought (prop simulator, on the test-period trades, for the account in question)
+### Phase 5 — Before the eval is bought (prop simulator, on the test-period trades, for the account in question) -- OFF until the owner asks (2026-10-25)
 One strategy is read on lines 5.1, 5.2, 5.4 and 5.5. The portfolio, several proven strategies on one account with their days
 drawn together, is read on lines 5.2, 5.3, 5.6 and 5.7 (owner, 2026-10-06: the 60 % and 75 % bars are the portfolio's).
 Line 5.5 has no day limit: a run goes on for 250 trading days (the app's own horizon); a run still open then is neither a pass nor

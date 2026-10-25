@@ -5,7 +5,7 @@ on a plain trades file -- toolkit plan, step 7 (its code-check half).
     outside the stated window (1.1), an overnight hold, a late exit on a half day, two positions at once (1.2), one trade
     too many on a day (1.3), a winner far from its target, a stop-out that cost less than its stop (1.4). A stop that was
     gapped is LISTED and passes: the fill law makes those.
-(b) 1.5 names the same 10 trades for the same list (the first 5 and 5 drawn with the fixed seed of rules.json) and is true
+(b) 1.5 names the same 3 trades for the same list (the first 1 and 2 drawn with the fixed seed of rules.json) and is true
     only once the owner has looked; 1.6 holds an earlier trade list against the new one, field for field.
 (c) The same through a STORE (the library's format): the stated sessions, the maximum per session and day and the stops and
     targets are read from the store itself; a stop that is not the stated points is caught.
@@ -229,27 +229,27 @@ def test_each_planted_bad_trade_is_caught_by_its_own_line():
 
 def test_line_1_5_the_ten_trades_and_the_owner_looking():
     need = R.need("1.5")
-    assert need == {"trades": 10, "first": 5, "random": 5} and isinstance(R.rule("1.5")["also"]["seed"], int)
+    assert need == {"trades": 3, "first": 1, "random": 2} and isinstance(R.rule("1.5")["also"]["seed"], int)
     r, again = check(clean()), check(clean())
     x = by(r)["1.5"]
     picks = [t["trade"] for t in r["look"]]
-    rest = sorted(np.random.default_rng(R.rule("1.5")["also"]["seed"]).choice(np.arange(6, 13), 5, replace=False).tolist())
-    assert picks == [1, 2, 3, 4, 5] + rest and picks == [t["trade"] for t in again["look"]] and len(set(picks)) == 10
-    assert x["passed"] is False and (x["number"], x["need"]) == (0, 10) and r["failed"] == ["1.5"] and r["passed"] is False
-    assert x["text"] == ("1.5 FAIL the owner has not looked yet: look at these 10 trades on the chart (the first 5 and 5 at random), then run it again with "
+    rest = sorted(np.random.default_rng(R.rule("1.5")["also"]["seed"]).choice(np.arange(2, 13), 2, replace=False).tolist())
+    assert picks == [1] + rest and picks == [t["trade"] for t in again["look"]] and len(set(picks)) == 3
+    assert x["passed"] is False and (x["number"], x["need"]) == (0, 3) and r["failed"] == ["1.5"] and r["passed"] is False
+    assert x["text"] == ("1.5 FAIL the owner has not looked yet: look at these 3 trades on the chart (the first 1 and 2 at random), then run it again with "
                          "--looked: " + ", ".join(f"#{n}" for n in picks))
     assert r["look"][0] == {"trade": 1, "list": "list", "date": "2022-03-15", "entry_et": "09:35:00", "exit_et": "09:55:00", "side": "short", "session": "nyam", "ended": "tp"}
-    assert [t["date"] for t in r["look"][:5]] == DAYS[:5] and all(set(t) == set(r["look"][0]) for t in r["look"])
+    assert [t["date"] for t in r["look"][:1]] == DAYS[:1] and all(set(t) == set(r["look"][0]) for t in r["look"])
     assert all(f"#{t['trade']:<3d} {t['date']} {t['entry_et']} -> {t['exit_et']} ET  {t['side']}" in r["text"] for t in r["look"])
     ok = by(check(clean(), looked=True))["1.5"]
-    assert ok["passed"] is True and ok["number"] == 10
-    assert ok["text"] == "1.5 PASS the owner looked at 10 trades on the chart (the first 5 and 5 at random): " + ", ".join(f"#{n}" for n in picks)
+    assert ok["passed"] is True and ok["number"] == 3
+    assert ok["text"] == "1.5 PASS the owner looked at 3 trades on the chart (the first 1 and 2 at random): " + ", ".join(f"#{n}" for n in picks)
     rows = clean()                                          # the numbers follow the entry time, not the order of the file
     random.Random(5).shuffle(rows)
     assert check(rows, "shuffled")["look"] == [{**t, "list": "shuffled"} for t in r["look"]]
-    assert [t["trade"] for t in check(clean()[:10], "ten")["look"]] == list(range(1, 11))
-    few = by(check(clean()[:7], "few", looked=True))["1.5"]
-    assert few["passed"] is False and "only 7 trades" in few["text"]
+    assert [t["trade"] for t in check(clean()[:3], "three")["look"]] == [1, 2, 3]
+    few = by(check(clean()[:2], "few", looked=True))["1.5"]
+    assert few["passed"] is False and "only 2 trades" in few["text"]
 
 
 def test_line_1_6_the_earlier_trade_list_is_reproduced_exactly():
@@ -300,8 +300,8 @@ def test_a_store_is_read_with_what_it_states():
     assert b["1.1"]["text"] == "1.1 PASS every one of the 20 trades is entered inside the stated window (sessions nyam)"
     assert b["1.3"]["text"] == "1.3 PASS never more than the stated maximum of 2 a session and day: the most is 1 (20 trades in 2 lists)"
     assert (b["1.4"]["at_target"], b["1.4"]["at_stop"], b["1.4"]["other"], b["1.4"]["gapped"]) == (4, 12, 4, 0)
-    assert [t["list"] for t in r["look"]] == ["pts10-r2"] * 10 and r["look"][0]["trade"] == 1 and "of pts10-r2" in b["1.5"]["text"]
-    assert [t["list"] for t in A.code_check("hand", store=p, cell="pts10-r0")["look"]] == ["pts10-r0"] * 8
+    assert [t["list"] for t in r["look"]] == ["pts10-r2"] * 3 and r["look"][0]["trade"] == 1 and "of pts10-r2" in b["1.5"]["text"]
+    assert [t["list"] for t in A.code_check("hand", store=p, cell="pts10-r0")["look"]] == ["pts10-r0"] * 3
     refused(lambda: A.code_check("hand", store=p, cell="no_such_cell"), "no_such_cell")
     assert A.code_check("hand", store=p, looked=True, sessions=["mid"])["failed"] == ["1.1"]      # what the caller states wins over the store
     # a store is named by its path, or by its KEY in the store folder (--store=K; the folder is runs_bp/ unless told)
@@ -360,7 +360,7 @@ def test_the_engines_own_stores_pass():
         r = A.code_check("on_disk", store=where)             # as the library names it: <folder>/<key>
         b = by(r)
         assert [b[k]["passed"] for k in ("1.1", "1.2", "1.3", "1.4")] == [True] * 4, (where, [b[k]["text"] for k in ("1.1", "1.2", "1.3", "1.4")])
-        assert b["1.1"]["number"] == b["1.2"]["number"] == b["1.4"]["number"] == 0 and r["source"]["kind"] == "store" and len(r["look"]) == 10
+        assert b["1.1"]["number"] == b["1.2"]["number"] == b["1.4"]["number"] == 0 and r["source"]["kind"] == "store" and len(r["look"]) == 3
         n, trades = n + 1, trades + r["source"]["trades"]
     assert n >= 6 and trades > 500_000
     own = by(A.code_check("on_disk", store=W / "runs" / "ib-NQ-tf15"))["1.4"]
@@ -385,8 +385,8 @@ def test_the_command():
     rc, txt = _run(argv)
     lines = txt.rstrip("\n").split("\n")
     assert rc == 0 and txt.rstrip("\n") == r["text"] and lines[0] == f"CODE CHECK of cmd: 12 trades in 1 list, market NQ ({p})"
-    assert lines[1:7] == [x["text"] for x in r["lines"]] and lines[7:17] == [ln for ln in lines if ln.startswith("  #")] and len(lines) == 18
-    assert lines[17] == "RESULT: fails 1.5; not read: 1.6. Phase 1 is passed only when every line is true."
+    assert lines[1:7] == [x["text"] for x in r["lines"]] and lines[7:10] == [ln for ln in lines if ln.startswith("  #")] and len(lines) == 11
+    assert lines[10] == "RESULT: fails 1.5; not read: 1.6. Phase 1 is passed only when every line is true."
     rc, js = _run(argv + ["--looked", f"--same-as={e}", *last])
     d = json.loads(js)
     assert rc == 0 and js.count("\n") == 1 and js.isascii() and list(d)[:len(CONTRACT)] == list(CONTRACT) and d["name"] == "cmd" and d["passed"] is True

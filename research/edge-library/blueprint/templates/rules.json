@@ -18,7 +18,7 @@
   "text": "Its home: market, session and bar size (or \"all\" when the reason does not single one out)"
  },
  "0.4": {
-  "text": "Where else it should work (its neighbors). A place it should NOT work is no longer asked for (owner, 2026-10-07: \"remove the test when it should not\"): a card that names one still has it run and shown, no line reads it"
+  "text": "Where else it should work (its neighbors): optional since 2026-10-25 (owner: a lighter card). A place it should NOT work is no longer asked for (owner, 2026-10-07: \"remove the test when it should not\"): a card that names one still has it run and shown, no line reads it"
  },
  "0.5": {
   "text": "The main setting and its 3-4 values",
@@ -33,7 +33,7 @@
   "text": "Whether it trades both sides or one side only, and why"
  },
  "0.7": {
-  "text": "When it should lose: one stretch or kind of market in which the idea must lose money. A build without that loss is a red flag, and no filter is added only to erase it",
+  "text": "When it should lose: one stretch or kind of market in which the idea must lose money (optional since 2026-10-25: the owner reads it if it is there). A build without that loss is a red flag, and no filter is added only to erase it",
   "need": {
    "stretches": 1
   },
@@ -65,16 +65,16 @@
   "note": "\"about\" = within 2 ticks (toolkit_plan.md section 6, decision 3)"
  },
  "1.5": {
-  "text": "10 trades are looked at on the chart (the first 5 and 5 at random): entry and exit sit where the rule says. *(10 is my number; the course gives none)*",
+  "text": "3 trades are looked at on the chart (the first 1 and 2 at random): entry and exit sit where the rule says. *(3 is my number since 2026-10-25, was 10; the course gives none)*",
   "need": {
-   "trades": 10,
-   "first": 5,
-   "random": 5
+   "trades": 3,
+   "first": 1,
+   "random": 2
   },
   "also": {
    "seed": 20261006
   },
-  "note": "the 5 at random are drawn with this fixed seed from the trades after the first 5, so the same trade list always shows the same 10 (blueprint/checks.py)"
+  "note": "the 5 at random are drawn with this fixed seed from the trades after the first 5, so the same trade list always shows the same 3 (blueprint/checks.py)"
  },
  "1.6": {
   "text": "After any change to the code, the earlier trade list is reproduced exactly before a new run counts"

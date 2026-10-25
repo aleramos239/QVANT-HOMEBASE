@@ -189,8 +189,10 @@ def _places(card: dict, home, known, run: dict) -> tuple:
     """Line 0.4 -> (the neighbors, the place it should not work, what is missing). Without a home (line 0.3 failed) the
     entries are only read as places."""
     nb, nh = card.get("neighbors"), card.get("not_here")
-    if not isinstance(nb, list) or not nb or not all(_text(x) for x in nb):
-        return None, None, "it does not say where else it should work (card.neighbors: the next bar sizes, the other sessions or markets it should fit)"
+    if nb in (None, []) and not _text(nh):          # optional since 2026-10-25 (owner: a lighter card): none named = none run
+        return [], None, ""
+    if not isinstance(nb, list) or not all(_text(x) for x in nb):
+        return None, None, "card.neighbors: a list of the next bar sizes, the other sessions or markets it should fit (or leave it out)"
     base = home or {"market": "?", "session": "?", "bar": "?"}
     P = []
     for i, said in enumerate([*nb, *([nh] if _text(nh) else [])]):          # (the place it should NOT work is optional since 2026-10-07: none named = none run)
@@ -258,8 +260,9 @@ def card_lines(spec: dict) -> tuple:
     rows.append(L._row("0.3", not bad, None, R.rule("0.3").get("need"), bad or f"home: {home['market']}, {J.SESS_PLAIN[home['session']]}, {home['bar']}-minute bars"))
     # 0.4 where else it should work, and one place it should not
     nbs, nh, bad = _places(card, home, known, run)
-    rows.append(L._row("0.4", not bad, len(nbs or []), R.rule("0.4").get("need"), bad or f"{len(nbs)} place{'s' * (len(nbs) > 1)} it should also work "
-                       f"({' · '.join(p['said'] for p in nbs)})" + (f" and one where it should NOT ({nh['said']})" if nh else "")))
+    rows.append(L._row("0.4", not bad, len(nbs or []), R.rule("0.4").get("need"), bad or (f"{len(nbs)} place{'s' * (len(nbs) > 1)} it should also work "
+                       f"({' · '.join(p['said'] for p in nbs)})" + (f" and one where it should NOT ({nh['said']})" if nh else "") if nbs or nh else
+                       "no other place named (optional)")))
     l2 = [f for f in (F or []) if f[0] in RUN._blocks().L2_BLOCKS]          # Level 2 exists for NQ only: every place of the card is NQ
     away = [p for p in (home, *(nbs or []), nh) if l2 and p and p["market"] != "NQ"]       # (nh may be None)
     if away and rows[1]["passed"]:
@@ -290,8 +293,8 @@ def card_lines(spec: dict) -> tuple:
     rows.append(L._row("0.6", not bad, None, R.rule("0.6").get("need"), bad or f"{'both sides' if sides == 'both' else sides + ' only'}: {sw}"))
     # 0.7 when it should lose (law v1.1): said in words before any run; nobody checks a motive by machine
     lw = _text(card.get("loses_when"))
-    rows.append(L._row("0.7", bool(lw), None, R.need("0.7"), f"when it should lose: {lw}" if lw else
-                       "it does not say when it should lose: one stretch or kind of market in which the idea must lose money (card.loses_when)"))
+    rows.append(L._row("0.7", True, None, R.need("0.7"), f"when it should lose: {lw}" if lw else
+                       "not said (optional since 2026-10-25: card.loses_when)"))
     if not all(x["passed"] for x in rows):
         return rows, None
     pairs: dict = {}

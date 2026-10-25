@@ -212,8 +212,8 @@ SPECS = [
     _spec("blueprint_code_check", "Blueprint phase 1, the code check (on the 3:1 in-sample months only): do the trades do what the card "
           "says? It counts entries outside the session window, more than one position at a time or a trade not flat "
           "by 15:58 ET, a trade count the rule does not imply, winners and losers that do not pay about the target "
-          "and the stop, and a trade list that no longer reproduces after a code change -- and names 10 trades to "
-          "look at on the chart (the first 5 and 5 at random). Give at most one of store, trades_file, run_id. Call "
+          "and the stop, and a trade list that no longer reproduces after a code change -- and names 3 trades to "
+          "look at on the chart (the first 1 and 2 at random). Give at most one of store, trades_file, run_id. Call "
           "it again with looked=true once those 10 were looked at. An old idea: refused for any day on or after 2025-07-01. "
           "A 3:1 idea (blueprint_wf): only its own 3:1 in-sample store (no store = that one); a test month, the old build "
           "days and a trades file are refused.",
@@ -221,7 +221,7 @@ SPECS = [
            "store": {"type": "string", "description": "A store key of the research engine."},
            "trades_file": {"type": "string", "description": "The path of a trade list file."},
            "run_id": {"type": "string", "description": "A tester run id (from backtest / list_runs)."},
-           "looked": {"type": "boolean", "description": "true = the 10 trades it named were looked at on the chart, "
+           "looked": {"type": "boolean", "description": "true = the 3 trades it named were looked at on the chart, "
                                                         "and each entry and exit sits where the rule says (line 1.5). "
                                                         "Default false."}},
           ["name"]),

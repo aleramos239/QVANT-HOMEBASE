@@ -6,10 +6,10 @@ and returns {"line", "passed", "number", "need", "text"} + the trades that break
   1.2 one_position  one position at a time, and every trade is flat by 15:58 ET (13:13 on half days)
   1.3 count         never more trades than the stated maximum: a session and day in a store, a day in a trades file
   1.4 payoff        with a stop and a target on, a target exit pays about the target and a stop exit costs about the stop
-  1.5 chart         the 10 trades the owner looks at on the chart: the first 5 and 5 drawn with a fixed seed
+  1.5 chart         the 3 trades the owner looks at on the chart: the first 1 and 2 drawn with a fixed seed
   1.6 reproduced    after a change to the code: the earlier trade list again, field for field
 Every number is read from rules.json: the flat times and the minute a trade may still close in (1.2), "about" = within 2
-ticks (1.4), the 10 trades and their seed (1.5). A half day is the engine's calendar (l2sim.EARLY_CLOSES, equity-index
+ticks (1.4), the 3 trades and their seed (1.5). A half day is the engine's calendar (l2sim.EARLY_CLOSES, equity-index
 markets). passed None = the line cannot be read here (the text says what is missing); phase 1 is passed on TRUE lines only.
 
 HOW 1.4 IS READ. A trade ends at its target, at its stop, or by another exit (the clock at 15:58, a trailing / bar / book
@@ -380,9 +380,9 @@ def payoff(t: dict) -> dict:
 
 
 def chart(t: dict, looked: bool = False, cell=None) -> dict:
-    """1.5 10 trades are looked at on the chart (the first 5 and 5 at random): entry and exit sit where the rule says. The
-    tool names them -- of ONE list (a store: `cell`, else its first cell with 10 trades), the same 10 for the same list
-    (the fixed seed of rules.json) -- and the owner looks: the line is true only with `looked`. `look` = the 10 trades."""
+    """1.5 3 trades are looked at on the chart (the first 1 and 2 at random): entry and exit sit where the rule says. The
+    tool names them -- of ONE list (a store: `cell`, else its first cell with 3 trades), the same 3 for the same list
+    (the fixed seed of rules.json) -- and the owner looks: the line is true only with `looked`. `look` = the 3 trades."""
     need, seed, ids = R.need("1.5"), R.rule("1.5")["also"]["seed"], [x["id"] for x in t["lists"]]
     if cell is not None and cell not in ids:
         raise J.Refuse(f"{cell!r} is not a list of {t['label']} (it has {', '.join(ids[:6])}{' ...' if len(ids) > 6 else ''})")

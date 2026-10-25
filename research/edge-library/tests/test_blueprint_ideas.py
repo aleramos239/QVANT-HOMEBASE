@@ -308,15 +308,20 @@ BAD = [  # (what the card says, the line that fails, a word of the reason)
     ({"card": {"home": {"market": "NQ", "session": "nyam"}}}, "0.3", "bar"), ({"card": {"home": {"market": "CL", "session": "nyam", "bar": "15"}}}, "0.3", "CL"),
     ({"card": {"home": {"market": "NQ", "session": "nyam", "bar": "7"}}}, "0.3", "7"),
     ({"card": {"home": {"market": "NQ", "session": "all", "bar": "15"}}}, "0.3", "ONE home table"),
-    ({"card": {"neighbors": []}}, "0.4", "where else"),
     ({"card": {"neighbors": ["somewhere nice"]}}, "0.4", "somewhere"), ({"card": {"neighbors": ["NQ nyam 15"]}}, "0.4", "home"),
     ({"card": {"neighbors": ["midday", "mid"]}}, "0.4", "twice"), ({"card": {"not_here": "asia and london"}}, "0.4", "ONE place"),
     ({"card": {"not_here": "midday"}}, "0.4", "also"), 
     ({"card": {"main_setting": "n"}}, "0.5", "or_min"), ({"run": {"params": {"or_min": ["5", "15"]}}}, "0.5", "2 values"),
     ({"run": {"params": {"or_min": ["5", "15", "30", "45", "60"]}}}, "0.5", "5 values"),
     ({"run": {"params": {"or_min": ["5", "15", "30"], "max_tr": [1, 2]}}}, "0.5", "ONE setting"),
-    ({"card": {"sides": "up"}}, "0.6", "both"), ({"card": {"sides_why": ""}}, "0.6", "why"), ({"card": {"loses_when": " "}}, "0.7", "when it should lose"),
+    ({"card": {"sides": "up"}}, "0.6", "both"), ({"card": {"sides_why": ""}}, "0.6", "why"),
     ({"card": {"sides": "long"}, "run": {"limits": {"dir": "short"}}}, "0.6", "dir")]
+
+
+def test_neighbors_and_when_it_loses_are_optional():
+    """Owner, 2026-10-25 (a lighter card): lines 0.4 and 0.7 pass with nothing said."""
+    rows, p = REC.card_lines(idea(card={"neighbors": [], "loses_when": " "}))
+    assert all(x["passed"] for x in rows) and p["neighbors"] == []
 
 
 def test_every_missing_line_is_refused_and_named():
@@ -778,10 +783,10 @@ def test_the_commands_in_this_process():
     path.write_text(json.dumps(idea(name)))
     assert _run(["card", name, f"--spec={path}", *last])[0] == 0                                              # ... or from a file
     # refusals: exit 2, the one object, the missing line named; a person reads every line as pass or fail
-    rc, js = _run(["card", name, "--spec=-", *last], json.dumps(idea(name, card={"neighbors": []})))
+    rc, js = _run(["card", name, "--spec=-", *last], json.dumps(idea(name, card={"neighbors": ["somewhere nice"]})))
     d = json.loads(js)
     assert rc == 2 and d["ok"] is False and "0.4" in d["error"] and [x["passed"] for x in d["lines"]] == [True, True, True, False, True, True, True]
-    rc, txt = _run(["card", name, "--spec=-", f"--root={root}"], json.dumps(idea(name, card={"neighbors": []})))
+    rc, txt = _run(["card", name, "--spec=-", f"--root={root}"], json.dumps(idea(name, card={"neighbors": ["somewhere nice"]})))
     assert rc == 2 and [ln[:8] for ln in txt.split("\n")[1:7]] == ["0.1 PASS", "0.2 PASS", "0.3 PASS", "0.4 FAIL", "0.5 PASS", "0.6 PASS"] and "REFUSED: " in txt
     n = 0
     for argv, stdin, word in ((["card", name, "--spec=-"], "", "stdin"), (["card", name, "--spec=-"], "{not json", "JSON"), (["card", name], "", "--spec"),
@@ -868,7 +873,7 @@ def test_the_apps_connector_against_this_toolkit():
         pytest.skip(f"the app's Python is not there: {APP_PYTHON}")
     life(1)
     root, name = tmp() / "ideas_app", NAME
-    calls = [("blueprint_card", {"name": name, "card": CARD, "settings": SETTINGS}), ("blueprint_card", {"name": name, "card": {**CARD, "neighbors": []}, "settings": SETTINGS}),
+    calls = [("blueprint_card", {"name": name, "card": CARD, "settings": SETTINGS}), ("blueprint_card", {"name": name, "card": {**CARD, "neighbors": ["somewhere nice"]}, "settings": SETTINGS}),
              ("blueprint_build", {"name": name, "owner_said": "build it", "reason": "the plain idea, as carded"}), ("blueprint_status", {}), ("blueprint_status", {"name": name})]
     env = {**os.environ, "HOMEBASE_IDEAS_ROOT": str(root), "HOMEBASE_DRAFTS_DIR": str(tmp() / "drafts_app"), "HOMEBASE_BP": str(W / "bp.py"),
            "HOMEBASE_BP_PYTHON": sys.executable, REC.TEST_RUN: json.dumps({**TINY, "tester": str(tmp() / "tester_app")})}

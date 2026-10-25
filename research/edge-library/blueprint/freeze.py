@@ -13,7 +13,7 @@ REFUSED unless, for the idea on file:
   * its LATEST build round has every line 2.1-2.9 in its result and none failed (null = the line does not apply) -- a round
     that was started and has no result, a smoke run, a round whose card was changed afterwards: refused
   * a CODE CHECK is on file for the round's home store with every line that is read true: 1.1-1.5 TRUE (1.5 = the owner
-    looked at the 10 trades), 1.6 not failed -- and TRUE when the engine or the family code changed since the store was
+    looked at the 3 trades), 1.6 not failed -- and TRUE when the engine or the family code changed since the store was
     written (the earlier trade list reproduced by a fresh run: line 1.6)
 THEN (start() refuses, run() works):
   1. THE WORSE-FILLS TABLE of the home table on the build days (runner.run_worse: the engine's STRESS, 2 ticks + 250 ms,
@@ -174,11 +174,11 @@ def _checked(d: Path, folder: Path, key: str, family: str) -> None:
     name, chk = d.name, REC._json(d / "check.json")
     home = f"bp.py code-check {name} --store={key}"
     if chk is None:
-        raise J.Refuse(f"{name} has no code check on file: phase 1 comes before the freeze ({home}, look at the 10 trades it names, then again with --looked)")
+        raise J.Refuse(f"{name} has no code check on file: phase 1 comes before the freeze ({home}, look at the 3 trades it names, then again with --looked)")
     marks = {x.get("line"): x.get("passed") for x in chk.get("lines") or [] if isinstance(x, dict)}
     off = [k for k in PLAIN if marks.get(k) is not True] + (["1.6"] if marks.get("1.6") is False else [])
     if off or chk.get("ok") is False:
-        why = "the owner has not looked at the 10 trades on the chart yet (line 1.5): run it again with --looked" if off == ["1.5"] else \
+        why = "the owner has not looked at the 3 trades on the chart yet (line 1.5): run it again with --looked" if off == ["1.5"] else \
             f"line{'s' * (len(off) != 1)} {', '.join(off)} {'are' if len(off) != 1 else 'is'} not true"
         raise J.Refuse(f"the code check of {name} on file is not passed: {why} ({home})")
     src, asked, here = chk.get("source") or {}, chk.get("asked") or {}, (folder / key).resolve()
