@@ -23,7 +23,7 @@ from .history import History
 from .session import session_date
 from .store import ARCHIVE, TickStore
 
-COARSE = (300, 900, 1800, 3600, 14400, 86400)   # the coarse time bars the chart offers, as seconds (history.COARSE_MIN and up)
+COARSE = (30, 300, 900, 1800, 3600, 14400, 86400)   # the coarse time bars the chart offers, as seconds (history.COARSE_MIN and up)
 
 
 def warm(roots, since: dt.date | None = None, *, base: Path = ARCHIVE, cache_dir: Path | None = None,
@@ -58,7 +58,7 @@ def warm(roots, since: dt.date | None = None, *, base: Path = ARCHIVE, cache_dir
                 n = len(history.minutes(root, d))
                 built += 1
                 out(f"{root} {d.isoformat()}: {n} one-minute bars in {time.monotonic() - t0:.1f}s ({i}/{len(dates)})")
-            for size in COARSE:     # the 5m / 15m / 30m / hour / 4-hour / daily bars of the session, kept beside its minutes (a fresh file is a read)
+            for size in COARSE:     # the 30s / 5m / 15m / 30m / hour / 4-hour / daily bars of the session, kept beside its minutes (a fresh file is a read)
                 history.bars(root, BarSpec("time", size), d, memo=False)
         out(f"{root}: {len(dates)} sessions checked")
     return {"built": built, "skipped": skipped}
