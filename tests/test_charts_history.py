@@ -230,10 +230,12 @@ def test_a_newer_source_rebuilds_the_coarse_file(tmp_path):
     assert len(calls) == 1, "the stale coarse file (and its minutes) were rebuilt from the ticks"
 
 
-def test_bars_finer_than_15_minutes_are_not_kept_as_their_own_file(tmp_path):
+def test_bars_finer_than_5_minutes_are_not_kept_as_their_own_file(tmp_path):
     h, _, _ = setup(tmp_path)
+    h.bars("NQ", BarSpec("time", 180), D)
+    assert not list((tmp_path / "cache").glob("*.t180.pkl"))
     h.bars("NQ", BarSpec("time", 300), D)
-    assert not list((tmp_path / "cache").glob("*.t300.pkl"))
+    assert list((tmp_path / "cache").glob("*.t300.pkl"))
     h.bars("NQ", BarSpec("time", 900), D)
     assert list((tmp_path / "cache").glob("*.t900.pkl"))
 

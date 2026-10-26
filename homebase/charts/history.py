@@ -34,7 +34,7 @@ from .store import TickStore
 M1 = BarSpec("time", 60)
 CACHE_VERSION = 2
 DAY_S = 86400          # a session fits inside one day: its bars of this size or longer are one bar
-COARSE_MIN = 900        # time bars this coarse (a whole number of minutes) are also kept per session on disk
+COARSE_MIN = 300        # time bars this coarse (a whole number of minutes) are also kept per session on disk
 MEMO_CELLS = 4_000_000  # what the memo may hold across sessions, in cells (a bar, plus each footprint level -- counted for
                         # fp and again for fpn --, tape order, big print, sweep and bubble it carries; ~250 B each in Python
                         # at most, so ~1 GB). A weight, not a count: a daily or weekly chart keeps one bar a session, so its
