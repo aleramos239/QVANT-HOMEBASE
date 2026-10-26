@@ -104,7 +104,7 @@ html.hb-apple #tabStrip .tab-add:active { background: var(--a-fill-press); }
 html.hb-apple #tabStrip .tab-add .icw { width: 15px; height: 15px; background: currentColor; -webkit-mask: var(--sf-plus) center / 13px 13px no-repeat; mask: var(--sf-plus) center / 13px 13px no-repeat; }
 html.hb-apple #tabStrip .tab-add .icw svg { display: none; }
 
-/* ---- the chart area: flat panes on the window, hairlines between them, the tool rail in its own column on the left (owner 2026-10-26: not over the chart) ------------- */
+/* ---- the chart area: flat panes on the window, hairlines between them, the tool rail is a full-height panel of its own on the left, like the panes (owner 2026-10-26: not over the chart, not a card) ------------- */
 html.hb-apple body > .main { position: relative; flex: 1 1 auto; min-height: 0; display: flex; gap: 0; padding: 0; border-top: 1px solid var(--a-sep); }
 html.hb-apple #grid { flex: 1 1 auto; min-width: 0; gap: 1px; background: var(--a-sep); }
 html.hb-apple #grid > .panel { border-radius: 0; box-shadow: none; background: var(--c-canvas); --panel: var(--c-canvas); }
@@ -139,10 +139,10 @@ html.hb-apple .tr-sell, html.hb-apple .tr-buy, html.hb-apple .tr-flat { border-r
 html.hb-apple .lg-trade.live::before { border-radius: 9px; }
 html.hb-apple .ev-tip, html.hb-apple .rail-tip { border-radius: 6px; font-size: 11px; line-height: 14px; }
 
-/* the drawing tools: one vertical capsule of glass, 36 wide; 28 buttons; the chosen tool on the grey pill */
-html.hb-apple #rail { position: relative; z-index: 9; flex: none; align-self: flex-start; width: 36px; height: auto; display: flex; flex-direction: column; align-items: center;
-  gap: 4px; padding: 4px 0; margin: 8px; border: 0; border-radius: var(--hb-bubble-r); background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
-  box-shadow: var(--a-platter-shadow); max-height: calc(100% - 16px); overflow-x: hidden; overflow-y: auto; scrollbar-width: none; }
+/* the drawing tools: a flat full-height panel, 44 wide, hairline on its right; 28 buttons; the chosen tool on the grey pill */
+html.hb-apple #rail { position: relative; z-index: 9; flex: none; align-self: stretch; width: 44px; height: auto; display: flex; flex-direction: column; align-items: center;
+  gap: 4px; padding: 8px 0; margin: 0; border: 0; border-right: 1px solid var(--a-sep); border-radius: 0; background: var(--c-canvas); -webkit-backdrop-filter: none; backdrop-filter: none;
+  box-shadow: none; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; }
 html.hb-apple #rail::-webkit-scrollbar { display: none; }
 html.hb-apple #rail .rail-btn { flex: none; width: 28px; height: 28px; border-radius: var(--hb-bubble-r); background: transparent; color: var(--a-label); transform: none; transition: background-color 120ms ease; }
 html.hb-apple #rail .rail-btn .ic { width: 17px; height: 17px; stroke-width: 1.6; }
