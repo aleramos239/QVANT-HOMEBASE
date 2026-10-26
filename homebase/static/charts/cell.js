@@ -872,6 +872,15 @@ class Cell {
     requestAnimationFrame(() => this.placeGear());
     this.ov = this.host.overlays ? this.host.overlays(this) : [];
     this.pineSync();
+    // a settings change rebuilds the overlays, which paint on their own clock: without this the change showed only at
+    // the next bar or pan, or after the eye was clicked off and on (the owner, 2026-10-26)
+    const ov = this.ov;
+    requestAnimationFrame(() => { if (this.ov === ov) this.repaintOverlays(); });
+  }
+
+  repaintOverlays() {
+    for (const o of this.ov) { if (o && o.onIndicators) { try { o.onIndicators(); } catch (e) { console.error(e); } } }
+    this.redrawEvents();   // the calendar flags read the events indicator's settings too
   }
 
   restyle() { if (this.chart) this.build(this.viewNow()); }
@@ -1281,8 +1290,7 @@ class Cell {
     if (this.pine && this.pine.get(uid)) this.pineDraw(this.pine.get(uid));   // its marks and drawings follow the eye too
     // the overlay layers (flow bubbles, Level 2 lines, the book's events, the heatmap) read the eye themselves but
     // repainted only on a new bar or a pan: an eye click left them as they were
-    for (const o of this.ov) { if (o && o.onIndicators) { try { o.onIndicators(); } catch (e) { console.error(e); } } }
-    this.redrawEvents();   // the calendar flags read the events indicator's eye too
+    this.repaintOverlays();
     this.legendRows();
     this.legend(this.hover);
   }

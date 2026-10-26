@@ -59,8 +59,10 @@ refresh-after-push and refresh-after-action (`_request_flush`, scheduling
 09:29:50-09:30:30 ET on weekdays, and also while ANY bot day state is
 `placing` (a broker ack is outstanding on this same loop). Fill events still
 publish immediately during the pause — `_on_entity` never rebuilds a view
-inline, so it stays O(1) regardless of the pause; a slow listener would
-delay the adapter's websocket reader. A settings change (`set_settings`: a
+inline, so it stays O(1) regardless of the pause; a slow listener there would
+delay the adapter's websocket reader. One exception to "no view" (owner, 2026-10-26: the chart kept a stopped-out
+position for 40 s): an account with a fill or a finished chart action in the pause publishes its own changed view as
+`account_live`, from the flush loop (`_flush_hot`), never inline; the rest waits for 09:30:30. A settings change (`set_settings`: a
 disk write, a rebuild and a publish) is refused in the same pause, except
 one whose only effect is switching chart trading off. `disable()` (the
 desk's Kill) is never paused: an emergency switch-off must always take
@@ -523,6 +525,7 @@ class ChartDesk:
         self._attached: dict[str, object] = {}
         self._last_ids: list | None = None
         self._last_acct: dict[str, dict] = {}
+        self._hot: set[str] = set()      # accounts with a fill or a finished chart action in the pause: their view still goes out
         self._last_bot: dict | None = None
         self._flush_handle: Optional[tuple] = None     # (loop, handle): a flush asked for, not run yet
         self._flush_gap_until = 0.0                    # loop.time(): asks before this wait for it
@@ -685,8 +688,11 @@ class ChartDesk:
         listens, and nothing while the 9:30 fire is protected (P2) — no view
         is rebuilt or serialized then; the next flush after the pause picks
         up whatever changed in the meantime. True when it published."""
-        if not self._subs or self._views_paused():
+        if not self._subs:
             return False
+        if self._views_paused():
+            return self._flush_hot()
+        self._hot.clear()
         if list(self._accts()) != self._last_ids:
             self.publish_state()
             return True
@@ -702,6 +708,20 @@ class ChartDesk:
             self._last_bot = b
             self.publish("bot", b)
             out = True
+        return out
+
+    def _flush_hot(self) -> bool:
+        """The pause lets ONE thing through (the owner, 2026-10-26: a stop filled at 09:29:52 and the chart kept the
+        position and its orders to 09:30:30): the view of an account that just had a fill or a finished chart action,
+        as `account_live`. Only those accounts, only when the view changed -- the bots' pending orders and the rest of
+        the desk stay quiet until the pause ends."""
+        out = False
+        for aid in [a for a in self._hot if a in self._accts()]:
+            v = self.account_view(aid)
+            if v != self._last_acct.get(aid):
+                self._last_acct[aid] = v
+                self.publish("account_live", v)
+                out = True
         return out
 
     def _safe_flush(self) -> bool:
@@ -770,6 +790,7 @@ class ChartDesk:
             fv = self._fill_view(aid, ent)
             self._fills.setdefault(aid, deque(maxlen=FILLS_KEPT)).append(fv)
             self.publish("fill", {"account": aid, "fill": fv})
+            self._hot.add(aid)
         self._request_flush()
 
     # --- settings (the desk page) ----------------------------------------------
@@ -1010,6 +1031,7 @@ class ChartDesk:
         out = {"results": results}
         self._done[(action, cid)] = (self._mono(), out)
         self.publish("result", {"client_id": cid, "action": action, **out})
+        self._hot.update(a for a in results if a in self._accts())
         self._request_flush()           # the accounts' views follow at once, not at the next watch
         return out
 

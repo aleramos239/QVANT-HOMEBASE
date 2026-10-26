@@ -188,7 +188,36 @@ def test_nothing_is_rebuilt_or_serialized_at_093000(tmp_path):
         return drain(q)
 
     evs = [e for e, _ in run(go())]
-    assert evs == ["state", "fill"]                        # only the baseline + the (cheap) fill
+    # the baseline, the (cheap) fill, and the filled account's own view (2026-10-26); nothing else is rebuilt
+    assert evs == ["state", "fill", "account_live"]
+
+
+def test_a_fill_in_the_pause_still_publishes_that_accounts_view(tmp_path):
+    """2026-10-26: a stop filled at 09:29:52 and the chart kept the position to 09:30:30. An account with a fill in the
+    pause publishes its own (changed) view as account_live; another account's change stays held until the pause ends."""
+    desk, eng, ads, clock, mono, saved = mkdesk(tmp_path, et=(9, 29))
+    desk.attach("a1", ads["a1"])
+
+    async def go():
+        q = desk.subscribe()
+        desk.flush()                                       # baseline "state"
+        drain(q)
+        clock.dt += dt.timedelta(seconds=60)               # 09:30:00: inside the pause
+        ads["a2"]._connected = False                       # a change nobody filled on: held
+        ads["a1"].view["positions"] = []
+        ads["a1"]._notify("fill", {"id": 9, "orderId": 5, "contractId": 1, "action": "Buy",
+                                   "qty": 1, "price": 100.0, "timestamp": "t"})
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        got = drain(q)
+        clock.dt += dt.timedelta(seconds=30)               # 09:30:30: the pause ends
+        desk.flush()
+        return got, drain(q)
+
+    got, after = run(go())
+    assert [e for e, _ in got] == ["fill", "account_live"]
+    assert got[1][1]["id"] == "a1"
+    assert [(e, d["id"]) for e, d in after] == [("account", "a2")]
 
 
 def test_the_refresh_resumes_at_093030(tmp_path):
@@ -318,9 +347,9 @@ def test_a_flush_that_publishes_nothing_starts_no_gap(tmp_path, monkeypatch):
     assert run(go()) == ["state", "result", "account"]          # the push was not held 5 s
 
 
-def test_a_chart_action_inside_the_pause_publishes_no_view(tmp_path):
-    """09:29:50-09:30:30: the finished action asks, the paused flush publishes nothing;
-    the watch after the pause does."""
+def test_a_chart_action_inside_the_pause_publishes_only_its_accounts_view(tmp_path):
+    """09:29:50-09:30:30: the finished action's account publishes its own view (account_live); the rest of the
+    views wait for the watch after the pause."""
     desk, eng, ads, clock, *_ = mkdesk(tmp_path, et=(9, 29))
     _shows_its_order(ads["a2"])                                   # a2 is not booked to a bot
 
@@ -338,7 +367,7 @@ def test_a_chart_action_inside_the_pause_publishes_no_view(tmp_path):
 
     out, during, after = run(go())
     assert out["results"]["a2"]["ok"] is True
-    assert during == ["state", "result"] and after == ["account"]
+    assert during == ["state", "result", "account_live"] and after == []
 
 
 def test_a_bot_kill_publishes_the_bot_view_at_once(tmp_path):
