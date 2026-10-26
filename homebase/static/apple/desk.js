@@ -102,12 +102,13 @@
       setupBox.replaceChildren(...rows);
     }
 
-    /* A GROUP (the page's DESKGROUPS, words in desklab.js): its kind, how many strategies, the account it is scored on. Display only. */
+    /* A GROUP (the page's DESKGROUPS, words in desklab.js): its kind, how many strategies, the account it is scored on, its account cycle. */
     const groupped = () => { try { return VIEW && VIEW.k === 'group' ? ((DESKGROUPS.groups || []).find((g) => g && g.id === VIEW.name) || null) : null; } catch (_) { return null; } };
     function setupGroup(g) {
-      let res = null;
+      let res = null, cycle = null;
       try { res = DESKGRES[g.id] || null; } catch (_) {}
-      const rows = window.DeskLab ? window.DeskLab.groupSetupRows(g, res).map(([k, v]) => row(k, v)) : [];
+      try { cycle = (ST.groups || {})[g.id] || null; } catch (_) {}
+      const rows = window.DeskLab ? window.DeskLab.groupSetupRows(g, res, cycle).map(([k, v]) => row(k, v)) : [];
       setupBox.replaceChildren(...rows);
     }
 

@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=3">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=33"></script>
+<script src="/static/desklab.js?v=35"></script>
 <script src="/static/desklabset.js?v=2"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
@@ -825,8 +825,8 @@
       <span class="spacer" style="flex:1"></span>
       <button class="cal-nav" onclick="closeGroupMgr()" title="Close" aria-label="Close">&times;</button>
     </div>
-    <p class="mcap" style="margin:0 0 10px">A group is display only: it switches nothing on and books no account. A strategy is in one
-      group. The same code tried two ways (an eval and a funded account) is two strategies, each in its own group.</p>
+    <p class="mcap" style="margin:0 0 10px">A group shows its strategies' results together. On its page, the Account cycle (off until you switch it on) makes
+      them take turns across the accounts you tick. A strategy is in one group. The same code tried two ways (an eval and a funded account) is two strategies, each in its own group.</p>
     <div class="field" style="margin-bottom:6px"><label for="groupNewName">New group</label>
       <div style="display:flex;gap:8px;align-items:center">
         <input id="groupNewName" autocomplete="off" spellcheck="false" maxlength="40" placeholder="e.g. Eval — Lucid 50K"
@@ -2031,24 +2031,64 @@ function cycleHtml(g) {
   const boxes = Object.keys(ST.accounts || {}).map(a => `<label class="feed-row" style="cursor:pointer">
       <span class="h"><input type="checkbox" class="cyc-acct" data-acct="${esc(a)}" ${chosen.has(a) ? "checked" : ""}
         onchange="saveCycle(${jsArg(g.id)})"> ${esc(acctShort(a))}${isDemoAcct(a) ? ' <span class="dim">· paper/demo</span>' : ""}</span></label>`).join("");
-  const missing = cyc ? mem.flatMap(m => cyc.accounts.filter(a => !((ST.book || {})[m] || []).some(r => r.account === a))
-      .map(a => `${stratLabel(m)} is not booked on ${acctShort(a)}`)) : [];
+  const missing = cyc ? cyc.accounts.map(a => [a, mem.filter(m => !((ST.book || {})[m] || []).some(r => r.account === a)).length])
+      .filter(x => x[1]).map(([a, n]) => `${acctShort(a)}: ${n} of ${mem.length} strategies not booked`) : [];
   const out = cyc ? cyc.members.filter(m => !mem.includes(m)) : [], add = cyc ? mem.filter(m => !cyc.members.includes(m)) : [];
   const num = (cls, v, ph) => `<input class="${cls}" type="text" inputmode="decimal" autocomplete="off" value="${esc(String(v))}"
-      placeholder="${ph}" style="width:90px" onfocus="FREEZE=true" onblur="FREEZE=false" onchange="FREEZE=false;saveCycle(${jsArg(g.id)})">`;
+      placeholder="${ph}" style="width:72px;max-width:100%;text-align:right" onfocus="FREEZE=true" onblur="FREEZE=false" onchange="FREEZE=false;saveCycle(${jsArg(g.id)})">`;
   return `<div class="sec"><h2>Account cycle</h2><div class="agroup feed static">
     <div class="feed-row"><span class="h">Take turns across these accounts</span>
       <button class="switch" role="switch" aria-label="Account cycle" aria-checked="${on}"
         title="${on ? "ON — each trade goes to the next account below" : "OFF — each strategy trades its own booked accounts"}"
-        onclick="setCycle(${jsArg(g.id)}, ${!on})"></button></div>
+        onclick="toggleCycle(${jsArg(g.id)})"></button></div>
     ${on && cyc.next ? `<div class="feed-row"><span class="h">Next account: ${esc(acctShort(cyc.next))}</span></div>` : ""}
     <div class="feed-row"><span class="h">Risk per trade ($)</span><span class="t">${num("cyc-risk", cyc ? cyc.risk_usd : 1000, "1000")}</span></div>
     <div class="feed-row"><span class="h">Most per trade (full contracts)</span><span class="t">${num("cyc-minis", cyc ? cyc.max_minis : 17, "17")}</span></div>
     ${boxes}</div>
     <div class="mcap">One trade goes to one account, the next ticked one that is free. A trade the opposite way to one open on
       another of these accounts is skipped. Risk 0 = each strategy's own size.</div>
-    ${missing.length ? `<div class="mcap warn">${esc(missing.join(" · "))}.</div>` : ""}
-    ${out.length || add.length ? `<div class="mcap warn">The group's strategies changed: tick an account (or change a number) to update the cycle.</div>` : ""}</div>`;
+    ${missing.length ? `<div class="mcap warn">${esc(missing.join(" · "))}.</div>
+      ${on ? `<div class="sd-actions"><button class="btn btn-default btn-sm" onclick="bookCycle(${jsArg(g.id)})">Book every strategy on these accounts</button></div>`
+           : `<div class="mcap">Switch the cycle on first, then book its strategies here (booked with the cycle off, each strategy trades every account it is booked on).</div>`}` : ""}
+    ${out.length || add.length ? `<div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="syncCycle(${jsArg(g.id)})">Update the cycle to the group's strategies</button></div>` : ""}</div>`;
+}
+function cycleLive(members) {        // ", 3 of them LIVE" for the accounts these strategies are booked on
+  const live = new Set(members.flatMap(m => ((ST.book || {})[m] || []).map(r => r.account)).filter(a => !isDemoAcct(a))).size;
+  return live ? `, ${live} of them LIVE` : "";
+}
+/* The cycle follows its Desk group: its strategies are the group's Lab strategies; a group deleted takes its cycle with it.
+   A cycle left with no strategy goes off. */
+async function syncCycle(id) {
+  const cyc = ((ST && ST.groups) || {})[id];
+  if (!cyc) return;
+  const g = groupOf(id), members = g ? cycleMembers(g) : [];
+  if (g && JSON.stringify(members) === JSON.stringify(cyc.members)) return;
+  let r, err = null;
+  try {
+    r = g ? await post("/api/groups", {id, members, ...(members.length ? {} : {on: false})}) : await post("/api/groups/delete", {id});
+  } catch (e) { err = e || new Error("no answer"); }
+  refresh();
+  const why = DEMO ? "" : answerWhy(r, err);
+  if (why) toast(`Account cycle NOT updated — ${why}.`, 8000);
+}
+/* Book every strategy of an ON cycle on the cycle's accounts it is not booked on yet (size 1: the cycle sizes each order). Only
+   while the cycle is on: booked with it off, each strategy would trade every account at once. */
+async function bookCycle(id) {
+  const cyc = ((ST && ST.groups) || {})[id];
+  if (!cyc || !cyc.on) return;
+  const todo = cyc.members.map(m => [m, cyc.accounts.filter(a => !((ST.book || {})[m] || []).some(r => r.account === a))]).filter(x => x[1].length);
+  const n = todo.reduce((k, x) => k + x[1].length, 0), live = new Set(todo.flatMap(x => x[1]).filter(a => !isDemoAcct(a))).size;
+  if (!n || !await confirmDlg(`Book ${n} account${n === 1 ? "" : "s"}?`, `${todo.length} strateg${todo.length === 1 ? "y" : "ies"} on the cycle's accounts` +
+      `${live ? ` (${live} LIVE)` : ""}. Each trade still goes to ONE account, in turn, sized by the cycle.`, "Book", false)) return;
+  const bad = [];
+  for (const [m, add] of todo) {
+    const rows = ((ST.book || {})[m] || []).map(r => ({account: r.account, qty: r.qty})).concat(add.map(a => ({account: a, qty: 1})));
+    let r = null;
+    try { r = await post("/api/book", {strategy: m, assignments: rows}); } catch (_) { r = null; }
+    if (!r || r.ok !== true) bad.push(`${stratLabel(m)}: ${labSafe(() => DeskLab.refusalText(r), "refused")}`);
+  }
+  refresh();
+  if (!DEMO) toast(bad.length ? `Not all booked — ${bad.join(" · ")}` : "Every strategy is booked on the cycle's accounts.", bad.length ? 9000 : 4200);
 }
 function cycleBody(id) {
   const g = groupOf(id), root = document.querySelector("#viewStrat");
@@ -2067,9 +2107,12 @@ async function saveCycle(id, extra) {
   if (why) toast(`Account cycle NOT changed — ${why}.`, 8000);
   return !why;
 }
+const toggleCycle = (id) => setCycle(id, !(((ST && ST.groups) || {})[id] || {}).on);
 async function setCycle(id, on) {
   if (switchBounced("cycle:" + id)) return;
   const b = cycleBody(id);
+  if (!on && b.members.some(m => ((ST.book || {})[m] || []).length > 1) && !await confirmDlg(`Stop the account cycle?`,
+      `Each strategy's next trade then goes to EVERY account it is booked on${cycleLive(b.members)}.`, "Stop the cycle", true)) { refresh(); return; }
   if (on) {
     const live = b.accounts.filter(a => !isDemoAcct(a)).length;
     if (!await confirmDlg(`Start the account cycle?`, `${b.members.length} strateg${b.members.length === 1 ? "y" : "ies"} take turns across ${b.accounts.length} account${b.accounts.length === 1 ? "" : "s"}${live ? ` (${live} LIVE)` : ""}` +
@@ -2080,8 +2123,13 @@ async function setCycle(id, on) {
 async function deleteGroup(id) {
   const g = groupOf(id);
   if (!g) return;
-  if (!await confirmDlg(`Delete ${g.name}?`, "Its strategies stay on the Desk and go back under Strategies. Nothing is switched off.", "Delete", false)) return;
-  if (await groupPost("delete", {id})) toast(`${g.name} is deleted. Its strategies are in no group.`);
+  const on = !!(((ST && ST.groups) || {})[id] || {}).on;
+  if (!await confirmDlg(`Delete ${g.name}?`, on ? `Its account cycle stops too: each strategy's next trade goes to EVERY account it is booked on${cycleLive(cycleMembers(g))}. Its strategies stay on the Desk, in no group.`
+                                             : "Its strategies stay on the Desk and go back under Strategies. Nothing is switched off.", "Delete", on)) return;
+  if (await groupPost("delete", {id})) {
+    await syncCycle(id);
+    toast(`${g.name} is deleted. Its strategies are in no group.`);
+  }
 }
 
 const hmin = (t) => { const m = /^(\d{1,2}):(\d\d)/.exec(String(t || "")); return m ? +m[1] * 60 + +m[2] : null; };
@@ -2239,7 +2287,8 @@ function renderSide(names, hiddenCount, issues) {
     const k = "g:" + g.id, rows = g.members.map(id => rowOf[id]).filter(Boolean);
     const opened = sel("group", g.id) !== "";
     const open = `<button class="sh-btn" title="Open ${esc(g.name)}" aria-label="Open ${esc(g.name)}"${opened ? ' aria-current="page" style="color:var(--foreground)"' : ""} onclick="setView('group',${jsArg(g.id)})">›</button>`;
-    return head(k, esc(g.name), rows.length, open).replace('class="sh', 'class="sh sub') + (SIDE_FOLD[k] ? "" : rows.join("") || `<button class="side-more" onclick="openGroupMgr()">Empty · add strategies</button>`);
+    const cyc = ((ST.groups || {})[g.id] || {}).on ? '<span class="tag" title="Its account cycle is on">cycle</span>' : "";
+    return head(k, esc(g.name), rows.length, cyc + open).replace('class="sh', 'class="sh sub') + (SIDE_FOLD[k] ? "" : rows.join("") || `<button class="side-more" onclick="openGroupMgr()">Empty · add strategies</button>`);
   }).join("");
   const rank = (a) => a.env === "live" ? 0 : a.env === "paper" ? 2 : 1;
   const accts = Object.entries(ST.accounts || {}).sort((a, b) => rank(a[1]) - rank(b[1]));
@@ -4268,7 +4317,18 @@ async function addGroup() {
   }
 }
 const renameGroup = (id, name) => groupPost("rename", {id, name: String(name).trim()});
-const moveToGroup = (strategy, group) => groupPost("move", {strategy, group: group || null});
+async function moveToGroup(strategy, group) {
+  const old = DESKGROUPS.groups.find(g => g.members.includes(strategy)), oc = old ? ((ST && ST.groups) || {})[old.id] : null;
+  if (oc && oc.on && oc.members.includes(strategy) && ((ST.book || {})[strategy] || []).length > 1 && !await confirmDlg(
+      `Take ${stratLabel(strategy)} out of the account cycle?`,
+      `Its next trade goes to EVERY account it is booked on${cycleLive([strategy])}, not one at a time.`, "Take it out", true)) {
+    renderGroupMgr(true);
+    return;
+  }
+  if (!await groupPost("move", {strategy, group: group || null})) return;
+  if (old) await syncCycle(old.id);
+  if (group) await syncCycle(group);
+}
 $("#groupOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeGroupMgr();
 });

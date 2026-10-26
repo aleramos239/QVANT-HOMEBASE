@@ -378,7 +378,7 @@
   }
 
   /* ---- Desk groups (chart service, GET /api/tester/deskgroups and /deskgroups/results): named sets of strategies that run
-     together. Bookkeeping and display only: a group switches nothing on and books no account. Its combined results are its
+     together. A group trades only through its account cycle (index.html cycleHtml, off by default). Its combined results are its
      members' SAVED runs put together as one account's trades. ---- */
   var GROUP_KINDS = [
     { k: "eval", label: "Eval", note: "Leads with the odds of passing the eval." },
@@ -387,7 +387,7 @@
   ];
   var NO_GROUP = "No group";
   var EMPTY_GROUP = "No strategy is in this group yet. Add one from Manage groups.";
-  var GROUP_NOTE = "Display only: a group switches nothing on and books no account. Its results are its strategies' saved runs put together as one account's trades.";
+  var GROUP_NOTE = "Its results are its strategies' saved runs put together as one account's trades. The group trades only through its Account cycle (below), and only once that is switched on.";
   var GROUP_MISSING = "That group is not there any more.";
   var NO_GROUP_RUNS = "No saved run to put together yet.";
   var GROUP_FIG_ROWS = ["Net", "Win rate", "Trades", "Profit factor", "Deepest drawdown"];
@@ -457,14 +457,15 @@
   }
   var NO_PROP_GROUP = "No prop sim: no saved run to score yet.";
   // The skin's Setup card for a group: [[name, value], ...]
-  function groupSetupRows(group, res) {
+  function groupSetupRows(group, res, cycle) {
     var g = isObj(group) ? group : {}, count = Array.isArray(g.members) ? g.members.length : 0;
+    var c = isObj(cycle) ? cycle : null, n = c && Array.isArray(c.accounts) ? c.accounts.length : 0;
     var p = isObj(res) && isObj(res.prop) ? (res.prop.unseen || res.prop.build) : null;
     return [
       ["Kind", kindLabel(text(g.kind))],
       ["Strategies", String(count)],
       ["Account", text(isObj(p) ? p.account : "") || DASH],
-      ["Orders", "None: display only"],
+      ["Orders", c && c.on ? "Account cycle: " + n + " account" + (n === 1 ? "" : "s") + ", one a trade" : "None: account cycle off"],
     ];
   }
 

@@ -1210,7 +1210,7 @@ test('a group page before its first answer says so, and a hostile name or senten
     DESKGROUPS: { groups: [{ id: 'g1', name: hostile, kind: 'eval', members: [hostile] }], ok: true },
     DESKGRES: { g1: { members: [{ strategy: hostile, label: hostile, state: 'done', build: { net: 1 }, unseen: { net: 1 } }],
       left_out: [{ strategy: hostile, why: hostile }], build: null, unseen: null, prop: { build: null, unseen: null } } },
-    eqPlot: () => '' });
+    eqPlot: () => '', labSafe: (f, d) => { try { return f(); } catch (_) { return d; } } });
   vm.runInContext(`const jsArg = (v) => esc(JSON.stringify(String(v == null ? "" : v)));
     const groupOf = (id) => DESKGROUPS.groups.find(g => g.id === id) || null;
     ${GROUP_PAGE.slice(GROUP_PAGE.indexOf('const GROUP_FAULT'), GROUP_PAGE.indexOf('async function deleteGroup('))}
@@ -1220,10 +1220,13 @@ test('a group page before its first answer says so, and a hostile name or senten
   assert.match(ctx.gone, /That group is not there any more/);
 });
 
-test('the group writes go to the chart service by name, and a group id is only a JS string literal in a handler', () => {
+test('the group writes go to the chart service by name (the account cycle to the desk), and a group id is only a JS string literal in a handler', () => {
   const urls = [...new Set([...GROUP_PAGE.matchAll(/["'`](\/api\/[^"'`$?]*)/g)].map((m) => m[1]))].sort();
-  assert.deepEqual(urls, ['/api/tester/deskgroups', '/api/tester/deskgroups/', '/api/tester/deskgroups/results']);
-  assert.doesNotMatch(GROUP_PAGE.replace(/\/\*[\s\S]*?\*\//g, ''), /\/api\/(strategy|book|status)/, 'a group never talks to the desk');
+  // the Desk is reached only by the group's account cycle (owner 2026-10-25): its settings and booking its strategies
+  assert.deepEqual(urls, ['/api/book', '/api/groups', '/api/groups/delete', '/api/tester/deskgroups', '/api/tester/deskgroups/',
+                          '/api/tester/deskgroups/results']);
+  assert.doesNotMatch(GROUP_PAGE.replace(/\/\*[\s\S]*?\*\//g, ''), /\/api\/(strategy|status|arm|kill|rotation)/, 'nothing else of the desk');
+  assert.equal((GROUP_PAGE.match(/\/api\/book/g) || []).length, 1, 'booking only from bookCycle (the cycle on)');
   const handlers = [...GROUP_PAGE.matchAll(/on(?:click|keydown)="([^"]*)"/g)].map((m) => m[1]);
   assert.ok(handlers.length >= 4);
   for (const h of handlers) for (const m of h.matchAll(/\$\{([^}]*)\}/g)) assert.match(m[1], /^jsArg\([\w.]+\)$/, h);
