@@ -172,6 +172,10 @@ class GroupMixin:
                             "last": old.get("last") if old.get("last") in accounts else None}
         self._save_groups()
         self.journal("group_set", group=gid, **{k: v for k, v in self.groups[gid].items() if k != "last"})
+        if on:                                       # each member's own Take turns goes on with the cycle (owner 2026-10-25):
+            for m in members:                        # its page says so, and with the cycle off later it still takes one
+                if not self.rotating(m):             # account a trade instead of every account at once
+                    self.set_rotation(m, True)
         return self.groups_view()[gid]
 
     def delete_group(self, gid: str) -> None:

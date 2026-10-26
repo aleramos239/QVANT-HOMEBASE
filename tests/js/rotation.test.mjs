@@ -11,10 +11,10 @@ const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
 const ESC = between('const esc = (v) =>', 'async function chartPost(');
 const CODE = between('/* Take turns (account rotation', 'function removeAsg(');
 
-function ctx({ rotation = { on: false, next: null }, book = ['a', 'b'], live = false, yes = true, reply } = {}) {
+function ctx({ rotation = { on: false, next: null }, book = ['a', 'b'], live = false, yes = true, reply, groups } = {}) {
   const sent = [], toasts = [], asked = [];
   const c = vm.createContext({
-    ST: { strategies: { s1: { rotation } }, book: { s1: book.map((account) => ({ account, qty: 1 })) } },
+    ST: { strategies: { s1: { rotation } }, book: { s1: book.map((account) => ({ account, qty: 1 })) }, groups },
     DEMO: false,
     acctShort: (id) => id.toUpperCase(),
     stratLabel: (n) => n,
@@ -83,4 +83,11 @@ test('the strategy name reaches the handler as one JS string literal', () => {
   new Function('setRotation', 'alert', h)((...a) => calls.push(a), (x) => alerts.push(x));
   assert.deepEqual(alerts, []);
   assert.deepEqual(calls, [["x');alert(1);('", true]]);
+});
+
+test('in an ON account cycle the page says the cycle picks the account', () => {
+  const groups = { g4: { name: 'apex 300k', on: true, members: ['s1'], next: 'b' } };
+  const h = ctx({ rotation: { on: true, next: 'a' }, groups }).c.rotationHtml('s1');
+  assert.match(h, /In the apex 300k account cycle: it picks the account \(next: B\)/);
+  assert.doesNotMatch(ctx({ groups: { g4: { ...groups.g4, on: false } } }).c.rotationHtml('s1'), /account cycle/);
 });

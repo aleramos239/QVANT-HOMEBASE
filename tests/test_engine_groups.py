@@ -195,3 +195,14 @@ def test_rounding_never_goes_more_than_ten_percent_over(tmp_path, risk, qty):
     d.eng.set_group("g", {"name": "A", "members": [lu.LAB], "accounts": ["a1"], "on": True, "risk_usd": risk})
     lu.send(d, [lu.entry()])
     assert [b.qty for b in d.ads["a1"].brackets] == ([qty] if qty else [])
+
+
+def test_cycle_on_switches_on_each_members_take_turns(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    group(eng, on=False)
+    assert not eng.rotating(tlab.LAB) and not eng.rotating(TWO)          # off: nothing of theirs changes
+    group(eng)
+    assert eng.rotating(tlab.LAB) and eng.rotating(TWO)
+    eng.set_group("g", {"on": False})                                    # off again: each keeps taking turns on its own
+    assert eng.rotating(tlab.LAB) and eng.rotating(TWO)
+    assert took(enter(eng, tlab.LAB, tlab.leg())) == ["a1"]              # one account, not all three

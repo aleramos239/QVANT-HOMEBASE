@@ -2053,6 +2053,9 @@ function cycleHtml(g) {
            : `<div class="mcap">Switch the cycle on first, then book its strategies here (booked with the cycle off, each strategy trades every account it is booked on).</div>`}` : ""}
     ${out.length || add.length ? `<div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="syncCycle(${jsArg(g.id)})">Update the cycle to the group's strategies</button></div>` : ""}</div>`;
 }
+function cycleCopies(members) {     // the strategies that, out of the cycle, would send each trade to several accounts at once
+  return members.filter(m => ((ST.book || {})[m] || []).length > 1 && !((((ST.strategies || {})[m]) || {}).rotation || {}).on);
+}
 function cycleLive(members) {        // ", 3 of them LIVE" for the accounts these strategies are booked on
   const live = new Set(members.flatMap(m => ((ST.book || {})[m] || []).map(r => r.account)).filter(a => !isDemoAcct(a))).size;
   return live ? `, ${live} of them LIVE` : "";
@@ -2112,8 +2115,9 @@ const toggleCycle = (id) => setCycle(id, !(((ST && ST.groups) || {})[id] || {}).
 async function setCycle(id, on) {
   if (switchBounced("cycle:" + id)) return;
   const b = cycleBody(id);
-  if (!on && b.members.some(m => ((ST.book || {})[m] || []).length > 1) && !await confirmDlg(`Stop the account cycle?`,
-      `Each strategy's next trade then goes to EVERY account it is booked on${cycleLive(b.members)}.`, "Stop the cycle", true)) { refresh(); return; }
+  const copies = on ? [] : cycleCopies(b.members);
+  if (copies.length && !await confirmDlg(`Stop the account cycle?`,
+      `${copies.length} strateg${copies.length === 1 ? "y" : "ies"} then send each trade to EVERY account booked${cycleLive(copies)}.`, "Stop the cycle", true)) { refresh(); return; }
   if (on) {
     const live = b.accounts.filter(a => !isDemoAcct(a)).length;
     if (!await confirmDlg(`Start the account cycle?`, `${b.members.length} strateg${b.members.length === 1 ? "y" : "ies"} take turns across ${b.accounts.length} account${b.accounts.length === 1 ? "" : "s"}${live ? ` (${live} LIVE)` : ""}` +
@@ -2124,8 +2128,8 @@ async function setCycle(id, on) {
 async function deleteGroup(id) {
   const g = groupOf(id);
   if (!g) return;
-  const on = !!(((ST && ST.groups) || {})[id] || {}).on;
-  if (!await confirmDlg(`Delete ${g.name}?`, on ? `Its account cycle stops too: each strategy's next trade goes to EVERY account it is booked on${cycleLive(cycleMembers(g))}. Its strategies stay on the Desk, in no group.`
+  const on = !!(((ST && ST.groups) || {})[id] || {}).on && cycleCopies(cycleMembers(g)).length > 0;
+  if (!await confirmDlg(`Delete ${g.name}?`, on ? `Its account cycle stops too: ${cycleCopies(cycleMembers(g)).length} of its strategies then send each trade to EVERY account booked${cycleLive(cycleCopies(cycleMembers(g)))}. Its strategies stay on the Desk, in no group.`
                                              : "Its strategies stay on the Desk and go back under Strategies. Nothing is switched off.", "Delete", on)) return;
   if (await groupPost("delete", {id})) {
     await syncCycle(id);
@@ -3267,12 +3271,14 @@ async function setBook(strategy, assignments) {
    Turning it OFF with a live account booked asks first: the next trade then goes to every account. */
 function rotationHtml(name) {
   const rot = (((ST.strategies || {})[name]) || {}).rotation || {}, n = ((ST.book && ST.book[name]) || []).length;
-  if (n < 2 && !rot.on) return "";
+  const cyc = Object.values((ST && ST.groups) || {}).find(g => g.on && (g.members || []).includes(name)) || null;
+  if (n < 2 && !rot.on && !cyc) return "";
   return `<div class="agroup feed static"><div class="feed-row"><span class="h">Take turns: one account a trade</span>
     <button class="switch" role="switch" aria-label="Take turns" aria-checked="${!!rot.on}"
       title="${rot.on ? "ON — each trade goes to the next account in the list" : "OFF — every trade goes to every account"}"
       onclick="setRotation(${jsArg(name)}, ${!rot.on})"></button></div>
-    ${rot.on && rot.next ? `<div class="feed-row"><span class="h">Next account: ${esc(acctShort(rot.next))}</span></div>` : ""}</div>`;
+    ${cyc ? `<div class="feed-row"><span class="h">In the ${esc(cyc.name)} account cycle: it picks the account (next: ${esc(acctShort(cyc.next || ""))})</span></div>`
+          : rot.on && rot.next ? `<div class="feed-row"><span class="h">Next account: ${esc(acctShort(rot.next))}</span></div>` : ""}</div>`;
 }
 async function setRotation(name, on) {
   if (switchBounced("rotation:" + name)) return;
@@ -4320,7 +4326,7 @@ async function addGroup() {
 const renameGroup = (id, name) => groupPost("rename", {id, name: String(name).trim()});
 async function moveToGroup(strategy, group) {
   const old = DESKGROUPS.groups.find(g => g.members.includes(strategy)), oc = old ? ((ST && ST.groups) || {})[old.id] : null;
-  if (oc && oc.on && oc.members.includes(strategy) && ((ST.book || {})[strategy] || []).length > 1 && !await confirmDlg(
+  if (oc && oc.on && oc.members.includes(strategy) && cycleCopies([strategy]).length && !await confirmDlg(
       `Take ${stratLabel(strategy)} out of the account cycle?`,
       `Its next trade goes to EVERY account it is booked on${cycleLive([strategy])}, not one at a time.`, "Take it out", true)) {
     renderGroupMgr(true);
