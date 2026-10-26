@@ -106,6 +106,13 @@ def root_of(symbol: str) -> str:
     return s
 
 
+def market_of(symbol: str) -> str:
+    """The market a contract trades, a micro counted as its full contract's: 'MNQZ6' -> 'NQ', 'NQZ6' -> 'NQ', 'MNQ' -> 'NQ'.
+    (Two positions of one market, one in NQ and one in MNQ, are the same bet: the account cycle's hedge check, 2026-10-26.)"""
+    r = root_of(symbol)
+    return _PRICED_ON.get(r, r)
+
+
 def spec_for(symbol: str) -> ContractSpec:
     """ContractSpec for a symbol or root; `known=False` spec if unrecognized."""
     root = root_of(symbol)

@@ -1918,7 +1918,8 @@ function setView(k, name) {
 }
 
 /* ---- DESK GROUPS (2026-10-11): named sets of strategies that run together (an eval group, a funded group ...), kept by the chart
-   service (GET /api/tester/deskgroups). Display and bookkeeping only: a group never switches a strategy on or books an account. A
+   service (GET /api/tester/deskgroups). A group trades only through its ACCOUNT CYCLE (cycleHtml below; the Desk's engine keeps it, and
+   the chart service makes it follow every rename, move and delete, server side). Group ids are never reused. A
    strategy is in ONE group at most; the same code tried two ways (say for an eval and for a funded account) is two strategies, each
    in its own group. A group's combined results are its members' SAVED runs put together as one account's trades
    (GET /api/tester/deskgroups/results, asked only while a group's page is open). The words are DeskLab.groupPage. ---- */
@@ -2049,6 +2050,8 @@ function cycleHtml(g) {
     ${boxes}</div>
     <div class="mcap">One trade goes to one account, the next ticked one that is free. A trade the opposite way to one open on
       another of these accounts is skipped. Risk 0 = each strategy's own size.</div>
+    ${cyc && cyc.outside && Object.keys(cyc.outside).length ? `<div class="mcap warn">${esc(Object.entries(cyc.outside).map(([m, as]) =>
+      `${stratLabel(m)} is booked on ${as.map(acctShort).join(", ")} outside the cycle: it never trades there`).join(" · "))}.</div>` : ""}
     ${missing.length ? `<div class="mcap warn">${esc(missing.join(" · "))}.</div>
       ${on ? `<div class="sd-actions"><button class="btn btn-default btn-sm" onclick="bookCycle(${jsArg(g.id)})">Book every strategy on these accounts</button></div>`
            : `<div class="mcap">Switch the cycle on first, then book its strategies here (booked with the cycle off, each strategy trades every account it is booked on).</div>`}` : ""}
@@ -2132,10 +2135,7 @@ async function deleteGroup(id) {
   const on = !!(((ST && ST.groups) || {})[id] || {}).on && cycleCopies(cycleMembers(g)).length > 0;
   if (!await confirmDlg(`Delete ${g.name}?`, on ? `Its account cycle stops too: ${cycleCopies(cycleMembers(g)).length} of its strategies then send each trade to EVERY account booked${cycleLive(cycleCopies(cycleMembers(g)))}. Its strategies stay on the Desk, in no group.`
                                              : "Its strategies stay on the Desk and go back under Strategies. Nothing is switched off.", "Delete", on)) return;
-  if (await groupPost("delete", {id})) {
-    await syncCycle(id);
-    toast(`${g.name} is deleted. Its strategies are in no group.`);
-  }
+  if (await groupPost("delete", {id})) toast(`${g.name} is deleted. Its strategies are in no group.`);     // its cycle went first, server side
 }
 
 const hmin = (t) => { const m = /^(\d{1,2}):(\d\d)/.exec(String(t || "")); return m ? +m[1] * 60 + +m[2] : null; };
@@ -4311,10 +4311,26 @@ function renderGroupMgr(force) {
         <option value="">${esc(DeskLab.NO_GROUP)}</option>${groups.map(g => `<option value="${esc(g.id)}"${cur && cur.id === g.id ? " selected" : ""}>${esc(g.name)}</option>`).join("")}
       </select></div>`;
   }).join("");
-  $("#groupList").innerHTML = (groups.length ? `<div class="mcap" style="margin:8px 0 2px">Groups</div>${glist}` : "")
+  // an account cycle whose Desk group is gone (a delete from before the chart service kept them in step): shown, so it can be removed
+  const orphans = DESKGROUPS.ok === true ? Object.entries((ST && ST.groups) || {}).filter(([id]) => !groupOf(id)) : [];
+  const olist = orphans.map(([id, c]) => `<div class="acct" style="padding:8px 0;gap:8px;align-items:center">
+      <span class="nm" style="font-size:13px;flex:1;min-width:0">${esc(c.name)} · account cycle ${c.on ? "<b>ON</b>" : "off"}, no group</span>
+      <button class="btn btn-outline btn-sm" onclick="removeOrphanCycle(${jsArg(id)})">Remove</button></div>`).join("");
+  $("#groupList").innerHTML = (olist ? `<div class="mcap warn" style="margin:8px 0 2px">Account cycles with no group</div>${olist}` : "")
+    + (groups.length ? `<div class="mcap" style="margin:8px 0 2px">Groups</div>${glist}` : "")
     + (known.length ? `<div class="mcap" style="margin:12px 0 2px">Strategies</div>${slist}` : `<div class="mcap" style="padding:14px 0">No strategies on the Desk yet.</div>`);
 }
 function openGroupMgr() { renderGroupMgr(true); showOverlay("groupOverlay"); renderGroupMgr(true); }
+async function removeOrphanCycle(id) {
+  const c = ((ST && ST.groups) || {})[id];
+  if (!c || !await confirmDlg(`Remove the ${c.name} account cycle?`, c.on ? `It is ON with no group. Its strategies then trade their own booked accounts again${cycleLive(c.members || [])}.`
+      : "It has no group and is off.", "Remove", !!c.on)) return;
+  let r, err = null;
+  try { r = await post("/api/groups/delete", {id}); } catch (e) { err = e || new Error("no answer"); }
+  refresh();
+  const why = DEMO ? "" : answerWhy(r, err);
+  toast(why ? `Account cycle NOT removed — ${why}.` : `${c.name} account cycle removed.`, why ? 8000 : 4200);
+}
 function closeGroupMgr() { hideOverlay("groupOverlay"); }
 async function addGroup() {
   const name = $("#groupNewName").value.trim();
@@ -4333,9 +4349,15 @@ async function moveToGroup(strategy, group) {
     renderGroupMgr(true);
     return;
   }
-  if (!await groupPost("move", {strategy, group: group || null})) return;
-  if (old) await syncCycle(old.id);
-  if (group) await syncCycle(group);
+  const nc = group ? ((ST && ST.groups) || {})[group] : null;
+  if (nc && nc.on && !(nc.members || []).includes(strategy) && !await confirmDlg(
+      `Add ${stratLabel(strategy)} to the ${nc.name} account cycle?`,
+      `Its trades then go to ONE account at a time of ${nc.accounts.length}${nc.risk_usd > 0 ? `, each sized to $${Number(nc.risk_usd).toLocaleString("en-US")} at risk` : ""}.`,
+      "Add it", false)) {
+    renderGroupMgr(true);
+    return;
+  }
+  await groupPost("move", {strategy, group: group || null});      // the chart service makes the cycle follow, server side
 }
 $("#groupOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeGroupMgr();

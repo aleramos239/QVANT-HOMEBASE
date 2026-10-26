@@ -59,6 +59,7 @@ from . import config as config_mod
 from . import labcfg
 from .config import AppCfg, assignments
 from .contracts import point_value, tick_size
+from .engine_lab import GROUP_HEDGE
 from .labcfg import LAB
 from .labrun import door, fanout, intents, store
 
@@ -89,10 +90,12 @@ RATE_N, RATE_WINDOW_S = 5, 1.0           # entries: at most this many requests a
 MAX_ORDERS = 20                          # order intents in one event (the host's own limit)
 PRICE_FRESH_S, PRICE_AHEAD_S = 30.0, 5.0     # the runner's last print: at most this old / this far ahead of the desk clock
 HOLD_S, HOLD_POLL_S = 2.0, 0.02          # an entry waits this long, at most, for the 9:30 orders to go first
-# an entry the moment after the last trade ended (owner 2026-10-26: refused at 10:40:00, the stop filled at 10:39:59) waits this
-# long, at most, for the engine to read that trade's orders ended (its clock does, about a second later). With HOLD_S it stays
-# under the runner's 5 s (deskclient.SEND_S).
-SETTLE_WAIT_S, SETTLE_POLL_S = 2.0, 0.1
+# an entry the moment after the last trade ended (owner 2026-10-26: refused at 10:40:00, the stop filled at 10:39:59) waits for
+# the engine to read that trade's orders ended (its clock does, about a second later): SETTLE_WAIT_S at most, a market entry
+# SETTLE_MARKET_S (its price is the event's, it must not grow old), and never past the event's budget -- EVENT_BUDGET_S from
+# its arrival, minus HOLD_S kept for the 9:30 hold -- so the answer stays inside the runner's 5 s (deskclient.SEND_S).
+SETTLE_WAIT_S, SETTLE_MARKET_S, SETTLE_POLL_S = 2.0, 1.0, 0.1
+EVENT_BUDGET_S = 4.5
 FIRE_LEAD_S, FIRE_AFTER_S = 2.0, 0.5     # ... "near a fire": from this long before a timer strategy's fire to just after
 PUBLISH_S = 0.25                         # the stream's snapshots are compared this often
 SUB_QUEUE_MAX = 200                      # snapshots a stream reader may fall behind before it is dropped
@@ -975,11 +978,13 @@ class LabDesk:
     def _fire_first(self) -> bool:
         return self.held() or self._near_fire(self.engine.now_et())
 
-    async def _settled(self, name: str) -> bool:
-        """An entry refused only because the last trade's orders are not read ended yet (LAST_TRADE): wait, SETTLE_WAIT_S at
+    async def _settled(self, name: str, most: float) -> bool:
+        """An entry refused only because the last trade's orders are not read ended yet (LAST_TRADE): wait, `most` seconds at
         most, for the engine's clock to read them. -> True once every round of today reads ended (the entry is asked again)."""
-        end = self._mono() + SETTLE_WAIT_S
-        for _ in range(round(SETTLE_WAIT_S / SETTLE_POLL_S)):        # bounded by count too: a clock that stands still
+        if most < SETTLE_POLL_S:
+            return False
+        end = self._mono() + most
+        for _ in range(round(most / SETTLE_POLL_S)):                # bounded by count too: a clock that stands still
             if all(r.get("clean") for r in self._rows(name) if not r.get("carried")):
                 return True
             if self._mono() >= end:
@@ -1061,7 +1066,8 @@ class LabDesk:
 
     def _verdicts(self, name: str, ev, booked: list) -> tuple:
         """Checks 7 and 8, once per booked account with that account's size: ({entry index: {account: sentence |
-        None}}, {oco index: sentence | None}, {entry index: its pair's other index}). Judged against the state BEFORE
+        None}}, {oco index: sentence | None}, {entry index: its pair's other index}). Judged against the state as it is when asked
+        (an entry after a cancel or flatten of the same event is asked again after them, 2026-10-26); first against the state BEFORE
         the event, as the shadow host judges (host.py), so the owner reads the sentences he read in shadow."""
         d, limits, rec = self._rec(name), labcfg.limits_of(self.cfg, name), labcfg.record_of(self.cfg, name) or {}
         rows = self._rows(name)
@@ -1187,6 +1193,7 @@ class LabDesk:
 
     async def _event(self, ev, limited: bool) -> dict:
         name = ev.strategy
+        t_in = self._mono()                                  # the event's answer budget starts here (EVENT_BUDGET_S)
         known = self.is_lab(name)
         d = self._rec(name) if known else None
         orders = [it for it in ev.intents if it["op"] in intents.ORDER_OPS or it["op"] == "stop"]
@@ -1268,7 +1275,9 @@ class LabDesk:
                     if no is None:
                         accounts, sizes = self._takers(unit, per, booked, want)
                         if not sizes and accounts and all(s == LAST_TRADE for s in accounts.values()) \
-                                and await self._settled(name):
+                                and await self._settled(name, min(
+                                    SETTLE_MARKET_S if any(ev.intents[j]["kind"] == "market" for j in unit) else SETTLE_WAIT_S,
+                                    EVENT_BUDGET_S - HOLD_S - (self._mono() - t_in))):
                             # the last trade ended a moment ago and its orders are read ended now: asked again
                             no = self._stale(ev) or self._not_now(name)
                             if no is None:
@@ -1414,7 +1423,7 @@ class LabDesk:
         if not took:
             text = whole or next(iter(said.values()), door.CANNOT_CHECK)
             self._dead(d, ids)
-            if whole is None and not all(s == door.SLOT_BUSY for s in said.values()):
+            if whole is None and not all(s in (door.SLOT_BUSY, GROUP_HEDGE) for s in said.values()):
                 d["untaken"] += 1                            # it was offered to its accounts and none took it (one
                                                              # skipped for the group's turn is not counted)
         if not took and whole is not None:

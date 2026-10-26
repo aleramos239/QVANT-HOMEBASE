@@ -19,9 +19,12 @@ import re
 import sys
 from typing import Optional
 
-from .engine_lab import GROUP_HEDGE, LAB, LAB_BAD_ORDER
+from .config import assignments
+from .contracts import market_of
+from .engine_lab import GROUP_HEDGE, LAB, LAB_BAD_ORDER, LAB_PREFIX
 
 GROUP_NONE = "No account of its group could take this trade."
+GROUP_UNBOOKED = "It is not booked on any account of its group."
 GROUP_ID_RE = re.compile(r"[a-z0-9][a-z0-9_-]{0,39}")
 MAX_GROUPS = 12
 MAX_NAME = 40
@@ -32,6 +35,10 @@ MINIS_DEFAULT = 17             # Apex 300K PA: half size (17 minis = 170 micros)
 
 class GroupError(ValueError):
     """A refusal in words the page may show."""
+
+
+class GroupMissing(GroupError):
+    """No such group (404)."""
 
 
 def _opposite(open_sides: set, new_sides: set) -> bool:
@@ -86,9 +93,16 @@ class GroupMixin:
         return accts[i:] + accts[:i]
 
     def groups_view(self) -> dict:
-        return {gid: {**{k: v for k, v in g.items() if k != "last"},
-                      "next": (self.group_turn(g) or [None])[0] if g["on"] else None}
-                for gid, g in self.groups.items()}
+        """Each group as the page reads it, with `outside`: {member: [accounts it is booked on that are not the group's]} --
+        a member is only ever traded on the group's accounts, so those bookings never trade (said on the page)."""
+        out = {}
+        for gid, g in self.groups.items():
+            outside = {m: [r["account"] for r in assignments(self.cfg, m) if r["account"] not in g["accounts"]]
+                       for m in g["members"]}
+            out[gid] = {**{k: v for k, v in g.items() if k != "last"},
+                        "next": (self.group_turn(g) or [None])[0] if g["on"] else None,
+                        "outside": {m: a for m, a in outside.items() if a}}
+        return out
 
     def group_open_sides(self, g: dict, symbol: str) -> set:
         """"Buy" / "Sell" of every trade in `symbol`'s market that is open, or whose entry is working, on any of the
@@ -99,20 +113,24 @@ class GroupMixin:
         def broker(a: str):
             return getattr(self.adapters.get(a), "broker_key", a)
 
-        keys = {broker(a) for a in g["accounts"]}
+        keys, market = {broker(a) for a in g["accounts"]}, market_of(symbol)
         sides: set = set()
         for s in self.states.values():
-            if s.date != today or s.status == "idle" or broker(s.account) not in keys:
+            if s.status == "idle" or broker(s.account) not in keys:
                 continue
             so = self.cfg.strategies.get(s.strategy)
-            if so is not None and not self._same_market(so.symbol, symbol):
+            lab = (so.kind == LAB) if so is not None else s.strategy.startswith(LAB_PREFIX)
+            unsure = lab and not self._lab_clean(s)         # its orders not read ended: one may still rest at the broker
+            if s.date != today and not unsure:
+                continue
+            if so is not None and market_of(so.symbol) != market:
                 continue
             went_in = (s.entry_qty or s.qty or 0) if s.entry_side else 0
             if s.entry_side and (s.exit_qty or 0) < went_in:
                 sides.add(s.entry_side)                       # a position is open
-            elif s.status in ("placing", "placed") and not s.entry_side:
-                got = set((self._lab_x(s).get("iid") or {}).keys()) if so is not None and so.kind == LAB else set()
-                sides |= got or {"Buy", "Sell"}               # an entry is working
+            elif not s.entry_side and (s.status in ("placing", "placed") or unsure):
+                got = set((self._lab_x(s).get("iid") or {}).keys()) if lab else set()
+                sides |= got or {"Buy", "Sell"}               # an entry is working, or its fate is not known
         for a in g["accounts"]:
             ad = self.adapters.get(a)
             try:
@@ -120,12 +138,20 @@ class GroupMixin:
             except Exception:  # noqa: BLE001 -- a cache that cannot be read adds nothing; the rounds above still count
                 view = None
             for p in (view or {}).get("positions") or []:
-                if p.get("symbol") and self._same_market(p["symbol"], symbol) and p.get("net"):
+                if p.get("symbol") and market_of(p["symbol"]) == market and p.get("net"):     # NQ and MNQ: one market
                     sides.add("Buy" if p["net"] > 0 else "Sell")
         return sides
 
     def group_hedged(self, g: dict, symbol: str, legs: list) -> bool:
         return _opposite(self.group_open_sides(g, symbol), {leg.side for leg in legs})
+
+    def hedge_refusal(self, name: str, account: str, symbol: str, legs: list) -> Optional[str]:
+        """GROUP_HEDGE when an entry of `name` on `account` would be opposite to a trade open on an account of an ON group
+        -- its own group when it is a member; else any ON group that `account` belongs to (a strategy outside the cycle,
+        trading one of its accounts, may not hedge it either). Asked with no await before a round is written."""
+        grp = self.group_of(name)
+        gs = [grp[1]] if grp is not None else [g for g in self.groups.values() if g["on"] and account in g["accounts"]]
+        return GROUP_HEDGE if any(self.group_hedged(g, symbol, legs) for g in gs) else None
 
     # --- the switch and the settings ----------------------------------------------------------------------------
     def set_group(self, gid: str, body: dict) -> dict:
@@ -159,6 +185,9 @@ class GroupMixin:
         for a in accounts:
             if a not in self.cfg.accounts:
                 raise GroupError(f"{a} is not an account on this Desk.")
+            for other, g in self.groups.items():
+                if other != gid and a in g["accounts"]:
+                    raise GroupError(f"{a} is already in the group {g['name']}.")
         if isinstance(risk, bool) or not isinstance(risk, (int, float)) or not 0 <= risk <= RISK_MOST:
             raise GroupError(f"Risk per trade: a dollar amount from 0 to {RISK_MOST:,.0f} (0 = each strategy's own size).")
         if isinstance(minis, bool) or not isinstance(minis, int) or not 1 <= minis <= MINIS_MOST:
@@ -174,13 +203,30 @@ class GroupMixin:
         self.journal("group_set", group=gid, **{k: v for k, v in self.groups[gid].items() if k != "last"})
         if on:                                       # each member's own Take turns goes on with the cycle (owner 2026-10-25):
             for m in members:                        # its page says so, and with the cycle off later it still takes one
-                if not self.rotating(m):             # account a trade instead of every account at once
+                # account a trade instead of every account at once. Only when the cycle goes on or the member joins it: a
+                # Take turns the owner switched off later is left as he set it
+                if (not old.get("on") or m not in old.get("members", [])) and not self.rotating(m):
                     self.set_rotation(m, True)
         return self.groups_view()[gid]
 
+    def follow_group(self, gid: str, name: str | None = None, members: list | None = None) -> dict:
+        """The charts service's Desk group changed (a rename, a strategy moved in or out): its cycle follows, in the same
+        request, server side (never left to a page). Members the Desk does not hold as Lab strategies are left out; a cycle
+        left with no strategy goes off. GroupMissing when the group has no cycle (nothing to follow)."""
+        if gid not in self.groups:
+            raise GroupMissing("No such group.")
+        body: dict = {}
+        if name is not None:
+            body["name"] = str(name)[:MAX_NAME]
+        if members is not None:
+            body["members"] = [m for m in members if isinstance(m, str) and getattr(self.cfg.strategies.get(m), "kind", None) == LAB]
+            if not body["members"]:
+                body["on"] = False
+        return self.set_group(gid, body)
+
     def delete_group(self, gid: str) -> None:
         if gid not in self.groups:
-            raise GroupError("No such group.")
+            raise GroupMissing("No such group.")
         del self.groups[gid]
         self._save_groups()
         self.journal("group_deleted", group=gid)
@@ -201,6 +247,10 @@ class GroupMixin:
 
         if self.group_hedged(g, cfg.symbol, legs):
             return hedge()
+        if not any(a in sizes for a in g["accounts"]):     # booked only outside the cycle: said, never silent (2026-10-26)
+            self.journal("group_skipped", group=gid, strategy=name, reason=GROUP_UNBOOKED, accounts={})
+            return {"armed": bool(self.cfg.armed), "reason": GROUP_UNBOOKED,
+                    "accounts": {a: {"ok": False, "round": None, "reason": GROUP_UNBOOKED} for a in sizes}}
         tried = {}
         for a in (a for a in self.group_turn(g) if a in sizes):
             try:
@@ -211,8 +261,13 @@ class GroupMixin:
             if not went and tried[a].get("reason") == GROUP_HEDGE:
                 return hedge()                       # a trade opened elsewhere in the group while this one waited
             if went:
-                g["last"] = a
-                self._save_groups()
+                cur = self.groups.get(gid)               # the group as it is NOW (a save may have replaced it meanwhile)
+                if cur is not None:
+                    cur["last"] = a
+                    try:
+                        self._save_groups()
+                    except Exception as e:  # noqa: BLE001 -- the order is out: never report it as not placed
+                        self.journal("group_save_failed", group=gid, error=f"{type(e).__name__}: {e}"[:200])
                 break
         else:
             self.journal("group_skipped", group=gid, strategy=name, reason=GROUP_NONE,

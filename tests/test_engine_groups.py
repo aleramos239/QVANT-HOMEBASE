@@ -206,3 +206,70 @@ def test_cycle_on_switches_on_each_members_take_turns(tmp_path):
     eng.set_group("g", {"on": False})                                    # off again: each keeps taking turns on its own
     assert eng.rotating(tlab.LAB) and eng.rotating(TWO)
     assert took(enter(eng, tlab.LAB, tlab.leg())) == ["a1"]              # one account, not all three
+
+
+# ------------------------------------------------------------------------------------------------ review fixes 2026-10-26
+def test_a_full_size_nq_position_counts_for_micro_members(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    group(eng)
+    eng.cfg.strategies[tlab.LAB] = __import__("dataclasses").replace(eng.cfg.strategies[tlab.LAB], symbol="MNQ")
+    ads["a2"].trade_view = lambda: {"positions": [{"symbol": "NQZ6", "net": -1}], "orders": []}   # NQ short, by hand
+    assert enter(eng, tlab.LAB, tlab.leg(side="Buy"))["reason"] == GROUP_HEDGE
+
+
+def test_an_order_of_unknown_fate_counts_as_open(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    group(eng)
+    enter(eng, tlab.LAB, tlab.leg(iid=1, side="Buy"))                   # a1
+    st = eng.states[f"{tlab.LAB}@a1"]
+    st.status = "error"                                                 # the broker timed out: it may rest there
+    eng._lab_x(st)["clean"] = False
+    assert enter(eng, TWO, tlab.leg(iid=2, side="Sell", px=90.0, sl=95.0, tp=80.0))["reason"] == GROUP_HEDGE
+
+
+def test_a_strategy_outside_the_cycle_may_not_hedge_its_accounts(tmp_path):
+    three = "lab_three"
+    eng, ads, clock = tlab.mk(tmp_path, accounts=ACCTS, extra={TWO: tlab.lab_cfg(), three: tlab.lab_cfg()},
+                              book={TWO: [{"account": a, "qty": 1} for a in ACCTS], three: [{"account": "a2", "qty": 1}]})
+    eng.set_group("g", {"name": "Apex", "members": [tlab.LAB, TWO], "accounts": ["a1", "a2"], "on": True})
+    enter(eng, tlab.LAB, tlab.leg(iid=1, side="Buy"))                   # a1: long
+    out = tlab.run(eng.lab_enter(three, [tlab.leg(iid=9, side="Sell", px=90.0, sl=95.0, tp=80.0)], {"a2": 1}, max_rounds=5))
+    assert out["accounts"]["a2"]["reason"] == GROUP_HEDGE and ads["a2"].brackets == []
+    out = tlab.run(eng.lab_enter(three, [tlab.leg(iid=10, side="Buy")], {"a2": 1}, max_rounds=5))
+    assert out["accounts"]["a2"]["ok"]                                  # the same way is fine
+
+
+def test_an_account_is_in_one_group_at_most(tmp_path):
+    three = "lab_three"
+    eng, ads, _ = tlab.mk(tmp_path, accounts=ACCTS, extra={TWO: tlab.lab_cfg(), three: tlab.lab_cfg()})
+    group(eng)
+    with pytest.raises(GroupError, match="already in the group"):
+        eng.set_group("h", {"name": "h", "members": [three], "accounts": ["a3"]})
+
+
+def test_booked_only_outside_the_cycle_is_said_not_silent(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    eng.set_group("g", {"name": "Apex", "members": [tlab.LAB, TWO], "accounts": ["a1"], "on": True})
+    out = tlab.run(eng.lab_enter(tlab.LAB, [tlab.leg()], {"a2": 1, "a3": 1}, max_rounds=5))
+    assert out["reason"] == "It is not booked on any account of its group." and all(not ad.brackets for ad in ads.values())
+    assert eng.groups_view()["g"]["outside"] == {tlab.LAB: ["a2", "a3"], TWO: ["a2", "a3"]}
+    assert len(tlab.events(tmp_path, "group_skipped")) == 1
+
+
+def test_saving_an_on_cycle_leaves_a_take_turns_switched_off_by_hand(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    group(eng)
+    eng.set_rotation(TWO, False)                                        # the owner, on TWO's page
+    eng.set_group("g", {"risk_usd": 900.0})
+    assert not eng.rotating(TWO) and eng.rotating(tlab.LAB)
+
+
+def test_follow_group_keeps_name_and_members_in_step(tmp_path):
+    from homebase.engine_groups import GroupMissing
+    eng, ads, _ = mk(tmp_path)
+    group(eng)
+    v = eng.follow_group("g", "Apex 300k", [TWO, "nq930_not_lab"])
+    assert (v["name"], v["members"], v["on"]) == ("Apex 300k", [TWO], True)
+    assert eng.follow_group("g", None, [])["on"] is False                # no strategy left: off
+    with pytest.raises(GroupMissing):
+        eng.follow_group("zz", "x", [])

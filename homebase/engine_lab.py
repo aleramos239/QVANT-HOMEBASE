@@ -1046,10 +1046,8 @@ class LabMixin:
         cfg, why = self._lab_may_enter(name)
         if why is None:
             why = self._lab_sits_out(name, cfg, account, qty, max_rounds)
-        if why is None:                             # asked again here, with no await before the round is written:
-            grp = self.group_of(name)               # another member may have opened a trade meanwhile
-            if grp is not None and self.group_hedged(grp[1], cfg.symbol, legs):
-                why = GROUP_HEDGE
+        if why is None:                             # asked here with no await before the round is written: never opposite to
+            why = self.hedge_refusal(name, account, cfg.symbol, legs)    # a trade open on an account cycle's accounts
         if why is not None:
             if why == LAB_DISARMED:                 # written down only, as the disarmed path of lab_enter does
                 self.journal("shadow_signal" if (self.cfg.armed and cfg.shadow) else "dry_run", strategy=name,

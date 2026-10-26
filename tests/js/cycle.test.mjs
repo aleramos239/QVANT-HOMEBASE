@@ -120,3 +120,25 @@ test('an empty group still shows the card, saying what to do first', () => {
   assert.match(h, /Account cycle/);
   assert.match(h, /strategies in it first/);
 });
+
+test('moving a strategy into an ON cycle asks first; a no moves nothing', async () => {
+  const MOVE = between('async function moveToGroup(', '$("#groupOverlay").addEventListener');
+  const run = async (yes, cyc) => {
+    const posts = [], asked = [];
+    const c = vm.createContext({
+      DESKGROUPS: { groups: [{ id: 'g4', name: 'apex 300k', members: [] }] }, ST: { groups: cyc ? { g4: cyc } : {}, book: {}, strategies: {} },
+      confirmDlg: async (t) => { asked.push(t); return yes; }, groupPost: async (a, b) => { posts.push([a, b]); return true; },
+      renderGroupMgr: () => {}, stratLabel: (n) => n, cycleCopies: () => [], cycleLive: () => '',
+    });
+    vm.runInContext(MOVE + '\nglobalThis.moveToGroup = moveToGroup;', c);
+    await c.moveToGroup('lab_x', 'g4');
+    return { posts, asked };
+  };
+  const on = { on: true, name: 'apex 300k', members: [], accounts: ['a', 'b'], risk_usd: 1000 };
+  let r = await run(false, on);
+  assert.match(r.asked[0], /Add lab_x to the apex 300k account cycle/) && assert.equal(r.posts.length, 0);
+  r = await run(true, on);
+  assert.deepEqual(JSON.parse(JSON.stringify(r.posts)), [['move', { strategy: 'lab_x', group: 'g4' }]]);
+  r = await run(true, null);                                         // no cycle: no question
+  assert.equal(r.asked.length, 0) && assert.equal(r.posts.length, 1);
+});

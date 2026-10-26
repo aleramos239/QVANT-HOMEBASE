@@ -190,6 +190,8 @@ import json
 import re
 import threading
 import time
+import urllib.error
+import urllib.request
 from collections import OrderedDict
 from pathlib import Path
 from typing import Callable
@@ -1264,8 +1266,41 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         except HTTPException as e:
             return watch_answer(request, {"ok": False, "detail": e.detail}, e.status_code)
 
-    # ---- Desk groups (deskgroups.py): named sets of Desk strategies, kept beside the Lab records. Bookkeeping only: a group
-    # ---- books no account and switches nothing; its results are read off the members' saved runs.
+    # ---- Desk groups (deskgroups.py): named sets of Desk strategies, kept beside the Lab records. A group trades only through
+    # ---- its account cycle, kept by the Desk's engine and made to follow here, server side, before a change is written.
+    def desk_post(path_: str, payload: dict) -> tuple:
+        """POST JSON to this host's Desk -> (HTTP status, detail); (None, why) when it does not answer."""
+        req = urllib.request.Request(f"{DESK_URL}{path_}", data=json.dumps(payload).encode(), method="POST",
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=3.0) as r:
+                return r.status, None
+        except urllib.error.HTTPError as e:
+            try:
+                return e.code, json.loads(e.read() or b"{}").get("detail")
+            except ValueError:
+                return e.code, None
+        except (OSError, ValueError) as e:
+            return None, type(e).__name__
+
+    async def cycle_follow(what: str, body: dict) -> str | None:
+        """Before a delete, a rename or a move is written: the Desk's account cycle of each group it changes follows it
+        (delete: the cycle goes; move / rename: its strategies and name). None when in step or there is no cycle to follow;
+        else the sentence that refuses the change -- nothing is written then, so the two never fall out of step."""
+        if what not in ("delete", "move", "rename"):
+            return None
+        before = {g["id"]: g for g in deskgroups.load()}
+        after = await asyncio.to_thread(deskgroups.preview, what, body)
+        calls = [("/api/groups/delete", {"id": body.get("id")})] if what == "delete" else [
+            ("/api/groups/follow", {"id": g["id"], "name": g["name"], "members": g["members"]})
+            for g in after if g["id"] in before and (before[g["id"]]["members"], before[g["id"]]["name"]) != (g["members"], g["name"])]
+        for path_, payload in calls:
+            code, detail = await asyncio.to_thread(desk_post, path_, payload)
+            if code not in (200, 404):                      # 404: that group has no cycle
+                return (f"The Desk refused the account cycle's change: {detail}" if code else
+                        "The Desk did not answer, so the group's account cycle could not follow. Nothing changed: try again.")
+        return None
+
     @r.get("/deskgroups")
     def deskgroups_list(request: Request):
         watch_guard(request)
@@ -1297,6 +1332,9 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             if not isinstance(body, dict):
                 raise HTTPException(400, "the body is a JSON object")
             try:
+                why = await cycle_follow(what, body)
+                if why is not None:
+                    raise HTTPException(409, why)
                 groups = await asyncio.to_thread(deskgroups.apply, what, body)
             except deskgroups.GroupError as e:
                 raise HTTPException(409, str(e)) from None
@@ -1315,7 +1353,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         same on the in-sample months (build), the out-of-sample months (unseen) and all of them together (both): net, win
         rate, PF, drawdown, days, the curve, the prop sim on DESKLAB_PROP (owner 2026-10-25: the group's curve is the 3:1, three
         lines -- as each strategy's card). A member that is not a Lab strategy, or whose 3:1 walk-forward is not done, is left
-        out and named. Saved results only (ensure_wf: never starts a run on a host without the data)."""
+        out and named. Reads saved walk-forwards; ensure_wf may START a missing one on a host that has the data (the Mac, the
+        first view of a new month), never on one without it (the server: no_data)."""
         watch_guard(request)
 
         def prop_of(key, ledger):

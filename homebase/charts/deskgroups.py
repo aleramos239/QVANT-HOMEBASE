@@ -2,8 +2,10 @@
 beside the Lab strategies' records (<desklab root>/../deskgroups.json). A strategy is in ONE group at most: the same code
 tried two ways (say for an eval and for a funded account) is two strategies, each in its own group.
 
-Display and bookkeeping only: a group never books an account, switches a strategy on or sends an order. Its combined
-results are read off the members' SAVED runs (see combine / summarize): nothing here runs a backtest.
+A group's ACCOUNT CYCLE (its strategies taking turns across chosen accounts, 2026-10-25) lives in the Desk's engine
+(engine_groups.py, keyed by this group's id); the charts service keeps it in step server side when a group is renamed,
+deleted or a strategy moved (tester_api deskgroups_write). Ids are never reused: a deleted group's id is never given again,
+so an old cycle can never attach to a new group. The combined results are read off the members' 3:1 walk-forwards.
 """
 import datetime as dt
 import json
@@ -50,13 +52,23 @@ def load(at=None) -> list[dict]:
         return []
 
 
-def _save(groups: list[dict], at=None) -> None:
+def _next_id(groups: list[dict], at=None) -> int:
+    """The next group number: above every id there is AND every id ever given (the file keeps the highest as `next`)."""
+    try:
+        kept = json.loads(path(at).read_text()).get("next")
+    except (OSError, ValueError, AttributeError):
+        kept = None
+    seen = [int(g["id"][1:]) + 1 for g in groups if re.fullmatch(r"g\d{1,4}", g["id"])]
+    return max([1] + seen + ([kept] if isinstance(kept, int) and not isinstance(kept, bool) else []))
+
+
+def _save(groups: list[dict], at=None, nxt: int | None = None) -> None:
     p = path(at)
     p.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=".deskgroups.", suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
-            json.dump({"groups": groups}, f, separators=(",", ":"))
+            json.dump({"groups": groups, "next": nxt if nxt is not None else _next_id(groups, at)}, f, separators=(",", ":"))
         os.replace(tmp, p)
     except BaseException:
         try:
@@ -91,6 +103,29 @@ def _taken(groups, name, but=None) -> None:
         raise GroupError("There is a group with that name already.")
 
 
+def preview(action: str, body: dict, at=None) -> list[dict]:
+    """The groups as `apply` WOULD leave them (nothing written): the charts service asks the Desk to make the cycle follow
+    first, then applies. A refusal raises GroupError."""
+    groups = [dict(g, members=list(g["members"])) for g in load(at)]
+    if action == "delete":
+        g = _find(groups, body.get("id"))
+        groups.remove(g)
+    elif action == "move":
+        sid, target = body.get("strategy"), body.get("group")
+        if not isinstance(sid, str) or not STRATEGY_RE.fullmatch(sid):
+            raise GroupError("That is not a strategy.")
+        t = _find(groups, target) if target is not None else None
+        for g in groups:
+            if sid in g["members"]:
+                g["members"].remove(sid)
+        if t is not None:
+            t["members"].append(sid)
+    elif action == "rename":
+        g = _find(groups, body.get("id"))
+        g["name"] = _name(body.get("name"))
+    return groups
+
+
 def apply(action: str, body: dict, at=None) -> list[dict]:
     """create {name, kind?} | rename {id, name} | kind {id, kind} | delete {id} | move {strategy, group: id | null} -> all groups.
     One write at a time; a refusal raises GroupError and writes nothing."""
@@ -101,11 +136,12 @@ def apply(action: str, body: dict, at=None) -> list[dict]:
             if len(groups) >= MAX_GROUPS:
                 raise GroupError(f"There are {MAX_GROUPS} groups already.")
             _taken(groups, name)
-            used = {g["id"] for g in groups}
-            n = 1
-            while f"g{n}" in used:
-                n += 1
+            n = _next_id(groups, at)                     # never a deleted group's id again
+            if n > 9999:
+                raise GroupError("No group numbers left.")
             groups.append({"id": f"g{n}", "name": name, "kind": _kind(body.get("kind", "together")), "members": []})
+            _save(groups, at, n + 1)
+            return groups
         elif action == "rename":
             g = _find(groups, body.get("id"))
             name = _name(body.get("name"))

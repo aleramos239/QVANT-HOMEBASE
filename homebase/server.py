@@ -1100,6 +1100,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                                   adapter_factory=adapter_factory, adapters=adapters, budget=budget, cfg=cfg,
                                   engine=engine, paper_http=paper_http)
     routes.strategies.register(app, cfg=cfg, engine=engine, labdesk=labdesk)
+    routes.groups.register(app, engine=engine)
     routes.lab.register(app, labdesk=labdesk)
     routes.records.register(app, STATIC=STATIC, _equity_path=_equity_path, adapters=adapters, cfg=cfg,
                                  state_dir=lambda: state_dir())
