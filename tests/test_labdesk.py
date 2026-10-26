@@ -720,7 +720,9 @@ def test_an_engine_error_on_an_entry_is_fail_closed_and_stays_with_its_strategy(
 
 # ---------------------------------------------------------------- exits are applied in EVERY desk state
 STATES = {"off": "It is off.", "killed": "Killed today.", "stopped": "Stopped for today.",
-          "disarmed": door.ONE_AT_A_TIME, "not ready": "The Desk cannot check this order.",
+          # disarmed: the entry is judged AFTER the event's cancel (owner 2026-10-26); with no clock to read the cancelled
+          # order ended it is refused in the last trade's words -- placed it never is (len(placed) stays 1)
+          "disarmed": "The Desk cannot check the last trade's orders.", "not ready": "The Desk cannot check this order.",
           "mark changed": "This order is out of date.", "limits unreadable": "The Desk cannot read its limits.",
           "rate limited": "Too many orders at once.", "record gone": "It is off."}
 

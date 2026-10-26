@@ -89,6 +89,10 @@ RATE_N, RATE_WINDOW_S = 5, 1.0           # entries: at most this many requests a
 MAX_ORDERS = 20                          # order intents in one event (the host's own limit)
 PRICE_FRESH_S, PRICE_AHEAD_S = 30.0, 5.0     # the runner's last print: at most this old / this far ahead of the desk clock
 HOLD_S, HOLD_POLL_S = 2.0, 0.02          # an entry waits this long, at most, for the 9:30 orders to go first
+# an entry the moment after the last trade ended (owner 2026-10-26: refused at 10:40:00, the stop filled at 10:39:59) waits this
+# long, at most, for the engine to read that trade's orders ended (its clock does, about a second later). With HOLD_S it stays
+# under the runner's 5 s (deskclient.SEND_S).
+SETTLE_WAIT_S, SETTLE_POLL_S = 2.0, 0.1
 FIRE_LEAD_S, FIRE_AFTER_S = 2.0, 0.5     # ... "near a fire": from this long before a timer strategy's fire to just after
 PUBLISH_S = 0.25                         # the stream's snapshots are compared this often
 SUB_QUEUE_MAX = 200                      # snapshots a stream reader may fall behind before it is dropped
@@ -971,6 +975,18 @@ class LabDesk:
     def _fire_first(self) -> bool:
         return self.held() or self._near_fire(self.engine.now_et())
 
+    async def _settled(self, name: str) -> bool:
+        """An entry refused only because the last trade's orders are not read ended yet (LAST_TRADE): wait, SETTLE_WAIT_S at
+        most, for the engine's clock to read them. -> True once every round of today reads ended (the entry is asked again)."""
+        end = self._mono() + SETTLE_WAIT_S
+        for _ in range(round(SETTLE_WAIT_S / SETTLE_POLL_S)):        # bounded by count too: a clock that stands still
+            if all(r.get("clean") for r in self._rows(name) if not r.get("carried")):
+                return True
+            if self._mono() >= end:
+                return False
+            await self._sleep(SETTLE_POLL_S)
+        return all(r.get("clean") for r in self._rows(name) if not r.get("carried"))
+
     async def _hold(self) -> tuple:
         """Before an entry leaves: wait while the 9:30 orders go first, HOLD_S at most. -> (go, it waited)."""
         end, waited = self._mono() + HOLD_S, False
@@ -1221,6 +1237,7 @@ class LabDesk:
             why = door.CANNOT_CHECK
         out: list = [None] * len(ev.intents)
         go: bool | None = None                               # the 9:30 hold: asked once, at the event's first entry
+        exited = False                                       # a cancel / flatten of THIS event ran before the entry
         for i, it in enumerate(ev.intents):
             op = it["op"]
             if out[i] is not None:                           # the second leg of a pair: answered with the first
@@ -1229,9 +1246,11 @@ class LabDesk:
                 if op == "cancel":
                     out[i] = {"op": op, "id": it["id"], "refused": None,
                               "accounts": await self.engine.lab_cancel(name, it["id"], why="cancel")}
+                    exited = True
                 elif op == "flatten":
                     reason = (it["reason"].strip() or "flat")[:40]
                     out[i] = {"op": op, "refused": None, "accounts": await self.engine.lab_flatten(name, reason=reason)}
+                    exited = True
                 elif op == "stop":
                     out[i] = {"op": op, "refused": None,
                               "accounts": await self._stop(name, it["why"], it["flatten"], cause="runner")}
@@ -1242,8 +1261,19 @@ class LabDesk:
                     ids = [ev.intents[j]["id"] for j in unit]
                     no, accounts = why, {}
                     want = self._own_size(name, ev, unit)
+                    if no is None and exited:
+                        # "cancel the old order, place a new one" in one event (owner 2026-10-26, FVG at 11:15): the entry is
+                        # judged on the state AFTER the event's own cancels, as the backtest takes it -- not before
+                        per, oco, _ = self._verdicts(name, ev, booked)
                     if no is None:
                         accounts, sizes = self._takers(unit, per, booked, want)
+                        if not sizes and accounts and all(s == LAST_TRADE for s in accounts.values()) \
+                                and await self._settled(name):
+                            # the last trade ended a moment ago and its orders are read ended now: asked again
+                            no = self._stale(ev) or self._not_now(name)
+                            if no is None:
+                                per, oco, _ = self._verdicts(name, ev, booked)
+                                accounts, sizes = self._takers(unit, per, booked, want)
                         if sizes:
                             waited = False
                             if go is None:

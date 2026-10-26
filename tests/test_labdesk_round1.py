@@ -637,3 +637,59 @@ def test_one_account_that_did_not_take_an_entry_is_named_in_the_refused_list(tmp
     send(d2, entry(1), seq=1)                                                      # no account was asked, none is named
     assert d2.ld.status_view(LAB)["refused"] == [{"t": "10:00:00", "text": "The desk is disarmed: written down only.",
                                                   "account": None}]
+
+
+# ================================================================ owner 2026-10-26: the two timing refusals of the first live day
+def ticking(d):
+    """The Desk's clock while an entry waits: each poll of the wait is one engine clock (it reads the ended orders)."""
+    async def clock(_s):
+        d.eng._retry_at.clear()
+        await d.eng.clock_tick()
+    d.ld._sleep = clock
+
+
+def test_an_entry_the_moment_after_an_exit_waits_for_the_check_and_goes(tmp_path):
+    # 10:39:59 the stop filled, 10:40:00 the next signal: it waited for the last trade's orders to read ended, then went
+    d = mkdesk(tmp_path)
+    send(d, entry(1), seq=1)
+    fill_entry(d.eng, d.ads["a1"], st(d), 110.25)
+    fill_exit(d.eng, d.ads["a1"], st(d), 105.0, "sl")
+    ticking(d)
+    out = send(d, entry(2), seq=2)
+    assert out["results"][0]["status"] == "working" and out["results"][0]["refused"] is None
+    assert len(d.ads["a1"].brackets) == 2
+    assert (d.ld._rec(LAB)["untaken"], d.ld._rec(LAB)["stopped"]) == (0, None)
+
+
+def test_the_wait_is_short_and_still_refuses_when_the_orders_never_read_ended(tmp_path):
+    d = mkdesk(tmp_path)
+    send(d, entry(1), seq=1)
+    fill_entry(d.eng, d.ads["a1"], st(d), 110.25)
+    fill_exit(d.eng, d.ads["a1"], st(d), 105.0, "sl")
+    waits = []
+
+    async def no_clock(s):
+        waits.append(s)
+    d.ld._sleep = no_clock
+    assert refusal(send(d, entry(2), seq=2)) == LAST_TRADE
+    assert 0 < len(waits) <= int(labdesk.SETTLE_WAIT_S / 0.3) + 1                # the Stepper clock: 0.3 s a read
+    assert labdesk.SETTLE_WAIT_S + labdesk.HOLD_S < 5.0                          # inside the runner's answer time
+
+
+def test_cancel_then_a_new_entry_in_one_event_places_the_new_one(tmp_path):
+    # 11:15 FVG: "cancel the old limit, place the new one" -- judged after the cancel, as the backtest takes it
+    d = mkdesk(tmp_path)
+    assert send(d, entry(1, kind="limit", price=100.0, sl=95.0, tp=105.0), seq=1)["results"][0]["status"] == "working"
+    ticking(d)
+    out = send(d, [{"op": "cancel", "id": 1}, entry(2, kind="limit", price=101.0, sl=96.0, tp=106.0)], seq=2)
+    assert out["results"][0]["op"] == "cancel" and out["results"][0]["refused"] is None
+    assert out["results"][1]["status"] == "working" and out["results"][1]["refused"] is None
+    assert [b.price for b in d.ads["a1"].brackets] == [100.0, 101.0]
+    assert d.ld._rec(LAB)["entries"] == 2
+
+
+def test_a_new_entry_without_a_cancel_still_waits_its_turn(tmp_path):
+    d = mkdesk(tmp_path)
+    send(d, entry(1, kind="limit", price=100.0, sl=95.0, tp=105.0), seq=1)
+    ticking(d)
+    assert refusal(send(d, entry(2, kind="limit", price=101.0, sl=96.0, tp=106.0), seq=2)) == door.ONE_AT_A_TIME
