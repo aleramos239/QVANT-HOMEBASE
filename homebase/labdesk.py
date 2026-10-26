@@ -109,6 +109,7 @@ FIRE_FIRST = "The 9:30 orders go first."
 PRICE_PAST = "The price is already past this entry."
 UNEVEN_PAIR = "A linked pair must be the same size on both sides."
 GROUP_NO_SIZE = "The stop is too wide for the group's dollars at risk."     # engine_groups: risk per trade
+OVER_MOST = 1.10                         # a group order never rounds up to more than 10 % over its dollars at risk
 LAST_TRADE = "The Desk cannot check the last trade's orders."     # the engine's own (LAB_CANNOT_CHECK)
 BOTH_FILLED = "Both entries filled."     # why the desk stops a strategy whose pair filled on both sides
 NOT_PLACED = "The entry was not placed. Check it."     # the page's words for a row whose `why` is a raw engine note:
@@ -1298,7 +1299,8 @@ class LabDesk:
 
     def _group_size(self, name: str, rec: dict, ev, unit: list, last, cap_usd: float = 0.0) -> tuple:
         """For a member of an ON account cycle group with dollars at risk: (contracts, None) = round(risk / (stop
-        distance x point value)) in the contract the orders go to, at most the group's `max_minis` full contracts'
+        distance x point value)) in the contract the orders go to -- rounded down when rounding would put more than
+        10 % over the risk -- at most the group's `max_minis` full contracts'
         worth and never more dollars than the strategy's own "at risk per trade" limit (`cap_usd`, when set);
         (None, GROUP_NO_SIZE) when not one contract fits or the stop cannot be measured (fail closed).
         (None, None): no such group -- the Desk's own sizes stand. A pair is sized on its wider stop."""
@@ -1310,6 +1312,8 @@ class LabDesk:
         try:
             dist = max(abs(door._entry_price(ev.intents[j], {"last_price": last}) - ev.intents[j]["sl"]) for j in unit)
             n = round(g["risk_usd"] / (dist * pv))
+            if n * dist * pv > g["risk_usd"] * OVER_MOST:   # rounding up a big contract (1 NQ at $1,660 for $1,000)
+                n = int(g["risk_usd"] // (dist * pv))       # goes down instead
             if cap_usd and cap_usd > 0:
                 n = min(n, int(cap_usd // (dist * pv)))
         except (TypeError, ValueError, ZeroDivisionError):

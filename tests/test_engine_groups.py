@@ -183,3 +183,15 @@ def test_hedge_skip_is_not_an_untaken_entry(tmp_path):
         row = lu.send(d, [lu.entry(iid=i)], seq=i)["results"][0]
         assert row["status"] == "cancelled" and row["refused"] == GROUP_HEDGE
     assert d.ld._rec(lu.LAB)["untaken"] == 0 and d.ld._rec(lu.LAB)["stopped"] is None
+
+
+
+@pytest.mark.parametrize("risk, qty", [(1000.0, 10), (1060.0, 11), (160.0, 1), (140.0, 1), (60.0, None)])
+def test_rounding_never_goes_more_than_ten_percent_over(tmp_path, risk, qty):
+    """$100 a contract. $1,060 -> 11 ($1,100, under 10 % over); $160 -> 2 would be $200 (25 % over): 1; $140 -> 1;
+    $60 -> 1 would be $100 (67 % over): none fits, refused."""
+    from tests import labdesk_util as lu
+    d = lu.mkdesk(tmp_path, accounts=("a1",), limits=dict(lu.LIMITS, max_risk_usd=100_000))
+    d.eng.set_group("g", {"name": "A", "members": [lu.LAB], "accounts": ["a1"], "on": True, "risk_usd": risk})
+    lu.send(d, [lu.entry()])
+    assert [b.qty for b in d.ads["a1"].brackets] == ([qty] if qty else [])
