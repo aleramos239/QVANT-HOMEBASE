@@ -2026,7 +2026,8 @@ function cycleMembers(g) {
 }
 function cycleHtml(g) {
   const cyc = ((ST && ST.groups) || {})[g.id] || null, mem = cycleMembers(g);
-  if (!mem.length && !cyc) return "";
+  if (!mem.length && !cyc) return `<div class="sec"><h2>Account cycle</h2><div class="mcap">Put this group's strategies in it first
+    (Manage groups): then tick the accounts here and switch the cycle on.</div></div>`;
   const on = !!(cyc && cyc.on), chosen = new Set(cyc ? cyc.accounts : []);
   const boxes = Object.keys(ST.accounts || {}).map(a => `<label class="feed-row" style="cursor:pointer">
       <span class="h"><input type="checkbox" class="cyc-acct" data-acct="${esc(a)}" ${chosen.has(a) ? "checked" : ""}

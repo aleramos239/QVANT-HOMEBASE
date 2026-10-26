@@ -114,3 +114,9 @@ test('the cycle follows its group: new strategies, and gone with the group', asy
   await same.c.syncCycle('g1');
   assert.equal(same.sent.length, 0);
 });
+
+test('an empty group still shows the card, saying what to do first', () => {
+  const h = ctx({ group: { name: 'Apex', members: [] } }).c.cycleHtml({ id: 'g1', members: [] });
+  assert.match(h, /Account cycle/);
+  assert.match(h, /strategies in it first/);
+});
