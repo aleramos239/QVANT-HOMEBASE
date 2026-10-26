@@ -181,6 +181,28 @@ def test_journal_endpoint_skips_lines_that_are_not_json_objects(client, tmp_path
     assert [e["event"] for e in d["events"]] == ["account_added", "armed_toggled"]  # newest first
 
 
+def test_journal_endpoint_strategy_group_and_days(client, tmp_path):
+    rows = [
+        {"et": "2026-09-19T10:00:00", "event": "lab_round", "strategy": "lab_a", "account": "x1"},     # 4 days back: out at 3
+        {"et": "2026-09-20T10:00:00", "event": "lab_round", "strategy": "lab_a", "account": "x1"},
+        {"et": "2026-09-21T10:00:00", "event": "group_hedge_skipped", "group": "g4", "strategy": "lab_c"},
+        {"et": "2026-09-21T11:00:00", "event": "broker_connected", "account": "x1"},                  # names no strategy
+        {"et": "2026-09-22T09:00:00", "event": "account_flatten", "account": "x2", "strategies": {"lab_b@x2": []}},
+        {"et": "2026-09-22T09:30:00", "event": "exit_fill", "strategy": "lab_b", "account": "x2", "pnl": 5},
+        {"et": "2026-09-22T09:31:00", "event": "exit_fill", "strategy": "other", "account": "x2"},
+        {"et": "2026-09-22T09:32:00", "event": "group_set", "group": "g5"},
+    ]
+    (tmp_path / "journal.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    get = lambda **p: client.get("/api/journal", params={"date": "2026-09-22", **p}).json()
+    d = get(strategy="lab_a,lab_b", group="g4", days=3)
+    assert d["first"] == "2026-09-20"
+    assert [(e["et"][:10], e["event"]) for e in d["events"]] == [
+        ("2026-09-22", "exit_fill"), ("2026-09-22", "account_flatten"),
+        ("2026-09-21", "group_hedge_skipped"), ("2026-09-20", "lab_round")]
+    assert get(days=1)["count"] == 4                                      # no filter: the day as before
+    assert get(group="g5", days=7)["count"] == 1
+
+
 def test_journal_endpoint_reads_off_the_event_loop(client, tmp_path, monkeypatch):
     import asyncio
     calls = []

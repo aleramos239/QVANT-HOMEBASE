@@ -250,6 +250,9 @@
   .feed-empty{ color:var(--muted-foreground); font-size:13px; padding:18px 0; }
   /* a list that only reads (a Lab strategy's orders, trades and days): nothing opens, and an amount never wraps */
   .feed.static .feed-row{ cursor:default; }
+  .act-pick{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+  .act-pick select{ width:auto; max-width:240px; }
+  .feed-day{ padding:12px 0 4px; font-size:12px; font-weight:600; color:var(--muted-foreground); }
   .feed.static .t{ white-space:nowrap; }
   .feed.static .t.net{ flex:0 0 auto; margin-left:auto; }
 
@@ -606,8 +609,13 @@
         <div class="act-head">
           <div><h1>Activity</h1>
             <div class="hint">Every alert, order, fill and safety event as it happens. Hover or click a row for its raw line.</div></div>
-          <button class="btn btn-outline btn-sm" type="button" id="feedRawBtn" aria-pressed="false"
-            title="Show every row's raw journal line">Raw</button>
+          <div class="act-pick">
+            <select class="hb-field" id="actWho" aria-label="Show"><option value="">Everything</option></select>
+            <select class="hb-field" id="actDays" aria-label="Period">
+              <option value="1">Today</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select>
+            <button class="btn btn-outline btn-sm" type="button" id="feedRawBtn" aria-pressed="false"
+              title="Show every row's raw journal line">Raw</button>
+          </div>
         </div>
         <div class="act-card"><div id="feed" class="feed"><div class="feed-empty">Waiting for events…</div></div></div>
       </section>
@@ -1678,7 +1686,23 @@ const ACTIVITY = {
   selftest_order: (r) => [`Self-test order${actOn(r)}${r.placed ? (r.placed.ok ? " — placed and cancelled" : " — refused: " + actErr(r.placed.error)) : ""}`,
     r.placed && !r.placed.ok ? "warn" : ""],
   selftest_order_rest: (r) => [`Self-test order${actOn(r)} (REST) — HTTP ${r.http_status}`],
+  group_set: (r) => [`${actCycle(r)} ${r.on ? "ON" : "OFF"} — ${(r.members || []).length} strategies on ` +
+      `${(r.accounts || []).map(acctShort).join(", ") || "no accounts"}${r.risk_usd ? ` · $${fmt(r.risk_usd, 0)} a trade` : ""}`],
+  group_deleted: (r) => [`${actCycle(r)} removed`],
+  group_hedge_skipped: (r) => [`${actStrat(r)} skipped a ${actSides(r.sides)} — a ${actSides(r.open)} is open on another account of ` +
+      `${actCycle(r).toLowerCase()} (no hedging)`, "warn"],
+  group_skipped: (r) => {
+    const why = Object.entries(r.accounts || {}).map(([a, w]) => `${acctShort(a)}: ${actErr(w)}`);
+    return [`${actStrat(r)} skipped — ${actErr(r.reason)}${why.length ? " (" + why.join(" · ") + ")" : ""}`, "warn"];
+  },
+  group_save_failed: (r) => [`${actCycle(r)}: the next account could not be saved — ${actErr(r.error)}`, "neg"],
 };
+/* "Account cycle "apex 300k"": the journal line's own name, else the Desk group's, else its id. */
+function actCycle(r) {
+  const g = typeof DESKGROUPS !== "undefined" ? DESKGROUPS.groups.find(x => x.id === r.group) : null;
+  return `Account cycle "${r.name || (g && g.name) || r.group}"`;
+}
+const actSides = (s) => (Array.isArray(s) ? s : []).map(x => x === "Buy" ? "long" : x === "Sell" ? "short" : String(x)).join(" and ") || "trade";
 /* A Lab strategy's flatten answers with plain steps that are not failures ("This trade had already ended."): read them as plain, for a Lab strategy only. */
 for (const k of ["manual_flatten", "clock_flat", "clock_flat_failed"]) {
   const f = ACTIVITY[k];
@@ -1724,19 +1748,83 @@ const FEED_OPEN = new Set();   // rows opened to their raw line, by ts|et|event|
 function renderActivity(journal) {
   FEED_ROWS = (Array.isArray(journal) ? journal : []).filter(r => r && typeof r === "object" &&
     !(typeof r.event === "string" && r.event.indexOf("lab_") === 0 && typeof DeskLab !== "undefined" && DeskLab.hiddenEvent(r.event)));      // the Lab's named bookkeeping (DeskLab.HIDDEN_EVENTS) shows nothing; every other Lab event shows
-  const sig = JSON.stringify([FEED_ROWS, FEED_RAW, [...FEED_OPEN]]);
+  const sig = JSON.stringify([FEED_ROWS, FEED_RAW, [...FEED_OPEN], ACT_WHO, ACT_DAYS, ACT_ROWS === null]);
   if (sig === FEED_SIG) return;           // nothing changed: leave the rows (and a hovered tooltip) alone
   FEED_SIG = sig;
+  let day = "";
   $("#feed").innerHTML = (FEED_RAW ? FEED_ROWS : foldRoutine(FEED_ROWS)).map((r) => {
     const prev = r.event === "chart_trading_set" ? FEED_ROWS.slice(FEED_ROWS.indexOf(r) + 1).find(o => o.event === r.event) : null;
     const {text, tone} = activityLine(r, prev);
     const raw = r.rows ? r.rows.map(o => String(o.et || "").slice(11, 19) + "  " + activityRaw(o)).join("\n") : activityRaw(r), key = `${r.ts}|${r.et}|${r.event}|${r.account || ""}`, open = FEED_RAW || FEED_OPEN.has(key);
-    return `<div class="feed-row${open ? " open" : ""}" data-k="${esc(key)}" title="${esc(raw)}">` +
+    const d = String(r.et || "").slice(0, 10), head = ACT_DAYS > 1 && d !== day ? `<div class="feed-day">${esc(actDay(d))}</div>` : "";
+    day = d;
+    return head + `<div class="feed-row${open ? " open" : ""}" data-k="${esc(key)}" title="${esc(raw)}">` +
       `<span class="t">${esc(hbClock(String(r.et || "").slice(11, 19)))}</span>` +
       `<span class="h${tone ? " " + tone : ""}">${esc(text)}</span>` +
       (open ? `<span class="raw">${esc(raw)}</span>` : "") + `</div>`;
-  }).join("") || '<div class="feed-empty">Waiting for events…</div>';
+  }).join("") || `<div class="feed-empty">${!actFiltered() ? "Waiting for events…" : ACT_ROWS ? "Nothing in this period." : "Loading…"}</div>`;
 }
+const actDay = (d) => { try { return new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric", timeZone: "UTC"}); } catch (_) { return d; } };
+/* Activity for one strategy or one group, or for more than today (owner 2026-10-26: "see which strategy copied on which account
+   and when"): the Desk's journal for those days (GET /api/journal, strategy/group/days), read again every 15 s while the page is
+   open. Everything, today, stays the status poll's own tail. A group shows its strategies' lines and its account cycle's. */
+let ACT_WHO = "", ACT_DAYS = 1, ACT_ROWS = null, ACT_BUSY = false, ACT_AT = 0;
+const actFiltered = () => ACT_WHO !== "" || ACT_DAYS > 1;
+const actRows = (tail) => actFiltered() ? (ACT_ROWS || []) : tail;
+function actQuery() {
+  const p = new URLSearchParams({days: String(ACT_DAYS), limit: "2000"});
+  if (ACT_WHO.startsWith("g:")) {
+    const id = ACT_WHO.slice(2), g = groupOf(id);
+    p.set("group", id);
+    p.set("strategy", (g ? g.members : []).join(","));
+  } else if (ACT_WHO.startsWith("s:")) p.set("strategy", ACT_WHO.slice(2));
+  return "/api/journal?" + p;
+}
+async function loadActivity(force) {
+  if (!actFiltered() || DEMO || ACT_BUSY || (!force && Date.now() - ACT_AT < 15000)) return;
+  ACT_BUSY = true;
+  const q = actQuery();
+  try {
+    const r = await fetch(q);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    if (q !== actQuery()) return;          // the picks changed while it read: the next read is theirs
+    ACT_ROWS = Array.isArray(j && j.events) ? j.events : [];
+    ACT_AT = Date.now();
+    renderActivity(ACT_ROWS);
+  } catch (_) { /* the Desk does not answer: keep what is shown */ }
+  finally { ACT_BUSY = false; }
+}
+/* The Show menu: every Desk group, then every strategy on the Desk (rebuilt only when that list changes, never while it is open). */
+function fillActWho() {
+  const sel = $("#actWho");
+  if (!sel || document.activeElement === sel) return;
+  const groups = typeof DESKGROUPS !== "undefined" ? DESKGROUPS.groups : [];
+  const strats = Object.keys((ST && ST.strategies) || {}).sort((a, b) => stratLabel(a).localeCompare(stratLabel(b)));
+  const opts = [["", "Everything"]].concat(groups.map(g => ["g:" + g.id, "Group: " + g.name]), strats.map(n => ["s:" + n, stratLabel(n)]));
+  if (ACT_WHO && !opts.some(([v]) => v === ACT_WHO)) opts.push([ACT_WHO, ACT_WHO.slice(2)]);
+  const sig = JSON.stringify(opts);
+  if (sel._sig !== sig) {
+    sel._sig = sig;
+    sel.innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join("");
+  }
+  sel.value = ACT_WHO;
+}
+function setActivity(who, days) {
+  ACT_WHO = who; ACT_DAYS = days; ACT_ROWS = null; ACT_AT = 0;
+  fillActWho();
+  const d = $("#actDays");
+  if (d) d.value = String(days);
+  renderActivity(actRows([]));
+  if (actFiltered()) loadActivity(true); else if (ST) render();
+}
+/* "Activity ›" on a strategy's or a group's page: its lines of the last 7 days. */
+function openActivity(who) {
+  setActivity(who, 7);
+  setView("activity");
+}
+$("#actWho")?.addEventListener("change", (e) => setActivity(e.target.value, ACT_DAYS));
+$("#actDays")?.addEventListener("change", (e) => setActivity(ACT_WHO, Math.max(1, parseInt(e.target.value, 10) || 1)));
 $("#feed").addEventListener("click", (e) => {
   const row = e.target && e.target.closest && e.target.closest(".feed-row");
   if (!row || FEED_RAW) return;
@@ -1907,6 +1995,9 @@ async function removeBuiltin(name) {
   toggleAlgoHidden(name, true);
   toast(`${stratLabel(name)} is off the Desk's list. Bring it back from Manage algos.`);
 }
+/* "Activity ›" on a strategy's or a group's page (openActivity: the Activity page, filtered to it, the last 7 days). */
+const actBtn = (who) => `<button class="btn btn-quiet btn-sm" onclick="openActivity(${jsArg(who)})"
+  title="Every trade, skip and order of the last 7 days: which account and when">Activity ›</button>`;
 function setView(k, name) {
   closeAsgMenus(false);
   VIEW = k === "strat" || k === "lab" || k === "group" ? {k, name} : {k};
@@ -2004,6 +2095,7 @@ function groupView(id) {
     <div class="sd-top"><div><h1 class="sd-title">${esc(p.title)}</h1><div class="sp mono">${esc(p.lead)}</div></div></div>
     <div class="sd-state"><b>${esc(p.kind)}</b> · ${esc(p.kindNote)}</div>
     <div class="sd-note">${esc(p.note)}</div>
+    ${actBtn("g:" + g.id)}
     ${p.empty ? `<div class="eq-empty">${esc(DeskLab.EMPTY_GROUP)}</div>` : ""}
     ${curve}
     <div class="figs labres-prop grp-figs${three(p.figs)}" data-h="Combined, after costs">${two(p.figs)}</div>
@@ -2540,7 +2632,7 @@ function stratView(name) {
     ? `<div class="figs">${money}${fig("Win rate", lv.win_rate + "%")}${fig("Trades", lv.trades)}${fig("Avg per trade", usd(lv.avg_trade), "Before fees, per trade")}${fig("Avg slip", (lv.avg_slip_pts ?? "—") + " pts")}</div>`
     : `<div class="eq-empty">No live trades yet.</div>`;
   const links = `<div class="qlinks">${s.research && s.research.rows ? `<button class="btn btn-quiet btn-sm" onclick="openRes('${name}')">Backtest metrics</button>` : ""}
-    <button class="btn btn-quiet btn-sm" onclick="openLive('${name}')">Live calendar</button></div>`;
+    <button class="btn btn-quiet btn-sm" onclick="openLive('${name}')">Live calendar</button>${actBtn("s:" + name)}</div>`;
   const accts = ST.accounts || {}, asg = (ST.book && ST.book[name]) || [];
   const rows = asg.map(a => acctRow(a.account, {qty: a.qty, strategy: name})).join("");
   const free = Object.keys(accts).filter(id => !asg.some(a => a.account === id));
@@ -2748,7 +2840,7 @@ function labDeskView(name, s) {
     ${ro ? `<div class="sd-note">${esc(DeskLab.OTHER_DESK)}</div>` : ""}
     ${lab.auto === true ? "" : `<div class="sec"><h2>Limits</h2><div class="agroup feed static">${limits}</div>${winNote ? `<div class="mcap warn">${esc(winNote)}</div>` : ""}
       <button class="btn btn-outline btn-sm" onclick="openLabLimits(${jsArg(name)})"${ro ? " disabled" : ""}>${esc(DeskLab.EDIT_LIMITS)}</button></div>`}
-    <div class="sec"><h2>${shadow ? "Today, in shadow" : "Today"}</h2>${today}</div>${lab.name ? stratCal(name, lab.name) : ""}
+    <div class="sec"><h2>${shadow ? "Today, in shadow" : "Today"}</h2>${today}${actBtn("s:" + name)}</div>${lab.name ? stratCal(name, lab.name) : ""}
     ${old.length ? `<div class="sec"><h2>${esc(DeskLab.OLD_TITLE)}</h2><div class="agroup feed static">${old.join("")}</div></div>` : ""}
     ${row ? `<div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
     ${labCurveHtml(row.name)}${labResHtml(row.name, name)}` : ""}
@@ -3042,7 +3134,9 @@ function render() {
   if ($("#algoOverlay").classList.contains("open")) renderAlgoMgr();
   renderGroupMgr();
 
-  renderActivity(s.journal);
+  fillActWho();
+  renderActivity(actRows(s.journal));
+  if (VIEW.k === "activity") loadActivity(false);
   renderNotices(s.notices);
 }
 

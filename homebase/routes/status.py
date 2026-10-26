@@ -4,6 +4,7 @@ Moved verbatim from homebase.server.create_app (2026-10-20): same paths, same bo
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import json
 from dataclasses import asdict
 from pathlib import Path
@@ -111,25 +112,40 @@ def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapter
                 out.append(rec)
         return out
 
+    def _names_in(touched, names: set) -> bool:
+        """A Kill / account flatten names what it touched as {"<strategy>@<account>": ...}."""
+        return isinstance(touched, (dict, list)) and any(str(k).split("@", 1)[0] in names for k in touched)
+
     @app.get("/api/journal")
     async def journal_query(date: str | None = None, event: str | None = None,
-                            account: str | None = None, limit: int = 200):
-        """Journal events, newest first, for a day (default today ET) -- unlike /api/status's
-        fixed JOURNAL_TAIL preview, this one takes a date and filters, for a real read of what
-        happened (the MCP desk_journal tool; the dashboard doesn't call this)."""
+                            account: str | None = None, limit: int = 200,
+                            strategy: str | None = None, group: str | None = None, days: int = 1):
+        """Journal events, newest first, for a day (default today ET) or the `days` days ending on it --
+        unlike /api/status's fixed JOURNAL_TAIL preview, this one takes a date and filters, for a real
+        read of what happened (the MCP desk_journal tool; the Activity page when it shows one strategy, a
+        group or more than today). `strategy` (comma-separated ids) and `group` (an account cycle's id)
+        keep a line that names one of those strategies or that group."""
         limit = max(1, min(int(limit), 2000))
-        day = date or engine.now_et().date().isoformat()
+        last = date or engine.now_et().date().isoformat()
+        try:
+            first = (dt.date.fromisoformat(last) - dt.timedelta(days=max(1, min(int(days), 90)) - 1)).isoformat()
+        except ValueError:
+            first = last
+        names = {s for s in (strategy or "").split(",") if s}
         jp = state_dir() / "journal.jsonl"
         records = await asyncio.to_thread(_read_journal_records, jp)
         out = []
         for rec in records:
-            if str(rec.get("et", "")).split("T", 1)[0] != day:
+            if not first <= str(rec.get("et", "")).split("T", 1)[0] <= last:
                 continue
             if event and rec.get("event") != event:
                 continue
             if account and rec.get("account") != account:
                 continue
+            if (names or group) and not (rec.get("strategy") in names or (group and rec.get("group") == group)
+                                         or _names_in(rec.get("strategies"), names)):
+                continue
             out.append(rec)
         out.reverse()
-        return {"date": day, "count": len(out), "events": out[:limit]}
+        return {"date": last, "first": first, "count": len(out), "events": out[:limit]}
 

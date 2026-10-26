@@ -332,6 +332,10 @@ html.hb-apple .hb-insp .sd-actions .btn { width: 100%; height: 28px; border-radi
 /* ---- content: Activity --------------------------------------------------------------------------------------------- */
 html.hb-apple .act-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 0 10px; }
 html.hb-apple .act-head h1 { margin: 0; font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: normal; color: var(--a-label); }
+html.hb-apple .act-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+html.hb-apple .act-pick select { width: auto; max-width: 240px; }
+html.hb-apple .act-head { flex-wrap: wrap; }
+html.hb-apple .feed-day { padding: 12px 10px 4px; font-size: 12px; font-weight: 600; color: var(--a-label-2); }
 html.hb-apple .act-head .hint { margin-top: 2px; max-width: 60ch; font-size: 13px; line-height: 16px; color: var(--a-label-2); }
 html.hb-apple #feedRawBtn[aria-pressed="true"] { background: var(--a-track); color: var(--a-label); font-weight: 510; }
 html.hb-apple .act-card { margin: 18px 0 0; padding: 0; border-radius: 12px; background: var(--a-group); box-shadow: none; overflow: hidden; }
