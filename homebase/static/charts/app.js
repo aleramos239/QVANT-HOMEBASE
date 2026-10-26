@@ -325,7 +325,14 @@ function startDividerDrag(e, axis, k) {
   el.classList.add('dragging');
   document.body.classList.add('split-dragging', axis);
   let moved = false;
+  const end = () => {   // the handlers die with the drag: left on, a later hover over the divider kept resizing
+    el.onpointermove = el.onpointerup = el.onpointercancel = el.onlostpointercapture = null;
+    el.classList.remove('dragging');
+    document.body.classList.remove('split-dragging', 'col', 'row');
+    if (moved) markDirty();
+  };
   el.onpointermove = (m) => {
+    if (!m.buttons) { end(); return; }   // the release was missed (outside the window): no button, no drag
     const delta = ((axis === 'col' ? m.clientX : m.clientY) - from) / equal;
     const next = { ...start, [key]: C.dragTrack(start[key], k, delta) };
     moved = true;
@@ -333,11 +340,7 @@ function startDividerDrag(e, axis, k) {
     placeDividers();
     layout.sizes = C.cleanSizes(next, layout.grid);
   };
-  el.onpointerup = el.onpointercancel = () => {
-    el.classList.remove('dragging');
-    document.body.classList.remove('split-dragging', 'col', 'row');
-    if (moved) markDirty();
-  };
+  el.onpointerup = el.onpointercancel = el.onlostpointercapture = end;
 }
 function resetTracks(axis) {
   const t = trackSizes(), key = axis === 'col' ? 'cols' : 'rows';

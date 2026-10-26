@@ -35,6 +35,7 @@ M1 = BarSpec("time", 60)
 CACHE_VERSION = 2
 DAY_S = 86400          # a session fits inside one day: its bars of this size or longer are one bar
 COARSE_MIN = 300        # time bars this coarse (a whole number of minutes) are also kept per session on disk
+SUB_KEPT = (30,)        # time bars finer than a minute also kept per session on disk: built from the ticks, not from minutes (owner 2026-10-26)
 MEMO_CELLS = 4_000_000  # what the memo may hold across sessions, in cells (a bar, plus each footprint level -- counted for
                         # fp and again for fpn --, tape order, big print, sweep and bubble it carries; ~250 B each in Python
                         # at most, so ~1 GB). A weight, not a count: a daily or weekly chart keeps one bar a session, so its
@@ -135,7 +136,9 @@ class History:
         stem = cp.name[:-len(".m1.pkl")]
         for coarse in self.cache_dir.glob(glob_escape(stem) + ".t*.pkl"):
             tail = coarse.name[len(stem) + 2:-len(".pkl")]  # ".t900.pkl" -> "900"
-            if tail.isdigit():
+            if tail.isdigit() and int(tail) < 60:
+                coarse.unlink(missing_ok=True)              # a sub-minute file is not resampled from minutes: the next read rebuilds it from the ticks
+            elif tail.isdigit():
                 self._keep(coarse, resample(bars, BarSpec("time", int(tail))), src_ns)
         return True
 
@@ -167,7 +170,9 @@ class History:
                     return pickle.load(fh)
         except (OSError, pickle.UnpicklingError, EOFError):
             pass
-        if spec.size > DAY_S:
+        if spec.size < 60:
+            out = self._from_ticks(root, spec, d)           # a sub-minute bar cannot be resampled from minutes
+        elif spec.size > DAY_S:
             # a session is one bar of anything longer than a day (resample anchors at the session open), and that bar is
             # the session's daily bar with a longer span: from the cached daily file, not from ~1,400 minutes (a 1W
             # chart's first build was ~55 ms a session, 70 s over 1,300 of them; from the daily bar it is ~1 ms)
@@ -188,7 +193,7 @@ class History:
                 return hit
             gen = self._gen
         self.watch(root, d)                                 # the files BEFORE their ticks are read
-        if spec.from_minutes and spec.size >= COARSE_MIN:
+        if (spec.from_minutes and spec.size >= COARSE_MIN) or (spec.kind == "time" and spec.size in SUB_KEPT):
             out = self._coarse(root, spec, d)
         elif spec.from_minutes:
             out = resample(self.minutes(root, d), spec)

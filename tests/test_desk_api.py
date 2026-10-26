@@ -316,6 +316,22 @@ def test_stream_obeys_the_930_pause_but_fills_still_flow(tmp_path):
     assert len(calls) == 2
 
 
+def test_stream_sends_an_account_live_view_as_account_in_the_pause(tmp_path):
+    desk, eng, ads, clock, *_ = mkdesk(tmp_path)
+
+    async def go():
+        gen = event_stream(desk, heartbeat_s=5, poll_s=0.01)
+        await gen.__anext__()                                # 11:00: the state
+        clock.set_et(9, 30)                                  # inside the pause
+        desk.publish("account", {"id": "a1", "stale": True})  # a held view event: not serialized
+        desk.publish("account_live", {"id": "a1", "net": 0})
+        out = await gen.__anext__()
+        await gen.aclose()
+        return out
+
+    assert run(go()) == 'event: account\ndata: {"id": "a1", "net": 0}\n\n'
+
+
 def test_stream_opened_in_the_pause_sends_its_first_state_after_it(tmp_path):
     desk, eng, ads, clock, *_ = mkdesk(tmp_path, et=(9, 30))
     calls = _count_snapshots(desk)

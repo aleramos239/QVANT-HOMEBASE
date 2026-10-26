@@ -118,7 +118,8 @@ async def event_stream(desk, *, heartbeat_s: float = HEARTBEAT_S,
     reader (it fell SUB_QUEUE_MAX behind): the client reconnects.
 
     P2: while `desk.views_paused()`, only fills (small, and the user must see
-    them) and the heartbeat are serialized. A view event (state/account/bot)
+    them), the view of an account that just had a fill or a chart action (`account_live`, sent as `account`)
+    and the heartbeat are serialized. A view event (state/account/bot)
     is not serialized at all: the stream owes a FRESH state instead, sent
     when the pause ends — it supersedes them and carries every fill so far.
     Other events (results) are held and follow it, in order. A stream opened
@@ -153,9 +154,10 @@ async def event_stream(desk, *, heartbeat_s: float = HEARTBEAT_S,
                 continue
             if event is None:
                 return
-            if event == "fill":
+            if event in ("fill", "account_live"):
                 if started:            # before the first state: that state carries it
-                    yield sse(event, data)
+                    # account_live: one account's fresh view, let through the pause (trading.ChartDesk._flush_hot)
+                    yield sse("account" if event == "account_live" else event, data)
                     last = loop.time()
                 continue
             if not (need_state or held) and not desk.views_paused():

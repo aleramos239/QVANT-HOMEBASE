@@ -186,7 +186,8 @@ function build() {
     b.type = 'button';
     b.setAttribute('aria-pressed', 'false');
     b.append(mk('span', 'op-tlbl', side));
-    b.onclick = () => { st.side = side; paint(); };
+    // the owner, 2026-10-26: a Buy / Sell press brings the chart preview back (the tag's × or the switch hid it)
+    b.onclick = () => { st.side = side; if (look.on) paint(); else setLook('on', true); };
     ui.tile[side] = { b };
   }
   tiles.append(ui.tile.Sell.b, ui.tile.Buy.b);
