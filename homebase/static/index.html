@@ -252,6 +252,7 @@
   .feed.static .feed-row{ cursor:default; }
   .act-pick{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
   .act-pick select{ width:auto; max-width:240px; }
+  .btn.act-link{ margin:14px 0 8px; }
   .feed-day{ padding:12px 0 4px; font-size:12px; font-weight:600; color:var(--muted-foreground); }
   .feed.static .t{ white-space:nowrap; }
   .feed.static .t.net{ flex:0 0 auto; margin-left:auto; }
@@ -1996,7 +1997,7 @@ async function removeBuiltin(name) {
   toast(`${stratLabel(name)} is off the Desk's list. Bring it back from Manage algos.`);
 }
 /* "Activity ›" on a strategy's or a group's page (openActivity: the Activity page, filtered to it, the last 7 days). */
-const actBtn = (who) => `<button class="btn btn-quiet btn-sm" onclick="openActivity(${jsArg(who)})"
+const actBtn = (who) => `<button class="btn btn-quiet btn-sm act-link" onclick="openActivity(${jsArg(who)})"
   title="Every trade, skip and order of the last 7 days: which account and when">Activity ›</button>`;
 function setView(k, name) {
   closeAsgMenus(false);
