@@ -409,7 +409,8 @@
   }
   function memberState(m) {
     var st = text(m.state);
-    return st === "done" ? "" : st === "pending" ? "Reading the unseen days…" : st === "failed" ? "Unseen run did not finish" : "No unseen run yet";
+    return st === "done" ? "" : st === "pending" ? "Running the 3:1 walk-forward…" : st === "failed" ? "The 3:1 walk-forward did not finish"
+      : st === "no_data" ? "No 3:1 walk-forward here: run it on the Mac" : st === "changed" ? "Code changed: promote it again" : "No 3:1 walk-forward yet";
   }
   /* A group's page: `group` = its record {id, name, kind, members}, `res` = its entry of /deskgroups/results (undefined while
      the first answer is on its way). Plain text everywhere; the page escapes it. */
@@ -418,11 +419,12 @@
     var kind = kindOf(text(g.kind)).k, count = Array.isArray(g.members) ? g.members.length : 0;
     var wait = !isObj(res);
     var b = !wait && isObj(res.build) ? res.build : null, u = !wait && isObj(res.unseen) ? res.unseen : null;
+    var bo = !wait && isObj(res.both) ? res.both : null, wf = !wait && res.walkforward === true;   // the 3:1: build, unseen, both
     var prop = !wait && isObj(res.prop) ? res.prop : {};
-    var pb = isObj(prop.build) ? prop.build : null, pu = isObj(prop.unseen) ? prop.unseen : null;
+    var pb = isObj(prop.build) ? prop.build : null, pu = isObj(prop.unseen) ? prop.unseen : null, pbo = isObj(prop.both) ? prop.both : null;
     var members = !wait && Array.isArray(res.members) ? res.members : [];
     var account = text((pu || pb || {}).account);
-    var cb = summaryCells(b), cu = summaryCells(u), pcb = propCells(pb), pcu = propCells(pu);
+    var cb = summaryCells(b), cu = summaryCells(u), cbo = summaryCells(bo), pcb = propCells(pb), pcu = propCells(pu), pcbo = propCells(pbo);
     var want = kind === "eval" ? [0, 1, 2] : kind === "funded" ? [3, 4] : [0, 1, 2, 3, 4];
     var days = u ? [
       { k: "Days traded", v: String(num(u.days) === null ? DASH : u.days) },
@@ -435,15 +437,16 @@
       title: text(g.name), kind: kindLabel(kind), kindNote: kindOf(kind).note, note: GROUP_NOTE,
       lead: count + (count === 1 ? " strategy" : " strategies") + " · " + kindLabel(kind),
       empty: count === 0,
-      figs: { head: ["Build", "Unseen"], rows: b || u ? GROUP_FIG_ROWS.map(function (k, i) { return { k: k, build: cb[i], unseen: cu[i] }; }) : [], note: note },
+      figs: { head: wf ? ["Build", "Unseen", "Both"] : ["Build", "Unseen"],
+        rows: b || u ? GROUP_FIG_ROWS.map(function (k, i) { var r = { k: k, build: cb[i], unseen: cu[i] }; if (wf) r.both = cbo[i]; return r; }) : [], note: note },
       days: { title: "Unseen days traded", rows: days },
       prop: {
         title: "Prop sim" + (account ? " · " + account : ""),
-        head: ["Build", "Unseen"],
-        rows: pb || pu ? want.map(function (i) { return { k: PROP_ROWS[i], build: pcb[i], unseen: pcu[i] }; }) : [],
+        head: wf ? ["Build", "Unseen", "Both"] : ["Build", "Unseen"],
+        rows: pb || pu ? want.map(function (i) { var r = { k: PROP_ROWS[i], build: pcb[i], unseen: pcu[i] }; if (wf) r.both = pcbo[i]; return r; }) : [],
         note: wait ? RES_WAIT : NO_PROP_GROUP,
       },
-      curve: u ? curve({ curve: u.curve }) : null,
+      curve: u ? curve({ walkforward: wf, curve: u.curve, curve_build: b && b.curve }) : null,
       members: members.map(function (m) {
         var mm = isObj(m) ? m : {};
         var ub = isObj(mm.build) ? mm.build : null, uu = isObj(mm.unseen) ? mm.unseen : null;

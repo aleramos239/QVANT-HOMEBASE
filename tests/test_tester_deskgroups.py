@@ -120,52 +120,43 @@ def _record(name, build_id):
             "session_window": ["09:25", "16:00"], "bar_minutes": 1}
 
 
-def _run(tmp_path, rid, name, trades, holdout):
-    d = tmp_path / "state" / "tester" / "runs" / rid
-    d.mkdir(parents=True)
-    rng = ({"kind": "custom", "start": "2025-07-01", "end": "2026-10-11", "holdout": True} if holdout
-           else {"kind": "research", "start": "2021-09-22", "end": "2025-06-30", "holdout": False})
-    (d / "request.json").write_text(json.dumps({"strategy": f"draft_{name}", "draft_sha256": f"sha-{name}", "inputs": {}, "qty": 1, "range": rng}))
-    (d / "status.json").write_text(json.dumps({"id": rid, "status": "done"}))
-    net = sum(t["net"] for t in trades)
-    (d / "run.json").write_text(json.dumps({"id": rid, "range": rng, "inputs": {}, "qty": 1, "report": {"summary": {"all": {
-        "net_profit": net, "trades": len(trades), "win_rate": 50.0, "profit_factor": 1.2, "max_drawdown": -300.0}}}}))
-    (d / "trades.json").write_text(json.dumps(trades))
-
-
-def test_a_groups_results_put_its_members_saved_runs_together(c, tmp_path, monkeypatch):
+def test_a_groups_results_are_its_members_3to1_walkforwards_put_together(c, tmp_path, monkeypatch):
+    """Owner 2026-10-25: the group's curve is the 3:1 -- in-sample, out-of-sample and both together, three lines, as each
+    strategy's card. Each member's walk-forward (deskresults.wf_state) is read; one not done is left out and named."""
+    import datetime as dt
+    from homebase import draftstore
+    from tests.test_tester_desklab import CODE, at_et, wf_result, write_wf
     seen = []
 
     def fake(trades, req):
-        seen.append([t["net"] for t in trades])
+        seen.append(len(trades))
         return {"rules": {"label": "LucidPro 50K"}, "headline": {"eval_pass_p": 0.4, "bust_p": 0.6, "median_days_to_pass": 5,
                                                               "funded_payout_p": 0.3, "funded_expected_cheque": 500.0}, "breach": {}}, False
     monkeypatch.setattr(tester_api, "_run_propsim", fake)
-    for n in ("nq_a", "nq_b", "nq_c"):
-        store.put(_record(n, f"20261001-100000-draft_{n}-aa"))
-    _run(tmp_path, "20261001-100000-draft_nq_a-aa", "nq_a", [{"date": "2024-01-02", "net": 300.0, "entry_ms": 1, "exit_ms": 2}], False)
-    _run(tmp_path, "20261001-100000-draft_nq_b-aa", "nq_b", [{"date": "2024-01-02", "net": -100.0, "entry_ms": 3, "exit_ms": 4}], False)
-    _run(tmp_path, "20261011-110000-draft_nq_a-bb", "nq_a", [{"date": "2025-07-01", "net": 1000.0, "entry_ms": 10, "exit_ms": 20},
-                                                             {"date": "2025-07-02", "net": -300.0, "entry_ms": 30, "exit_ms": 40}], True)
-    _run(tmp_path, "20261011-110001-draft_nq_b-bb", "nq_b", [{"date": "2025-07-01", "net": -200.0, "entry_ms": 12, "exit_ms": 18}], True)
+    at_et(monkeypatch, 2026, 10, 25, 12, 0)
+    for n in ("nq_a", "nq_b", "nq_c"):                                  # the settings the walk-forward resolves (the code's own)
+        store.put({**_record(n, f"20261001-100000-draft_{n}-aa"), "params": {"lookback": 6, "sl_pts": 20.0, "tp_pts": 40.0}})
+    for n in ("nq_a", "nq_b"):                                           # nq_c: no walk-forward
+        (draftstore.drafts_dir() / f"{n}.py").write_text(CODE.replace("nq_bars", n))
+        rec = store.get(n)
+        write_wf(tmp_path, rec, dt.date(2026, 10, 25), result=wf_result(), sha256=rec["sha256"])
     post(c, "create", {"name": "Eval group", "kind": "eval"})
-    for sid in ("lab_nq_a", "lab_nq_b", "lab_nq_c", "nq930"):          # nq_c has no unseen run, nq930 is built in
+    for sid in ("lab_nq_a", "lab_nq_b", "lab_nq_c", "nq930"):
         post(c, "move", {"strategy": sid, "group": "g1"})
     post(c, "create", {"name": "Empty"})
     got = c.get("/api/tester/deskgroups/results", headers=DESK).json()["results"]
     g = got["g1"]
-    assert (g["name"], g["kind"]) == ("Eval group", "eval")
-    assert [m["strategy"] for m in g["members"]] == ["lab_nq_a", "lab_nq_b", "lab_nq_c"]
+    assert (g["name"], g["kind"], g["walkforward"]) == ("Eval group", "eval", True)
     assert [m["state"] for m in g["members"]] == ["done", "done", "none"]
-    assert g["members"][0]["unseen"]["net"] == 700.0 and g["members"][2]["unseen"] is None
+    assert g["members"][0]["unseen"]["net"] == 1234.5 and g["members"][0]["build"]["net"] == 4000.0 and g["members"][2]["unseen"] is None
     assert [x["strategy"] for x in g["left_out"]] == ["lab_nq_c", "nq930"]
-    assert g["in"] == {"build": ["lab_nq_a", "lab_nq_b", "lab_nq_c"][:2], "unseen": ["lab_nq_a", "lab_nq_b"]}
-    u = g["unseen"]
-    assert (u["net"], u["trades"], u["together_days"]) == (500.0, 3, 1)
-    assert u["curve"] == {"days": ["2025-07-01", "2025-07-02"], "vals": [800.0, 500.0]}
-    assert g["build"]["net"] == 200.0 and g["build"]["trades"] == 2
-    assert g["prop"]["unseen"]["account"] == "LucidPro 50K" and g["prop"]["unseen"]["eval_pass_p"] == 0.4
-    assert sorted(map(sorted, seen)) == [[-300.0, -200.0, 1000.0], [-100.0, 300.0]], "each side is scored once, as one account's trades"
+    assert g["in"] == {k: ["lab_nq_a", "lab_nq_b"] for k in ("build", "unseen", "both")}
+    assert (g["unseen"]["net"], g["unseen"]["trades"]) == (400.0, 4)              # 2 members x (300 - 100)
+    assert g["unseen"]["curve"] == {"days": ["2022-04-04", "2022-04-05"], "vals": [600.0, 400.0]}
+    assert (g["build"]["net"], g["build"]["trades"]) == (100.0, 2)                # 2 members x 50
+    assert (g["both"]["net"], g["both"]["trades"]) == (500.0, 6)
+    assert g["both"]["curve"] == {"days": ["2022-01-03", "2022-04-04", "2022-04-05"], "vals": [100.0, 700.0, 500.0]}
+    assert g["prop"]["unseen"]["account"] == "LucidPro 50K"
+    assert sorted(seen) == [2, 4, 6], "each side is scored once, as one account's trades"
     empty = got["g2"]
-    assert empty["members"] == [] and empty["unseen"] is None and empty["build"] is None and empty["prop"] == {"build": None, "unseen": None}
-    assert c.get("/api/tester/deskgroups/results", headers=EVIL).status_code == 403
+    assert empty["members"] == [] and empty["unseen"] is None and empty["both"] is None

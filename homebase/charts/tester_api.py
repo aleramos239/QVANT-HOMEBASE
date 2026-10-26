@@ -1311,24 +1311,26 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
 
     @r.get("/deskgroups/results")
     def deskgroups_results(request: Request):
-        """For each group: its members' own unseen-days numbers and, for the members' saved runs put together as one account's
-        trades, the same on the build days and on the unseen days (net, win rate, PF, drawdown, days, the curve, the prop sim on
-        DESKLAB_PROP). A member that is not a Lab strategy, or has no unseen-days run yet, is left out of the unseen figures and
-        named. Saved runs only; a member's missing unseen run is started like the Desk panel's (ensure_unseen)."""
+        """For each group: its members' own 3:1 walk-forward numbers and, for their trades put together as one account's, the
+        same on the in-sample months (build), the out-of-sample months (unseen) and all of them together (both): net, win
+        rate, PF, drawdown, days, the curve, the prop sim on DESKLAB_PROP (owner 2026-10-25: the group's curve is the 3:1, three
+        lines -- as each strategy's card). A member that is not a Lab strategy, or whose 3:1 walk-forward is not done, is left
+        out and named. Saved results only (ensure_wf: never starts a run on a host without the data)."""
         watch_guard(request)
 
-        def prop_of(ids, ledger):
+        def prop_of(key, ledger):
             if not ledger:
                 return None
             try:
-                got = _rescore(("group", tuple(sorted(ids))), lambda: {"run": {}, "trades": ledger, "propsim": None}, DESKLAB_PROP)
+                got = _rescore(("group", key), lambda: {"run": {}, "trades": ledger, "propsim": None}, DESKLAB_PROP)
                 return deskresults.prop_headline(got)
             except (HTTPException, KeyError, ValueError, OSError):
                 return None
+        heads = ("net", "trades", "win_rate", "profit_factor", "max_drawdown")
         out = {}
         with desk_res_lock:
             for g in deskgroups.load():
-                members, build_in, unseen_in, left_out = [], [], [], []
+                members, left_out, sides = [], [], {"build": [], "unseen": [], "both": []}
                 for sid in g["members"]:
                     try:
                         rec = store.get(sid[4:]) if sid.startswith("lab_") else None
@@ -1336,28 +1338,35 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                         rec = None
                     if not isinstance(rec, dict):
                         left_out.append({"strategy": sid, "why": "not on the Desk any more" if sid.startswith("lab_")
-                                         else "built in: it has no unseen-days run to add"})
+                                         else "built in: it has no 3:1 walk-forward to add"})
                         continue
-                    got = ensure_unseen(rec)
-                    unseen_run = got.get("run")
-                    b_id = (rec.get("run") or {}).get("id")
-                    members.append({"strategy": sid, "label": rec.get("label") or rec.get("name"), "state": got["state"],
-                                    "build": {k: (rec.get("run") or {}).get(k) for k in ("net", "trades", "win_rate", "profit_factor", "max_drawdown")},
-                                    "unseen": ({k: unseen_run.get(k) for k in ("net", "trades", "win_rate", "profit_factor", "max_drawdown")}
-                                               if unseen_run else None)})
-                    if ledger_of(b_id) is not None:
-                        build_in.append((sid, b_id))
-                    if unseen_run and ledger_of(unseen_run["id"]) is not None:
-                        unseen_in.append((sid, unseen_run["id"]))
-                    else:
-                        left_out.append({"strategy": sid, "why": "no unseen-days run yet"})
-                res = {"id": g["id"], "name": g["name"], "kind": g["kind"], "members": members, "left_out": left_out}
-                for key, chosen in (("build", build_in), ("unseen", unseen_in)):
-                    ledger, owners = deskgroups.merged([(sid, ledger_of(rid) or []) for sid, rid in chosen])
-                    res[key] = deskgroups.summarize(ledger, owners)
-                    res.setdefault("prop", {})[key] = prop_of([rid for _, rid in chosen], ledger)
-                    res.setdefault("in", {})[key] = [sid for sid, _ in chosen]
-                out[g["id"]] = res
+                    got, res = ensure_wf(rec), None
+                    if got["state"] == "done":
+                        try:
+                            res = wfs.result(got["id"])
+                        except (ValueError, KeyError, OSError):
+                            res = None
+                    ins = ((res or {}).get("stitched_is") or {}).get("trades") or []
+                    oos = ((res or {}).get("stitched") or {}).get("trades") or []
+                    members.append({"strategy": sid, "label": rec.get("label") or rec.get("name"),
+                                    "state": "done" if res else ("failed" if got["state"] == "done" else got["state"]),
+                                    "build": {k: v for k, v in deskresults.wf_summary(got["id"], res, "stitched_is").items() if k in heads}
+                                    if res else None,
+                                    "unseen": {k: v for k, v in deskresults.wf_summary(got["id"], res).items() if k in heads} if res else None})
+                    if res is None:
+                        left_out.append({"strategy": sid, "why": "no 3:1 walk-forward yet"})
+                        continue
+                    sides["build"].append((sid, got["id"], ins))
+                    sides["unseen"].append((sid, got["id"], oos))
+                    sides["both"].append((sid, got["id"], ins + oos))
+                res_g = {"id": g["id"], "name": g["name"], "kind": g["kind"], "members": members, "left_out": left_out,
+                         "walkforward": True}
+                for key, chosen in sides.items():
+                    ledger, owners = deskgroups.merged([(sid, trades) for sid, _, trades in chosen])
+                    res_g[key] = deskgroups.summarize(ledger, owners)
+                    res_g.setdefault("prop", {})[key] = prop_of((key,) + tuple(sorted(w for _, w, _ in chosen)), ledger)
+                    res_g.setdefault("in", {})[key] = [sid for sid, _, _ in chosen]
+                out[g["id"]] = res_g
         return watch_answer(request, {"results": out})
 
     @r.post("/show")

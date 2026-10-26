@@ -1192,12 +1192,26 @@ test('a group page: the combined figures, the prop rows that fit its kind, and t
   assert.equal(ev.prop.title, 'Prop sim · LucidPro 50K');
   assert.deepEqual(ev.days.rows.map((r) => r.k), ['Days traded', 'Best day', 'Worst day', 'Days 2+ traded']);
   assert.equal(ev.curve.total, 500);
-  assert.deepEqual(ev.members.map((m) => [m.label, m.build, m.unseen, m.state]), [['NQ A', '+$500', '+$700', ''], ['NQ C', '+$10', '—', 'Reading the unseen days…']]);
+  assert.deepEqual(ev.members.map((m) => [m.label, m.build, m.unseen, m.state]), [['NQ A', '+$500', '+$700', ''], ['NQ C', '+$10', '—', 'Running the 3:1 walk-forward…']]);
   assert.deepEqual(ev.leftOut.map((x) => [x.label, x.why]), [['NQ C', 'no unseen-days run yet'], ['nq930', 'built in: it has no unseen-days run to add']]);
   const fu = D.groupPage({ id: 'g2', name: 'Funded', kind: 'funded', members: [] }, res);
   assert.deepEqual(fu.prop.rows.map((r) => r.k), ['Gets a payout', 'Expected cheque']);
   assert.equal(D.groupPage({ id: 'g3', name: 'T', kind: 'together', members: [] }, res).prop.rows.length, 5);
   assert.equal(fu.empty, true);
+});
+
+test('a 3:1 group page (owner 2026-10-25): Build, Unseen and Both columns, and three curve lines', () => {
+  const side = (net, days, vals) => ({ net, trades: 2, win_rate: 50, profit_factor: 1.2, max_drawdown: -100, days: days.length,
+    best_day: 1, worst_day: -1, together_days: 0, curve: { days, vals } });
+  const res = { walkforward: true, members: [], left_out: [],
+    build: side(300, ['2022-01-03', '2022-01-04'], [100, 300]), unseen: side(200, ['2022-04-04', '2022-04-05'], [250, 200]),
+    both: side(500, ['2022-01-03', '2022-01-04', '2022-04-04', '2022-04-05'], [100, 300, 550, 500]), prop: { build: null, unseen: null, both: null } };
+  const p = D.groupPage({ id: 'g4', name: 'apex 300k', kind: 'together', members: ['lab_a'] }, res);
+  assert.deepEqual(p.figs.head, ['Build', 'Unseen', 'Both']);
+  assert.deepEqual([p.figs.rows[0].build, p.figs.rows[0].unseen, p.figs.rows[0].both], ['+$300', '+$200', '+$500']);
+  assert.equal(p.curve.title, 'Walk-forward 3:1 · build and unseen days, after costs');
+  assert.ok(Array.isArray(p.curve.build) && Array.isArray(p.curve.both) && p.curve.vals.length > 0);
+  assert.deepEqual(D.groupPage({ id: 'g1', name: 'old', kind: 'together', members: [] }, { ...res, walkforward: false }).figs.head, ['Build', 'Unseen']);
 });
 
 test('a group page before its first answer says so, and a hostile name or sentence is escaped', () => {

@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=3">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=35"></script>
+<script src="/static/desklab.js?v=36"></script>
 <script src="/static/desklabset.js?v=2"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
@@ -1990,24 +1990,25 @@ function groupView(id) {
   const cell = (x) => `<div class="v mono">${esc(x)}</div>`;
   const f = (k, vals, head) => `<div class="${head ? "f fh" : "f"}"><div class="k">${esc(k)}</div>${vals.map(cell).join("")}</div>`;
   const note = (t) => `<div class="labres-note">${esc(t)}</div>`;
-  const two = (b) => b.rows.length ? f("", b.head, true) + b.rows.map(r => f(r.k, [r.build, r.unseen])).join("") : note(b.note);
+  const two = (b) => b.rows.length ? f("", b.head, true) + b.rows.map(r => f(r.k, "both" in r ? [r.build, r.unseen, r.both] : [r.build, r.unseen])).join("") : note(b.note);
+  const three = (b) => b.head && b.head.length === 3 ? " three" : "";
   const days = p.days.rows.length ? p.days.rows.map(r => f(r.k, [r.v])).join("") : note(p.figs.note);
   const members = p.members.map(m => `<div class="feed-row" role="button" tabindex="0" onclick="openGroupMember(${jsArg(m.strategy)})"
       onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openGroupMember(${jsArg(m.strategy)})}">
       <span class="h">${esc(m.label)}${m.state ? ` · <span class="dim">${esc(m.state)}</span>` : ""}</span>
       <span class="t dim">${esc(m.build)}</span><span class="t net">${esc(m.unseen)}</span></div>`);
   const out = p.leftOut.map(x => `<div class="feed-row"><span class="h">${esc(x.label)}</span><span class="t dim">${esc(x.why)}</span></div>`);
-  const curve = p.curve ? `<div class="sec"><h2>${esc(p.curve.title)}</h2>${eqPlot(p.curve.vals, p.curve.label, p.curve.total, p.curve.aria, p.curve.ends, p.curve.days)}</div>` : "";
+  const curve = p.curve ? `<div class="sec"><h2>${esc(p.curve.title)}</h2>${eqPlot(p.curve.vals, p.curve.label, p.curve.total, p.curve.aria, p.curve.ends, p.curve.days, p.curve.notes, p.curve.build, p.curve.both)}</div>` : "";
   return `<button class="back" onclick="setView('today')">‹ Today</button>
     <div class="sd-top"><div><h1 class="sd-title">${esc(p.title)}</h1><div class="sp mono">${esc(p.lead)}</div></div></div>
     <div class="sd-state"><b>${esc(p.kind)}</b> · ${esc(p.kindNote)}</div>
     <div class="sd-note">${esc(p.note)}</div>
     ${p.empty ? `<div class="eq-empty">${esc(DeskLab.EMPTY_GROUP)}</div>` : ""}
     ${curve}
-    <div class="figs labres-prop grp-figs" data-h="Combined, after costs">${two(p.figs)}</div>
+    <div class="figs labres-prop grp-figs${three(p.figs)}" data-h="Combined, after costs">${two(p.figs)}</div>
     <div class="labres" data-for="${esc(g.id)}">
       <div class="sec"><h2>${esc(p.days.title)}</h2><div class="figs labres-unseen" data-h="${esc(p.days.title)}">${days}</div></div>
-      <div class="sec"><h2>${esc(p.prop.title)}</h2><div class="figs labres-prop" data-h="${esc(p.prop.title)}">${two(p.prop)}</div></div></div>
+      <div class="sec"><h2>${esc(p.prop.title)}</h2><div class="figs labres-prop${three(p.prop)}" data-h="${esc(p.prop.title)}">${two(p.prop)}</div></div></div>
     ${members.length ? `<div class="sec"><h2>Strategies</h2><div class="agroup feed static">
       <div class="feed-row"><span class="h dim">Strategy</span><span class="t dim">Build</span><span class="t dim">Unseen</span></div>${members.join("")}</div></div>` : ""}
     ${out.length ? `<div class="sec"><h2>Left out of the sum</h2><div class="agroup feed static">${out.join("")}</div></div>` : ""}
