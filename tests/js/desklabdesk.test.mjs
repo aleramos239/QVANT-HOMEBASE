@@ -1473,6 +1473,24 @@ test('1.10: the last signal comes from /api/journal, read at most once a minute;
   assert.equal(urls.length, 2, 'a minute later it reads again');
 });
 
+test('B: a read that never answers does not hold the slot: a minute on the next read goes out; still one a minute', async () => {
+  const t = load(), urls = [];
+  t.ctx.fetch = async (u) => { urls.push(u); return new Promise(() => {}); };          // the desk never answers
+  const row = () => t.api.todayRow('nq930', t.ctx.ST.strategies.nq930);
+  row(); await tick();
+  assert.equal(urls.length, 1);
+  vm.runInContext('JREAD.today.at -= 30000;', t.ctx);                                 // 30 s on: still inside its minute
+  row(); await tick();
+  assert.equal(urls.length, 1, 'at most one read a minute');
+  vm.runInContext('JREAD.today.at -= 30000;', t.ctx);                                 // a minute on, the first read still hanging
+  row(); await tick();
+  assert.equal(urls.length, 2, 'the hung read no longer blocks the next one');
+  t.ctx.fetch = jsonAnswer([{ et: '2026-10-10T09:30:02-04:00', event: 'placed', strategy: 'nq930', account: 'a1' }], urls);
+  vm.runInContext('JREAD.today.at -= 60000;', t.ctx);
+  row(); await tick();
+  assert.match(row(), /Last signal 09:30<\/div>/, 'a later answer is read as usual');
+});
+
 test('1.10: no read in the demo or while the page is hidden, and a refused read leaves the row as it was', async () => {
   for (const [opts, hide] of [[{ demo: true }, false], [{}, true]]) {
     const t = load(opts), urls = [];
