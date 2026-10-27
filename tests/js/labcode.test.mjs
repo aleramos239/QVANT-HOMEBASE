@@ -764,3 +764,55 @@ test('the list by status and market, Dead hidden by default; sorted by name, las
   assert.equal(L.libSort(rows, g, 'groups'), rows, 'groups: left to the sections');
   assert.deepEqual(L.libMarkets(rows), ['ES', 'NQ']);
 });
+
+test('touchesTestMonths: the 3:1 test months are Jan, May and Sep from 2022 (plan 4.5)', () => {
+  assert.equal(L.touchesTestMonths('2021-09-22', '2021-12-31'), false);     // the first in-sample block only
+  for (const d of ['2022-01-01', '2022-01-17', '2022-01-31']) assert.equal(L.touchesTestMonths(d, d), true, d);
+  assert.equal(L.touchesTestMonths('2021-12-31', '2022-01-01'), true);
+  assert.equal(L.touchesTestMonths('2021-09-22', ''), true);                // open-ended, "to today"
+  assert.equal(L.touchesTestMonths('2021-09-22', null), true);
+  assert.equal(L.touchesTestMonths('2022-02-01', '2022-04-30'), false);     // Feb-Apr: in-sample
+  assert.equal(L.touchesTestMonths('2022-04-30', '2022-05-01'), true);
+  assert.equal(L.touchesTestMonths('2025-10-01', '2025-12-31'), false);
+  assert.equal(L.touchesTestMonths('2025-12-01', '2026-01-02'), true);      // a December into January crosses the year
+  assert.equal(L.touchesTestMonths('2023-06-01', '2023-08-31', ['2023-07']), true);   // a result's own months count too
+  assert.equal(L.touchesTestMonths('nope', '2022-03-01'), true);            // not a date: counted as touching
+  assert.equal(L.isTestMonth('2021-09'), false);
+  assert.equal(L.isTestMonth('2026-09'), true);
+});
+
+test('rangeReadsTestMonths: a saved run\'s range, by kind (plan 4.3)', () => {
+  assert.equal(L.rangeReadsTestMonths({ kind: 'wf_is', start: '2021-10-01', end: '2026-08-31' }), false);
+  assert.equal(L.rangeReadsTestMonths({ kind: 'wf_oos', start: '2022-01-01', end: '2022-01-31' }), true);
+  assert.equal(L.rangeReadsTestMonths({ kind: 'research', start: '2021-09-22', end: '2025-06-30' }), true);
+  assert.equal(L.rangeReadsTestMonths({ kind: 'research' }), true);
+  assert.equal(L.rangeReadsTestMonths({ kind: 'custom', start: '2022-02-01', end: '2022-03-31' }), false);
+  assert.equal(L.rangeReadsTestMonths({ kind: 'custom', start: '2024-08-01', end: '2024-09-03' }), true);
+  assert.equal(L.rangeReadsTestMonths({ kind: 'what' }), true);
+  assert.equal(L.rangeReadsTestMonths(null), true);
+});
+
+test('triesCount: each in-sample setting, one per heat-map table, every test-months read after the first (O5)', () => {
+  const run = (kind, extra = {}) => ({ strategy: 's', status: 'done', range: { kind, start: '2022-02-01', end: kind === 'custom' ? '2022-05-10' : '2022-03-31' }, ...extra });
+  // nothing yet: the first try
+  assert.deepEqual(L.triesCount([], [], 's', []), { n: 1, reads: 0, settings: 0, tables: 0, cut: false, locked: false });
+  // 3 settings, one heat-map table, an old 1:N walk-forward, one custom run into May, one 3:1 read: 3 + 2 tables + (3 reads - 1)
+  const runs = [run('wf_is'), run('wf_is'), run('wf_is'), run('custom'), run('wf_is', { status: 'error' }), run('wf_is', { strategy: 'other' })];
+  const wfs = [{ strategy: 's', scheme: 'fixed', axes: ['ctl.stop', 'ctl.target_rr'] }, { strategy: 's', scheme: 'fixed', axes: [] },
+    { strategy: 's', scheme: 'pick', axes: ['x'] }, { strategy: 'other', scheme: 'fixed', axes: ['x'] }];
+  const t = L.triesCount(runs, wfs, 's', [{ lock: { cell: 0 }, oos: { state: 'done' } }, null]);
+  assert.deepEqual(t, { n: 3 + 2 + 2, reads: 3, settings: 3, tables: 2, cut: false, locked: true });
+  // one heat-map table is one try, whatever its box count
+  assert.equal(L.triesCount([], [{ strategy: 's', scheme: 'fixed', axes: ['a', 'b', 'c'] }], 's', []).n, 1);
+  assert.equal(L.triesCount([run('wf_is')], [{ strategy: 's', scheme: 'fixed', axes: ['a'] }], 's', []).n, 2);
+  // the first read is free, the second is a try
+  assert.equal(L.triesCount([run('custom')], [], 's', []).n, 1);
+  assert.equal(L.triesCount([run('custom'), run('custom')], [], 's', []).n, 1);
+  assert.equal(L.triesCount([run('wf_is'), run('custom'), run('custom')], [], 's', []).n, 2);
+  // a full page of runs (500) or of walk-forwards (20): the count may be short
+  assert.equal(L.triesCount(Array.from({ length: 500 }, () => run('wf_is')), [], 's', []).cut, true);
+  assert.equal(L.triesCount(Array.from({ length: 499 }, () => run('wf_is')), [], 's', []).cut, false);
+  assert.equal(L.triesCount([], Array.from({ length: 20 }, () => ({ strategy: 'x', scheme: 'fixed', axes: [] })), 's', []).cut, true);
+  // no pick yet: not locked, even with a table
+  assert.equal(L.triesCount([], [{ strategy: 's', scheme: 'fixed', axes: ['a'] }], 's', [{ lock: null, oos: null }]).locked, false);
+});

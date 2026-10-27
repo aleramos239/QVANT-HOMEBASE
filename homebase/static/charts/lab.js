@@ -97,6 +97,7 @@ async function openKey(key) {
   S.run = S.run && S.run.key === key ? S.run : (S.active && !S.active.dead && S.active.key === key ? S.active : null);   // coming back to a strategy that is still running shows its progress
   paintRes();
   if (b && b.kind !== 'new' && !S.run) restoreLastRun(b);
+  if (b && (b.kind === 'builtin' || b.kind === 'draft')) loadTries(b.kind === 'builtin' ? b.id : `draft_${b.name}`);
   setHash(b);
 }
 function setHash(b) {
@@ -197,6 +198,8 @@ async function run(opts = {}) {
   const wf0 = b.kind !== 'pipe' && formOf(b);
   if (wf0 && wf0.range.wf && !is31(wf0)) return wfRun();          // rolling: the heat-map walk-forward, as before
   const tag = is31(wf0) ? (opts.tag || 'is') : '';                  // 3:1 blocks: the strategy as set, one run (owner 2026-10-24)
+  if (!tag && wf0 && !opts.asked && !(S.busy && S.active && !S.active.dead && S.active.key === b.key)
+    && !(await datedRunOk(wf0, () => run({ ...opts, asked: true })))) return;
   S.deskErr = '';
   if (S.busy && S.active && !S.active.dead) {
     if (S.active.key === b.key) return;                              // this one is already running
@@ -276,6 +279,7 @@ async function poll(run) {
       if (run.dead) return;
       run.bundle = bd.ok ? bd.json : null;
       settle(); run.dead = true; threeKeep(run);
+      if (run.strategy) loadTries(run.strategy);
       const who = viewing() ? '' : ` <b>${esc(run.name || '')}</b>`;
       if (run.bundle) {
         const a = run.bundle.run.report.summary.all;
@@ -2343,17 +2347,12 @@ function threeEmpty(T) {
     <button class="btn btn-sm" data-act="runall"${S.busy ? ' disabled' : ''}>Run all years</button></div>`;
   return '<div class="rs-empty"><h3>No run yet</h3><p>Run runs your strategy as set on the 3:1 in-sample months: its curve, its numbers and every trade. The test months, all years, the heat map and the prop sim run only when you click them.</p></div>';
 }
-function runAll() {
+async function runAll() {
   const f = buf() && formOf(buf());
   if (!is31(f) || S.busy) return;
-  const d = dialog(`<h2>Run all years?</h2><p>Your strategy as set on every month from Sep 2021 to now. It reads the test months too.</p>
-    <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">Run all years</button></div>`);
-  d.addEventListener('click', (e) => {
-    const x = e.target.closest('[data-x]');
-    if (!x) return;
-    closeDialog();
-    if (x.dataset.x === 'go') run({ tag: 'all' });
-  });
+  if (!(await hasPick(f))) { log('<span class="err">Pick a box first: all years read the test months, and they open only after a pick.</span>'); return; }
+  testMonthsAsk(f, { title: 'Run all years?', text: 'Your strategy as set on every month from Sep 2021 to now. It reads the test months too.', go: 'Run all years' },
+    () => run({ tag: 'all' }));
 }
 /* The test months of the strategy as set: one box, in-sample first (the pick needs it), then its test months -- on one click, once. */
 function oosRun() {
@@ -2361,14 +2360,48 @@ function oosRun() {
   if (!is31(f)) return;
   const T = threeState(f);
   if (T.oos.busy) return;
-  const d = dialog(`<h2>Run the test months?</h2><p>Your strategy as set, on every 3:1 test month. They run once: after this they are spent.</p>
-    <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">Run them</button></div>`);
+  testMonthsAsk(f, { title: 'Run the test months?', text: 'Your strategy as set, on every 3:1 test month. They run once: after this they are spent.', go: 'Run them',
+    lock: T.oos.result && T.oos.result.lock ? '' : 'This locks the strategy as set as box #1.' }, () => oosGo(b, f, T));
+}
+/* ---- the tries count and the pick (plan 4.3, 4.5): read-only GETs, per strategy ---- */
+async function loadTries(sid) {
+  if (!sid) return null;
+  const [r, w] = await Promise.all([send('GET', `/api/tester/runs?limit=${C.RUNS_PAGE}&strategy=${encodeURIComponent(sid)}`), send('GET', '/api/tester/walkforwards')]);
+  if (!r.ok || !w.ok) return triesOf(sid);
+  const wfs = Array.isArray(w.json) ? w.json : [], fixed = wfs.filter((x) => x && x.strategy === sid && x.scheme === 'fixed');
+  const res = await Promise.all(fixed.map((x) => send('GET', `/api/tester/walkforward/${encodeURIComponent(x.id)}/result`).then((g) => (g.ok ? g.json : null))));
+  S.tries[sid] = C.triesCount(Array.isArray(r.json) ? r.json : [], wfs, sid, res);
+  if (curSid() === sid) paintRes();
+  return S.tries[sid];
+}
+/* A box of this strategy is picked: in what is open, or in its saved walk-forwards (O15: no test month before a pick). */
+const pickedNow = (f) => { const T = S.three[f.strategy], w = S.wf[f.strategy], t = triesOf(f.strategy);
+  return !!((T && T.oos.result && T.oos.result.lock) || (w && w.result && w.result.lock) || (t && t.locked)); };
+async function hasPick(f) { return pickedNow(f) || !!((await loadTries(f.strategy)) || {}).locked; }
+/* The one ask before a read of test months (runAll, a dated Run, oosRun): what it reads, that it counts, and which try it is.
+   `go` sends what it sent before this ask existed. */
+async function testMonthsAsk(f, what, go) {
+  const t = (await loadTries(f.strategy)) || triesOf(f.strategy), reads = t ? t.reads : 0, n = t ? t.n : 1, more = !t || t.cut ? '+' : '';
+  const d = dialog(`<h2>${esc(what.title)}</h2><p>${esc(what.text)}</p>
+    <p>${esc(`They count as seen: test months read ${reads}${more} time${reads === 1 && !more ? '' : 's'} for this strategy; this is try ${reads >= 1 ? n + 1 : n}${more}.`)}</p>
+    ${what.lock ? `<p>${esc(what.lock)}</p>` : ''}
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">${esc(what.go)}</button></div>`);
   d.addEventListener('click', (e) => {
     const x = e.target.closest('[data-x]');
     if (!x) return;
     closeDialog();
-    if (x.dataset.x === 'go') oosGo(b, f, T);
+    if (x.dataset.x === 'go') go();
   });
+}
+/* A Run on dates that hold a test month (Other dates, a custom range): refused before a pick, asked after one (plan 4.5).
+   true = it may run now; `again` runs it after a yes. */
+async function datedRunOk(f, again) {
+  const d = X.rangeDates(f.range);
+  if (!C.touchesTestMonths(d.start, d.end)) return true;
+  const span = `${d.start || '?'} → ${d.end || 'today'}`;
+  if (!(await hasPick(f))) { log(`<span class="err">Pick a box first: ${esc(span)} holds test months, and they open only after a pick.</span>`); return false; }
+  testMonthsAsk(f, { title: 'Run these dates?', text: `${span} holds test months.`, go: 'Run them' }, again);
+  return false;
 }
 async function oosGo(b, f, T) {
   const o = T.oos, token = ++o.token, id = () => encodeURIComponent(o.id), sleep = (ms) => new Promise((res) => setTimeout(res, ms));
@@ -2415,7 +2448,7 @@ async function oosGo(b, f, T) {
     }
   } catch (e) { if (token === o.token) o.err = e.message || String(e); }
   if (token !== o.token) return;
-  o.busy = false; o.step = ''; paintRes();
+  o.busy = false; o.step = ''; paintRes(); loadTries(f.strategy);
 }
 function oosHtml(T) {
   const o = T.oos, res = o.result, oo = res && res.oos, head = '<div class="rs-h"><b>Test months</b><span>Your strategy as set</span></div>';
