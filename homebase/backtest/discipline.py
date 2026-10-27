@@ -29,9 +29,9 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-RESEARCH_START = dt.date(2021, 9, 22)       # the build days: from the archive's first session ...
-RESEARCH_END = dt.date(2025, 6, 30)
-HOLDOUT_START = dt.date(2025, 7, 1)         # ... and the test days, from here to the latest data
+from . import wfmonths
+from .wflayout import HOLDOUT_START, RESEARCH_END, RESEARCH_START  # the build / test days (re-exported: callers read them here)
+
 IS_MONTHS = (1, 4, 7, 10)
 WF_KINDS = ("wf_is", "wf_oos")
 WF_OOS_ONLY = ("a 3:1 test month (wf_oos) runs only from its walk-forward, after the owner's pick and on his word: "
@@ -53,10 +53,8 @@ class Range:
 
     def includes(self, d: dt.date) -> bool:
         if self.kind in WF_KINDS:                   # the 3:1 months, less the gappy sessions the walk-forward skips
-            from . import wfmonths
             return self.start <= d <= self.end and d.isoformat()[:7] in self.months and d not in wfmonths.skipped(self.root)
         if self.kind == "custom" and self.root:     # the 3:1 rolling range: its months, less the gappy sessions
-            from . import wfmonths
             return self.start <= d <= self.end and d not in wfmonths.skipped(self.root)
         return self.start <= d <= self.end and (self.kind != "is_months" or d.month in IS_MONTHS)
 
@@ -118,7 +116,6 @@ def parse_range(obj) -> Range:
         raise DisciplineError(f"range.kind: one of {', '.join(KINDS)}")
     kind = obj["kind"]
     if kind in WF_KINDS:                            # the months come from the data, never from the body
-        from . import wfmonths
         root = obj.get("root")
         bl = wfmonths.blocks(root) if isinstance(root, str) and root else []
         if not bl:
