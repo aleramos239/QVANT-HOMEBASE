@@ -2361,11 +2361,11 @@ async function threeResume(b, f) {
   };
   T.lookAll = () => look('all');
   look('is');
-  const m = await send('POST', '/api/tester/walkforward-match', X.wfFixedBody(f, []));
+  const set = setKey(f), m = await send('POST', '/api/tester/walkforward-match', X.wfFixedBody(f, []));
   if (!m.ok || !m.json || !m.json.id || T.oos.id) return;
   const g = await send('GET', `/api/tester/walkforward/${encodeURIComponent(m.json.id)}/result`);
   if (!g.ok || !g.json || T.oos.id) return;
-  T.oos.id = m.json.id; T.oos.result = g.json;
+  T.oos.id = m.json.id; T.oos.result = g.json; T.oos.set = set;
   if (g.json.oos && !X.wfFixedOos(g.json, '').final) oosGo(b, f, T);    // a read still running: follow it (it starts nothing new)
   else if (buf() === b) paintRes();
 }
@@ -2442,11 +2442,12 @@ async function oosGo(b, f, T) {
   o.busy = true; o.err = ''; o.step = 'Starting…'; paintRes();
   try {
     if (b.kind !== 'builtin' && (b.kind === 'new' || isDirty(b)) && !(await save(b))) throw new Error('the script could not be saved');
-    const body = X.wfFixedBody(f, []);                      // one box: the strategy as set
+    const body = X.wfFixedBody(f, []), set = setKey(f);     // one box: the strategy as set
     if (!o.id) {
       const m = await send('POST', '/api/tester/walkforward-match', body);
       if (m.ok && m.json && m.json.id) o.id = m.json.id;
       else { const r = await send('POST', '/api/tester/walkforward', body); if (!r.ok) throw new Error(r.error || 'the run did not start'); o.id = r.json.id; }
+      o.set = set;
     }
     for (let lost = 0; ;) {
       const s = await send('GET', `/api/tester/walkforward/${id()}`);
@@ -2999,17 +3000,28 @@ function deskGo() {
   }
   if (st.action === 'promote') promoteToDesk(b);
 }
-/* Put it on the Desk: first what the six lines say of it (plan 4.7), then the same request as before; Not yet sends nothing.
-   The lines are read from its open 3:1 walk-forward, the picked one first. */
+/* The settings a run is made with, as one key: inputs, Trade rules, size and fees (X.body's own cleaning, keys sorted). */
+function canon(v) { return JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [z]) => (a < z ? -1 : a > z ? 1 : 0))) : x)); }
+function setKey(f) { const x = X.body(f); return canon({ inputs: x.inputs, controls: x.controls || {}, qty: x.qty, commission: x.commission, slippage_ticks: x.slippage_ticks }); }
+/* The 3:1 record of the run being put on the Desk: the open one-box walk-forward (the strategy as set), only when it was opened for
+   the very settings the run was made with (its own record, not the form). A table box or other settings: none, and the dialog says so.
+   shortcut: the code is not compared (the record was matched to the code saved when it was opened). */
+function promoteRecord(f, r) {
+  const T = f && S.three[f.strategy], m = r.bundle && r.bundle.run;
+  if (!T || !T.oos.result || !T.oos.set || !m) return null;
+  const ran = setKey({ ...f, inputs: m.inputs || {}, controls: (m.controls && m.controls.rules) || {}, qty: m.qty, commission: m.commission, slippage_ticks: m.slippage_ticks });
+  return ran === T.oos.set ? T.oos.result : null;
+}
+/* Put it on the Desk: first what the six lines say of it (plan 4.7), then the same request as before; Not yet sends nothing. */
 function promoteToDesk(b) {
   const r = S.run && S.run.key === b.key ? S.run : null;
   if (!r || !r.rid || !r.bundle || r.grid) return;      // a heat-map cell has no run of its own to promote
-  const f = formOf(b), sid = f ? f.strategy : '', T = sid && S.three[sid], w = sid && S.wf[sid];
-  const got = [T && T.oos.result, w && w.result].filter(Boolean), rd = realRead(got.find((x) => x.lock) || got[0] || null, sid);
-  const word = (ok) => (ok === true ? 'PASS' : ok === false ? 'FAIL' : 'not run');
+  const f = formOf(b), sid = f ? f.strategy : '', w = sid && S.wf[sid], rd = realRead(promoteRecord(f, r), sid);
+  const word = (x) => (x.ok === true ? 'PASS' : x.ok === false ? 'FAIL' : x.gap ? 'not checked' : 'not run');
+  const tp = w && w.result && w.result.lock ? w.result.lock.cell : null;
   const d = dialog(`<h2>Put ${esc(b.name)} on the Desk?</h2>
-    ${rd ? `<p><b>${esc(rd.verdict.word)}</b>: ${esc(rd.verdict.why)}</p><div class="rl">${rd.lines.map((x) => `<div class="rl-line ${x.ok === true ? 'pass' : x.ok === false ? 'fail' : 'wait'}"><b>${word(x.ok)}</b><span>${esc(x.line)}: ${esc(x.said)}</span></div>`).join('')}</div>`
-    : '<p>No 3:1 walk-forward of it is open: the six lines are not read.</p>'}
+    ${rd ? `<p>The six lines of this run's own settings (its 3:1 record, as set):</p><p><b>${esc(rd.verdict.word)}</b>: ${esc(rd.verdict.why)}</p><div class="rl">${rd.lines.map((x) => `<div class="rl-line ${x.ok === true ? 'pass' : x.ok === false ? 'fail' : 'wait'}"><b>${word(x)}</b><span>${esc(x.line)}: ${esc(x.said)}</span></div>`).join('')}</div>`
+    : `<p>No 3:1 record of this run's own settings is open: the six lines are not read.</p>${tp != null ? `<p>Your pick in the in-sample table, box ${esc(X.boxNo(tp))}, is not matched to this run.</p>` : ''}`}
     <p>Lands OFF, no account.</p><p>Trade rules are not applied on the Desk.</p>
     <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">Put it on the Desk</button></div>`);
   d.addEventListener('click', (e) => {

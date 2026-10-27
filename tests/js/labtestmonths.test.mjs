@@ -164,24 +164,30 @@ test('the test months of the strategy as set: the same ask, which says it locks 
   assert.match(LAB, /Run the test months \(the owner clicked it in the Lab\)/);     // OOS_SAID stays
 });
 
-test('Put it on the Desk: the confirm shows the verdict, the six lines, lands OFF and no Trade rules; Not yet sends nothing (plan 4.7)', async () => {
+test('Put it on the Desk: the confirm shows the verdict and the six lines of the run\'s own settings, lands OFF and no Trade rules; Not yet sends nothing (plan 4.7)', async () => {
   const RL = require('../../homebase/static/charts/reallines.js');
-  const a = LAB.indexOf('function promoteToDesk'), code = LAB.slice(LAB.indexOf('const curSid'), LAB.indexOf('function wfFixedHtml'))
+  const a = LAB.indexOf('function canon'), code = LAB.slice(LAB.indexOf('const curSid'), LAB.indexOf('function wfFixedHtml'))
     + LAB.slice(a, LAB.indexOf('function deskOffDialog', a));
   const sent = [], dialogs = [];
   const res = { cells: [{ i: 0, is: { net: 900, trades: 250 }, blocks: [] }, { i: 1, is: { net: -50, trades: 40 }, blocks: [] }], lock: { cell: 0 }, oos: null };
+  const f = { strategy: 'draft_x', inputs: { len: 5 }, range: R31, qty: 1, commission: 4, slippage_ticks: 1, prop_rules: null, controls: {} };
+  const ran = (inputs) => ({ run: { inputs, qty: 1, commission: 4, slippage_ticks: 1, range: { kind: 'wf_is' } } });
   const c = vm.createContext({ X, C, RL, esc: (t) => String(t == null ? '' : t), closeDialog() {}, paintRes() {}, paintLib() {}, log() {}, loadDesk: async () => {},
-    S: { run: { key: 'd:x', rid: 'r1', bundle: {} }, tries: {}, three: { draft_x: { oos: { result: res } } }, wf: {} },
-    buf: () => null, formOf: () => ({ strategy: 'draft_x' }),
-    dialog: (html) => { const d = { html, on: null, addEventListener(t, f) { d.on = f; } }; dialogs.push(d); return d; },
+    S: { run: { key: 'd:x', rid: 'r1', bundle: ran({ len: 5 }) }, tries: {}, three: { draft_x: { oos: { result: res, set: '' } } }, wf: {} },
+    buf: () => null, formOf: () => f,
+    dialog: (html) => { const d = { html, on: null, addEventListener(t, fn) { d.on = fn; } }; dialogs.push(d); return d; },
     send: async (m, url, body) => { sent.push([m, url, body]); return { ok: true, json: { ok: true } }; } });
-  vm.runInContext(`${code}\nglobalThis.promoteToDesk = promoteToDesk;`, c);
+  vm.runInContext(`${code}\nObject.assign(globalThis, { promoteToDesk, setKey });`, c);
+  c.S.three.draft_x.oos.set = c.setKey(f);                 // the one-box record was opened for these settings
   const press = (x) => dialogs.at(-1).on({ target: { closest: () => ({ dataset: { x } }) } });
+  const POST = [['POST', '/api/tester/desklab/promote', { name: 'x', run_id: 'r1' }]];      // the same request as before, whatever the dialog says
   c.promoteToDesk({ key: 'd:x', name: 'x' });
   const h = dialogs[0].html;
   assert.match(h, /Put x on the Desk\?/);
+  assert.match(h, /The six lines of this run's own settings/);
   assert.match(h, /<b>LUCK<\/b>: 1 of 2 boxes made money in-sample/);
   for (const ln of ['boxes', 'trades', 'luck', 'years', 'worse fills', 'test months']) assert.match(h, new RegExp(`<span>${ln}: `), ln);
+  assert.match(h, /<b>not checked<\/b><span>luck: not checked in the Lab/);           // no t-statistic saved: never PASS
   assert.match(h, /Lands OFF, no account\./);
   assert.match(h, /Trade rules are not applied on the Desk\./);
   press('cancel');
@@ -189,7 +195,19 @@ test('Put it on the Desk: the confirm shows the verdict, the six lines, lands OF
   c.promoteToDesk({ key: 'd:x', name: 'x' });
   press('go');
   await new Promise((r) => setImmediate(r));
-  assert.deepEqual(JSON.parse(JSON.stringify(sent)), [['POST', '/api/tester/desklab/promote', { name: 'x', run_id: 'r1' }]]);   // the same request as before
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)), POST);
+  // a run made with other settings than the open record (or a record of unknown settings): its lines are not shown as this run's
+  for (const [bundle, set] of [[ran({ len: 6 }), c.setKey(f)], [ran({ len: 5 }), undefined], [{ run: { ...ran({ len: 5 }).run, qty: 2 } }, c.setKey(f)]]) {
+    c.S.run = { key: 'd:x', rid: 'r1', bundle }; c.S.three.draft_x.oos.set = set; c.S.wf.draft_x = { result: { lock: { cell: 4 } } };
+    c.promoteToDesk({ key: 'd:x', name: 'x' });
+    const o = dialogs.at(-1).html;
+    assert.match(o, /No 3:1 record of this run's own settings is open: the six lines are not read\./);
+    assert.match(o, /Your pick in the in-sample table, box #5, is not matched to this run\./);
+    assert.ok(!/LUCK|PASS|FAIL/.test(o), o);
+    assert.match(o, /Lands OFF, no account\./);
+  }
+  sent.length = 0; press('go'); await new Promise((r) => setImmediate(r));
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)), POST);
 });
 
 test('words (plan 4.10): a 3:1 run\'s All metrics says In-sample or Test months; the prop sim is not one of the six lines', () => {
