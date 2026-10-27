@@ -20,6 +20,10 @@ const ours = new Set();   // order ids this page placed: their fills get a toast
 const UNCLAIMED_MAX = 50;
 const unclaimed = [];
 const CLAIMS = ['order', 'flatten', 'reverse'];   // answers naming an order this page just SENT: only they claim
+/* 5.12: `account:order_id` the desk said is not working (HBTrade.notWorkingKeys): display only, for the gap until the
+   desk's next word on that account -- the refusal and the desk's list read the same view, so that word is the truth
+   (still listed: working again; gone: no line). Desk answers only: a PAPER refusal never marks. */
+const gone = new Set();
 let queued = null;
 
 function loadPrefs() { try { return T.parsePrefs(localStorage.getItem(T.PREFS_KEY)); } catch (_) { return T.parsePrefs(null); } }
@@ -49,13 +53,14 @@ function onMessage(m) {
     emit('quote');
     return;
   }
-  if (m.down !== undefined) { desk.state = null; desk.down = m.down; emit('state'); return; }
+  if (m.down !== undefined) { desk.state = null; desk.down = m.down; gone.clear(); emit('state'); return; }
   const d = m.data;
-  if (m.event === 'state') { desk.state = d; desk.down = null; }
+  if (m.event === 'state') { desk.state = d; desk.down = null; gone.clear(); }
   else if (!desk.state) return;
   else if (m.event === 'account') {
     const list = desk.state.accounts || (desk.state.accounts = []), i = list.findIndex((a) => a.id === d.id);
     if (i >= 0) list[i] = d; else list.push(d);
+    for (const k of gone) if (k.startsWith(`${d.id}:`)) gone.delete(k);
   } else if (m.event === 'bot') desk.state.bot = d;
   else if (m.event === 'fill') {
     if (d && d.fill) for (const fn of [...anyFills]) { try { fn(d); } catch (e) { console.error(e); } }
@@ -94,8 +99,13 @@ async function send(action, body) {
     if (CLAIMS.includes(action)) claim(String(r.order_id)); else ours.add(String(r.order_id));
   }
   for (const t of T.resultToasts(action, status, data, desk.state)) toast(t.tone, t.text);
+  const nw = T.notWorkingKeys(action, body, data);   // 5.12: the refused order's line greys -- nothing else changes
+  for (const k of nw.ok) gone.delete(k);
+  for (const k of nw.gone) gone.add(k);
+  if (nw.gone.length) emit('lines');
   return data;
 }
+function notWorking() { return gone; }
 
 /* ---- a bot's past runs: cached 60 s per strategy; fetched again on a new (ET) day, or as soon as the bot view shows
    an exit fill, a skip or a kill (HBTrade.historySig). The desk answers 503 from 09:29:00 to 09:30:30 ET (no journal
@@ -182,7 +192,7 @@ function merged() { return T.withPaper(desk.state, window.HBPaperClient ? window
 
 window.HBDeskClient = {
   get state() { return merged(); }, get down() { return desk.down; }, quotes: desk.quotes,
-  get prefs() { return desk.prefs; }, setPrefs, on, onAnyFill, onMessage, send, toast, botHistory,
+  get prefs() { return desk.prefs; }, setPrefs, on, onAnyFill, onMessage, send, toast, botHistory, notWorking,
   mode: (cellTrade) => T.tradeMode({ state: merged(), down: desk.down }, cellTrade),   // ONE chart's mode, from its own {accounts}
   gate: () => T.deskGate(desk),                        // the desk-level half alone (null: up and on)
   bookChanged: () => emit('account'),                  // the PAPER account changed (app.js, on a /ws paperbook push)

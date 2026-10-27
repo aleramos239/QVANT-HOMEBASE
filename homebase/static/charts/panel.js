@@ -221,6 +221,18 @@ function buildFqSummaryRow(tr, s) {
   td(tr, fqUsd(s.avgSlUsd), 'num');
   td(tr, '');
 }
+/* 2026-10-26: the tab shows only while the desk runs one of these bots -- none does now (nq930 is gone), so it is
+   hidden; its code and its route stay. */
+function fillqLive() {
+  const s = D() && D().state, b = s && s.bot && s.bot.strategies;
+  return !!b && typeof b === 'object' && BOT_KEYS.some((k) => Object.prototype.hasOwnProperty.call(b, k));
+}
+function paintFillq() {
+  const t = tabs.find((x) => x.id === 'fillq');
+  if (!t) return;
+  t.btn.hidden = !fillqLive();
+  if (t.btn.hidden && activeId === 'fillq') { activeId = tabs[0].id; renderTabsBar(); if (isOpen) renderActive(); }
+}
 function renderFillQuality(target) {
   const d = D();
   target.replaceChildren();
@@ -318,6 +330,7 @@ function relevant(id, why) {
 /* The desk client's own subscription (mount, below): redraws the active tab in place, and only when its
    declared events actually fired. */
 function onDeskEvent(why) {
+  paintFillq();
   if (!isOpen) return;
   if (!relevant(activeId, why)) return;
   renderActive(false);
@@ -415,6 +428,7 @@ function mount(pg) {
   applyHeight(saved && Number.isFinite(saved.h) ? saved.h : DEFAULT_H);
   if (saved && typeof saved.tab === 'string' && tabs.some((t) => t.id === saved.tab)) activeId = saved.tab;
   renderTabsBar();
+  paintFillq();
   // no saved state yet on the Backtest tab: open by default (its Strategy Tester tab is the point of the page)
   isOpen = saved ? saved.open === true : IS_BACKTEST;
   elPanel.classList.toggle('open', isOpen);

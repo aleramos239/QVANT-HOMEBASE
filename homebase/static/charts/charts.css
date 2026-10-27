@@ -398,6 +398,9 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .set-tab:hover, .set-tab.active { background: var(--hover); }
 .set-pane { flex: 1; min-width: 0; overflow: auto; padding: 4px 24px 16px; scrollbar-width: thin; }
 .set-cap { margin: 16px 0 4px; color: var(--text-2); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+/* 5.8 (2026-10-27): the Algo row (and its caption) only when there is an algo to pick; Export folds under More */
+.set-row:has(.set-algo.none), .set-cap:has(+ .set-row .set-algo.none) { display: none; }
+.set-fold > summary { cursor: pointer; }
 .set-row { height: 40px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; }
 .set-name { min-width: 0; display: flex; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden; }
 .set-name span { overflow: hidden; text-overflow: ellipsis; }
@@ -656,6 +659,10 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .tr-flat:disabled { opacity: .5; cursor: default; }
 .tr-px { font-size: 13px; font-weight: 600; } .tr-lbl { font-size: 11px; letter-spacing: .04em; }   /* .tr-px: the Bar Replay practice buttons' */
 .lg-trade .tr-lbl { font-size: 12px; font-weight: 600; }
+/* 2026-10-26: under the side, what the click sends ("1 NQ · …047"), inside the same fixed size */
+.lg-trade .tr-sell, .lg-trade .tr-buy { flex-direction: column; line-height: 13px; }
+.tr-sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; line-height: 11px; opacity: .9; }
+.tr-sub:empty { display: none; }
 /* S1, the LIVE cue (2026-09-28 safety pass): while the NEXT send from the chart's Buy/Sell block or the order panel's
    Send reaches a LIVE account (HBTradeUI.liveCue -- the send path's own account set), a red ring round it and a LIVE
    tag on each send button, one-click on or off. Nothing here takes space: the ring is an absolutely positioned
@@ -675,6 +682,8 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .tr-acct { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 2px 0 6px; border-radius: 4px;
   background: var(--panel); box-shadow: 0 0 0 1px var(--border); font-size: 11px; color: var(--text); font-variant-numeric: tabular-nums; }
 .tr-acct.off { opacity: .5; }
+.tr-acct:hover { box-shadow: 0 0 0 1px var(--accent); }   /* 2026-10-26: a chip opens Settings › Trading */
+.tr-on { font-size: 11px; line-height: 14px; color: var(--text-2); }
 .tl-layer { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
 .tl-chip { position: absolute; top: 0; display: inline-flex; height: 22px; border-radius: 4px; overflow: hidden; pointer-events: auto;
   font-size: 12px; font-variant-numeric: tabular-nums; box-shadow: 0 0 0 1px var(--c); background: var(--panel); }
@@ -687,6 +696,7 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .tl-be:hover:not(:disabled) { background: var(--hover); }
 .tl-chip.bot .tl-text { background: var(--panel); color: var(--c); cursor: default; }
 .tl-chip.ghost { pointer-events: none; opacity: .92; }
+.tl-chip.gone { opacity: .6; }   /* 5.12: the desk said its order is not working (display only) */
 .tl-chip.ghost.bad .tl-text { background: var(--panel); color: var(--c); text-decoration: line-through; }   /* refused (marketable, or the position already has that exit): won't send */
 
 /* ---- the chart's algo (Task 3): the legend badge -- bot icon, name, state pill, today's P&L, Kill ---- */
@@ -854,7 +864,6 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .op-fields { display: flex; flex-direction: column; gap: 8px; }
 .op-fields:not(:has(.op-field:not([hidden]))) { display: none; }
 .op-field { display: grid; grid-template-columns: minmax(0, 1fr) 148px; align-items: center; gap: 8px; }
-.op-field input[type="range"] { width: 100%; accent-color: var(--accent); }   /* Chart preview: shading */
 .op-rr .op-lab { white-space: nowrap; }   /* TP as a typed reward-to-risk ("1 : 2.5") */
 .op-armed { display: flex; flex-direction: column; gap: 4px; }   /* armed breakevens, each with a Cancel */
 .op-armrow { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: #E8A23A; }
@@ -879,6 +888,8 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .op-exit { display: flex; flex-direction: column; gap: 6px; }
 .op-exlab { font-size: 13px; }
 .op-exrow { display: grid; grid-template-columns: minmax(0, 1fr) 84px; gap: 6px; }
+.op-split { padding-left: 10px; border-left: 2px solid var(--border); }   /* 5.7: the partial take profit, folded under the TP */
+.op-split .op-exlab { color: var(--text-2); font-size: 12px; }
 
 /* the chart's accounts, then the send button */
 .op-accts { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border-top: 1px solid var(--border); }

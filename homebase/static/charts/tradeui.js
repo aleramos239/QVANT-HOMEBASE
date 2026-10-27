@@ -574,11 +574,12 @@ function registerChartMenuTrading() {
           run: () => placeOrder({ cell: ctx.cell, root: ctx.root, side, type, price, qty }) });
       }
     }
-    out.push({ text: `Cancel all orders (${ctx.root})`, run: () => symbolAction(ctx.cell, 'cancel-symbol', ctx.root) },
-      flatten,
-      { text: `Reverse ${ctx.root}`, run: () => symbolAction(ctx.cell, 'reverse', ctx.root) });
+    out.push({ text: `Cancel all orders (${ctx.root})`, run: () => symbolAction(ctx.cell, 'cancel-symbol', ctx.root) }, flatten);
     return out;
   });
+  // Reverse (2026-10-26, O14: kept): the same gate and the same confirm as before, moved to the bottom of the menu
+  window.HBChartMenu.register('last', (ctx) => (effectiveMode(ctx.cell).mode !== 'on' || flatBusy() || busy() ? []
+    : [{ text: `Reverse ${ctx.root}`, run: () => symbolAction(ctx.cell, 'reverse', ctx.root) }]));
 }
 
 /* ---- a replay's end (fix round 1, Important 2) ----
@@ -700,14 +701,13 @@ function paintDeskStatus() {
   const why = cell ? T.chartWhy({ replay: !!cell.replay, halted: !!(cell.cfg && cell.cfg.replayHalt),
     accounts: tradeOf(cell).accounts, unverified: cell.cfg && cell.cfg.unverified, state: D().state, liveConfirmed,
     mode: effectiveMode(cell) }) : '';
-  // W1: in parts -- the state is never cut, the chart's reason and the limits may step out on a narrow bar (app.js
-  // fitStatusBar) -- with the whole line as the tooltip
+  // W1: in parts -- the state is never cut, the chart's reason may step out on a narrow bar (app.js fitStatusBar) --
+  // with the whole line as the tooltip
   const s = T.deskStatusParts({ state: D().state, down: D().down }, why);
-  const whyEl = document.getElementById('sbDeskWhy'), limEl = document.getElementById('sbDeskLim'), box = document.getElementById('sbDesk');
+  const whyEl = document.getElementById('sbDeskWhy'), box = document.getElementById('sbDesk');
   dot.className = 'sb-dot ' + s.dot;
   text.textContent = s.state;
   if (whyEl) whyEl.textContent = s.why;
-  if (limEl) limEl.textContent = s.limits;
   if (box) box.title = s.text;
   link.hidden = !s.link;
   if (s.link && page) link.href = page.deskUrl();

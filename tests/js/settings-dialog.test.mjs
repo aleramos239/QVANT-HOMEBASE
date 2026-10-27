@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 
@@ -320,6 +321,44 @@ test('Trading tab: picking an algo ticks its booked accounts; clearing it to Non
   assert.deepEqual(cell.cfg.trade.accounts, ['sim041'], 'clearing the algo never unticks an account');
 });
 
+test('5.8 Trading tab: the Algo row hides (with its caption) while "None" is all it could pick', () => {
+  const cell = makeCell('time:60');
+  cell.cfg.root = 'ES';                                      // no desk strategy on ES: only "None"
+  cell.cfg.trade = { accounts: [] };
+  cell.cfg.algo = null;
+  const es = openTrading(cell).box.querySelector('.set-algo');
+  assert.equal(es.classList.contains('none'), true);
+  cell.cfg.root = 'NQ';                                      // nq930 trades NQ: there is one to pick
+  const nq = openTrading(cell).box.querySelector('.set-algo');
+  assert.equal(nq.classList.contains('none'), false);
+  cell.cfg.root = 'ES';                                      // an algo still set (nq930, confirmed on NQ): the row stays,
+  cell.cfg.algo = 'nq930';                                   // so it can be seen and cleared
+  const kept = openTrading(cell).box.querySelector('.set-algo');
+  assert.equal(kept.classList.contains('none'), false);
+  kept.value = ''; kept.onchange();
+  assert.equal(cell.cfg.algo, null, 'clearing it still works');
+  assert.match(readFileSync(new URL('../../homebase/static/charts/charts.css', import.meta.url), 'utf8'),
+    /\.set-row:has\(\.set-algo\.none\), \.set-cap:has\(\+ \.set-row \.set-algo\.none\) \{ display: none; \}/);
+});
+
+test('5.7 Trading tab: ORDER PREVIEW sets the preview look at once -- numbers stay numbers', () => {
+  const cell = makeCell('time:60');
+  cell.cfg.root = 'NQ';
+  cell.cfg.trade = { accounts: [] };
+  cell.cfg.algo = null;
+  const look = { on: true, style: 2, width: 1, shade: 12, labels: 'line' }, sets = [];
+  const { box } = openTrading(cell, { look: () => look, setLook: (k, v) => { sets.push([k, v]); look[k] = v; } });
+  assert.equal(findText(box, 'ORDER PREVIEW') != null, true);
+  const ctl = (label) => descend(box, (el) => el.attrs && el.attrs['aria-label'] === label);
+  assert.equal(ctl('Line').value, '2', 'shows the current look');
+  ctl('Line').value = '1'; ctl('Line').onchange();
+  ctl('Thickness').value = '3'; ctl('Thickness').onchange();
+  ctl('Labels').value = 'scale'; ctl('Labels').onchange();
+  assert.equal(ctl('Shading').type, 'range');
+  ctl('Shading').value = '20'; ctl('Shading').oninput();
+  assert.deepEqual(sets, [['style', 1], ['width', 3], ['labels', 'scale'], ['shade', 20]]);
+});
+
 test('Trading tab: a LIVE account needs the second click, and an unlisted one can never be ticked', () => {
   const cell = makeCell('time:60');
   cell.cfg.root = 'NQ';
@@ -507,6 +546,28 @@ test('Data tab: opens on Candles for the first market, and fetches its meta (ran
   assert.equal(contract.disabled, false);
   assert.equal(contract.children.length, 3);            // front + NQZ6 + NQU6
   assert.equal(findText(box, 'On disk: 2026-09-01 to 2026-09-25') != null, true);
+});
+
+test('5.8 Data tab: Export folds under a closed "More"; Refresh stays on top', async () => {
+  const { exp } = makeExportHost();
+  const { box } = openData(makeCell('time:60'), exp);
+  await flush();
+  const more = descend(box, (el) => el.tagName === 'details');
+  assert.ok(more, 'a More fold');
+  // not 'set-more': charts.css sizes that class as the indicator dialog's 28x28 button
+  assert.equal(more.className, 'set-fold');
+  assert.equal(more.children[0].tagName, 'summary');
+  assert.equal(more.children[0].textContent, 'More');
+  assert.equal(more.open, undefined, 'closed until clicked');
+  assert.ok(findByOwnText(more, 'button', 'Start export'), 'the export form is inside it');
+  assert.equal(findText(box, 'REFRESH') != null, true);
+});
+
+test('5.8 Data tab: a running export reattached on open shows itself -- More opens by itself', async () => {
+  const { exp } = makeExportHost({ active: async () => ({ id: 'job1', status: 'running', sessions_done: 1, sessions_total: 2, rows: 5 }) });
+  const { box } = openData(makeCell('time:60'), exp);
+  await flush();
+  assert.equal(descend(box, (el) => el.tagName === 'details').open, true);
 });
 
 test('Data tab: Level 3 is a disabled option (short label, kept out of the select\'s own width) with a reason', () => {

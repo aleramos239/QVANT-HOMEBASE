@@ -425,6 +425,15 @@ function accountChips(state, accounts, activeIds) {
   });
 }
 
+/* The legend's account spot (2026-10-26): while the chart's BUY / SELL is hidden (it cannot trade right now),
+   "Accounts:" leads its dimmed account chips -- never "Trade on:", which would read as if a click could trade -- and,
+   while chart trading is on at the desk (`deskOn`), a chart with no account says "Trade on: none"; each opens
+   Settings › Trading. A replaying (or replay-ended) chart gets neither: its practice block or its Resume sits there. */
+function tradeSpot(n, shown, replay, deskOn) {
+  const idle = !shown && !replay;
+  return { lead: idle && n > 0 ? 'Accounts:' : '', empty: idle && n === 0 && deskOn ? 'Trade on: none' : '' };
+}
+
 /* An account's env as its chip: LIVE (red), DEMO (grey), PAPER (the paper colour -- Task 2's virtual account), or
    '?' for an env the desk did not give (an account it does not list). */
 const ENV_CHIPS = { live: 'LIVE', demo: 'DEMO', paper: 'PAPER' };
@@ -587,6 +596,25 @@ const TYPE_WORDS = { Market: 'MARKET', Limit: 'LIMIT', Stop: 'STOP', StopLimit: 
 function sendLabel(side, qty, root, type) {
   return [side, qty >= 1 ? String(qty) : null, root, TYPE_WORDS[type] || String(type || '').toUpperCase()].filter(Boolean).join(' ');
 }
+/* What a click on the chart's BUY / SELL or the ENTRY tag sends, in words (2026-10-26; words only -- the send reads its
+   own gate): `ids` are that gate's accounts (the chart's mode). `full` "BUY 1 NQ · …047 LIVE" (2+: "BUY 3 NQ each ·
+   2 accounts (1 LIVE)" -- the desk sends the qty to EACH account) for tooltips; `sub` "1 NQ · …047" (2+: "3 NQ ×2")
+   for under the 76px button's side; `tag` for the ENTRY tag, kept short so its click area stays about its old size:
+   one account as `full`, 2+ "BUY 3 NQ ×2 · 1 LIVE". No account: the size alone. */
+function sendTag(side, qty, root, ids, state) {
+  const list = accountsOf(state), rows = idList(ids).map((id) => list.find((x) => x.id === id) || { id });
+  const one = rows.length === 1 ? rows[0] : null, live = rows.filter((a) => a.env === 'live').length;
+  const n = [qty >= 1 ? String(qty) : null, root].filter(Boolean).join(' '), SIDE = String(side || '').toUpperCase();
+  const many = rows.length > 1 ? `${n} ×${rows.length}` : null;
+  const who = one ? short(one) + (one.env === 'paper' ? '' : ` ${envChip(one.env)}`)
+    : rows.length ? `${rows.length} accounts${live ? ` (${live} LIVE)` : ''}` : '';
+  const full = [`${SIDE} ${n}${many && qty >= 1 ? ' each' : ''}`, who].filter(Boolean).join(' · ');
+  return {
+    full,
+    sub: many || [n, one ? short(one) : null].filter(Boolean).join(' · '),
+    tag: many ? [`${SIDE} ${many}`, live ? `${live} LIVE` : null].filter(Boolean).join(' · ') : full,
+  };
+}
 /* ---- money ---- */
 // sign/usd/money now live in tradepure.js (re-exported above, unchanged) -- the Strategy Tester needs money/usd too.
 /* qty contracts from `from` to `to`, s = 1 long / −1 short; null without a point value or a price. */
@@ -662,12 +690,16 @@ function lineLabel(g) {
 function canDrag(g) { return g.kind !== 'position' && g.type !== 'StopLimit'; }
 /* A position's chip is just side, size and P&L ("LONG 1 · −$20", 2026-09-27: the user's call), plus "· 2 accts" when it
    merges several accounts (review of d6bdb2e: its × / exit drag acts on every one of them, so that must show); the
-   account names go in the chip's tooltip (lineTitle). Order / SL / TP lines still name theirs. */
-function lineText(g, last, tick) {
+   account names go in the chip's tooltip (lineTitle). Order / SL / TP lines still name theirs. `named` (2026-10-26): the
+   chart shows 2+ accounts, so a one-account position names its account too ("LONG 1 · +$20 · …047").
+   shortcut: no "strategy (server)" tag (plan 5.3's second half) -- the desk marks only ITS OWN bots' orders (`owner`),
+   so a server strategy's order on an account both machines hold arrives as owner null, just like a hand order; build
+   it once the desk snapshot says which orders the server placed. */
+function lineText(g, last, tick, named = false) {
   if (g.kind === 'order') return [lineLabel(g), whoText(g)].join(' · ');
   if (g.kind === 'position') {
     const many = new Set(g.legs.map((l) => l.who)).size > 1;
-    return [lineLabel(g), usd(linePnl(g, last)), many ? whoText(g) : null].filter(Boolean).join(' · ');
+    return [lineLabel(g), usd(linePnl(g, last)), many || named ? whoText(g) : null].filter(Boolean).join(' · ');
   }
   return [lineLabel(g), usd(linePnl(g, last)), exitTicks(g, tick), whoText(g)].filter(Boolean).join(' · ');
 }
@@ -744,6 +776,7 @@ function exitZones(groups, P) {
 function lineTitle(g) { return [...new Set(((g && g.legs) || []).map((l) => l.who))].join(', '); }
 const PAPER_COLOR = '#7E57C2';   // charts.css --paper (light); cell.js's palette carries the theme's own as P.paper
 function lineColor(g, P) {
+  if (g.gone) return P.text2 || '#787B86';   // 5.12: the desk said its order is not working -- grey (lineGone)
   if (g.paper) return P.paper || PAPER_COLOR;   // a PAPER line: the paper colour whatever its kind (its text says which)
   if (g.kind === 'position') return g.side === 'Buy' ? P.up : P.down;
   if (g.kind === 'sl') return P.down;
@@ -751,6 +784,23 @@ function lineColor(g, P) {
   return g.side === 'Buy' ? P.accent : P.down;
 }
 const withPrice = (g, price) => ({ ...g, price });
+/* 5.12 (2026-10-27): a modify / cancel the desk refused with "order … is not working on …" -- the keys
+   (`account:order_id`) it refused that way, and the ones it did act on (they lose the mark). Display only: the line
+   greys and its chip says so (lineGone); nothing is blocked or sent because of it. */
+function notWorkingKeys(action, body, data) {
+  const out = { gone: [], ok: [] };
+  if ((action !== 'modify' && action !== 'cancel') || !isObj(body) || body.order_id == null || !isObj(data) || !isObj(data.results)) return out;
+  for (const [id, r] of Object.entries(data.results)) {
+    const k = `${id}:${body.order_id}`;
+    if (r && r.ok) out.ok.push(k);
+    else if (r && / is not working /.test(String(r.error || ''))) out.gone.push(k);
+  }
+  return out;
+}
+/* An order line every one of whose orders the desk said is not working (`gone`: a Set of notWorkingKeys keys). */
+function lineGone(g, gone) {
+  return !!g && g.kind !== 'position' && g.legs.length > 0 && g.legs.every((l) => gone.has(`${l.account}:${l.order_id}`));
+}
 
 /* ---- dragging a position's chip places an exit (2026-09-27, the desk's `exits` action) ----
    Pressing an editable position's chip (not its ×) and dragging it vertically draws a ghost exit line; which one is
@@ -1024,21 +1074,17 @@ function deskStatusText(desk, chartWhyText = '') {
   const gate = deskGate(desk);
   if (gate && gate.mode === 'down') return { dot: 'bad', text: `Desk unreachable — ${gate.reason}`, link: false };
   if (gate) return { dot: 'warn', text: 'Chart trading is off on the desk', link: true };
-  const lim = (desk.state && desk.state.limits) || {};
-  return { dot: 'ok', link: false,
-    text: `Desk: connected · chart trading on · max ${lim.max_order_qty ?? '—'}/order, ${lim.max_position_qty ?? '—'}/position`
-      + (chartWhyText ? ` · this chart: ${chartWhyText}` : '') };
+  // 5.8 (2026-10-27): no "max …/order, …/position" -- the size limits went, so it only ever showed dashes
+  return { dot: 'ok', link: false, text: 'Desk: connected · chart trading on' + (chartWhyText ? ` · this chart: ${chartWhyText}` : '') };
 }
 /* W1 (2026-09-28): the same line in parts, for a status bar too narrow for all of it: `state` -- the desk's own
-   connection and switch -- is never cut; `why` (the selected chart's reason, or why the desk is unreachable) and
-   `limits` may step out (the page's fit decides); `text`, the whole line, is their tooltip. */
+   connection and switch -- is never cut; `why` (the selected chart's reason, or why the desk is unreachable) may
+   step out (the page's fit decides); `text`, the whole line, is its tooltip. */
 function deskStatusParts(desk, chartWhyText = '') {
   const s = deskStatusText(desk, chartWhyText), gate = deskGate(desk);
-  if (gate && gate.mode === 'down') return { ...s, state: 'Desk unreachable', why: `— ${gate.reason}`, limits: '' };
-  if (gate) return { ...s, state: s.text, why: '', limits: '' };
-  const lim = (desk.state && desk.state.limits) || {};
-  return { ...s, state: 'Desk: connected · chart trading on', why: chartWhyText ? `· this chart: ${chartWhyText}` : '',
-    limits: `· max ${lim.max_order_qty ?? '—'}/order, ${lim.max_position_qty ?? '—'}/position` };
+  if (gate && gate.mode === 'down') return { ...s, state: 'Desk unreachable', why: `— ${gate.reason}` };
+  if (gate) return { ...s, state: s.text, why: '' };
+  return { ...s, state: 'Desk: connected · chart trading on', why: chartWhyText ? `· this chart: ${chartWhyText}` : '' };
 }
 /* Minor 6: the SELECTED chart's own short reason for the status bar ('' when it can trade). `mode` is its
    effective mode; the rest say why, most specific first. */
@@ -1691,18 +1737,18 @@ function routeSend(action, body, send) {
 
 const api = { PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
-  lineText, lineTitle, lineColor, exitZones, beStop, beArmStep, trailStop, trailStep, splitOrder, splitNote, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
+  lineText, lineTitle, lineColor, notWorkingKeys, lineGone, exitZones, beStop, beArmStep, trailStop, trailStep, splitOrder, splitNote, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, etDateOf, pastRunMarkers, pastRunFlags,
   algoFillMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
   enterConfirms, wireSend, sendingSide, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
-  migrateTicked, deskGate, armedMode, liveSendIds, liveCueTitle, replayGuard, legsWithin, lineAccounts, accountChips, acctTick, hiddenCellsLoaded,
+  migrateTicked, deskGate, armedMode, liveSendIds, liveCueTitle, replayGuard, legsWithin, lineAccounts, accountChips, tradeSpot, acctTick, hiddenCellsLoaded,
   NO_ACCOUNTS, SYMBOL_CHANGE_ACCOUNTS_CLEARED, liveIds, liveDroppedMessage, envChip, algoBookings, algoForAccount,
   accountsForAlgo, algoTickAccounts, accountPickRows, deskStatusText, deskStatusParts,
   verifyLoaded, verifyCells, nextUnverified, unverifiedMode, CHECKING_ACCOUNTS, REPLAY_ENDED, replayHaltGuard,
   replayEndPatch, sendsWithoutConfirm, chartWhy,
-  PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel,
+  PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel, sendTag,
   parseQty, parseUsd, parseDecimal, roundTickDir, riskTicks,
   paperKey, isPaperAlgo, paperStrategyId, paperStrategiesMap, paperPill, paperToday, paperLabel, paperLines,
   paperMarkers, paperOverlay, paperRunMarkers, paperStatsText, PAPER_ID, isPaperId, withPaper, splitSend, routeSend };

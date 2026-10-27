@@ -305,6 +305,39 @@ test('lines no account may manage (desk down / off, replay): every account\'s li
   assert.deepEqual(T.linesFor(STATE, 'ES', []).map((g) => T.lineText(g, 6490)), ['SHORT 1 · +$500']);
 });
 
+test('5.3 lineText named: with 2+ accounts on the chart a one-account position names its account; nothing else changes', () => {
+  const [es] = T.linesFor(STATE, 'ES', []);
+  assert.equal(T.lineText(es, 6490), 'SHORT 1 · +$500', 'one account on the chart: unchanged');
+  assert.equal(T.lineText(es, 6490, 0, true), `SHORT 1 · +$500 · ${es.legs[0].who}`);
+  const lines = T.linesFor(STATE, 'NQ', []);
+  assert.deepEqual(lines.map((g) => T.lineText(g, 30910, 0, true)), lines.map((g) => T.lineText(g, 30910)),
+    'a merged position and every order / SL / TP already name theirs');
+});
+
+test('5.4 sendTag: the BUY / SELL button and the ENTRY tag say the size, root and account a click sends to', () => {
+  const st = { accounts: [acct('live099', 'FAKELIVE099', 'live'), acct('sim047', 'SIM0000047', 'demo'), acct('paper', 'PAPER', 'paper')] };
+  assert.deepEqual(T.sendTag('Buy', 1, 'NQ', ['live099'], st), { full: 'BUY 1 NQ · …099 LIVE', sub: '1 NQ · …099', tag: 'BUY 1 NQ · …099 LIVE' });
+  assert.deepEqual(T.sendTag('Sell', 2, 'MNQ', ['sim047'], st), { full: 'SELL 2 MNQ · …047 DEMO', sub: '2 MNQ · …047', tag: 'SELL 2 MNQ · …047 DEMO' });
+  assert.deepEqual(T.sendTag('Buy', 3, 'NQ', ['live099', 'sim047'], st), { full: 'BUY 3 NQ each · 2 accounts (1 LIVE)', sub: '3 NQ ×2', tag: 'BUY 3 NQ ×2 · 1 LIVE' },
+    'the desk sends the qty to each account: never read as 3 in all; the button and the ENTRY tag keep it short');
+  assert.deepEqual(T.sendTag('Buy', 1, 'NQ', ['sim047', 'paper'], st).full, 'BUY 1 NQ each · 2 accounts');
+  assert.equal(T.sendTag('Buy', 1, 'NQ', ['sim047', 'paper'], st).tag, 'BUY 1 NQ ×2', 'no LIVE account: no LIVE word');
+  assert.equal(T.sendTag('Buy', 0, 'NQ', ['sim047', 'paper'], st).full, 'BUY NQ · 2 accounts', 'no qty: no "each"');
+  assert.deepEqual(T.sendTag('Buy', 1, 'NQ', ['paper'], st), { full: 'BUY 1 NQ · PAPER', sub: '1 NQ · PAPER', tag: 'BUY 1 NQ · PAPER' });
+  assert.deepEqual(T.sendTag('Buy', 1, 'NQ', [], st), { full: 'BUY 1 NQ', sub: '1 NQ', tag: 'BUY 1 NQ' }, 'no account: the size alone');
+  assert.equal(T.sendTag('Buy', 0, 'NQ', ['nope'], st).full, 'BUY NQ · …ope ?', 'no size without a valid qty; an unlisted account is never DEMO');
+});
+
+test('5.2 tradeSpot: "Accounts:" while BUY / SELL is hidden, "Trade on: none" for no account only while the desk trades, nothing in replay', () => {
+  assert.deepEqual(T.tradeSpot(1, false, false, true), { lead: 'Accounts:', empty: '' }, 'it cannot trade now: never "Trade on:"');
+  assert.deepEqual(T.tradeSpot(1, false, false, false), { lead: 'Accounts:', empty: '' });
+  assert.deepEqual(T.tradeSpot(0, false, false, true), { lead: '', empty: 'Trade on: none' });
+  assert.deepEqual(T.tradeSpot(0, false, false, false), { lead: '', empty: '' }, 'chart trading off / desk down: no prompt');
+  assert.deepEqual(T.tradeSpot(2, true, false, true), { lead: '', empty: '' }, 'BUY / SELL showing: the buttons say it (sendTag)');
+  assert.deepEqual(T.tradeSpot(0, false, true, true), { lead: '', empty: '' }, 'replay: its practice block is there');
+  assert.deepEqual(T.tradeSpot(1, false, true, true), { lead: '', empty: '' });
+});
+
 test('lineAccounts: every account the desk lists as tradable -- ticked on a chart or not; never an unlisted one', () => {
   const st = { accounts: [acct('sim041', 'SIM0000041', 'demo'), acct('live099', 'FAKELIVE099', 'live'),
     acct('sim047', 'SIM0000047', 'demo', { tradable: false }), acct('paper', 'PAPER', 'paper', { tradable: true })] };
@@ -1395,17 +1428,18 @@ test('accountPickRows: one row per account -- chip, balance, algo note, and an u
 
 test('deskStatusText: the desk\'s own state, for the bottom status bar', () => {
   assert.deepEqual(T.deskStatusText({ state: STATE }),
-    { dot: 'ok', text: 'Desk: connected · chart trading on · max 10/order, 20/position', link: false });
+    { dot: 'ok', text: 'Desk: connected · chart trading on', link: false });
   assert.deepEqual(T.deskStatusText({ state: null, down: 'connecting to the desk' }),
     { dot: 'bad', text: 'Desk unreachable — connecting to the desk', link: false });
   assert.deepEqual(T.deskStatusText({ state: { ...STATE, enabled: false } }),
     { dot: 'warn', text: 'Chart trading is off on the desk', link: true });
   // fix round 1, Minor 6: the SELECTED chart's own reason is appended while the desk itself is fine
   assert.equal(T.deskStatusText({ state: STATE }, 'arm LIVE …099').text,
-    'Desk: connected · chart trading on · max 10/order, 20/position · this chart: arm LIVE …099');
+    'Desk: connected · chart trading on · this chart: arm LIVE …099');
   assert.equal(T.deskStatusText({ state: null, down: 'x' }, 'replay').text, 'Desk unreachable — x');   // the desk's reason wins
-  assert.equal(T.deskStatusText({ state: { ...STATE, limits: {} } }).text,
-    'Desk: connected · chart trading on · max —/order, —/position');
+  // 5.8 (2026-10-27): no "max …/order, …/position", with limits or without (the size limits went: it only showed dashes)
+  assert.equal(T.deskStatusText({ state: { ...STATE, limits: {} } }).text, 'Desk: connected · chart trading on');
+  assert.doesNotMatch(T.deskStatusText({ state: STATE }, 'replay').text, /max|\/order|\/position/);
 });
 
 
@@ -1773,18 +1807,19 @@ test('review round 2, C: a pending bracket leg moves only on its side of its PAR
   assert.equal(T.pendingMoveError(leg3, 30930, sl), "This bracket's entry has no price to check against — cancel it and place again");
 });
 
-/* W1 (2026-09-28): the desk's status line in parts -- the state never cut, the chart's reason and the limits may step
-   out -- with deskStatusText's whole line kept as the tooltip. */
+/* W1 (2026-09-28): the desk's status line in parts -- the state never cut, the chart's reason may step out -- with
+   deskStatusText's whole line kept as the tooltip. 5.8 (2026-10-27): the limits part is gone. */
 test('W1: deskStatusParts -- the never-cut state, the parts that may step out, the whole line as `text`', () => {
   const up = T.deskStatusParts({ state: STATE }, 'arm LIVE …099');
-  assert.deepEqual([up.dot, up.state, up.why, up.limits, up.link],
-    ['ok', 'Desk: connected · chart trading on', '· this chart: arm LIVE …099', '· max 10/order, 20/position', false]);
+  assert.deepEqual([up.dot, up.state, up.why, up.link],
+    ['ok', 'Desk: connected · chart trading on', '· this chart: arm LIVE …099', false]);
+  assert.equal('limits' in up, false, 'no limits part (5.8)');
   assert.equal(up.text, T.deskStatusText({ state: STATE }, 'arm LIVE …099').text, 'the tooltip is the full line, unchanged');
   assert.equal(T.deskStatusParts({ state: STATE }).why, '', 'no reason while the chart can trade');
   const down = T.deskStatusParts({ state: null, down: 'connecting to the desk' }, 'replay');
-  assert.deepEqual([down.dot, down.state, down.why, down.limits], ['bad', 'Desk unreachable', '— connecting to the desk', '']);
+  assert.deepEqual([down.dot, down.state, down.why], ['bad', 'Desk unreachable', '— connecting to the desk']);
   const off = T.deskStatusParts({ state: { ...STATE, enabled: false } });
-  assert.deepEqual([off.dot, off.state, off.why, off.limits, off.link], ['warn', 'Chart trading is off on the desk', '', '', true]);
+  assert.deepEqual([off.dot, off.state, off.why, off.link], ['warn', 'Chart trading is off on the desk', '', true]);
 });
 
 test('exit lines: ticks from the entry on the chip, and a zone from the entry to each SL / TP', () => {
@@ -1863,4 +1898,25 @@ test('splitOrder: the partial take profit as two brackets with the same stop', (
   for (const bad of [{ qty: 0, tp: 30920 }, { qty: 3, tp: 30920 }, { qty: 1.5, tp: 30920 }, { qty: 1, tp: NaN }]) assert.equal(T.splitOrder(b, bad), null);
   assert.equal(T.splitOrder({ ...b, tp_price: undefined }, { qty: 1, tp: 30920 }), null, 'no TP: nothing to split');
   assert.match(T.splitNote(b, { qty: 1, tp: 30920 }, 0.25), /1 at TP1 30,920\.00 · 2 at TP 30,940\.00/);
+});
+
+/* WP5 5.12 (2026-10-27): a line the desk said is "not working": its keys, the grey, display only. */
+test('5.12 notWorkingKeys / lineGone / lineColor: the refused order\'s line greys; nothing else reads it', () => {
+  const nw = (action, body, data) => T.notWorkingKeys(action, body, data);
+  const body = { client_id: 'c', account: 'sim041', order_id: '7', price: 1 };
+  assert.deepEqual(nw('modify', body, { results: { sim041: { ok: false, error: 'order 7 is not working on SIM0000041' } } }),
+    { gone: ['sim041:7'], ok: [] });
+  assert.deepEqual(nw('cancel', body, { results: { sim041: { ok: true, order_id: '7' } } }), { gone: [], ok: ['sim041:7'] });
+  assert.deepEqual(nw('modify', body, { results: { sim041: { ok: false, error: 'too fast' } } }), { gone: [], ok: [] });
+  for (const [a, b, d] of [['order', body, { results: { sim041: { ok: false, error: 'order 7 is not working on X' } } }],
+    ['modify', null, { results: {} }], ['modify', { account: 'sim041' }, { results: {} }], ['modify', body, null], ['modify', body, { detail: 'x' }]]) {
+    assert.deepEqual(nw(a, b, d), { gone: [], ok: [] });
+  }
+  const g = { kind: 'sl', side: 'Sell', legs: [{ account: 'sim041', order_id: '7' }, { account: 'sim099', order_id: '8' }] };
+  assert.equal(T.lineGone(g, new Set(['sim041:7'])), false, 'one leg still working: not grey');
+  assert.equal(T.lineGone(g, new Set(['sim041:7', 'sim099:8'])), true);
+  assert.equal(T.lineGone({ kind: 'position', legs: [{ account: 'sim041', order_id: '7' }] }, new Set(['sim041:7'])), false, 'a position never');
+  const P = { up: 'U', down: 'D', accent: 'A', text2: 'G', paper: 'P' };
+  assert.equal(T.lineColor({ ...g, gone: true }, P), 'G');
+  assert.equal(T.lineColor(g, P), 'D', 'unmarked: its own colour');
 });

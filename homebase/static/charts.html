@@ -9,7 +9,7 @@
     document.documentElement.setAttribute('data-theme', (_t === 'light' || _t === 'dark') ? _t : 'light');
   } catch (_) { document.documentElement.setAttribute('data-theme', 'light'); }
 </script>
-<link rel="stylesheet" href="/static/charts/charts.css?v=58">
+<link rel="stylesheet" href="/static/charts/charts.css?v=63">
 <link rel="stylesheet" href="/static/charts/tape.css?v=2">
 <link rel="stylesheet" href="/static/charts/apple-charts.css?v=8">
 <link rel="stylesheet" href="/static/charts/guide.css?v=5">
@@ -24,7 +24,6 @@
     <div class="tabstrip" id="tabStrip" role="tablist" aria-label="Layout tabs"></div>
   </div>
   <div class="hb-bar-r">
-    <button class="tb-btn tb-icon" id="tbSettings" type="button" title="Chart settings" aria-label="Chart settings" aria-haspopup="dialog"><span class="icw" data-icon="gear"></span></button>
     <button class="tb-btn tb-icon" id="tbTheme" type="button" title="Dark theme"><span class="icw" data-icon="moon"></span></button>
   </div>
 </header>
@@ -84,7 +83,7 @@
   <!-- W1: data-drop ranks the segments that step out WHOLE when the bar is too narrow (the lowest first, app.js
        fitStatusBar); the connection and desk state never do -->
   <span class="sb-dot" id="sbDot"></span><span class="sb-mode" id="sbMode">Connecting…</span><span class="sb-feed" id="sbFeed"></span>
-  <span class="sb-desk" id="sbDesk"><span class="sb-dot" id="sbDeskDot"></span><span class="sb-desk-state" id="sbDeskText"></span><span class="sb-desk-why" id="sbDeskWhy" data-drop="6"></span><span class="sb-desk-lim" id="sbDeskLim" data-drop="3"></span><a class="sb-desk-link" id="sbDeskLink" href="#" target="_blank" rel="noopener" hidden>Open the desk</a></span>
+  <span class="sb-desk" id="sbDesk"><span class="sb-dot" id="sbDeskDot"></span><span class="sb-desk-state" id="sbDeskText"></span><span class="sb-desk-why" id="sbDeskWhy" data-drop="6"></span><a class="sb-desk-link" id="sbDeskLink" href="#" target="_blank" rel="noopener" hidden>Open the desk</a></span>
   <span class="sb-spacer" id="sbSpacer"></span>
   <span class="sb-note" id="sbNote" role="status"></span>
   <span class="sb-event" id="sbEvent" hidden data-drop="4"></span>
@@ -122,21 +121,21 @@
 <script src="/static/charts/scrollback.js?v=33"></script>
 <script src="/static/charts/cell.js?v=63"></script>
 <script src="/static/charts/sounds.js?v=1"></script>
-<script src="/static/charts/settings-dialog.js?v=46"></script>
+<script src="/static/charts/settings-dialog.js?v=50"></script>
 <script src="/static/charts/indicator-settings-dialog.js?v=51"></script>
-<script src="/static/charts/chartmenu.js?v=33"></script>
+<script src="/static/charts/chartmenu.js?v=34"></script>
 <script src="/static/charts/tradepure.js?v=33"></script>
-<script src="/static/charts/trade.js?v=40"></script>
+<script src="/static/charts/trade.js?v=47"></script>
 <script src="/static/charts/fillquality.js?v=33"></script>
-<script src="/static/charts/deskclient.js?v=34"></script>
+<script src="/static/charts/deskclient.js?v=36"></script>
 <script src="/static/charts/paperclient.js?v=34"></script>
 <script src="/static/charts/dom.js?v=36"></script>
 <script src="/static/charts/domui.js?v=35"></script>
 <script src="/static/charts/tape.js?v=1"></script>
 <script src="/static/charts/tapeui.js?v=3"></script>
-<script src="/static/charts/panel.js?v=35"></script>
-<script src="/static/charts/tradeui.js?v=36"></script>
-<script src="/static/charts/tradelines.js?v=41"></script>
+<script src="/static/charts/panel.js?v=36"></script>
+<script src="/static/charts/tradeui.js?v=38"></script>
+<script src="/static/charts/tradelines.js?v=44"></script>
 <script src="/static/charts/newsui.js?v=38"></script>
 <!-- 2026-09-28 three-tabs plan: Strategy Tester + Bar Replay moved to the Backtest tab
      (backtest.html loads tester.js/testerui.js/testerlayer.js/replay.js/replayui.js) -->
@@ -145,12 +144,13 @@
 <script src="/static/charts/bookevents.js?v=8"></script>
 <script src="/static/charts/flowlayer.js?v=9"></script>
 <script src="/static/charts/pinelayer.js?v=1"></script>
-<script src="/static/charts/orderpanel.js?v=52"></script>
+<script src="/static/charts/orderpanel.js?v=55"></script>
 <script src="/static/charts/panellayout.js?v=35"></script>
 <script src="/static/charts/panelshell.js?v=37"></script>
 <script src="/static/charts/layouts.js?v=33"></script>
 <script src="/static/charts/presets.js?v=33"></script>
-<script src="/static/charts/app.js?v=62"></script>
-<script src="/static/hb-glass.js?v=2"></script>
+<script src="/static/charts/app.js?v=67"></script>
+<!-- No hb-glass.js here (2026-10-27, WP5 5.9): in the app the skin takes the lens off anyway (apple/charts.js unlens);
+     in a plain browser the page switcher and the interval bar lose their glass look. The Lab keeps it. -->
 </body>
 </html>

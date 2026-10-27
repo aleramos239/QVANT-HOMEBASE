@@ -161,7 +161,9 @@ class Overlay {
     this.sellLive = liveTag();
     this.buyLive = liveTag();
     this.liveKey = null;
-    this.sellBtn.append(sideLabel(this.sellLive, 'SELL'));
+    this.sellSub = mk('span', 'tr-sub');   // 2026-10-26: what the click sends, "1 NQ · …047" (paintBlock)
+    this.buySub = mk('span', 'tr-sub');
+    this.sellBtn.append(sideLabel(this.sellLive, 'SELL'), this.sellSub);
     this.mid = document.createElement('div'); this.mid.className = 'tr-mid';
     this.qty = document.createElement('input');
     this.qty.type = 'number'; this.qty.min = '1'; this.qty.step = '1'; this.qty.setAttribute('aria-label', 'Quantity');
@@ -169,7 +171,7 @@ class Overlay {
     this.mid.append(this.qty);
     this.buyBtn = document.createElement('button');
     this.buyBtn.type = 'button'; this.buyBtn.className = 'tr-buy';
-    this.buyBtn.append(sideLabel(this.buyLive, 'BUY'));
+    this.buyBtn.append(sideLabel(this.buyLive, 'BUY'), this.buySub);
     // Flatten (the owner, 2026-10-23): this chart's accounts out of the symbol -- the position closed at the broker and
     // its orders cancelled -- the right-click menu's Flatten, one click away; its own lock, so a slow order never blocks it
     this.flatBtn = document.createElement('button');
@@ -284,6 +286,13 @@ class Overlay {
     if (liveTitle !== this.liveKey) { this.liveKey = liveTitle; this.sellLive.title = this.buyLive.title = liveTitle; }
     this.block.title = liveTitle ? `Sell / buy at market · ${liveTitle}` : 'Sell / buy at market';
     if (document.activeElement !== this.qty) this.qty.value = String(Dc.prefs.qty);
+    // the size, root and account of what a click sends (H1: one qty box serves every chart): the very qty trade() reads
+    // and this chart's mode's accounts -- the set the send's own gate (cellGate) answers with while it is 'on'
+    for (const [btn, sub, side] of [[this.sellBtn, this.sellSub, 'Sell'], [this.buyBtn, this.buySub, 'Buy']]) {
+      const t = T.sendTag(side, Dc.prefs.qty, this.root, mode.accounts, Dc.state);
+      if (sub.textContent !== t.sub) sub.textContent = t.sub;
+      btn.title = `${t.full} · at market`;
+    }
     const busy = window.HBTradeUI.busy();
     this.buyBtn.disabled = this.sellBtn.disabled = busy;
     this.flatBtn.disabled = window.HBTradeUI.flatBusy();
@@ -296,19 +305,34 @@ class Overlay {
   }
 
   /* The chart's accounts next to the block whenever it has any; one not in the chart's effective set right
-     now (unarmed LIVE, not tradable, unknown, replay) is dimmed. Rebuilt only when the chips change. */
+     now (unarmed LIVE, not tradable, unknown, replay) is dimmed. Rebuilt only when the chips change.
+     2026-10-26: "Accounts:" leads them while the block is hidden, "Trade on: none" stands in for none while chart
+     trading is on at the desk (HBTrade.tradeSpot), and a chip opens this chart's Settings › Trading -- it never trades
+     or ticks anything itself. */
   paintAccts(mode) {
-    const t = window.HBTradeUI.tradeOf(this.cell);
-    this.accts.hidden = !t.accounts.length;
+    const t = window.HBTradeUI.tradeOf(this.cell), cfg = this.cell.cfg || {};
+    const spot = T.tradeSpot(t.accounts.length, mode.mode === 'on', !!this.cell.replay || !!cfg.replayHalt, !window.HBDeskClient.gate());
+    this.accts.hidden = !t.accounts.length && !spot.empty;
     if (this.accts.hidden) return;
     const chips = T.accountChips(window.HBDeskClient.state, t.accounts, mode.mode === 'on' ? mode.accounts : []);
-    const key = JSON.stringify(chips);
+    const key = JSON.stringify([spot, chips]);
     if (key === this.acctsKey) return;
     this.acctsKey = key;
-    this.accts.replaceChildren(...chips.map((c) => {
-      const el = mk('span', 'tr-acct' + (c.active ? '' : ' off'), c.who);
+    const open = (el) => {
+      el.type = 'button';
+      el.onclick = (e) => { e.stopPropagation(); el.blur(); this.page.chartSettings(this.cell, 'trading'); };
+      return el;
+    };
+    if (spot.empty) {
+      const el = open(mk('button', 'tr-acct off', spot.empty));
+      el.title = 'Pick the accounts this chart trades on';
+      this.accts.replaceChildren(el);
+      return;
+    }
+    this.accts.replaceChildren(...(spot.lead ? [mk('span', 'tr-on', spot.lead)] : []), ...chips.map((c) => {
+      const el = open(mk('button', 'tr-acct' + (c.active ? '' : ' off'), c.who));
       if (c.env) el.append(mk('span', 'env' + (c.live ? ' live' : c.paper ? ' paper' : ''), c.env));
-      el.title = c.active ? `Orders from this chart go to ${c.id}` : `${c.id} — not trading from this chart right now`;
+      el.title = (c.active ? `Orders from this chart go to ${c.id}` : `${c.id} — not trading from this chart right now`) + ' · click to change';
       return el;
     }));
   }
@@ -318,11 +342,14 @@ class Overlay {
     const Dc = window.HBDeskClient, root = this.root;
     // every account's lines; any tradable desk account's are editable (HBTradeUI.lineMode), not only this chart's
     const groups = T.linesFor(Dc.state, root, window.HBTradeUI.editableIds(this.cell));
+    // 2+ accounts on this chart (ticked, or with lines here): every chip names its account (HBTrade.lineText `named`)
+    this.named = window.HBTradeUI.tradeOf(this.cell).accounts.length > 1 || new Set(groups.flatMap((g) => g.legs.map((l) => l.account))).size > 1;
     const busy = window.HBTradeUI.busy();
     const L = window.HBOrderPanel && window.HBOrderPanel.look ? window.HBOrderPanel.look() : { style: 0, width: 1, shade: 12 };
-    const seen = new Set();
+    const seen = new Set(), gone = Dc.notWorking ? Dc.notWorking() : new Set();
     for (const g of groups) {
       seen.add(g.key);
+      g.gone = T.lineGone(g, gone);   // 5.12: the desk said its order is not working: grey, and the chip says so
       if (this.dragging === g.key) continue;   // the key being dragged is skipped
       let it = this.items.get(g.key);
       if (!it) {
@@ -401,8 +428,10 @@ class Overlay {
 
   paint(it) {
     const Dc = window.HBDeskClient, q = Dc.quotes[this.root];
-    it.chip.text.textContent = T.lineText(it.g, q ? q.last : null, this.cell.tick);
+    it.chip.text.textContent = T.lineText(it.g, q ? q.last : null, this.cell.tick, !!this.named) + (it.g.gone ? ' · not working' : '');
     it.chip.style.setProperty('--c', T.lineColor(it.g, this.cell.P));
+    it.chip.classList.toggle('gone', !!it.g.gone);
+    if (it.g.gone) it.chip.title = 'The desk said this order is not working any more; the line goes when its list catches up';
     it.chip.classList.toggle('paper', !!it.g.paper);   // a PAPER account's line (Task 2): its colour comes via --c
   }
 
