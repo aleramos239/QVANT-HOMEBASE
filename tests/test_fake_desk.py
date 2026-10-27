@@ -33,7 +33,7 @@ def test_the_key_is_required_and_browsers_are_refused():
     assert c.get("/api/trade/state").status_code == 401
     assert c.get("/api/trade/state", headers={**H, "origin": "http://x"}).status_code == 403
     st = c.get("/api/trade/state", headers=H).json()
-    assert st["enabled"] is True and st["limits"] == {"max_order_qty": 10, "max_position_qty": 20}
+    assert st["enabled"] is True and st["limits"] == {}
     assert [a["env"] for a in st["accounts"]] == ["demo", "demo", "live"]
 
 
@@ -68,7 +68,7 @@ def test_refusals_carry_the_desks_sentences():
     # a distinct client_id per call: a real client never reuses one across separate orders, and the desk
     # (fake and real alike) now treats a repeated (action, client_id) as a retry of the FIRST one (review item 6)
     c = client()
-    assert order(c, cid="r1", qty=11).json()["results"]["sim041"]["error"] == "quantity must be 1-10"
+    assert order(c, cid="r1", qty=0).json()["results"]["sim041"]["error"] == "quantity must be at least 1"
     r = order(c, cid="r2", type="Stop", price=30890.0).json()["results"]["sim041"]
     assert r == {"ok": False, "order_id": None, "error": "a buy stop must be above the last price (30,900.25)",
                  "refused": True}
