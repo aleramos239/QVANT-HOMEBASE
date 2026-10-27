@@ -273,7 +273,7 @@ function dayState(a) {
 function dayTakeBox(id, a) {
   const d = (a && a.day) || {}, v = Number(d.day_lock) || 0, state = `<span data-ro="day">${dayState(a)}</span>`;
   return `<span class="mcap" title="Closed profit that ends the day for this account: no new entry after it, for any strategy. 0 = off">Day take $</span>
-    <input type="number" min="0" max="100000" step="50" value="${v || ""}" placeholder="OFF" style="width:72px" aria-label="Day take, dollars (empty = OFF)"
+    <input type="number" min="0" max="100000" step="50" value="${v || ""}" placeholder="OFF" style="width:72px" aria-label="Day take, dollars (0 = OFF)"
       onkeydown="if(event.key==='Enter')setDayTake(${jsArg(id)}, this.value)"><button class="btn btn-outline btn-sm"
       onclick="setDayTake(${jsArg(id)}, this.previousElementSibling.value)">Set</button>${state}`;
 }
