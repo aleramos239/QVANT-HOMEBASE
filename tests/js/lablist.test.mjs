@@ -571,3 +571,24 @@ test('page: opening a strategy asks for its own last run and its tries, read-onl
   assert.ok(p.requests.includes('GET /api/tester/walkforwards'));
   assert.ok(p.requests.every((r) => r.startsWith('GET ')), 'opening sends nothing but GETs');
 });
+
+test('another strategy still running: "X is still running. Stop it?" -- Keep it sends nothing, Stop it cancels it as before (plan 4.8)', () => {
+  const a = LAB_SRC.indexOf('function stopAsk'), code = LAB_SRC.slice(a, LAB_SRC.indexOf('function ensureBuf', a));
+  const dialogs = [], did = [];
+  const c = vm.createContext({ esc: (t) => String(t), closeDialog() {},
+    dialog: (html) => { const d = { html, on: null, addEventListener(t, f) { d.on = f; } }; dialogs.push(d); return d; } });
+  vm.runInContext(`${code}\nglobalThis.stopAsk = stopAsk;`, c);
+  const press = (x) => dialogs.at(-1).on({ target: { closest: () => ({ dataset: { x } }) } });
+  c.stopAsk({ name: 'nq930' }, () => did.push('go'));
+  assert.match(dialogs[0].html, /<h2>nq930 is still running\. Stop it\?<\/h2>/);
+  press('cancel');
+  assert.deepEqual(did, []);
+  c.stopAsk({ name: 'nq930' }, () => did.push('go'));
+  press('go');
+  assert.deepEqual(did, ['go']);
+  // run(): the ask comes before the cancel, and a yes is the same cancel route as before
+  const r = LAB_SRC.slice(LAB_SRC.indexOf('async function run('), LAB_SRC.indexOf('async function openRecordRun'));
+  assert.ok(r.indexOf('stopAsk(prev') < r.indexOf("/cancel`)"));
+  assert.match(r, /if \(opts\.stop !== prev\) return stopAsk\(prev, \(\) => run\(\{ \.\.\.opts, stop: prev \}\)\);/);
+  assert.match(r, /send\('POST', `\/api\/tester\/run\/\$\{encodeURIComponent\(prev\.rid\)\}\/cancel`\)/);
+});

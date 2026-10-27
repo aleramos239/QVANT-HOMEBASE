@@ -114,6 +114,17 @@ async function restoreLastRun(b) {
   S.run = { key: b.key, rid: hit.id, st: { status: 'done' }, bundle: bd.json, strategy: id };
   paintRes(); syncChart();
 }
+/* Another strategy's run is still going: stop it to run this one? Keep it = nothing is sent. */
+function stopAsk(prev, go) {
+  const d = dialog(`<h2>${esc(prev.name || 'The other strategy')} is still running. Stop it?</h2><p>Only one run goes at a time here: stopping it runs this one.</p>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Keep it running</button><button class="btn btn-default" data-x="go">Stop it</button></div>`);
+  d.addEventListener('click', (e) => {
+    const x = e.target.closest('[data-x]');
+    if (!x) return;
+    closeDialog();
+    if (x.dataset.x === 'go') go();
+  });
+}
 function ensureBuf(kind, key, init) {
   if (!S.bufs.has(key)) S.bufs.set(key, { key, kind, name: '', id: '', code: null, saved: null, valid: null, savedAt: 0, ...init });
   return S.bufs.get(key);
@@ -203,7 +214,9 @@ async function run(opts = {}) {
   S.deskErr = '';
   if (S.busy && S.active && !S.active.dead) {
     if (S.active.key === b.key) return;                              // this one is already running
-    const prev = S.active; prev.dead = true;
+    const prev = S.active;
+    if (opts.stop !== prev) return stopAsk(prev, () => run({ ...opts, stop: prev }));    // ask first (plan 4.8); a yes stops that run as before
+    prev.dead = true;
     if (prev.rid) send('POST', `/api/tester/run/${encodeURIComponent(prev.rid)}/cancel`);
     log(`Stopped the run of <b>${esc(prev.name || 'the other strategy')}</b> to run this one.`);
   }
