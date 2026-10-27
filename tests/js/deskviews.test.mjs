@@ -105,15 +105,15 @@ test('the switch on a row never also opens the strategy', () => {
 
 // ---- WP1.9: in session the headline says the day so far in money, LIVE apart from the rest ----
 const acct = (env, net) => ({ env, connected: true, day: { day_lock: null, closed_net: net, closes: 1, locked: null } });
-test('1.9: in session: "Live ±$X · Demo + paper ±$Y so far (closed trades)" from each account\'s closed P&L', () => {
+test('1.9: in session: "Live ±$X · Demo + paper ±$Y so far (strategies\' closed trades)" from each account\'s closed P&L', () => {
   const st = status('2026-10-01T10:00:00-0400', { accounts: { L1: acct('live', 120), L2: acct('live', -20), D1: acct('demo', 30), P1: acct('paper', -10) } });
-  assert.equal(load(st).dayHeadline([])[1], '1 on · 0 done today. Live +$100 · Demo + paper +$20 so far (closed trades).');
+  assert.equal(load(st).dayHeadline([])[1], '1 on · 0 done today. Live +$100 · Demo + paper +$20 so far (strategies\' closed trades).');
 });
 
 test('1.9: paper only says Paper; a loss has a real minus; the Mac says it is the Mac', () => {
   const st = status('2026-10-01T10:00:00-0400', { accounts: { L1: acct('live', -250.4), P1: acct('paper', 0) } });
-  assert.equal(load(st, false, { machine: 'mac' }).dayHeadline([])[1], '1 on · 0 done today. This Mac: Live −$250 · Paper $0 so far (closed trades).');
-  assert.equal(load(st, false, { machine: 'server' }).dayHeadline([])[1], '1 on · 0 done today. Live −$250 · Paper $0 so far (closed trades).');
+  assert.equal(load(st, false, { machine: 'mac' }).dayHeadline([])[1], '1 on · 0 done today. This Mac: Live −$250 · Paper $0 so far (strategies\' closed trades).');
+  assert.equal(load(st, false, { machine: 'server' }).dayHeadline([])[1], '1 on · 0 done today. Live −$250 · Paper $0 so far (strategies\' closed trades).');
 });
 
 test('1.9: no account day figures: the line is what it was; out of session it is unchanged too', () => {

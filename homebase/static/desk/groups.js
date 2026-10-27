@@ -338,7 +338,7 @@ function dayMoney() {
   const other = kinds.size === 2 ? "Demo + paper" : kinds.has("paper") ? "Paper" : "Demo";
   const parts = [sums.live != null ? `Live ${usdS(sums.live)}` : "", sums.other != null ? `${other} ${usdS(sums.other)}` : ""].filter(Boolean);
   if (!parts.length) return "";
-  return `${deskMachine() === "mac" ? "This Mac: " : ""}${parts.join(" · ")} so far (closed trades).`;
+  return `${deskMachine() === "mac" ? "This Mac: " : ""}${parts.join(" · ")} so far (strategies' closed trades).`;
 }
 /* the one sentence of the day -- two tones: what happens next, then what is armed */
 function dayHeadline(names) {
