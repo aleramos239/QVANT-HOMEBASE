@@ -54,7 +54,7 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
     },
     showOverlay: (id) => shown.push(id), hideOverlay: (id) => hidden.push(id), closeAsgMenus() {},
     switchBounced: () => false, render() {}, loadDeskLab() {}, refresh: async () => { refreshes.push(1); },
-    fetch: async () => ({ ok: false }), setView() {},
+    fetch: async () => ({ ok: false }), setView() {}, URLSearchParams,
   });
   const code = SLICE('/* ---- which machine this Desk runs on', '/* ---- algo manager') + SLICE('const esc = (v) =>', 'async function chartPost(') + SLICE('const stratLabel = ', 'const actStrat = ') + SLICE('const fmt = ', 'const usd = ') +
     'const usd = (v) => v == null ? "—" : (v < 0 ? "-$" : "$") + fmt(Math.abs(v));\n' +
@@ -724,7 +724,7 @@ test('I7 / N2 the feed and the "Last event" time leave out only the Lab\'s named
   const shown = t.api.journalShown(t.ctx.ST.journal);
   assert.deepEqual(shown.map((r) => r.event), ['lab_added', 'lab_store_owned', 'strategy_toggled', 'lab_refused', 'lab_something_new']);
   assert.match(t.side(), /Last event 10:00/);           // final wave: a strategy arriving on the Desk is a line
-  assert.match(t.api.todayFoot(0), /Last event 10:00/);
+  assert.doesNotMatch(t.api.todayFoot(0), /Last event/, 'WP1.11: the last event is the sidebar\'s Activity row only');
   // a journal with no Lab line is returned as it is
   const none = [{ event: 'armed_toggled' }, null, 'x'];
   assert.deepEqual(plain(t.api.journalShown(none)), plain(none));
@@ -1122,4 +1122,150 @@ test('the server\'s Desk draws no "Open in the Lab" / "Show on chart"; this Mac 
     }
     assert.equal(/>Show on chart</.test(pages.builtin), shown, `builtin with ${hb}/${machine}`);
   }
+});
+
+// ---- WP1.9: the day bar's axis runs from the earliest window to the latest, 9:00-16:00 by default ----
+const openAt = (bar) => Number(/class="tl-open" style="left:([\d.]+)%"/.exec(bar)[1]);
+test('1.9: the day bar is 9:00-16:00 for the 9:30 straddle; a booked London Lab strategy stretches it to 3:00', () => {
+  const plainDay = load({ strategies: { nq930: nq930() } });
+  assert.equal(openAt(plainDay.api.dayTimeline()), 7.14, '9:30 on a 9:00-16:00 bar, as before');
+  const london = load({ rows: [ROW({ session_window: ['03:00', '08:00'] })], book: BOOKED });
+  assert.equal(openAt(london.api.dayTimeline()), 50, '9:30 halfway along 3:00-16:00');
+  const shadowOnly = load({ rows: [ROW({ session_window: ['03:00', '08:00'] })] });
+  assert.equal(openAt(shadowOnly.api.dayTimeline()), 7.14, 'a Lab strategy with no account never sets the bar');
+  const evening = load({ rows: [ROW({ session_window: ['-20:00', '08:00'] })], book: BOOKED });
+  assert.equal(openAt(evening.api.dayTimeline()), 7.14, 'an evening-before window is left out: the bar is one day');
+});
+
+// ---- WP1.10: each Today row says its position, its last signal and LIVE / paper ---------------------------------------
+const tick = () => new Promise((r) => setImmediate(r));
+const jsonAnswer = (events, urls) => async (u) => { urls.push(u); return { ok: true, json: async () => ({ events }) }; };
+test('1.10: the row says LIVE when a booked account is live, DEMO or PAPER when none is, nothing with no account', () => {
+  const tagOf = (book, accounts = ACCOUNTS) => { const t = load({ book, accounts }); return t.api.todayRow('lab_nq_orb', t.ctx.ST.strategies.lab_nq_orb); };
+  assert.match(tagOf({ lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] }), /<span class="tag-live" title="Its orders go to a LIVE account: real money">LIVE<\/span>/);
+  assert.match(tagOf({ lab_nq_orb: [{ account: 'a1', qty: 1 }] }), /<span class="tag" title="Demo accounts only: no money">DEMO<\/span>/);
+  assert.match(tagOf({ lab_nq_orb: [{ account: 'p1', qty: 1 }] }, { p1: { label: 'Paper 1', env: 'paper', connected: true } }), />PAPER<\/span>/);
+  assert.match(tagOf({ lab_nq_orb: [{ account: 'gone', qty: 1 }] }), />LIVE<\/span>/, 'an account the desk does not know counts as LIVE');
+  const none = tagOf({});
+  assert.doesNotMatch(none, /LIVE|DEMO|PAPER/);
+  assert.match(none, />Shadow<\/span>/);
+});
+
+test('1.10: the position from the strategy\'s own open trades: a built-in\'s filled contracts, a Lab strategy\'s rounds', () => {
+  const built = nq930();
+  built.accounts = [{ account: 'a1', date: '2026-10-10', status: 'live', entry_side: 'Buy', qty: 3, entry_qty: 3, exit_qty: 1 },
+                    { account: 'a2', date: '2026-10-10', status: 'done', entry_side: 'Sell', qty: 3, entry_qty: 3, exit_qty: 3, pnl: 120 }];
+  built.day_status = 'live';
+  const t = load({ strategies: { nq930: built, lab_nq_orb: deskStrat({ rounds: [{ account: 'a1', round: 1, status: 'live', side: 'Sell', qty: 2 },
+    { account: 'a1', round: 2, status: 'done', side: 'Buy', qty: 1, pnl: 50 }] }) } });
+  assert.match(t.api.todayRow('nq930', t.ctx.ST.strategies.nq930), /<div class="sp mono">NQ · ±5 off · SL 5 \/ TP 15 · Long 2<\/div>/);
+  assert.match(t.api.todayRow('lab_nq_orb', t.ctx.ST.strategies.lab_nq_orb), /<div class="sp mono">NQ · 09:25-16:00 ET · from the Lab · Short 2<\/div>/);
+  assert.match(t.api.todayRow('nq930', t.ctx.ST.strategies.nq930), /<div class="rs">In position<\/div>/, 'the state words are as they were');
+  const flat = load();
+  assert.match(flat.api.todayRow('nq930', flat.ctx.ST.strategies.nq930), /<div class="sp mono">NQ · ±5 off · SL 5 \/ TP 15<\/div>/, 'flat: nothing added');
+});
+
+test('1.10: the last signal comes from /api/journal, read at most once a minute; until it answers the row leaves it out', async () => {
+  const t = load(), urls = [];
+  t.ctx.fetch = jsonAnswer([
+    { et: '2026-10-10T10:55:00-04:00', event: 'lab_event', strategy: 'lab_nq_orb' },          // bookkeeping: not a signal
+    { et: '2026-10-10T10:50:00-04:00', event: 'book_updated', strategy: 'nq930' },
+    { et: '2026-10-10T10:41:12-04:00', event: 'lab_round', strategy: 'lab_nq_orb', account: 'a1' },
+    { et: '2026-10-10T09:30:02-04:00', event: 'placed', strategy: 'nq930', account: 'a1' },
+    { et: '2026-10-10T09:00:00-04:00', event: 'shadow_signal', strategy: 'lab_nq_orb' }], urls);
+  const row = (n) => t.api.todayRow(n, t.ctx.ST.strategies[n]);
+  assert.doesNotMatch(row('lab_nq_orb'), /Last signal/, 'no answer yet: blank, never a guess');
+  await tick();
+  assert.deepEqual(urls, ['/api/journal?strategy=lab_nq_orb%2Cnq930&limit=2000']);
+  assert.match(row('lab_nq_orb'), /from the Lab · Last signal 10:41<\/div>/);
+  assert.match(row('nq930'), /TP 15 · Last signal 09:30<\/div>/);
+  for (let i = 0; i < 5; i++) row('nq930');
+  await tick();
+  assert.equal(urls.length, 1, 'every 2.5 s repaint reads the cache, not the desk');
+  vm.runInContext('JREAD.today.at -= 60000;', t.ctx);
+  row('nq930');
+  await tick();
+  assert.equal(urls.length, 2, 'a minute later it reads again');
+});
+
+test('1.10: no read in the demo or while the page is hidden, and a refused read leaves the row as it was', async () => {
+  for (const [opts, hide] of [[{ demo: true }, false], [{}, true]]) {
+    const t = load(opts), urls = [];
+    t.ctx.fetch = jsonAnswer([], urls);
+    t.ctx.document.hidden = hide;
+    t.api.todayRow('nq930', t.ctx.ST.strategies.nq930);
+    await tick();
+    assert.deepEqual(urls, []);
+  }
+  const t = load();
+  t.ctx.fetch = async () => { throw new Error('down'); };
+  assert.doesNotThrow(() => t.api.todayRow('nq930', t.ctx.ST.strategies.nq930));
+  await tick();
+  assert.doesNotMatch(t.api.todayRow('nq930', t.ctx.ST.strategies.nq930), /Last signal/);
+});
+
+// ---- WP1.11: the Today foot is one line, the accounts connected; no "things need a look", no "Last event" ----------------
+test('1.11: the foot says only how many accounts are connected, and opens the accounts', () => {
+  const t = load({ accounts: { ...ACCOUNTS, a3: { label: 'Off', env: 'demo', connected: false } },
+    journal: [{ ts: 1, et: '2026-10-10T09:59:00-0400', event: 'strategy_toggled', strategy: 'nq930', enabled: true }] });
+  for (const issues of [0, 1, 3]) {
+    assert.equal(t.api.todayFoot(issues), '<button class="foot-b" onclick="openAccts()">2 of 3 accounts connected <u>›</u></button>');
+  }
+  t.ctx.api.renderMain(['nq930', 'lab_nq_orb'], 2);
+  assert.doesNotMatch(t.els.todayFoot.innerHTML, /need a look|Last event|openChecks/);
+  assert.match(t.side(), /Last event 09:59/, 'the sidebar\'s Activity row keeps the last event');
+});
+
+// ---- WP1.19: a group's page, live: each member today, the group's P&L today, the cycle's last turn ---------------------
+function groupDesk({ events = null, on = true, rounds = [{ account: 'a1', round: 1, status: 'live', side: 'Buy', qty: 1 }] } = {}) {
+  const lab = deskStrat({ rounds });
+  lab.accounts = [{ account: 'a1', date: '2026-10-10', status: 'done', pnl: 50 }];
+  const built = nq930();
+  built.accounts = [{ account: 'a2', date: '2026-10-10', status: 'done', pnl: 120 }];
+  const t = load({ strategies: { nq930: built, lab_nq_orb: lab }, book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  t.ctx.ST.groups = { g1: { id: 'g1', name: 'Apex', members: ['lab_nq_orb'], accounts: ['a1', 'a2'], risk_usd: 1000, max_minis: 17, on, next: 'a2', outside: {} } };
+  vm.runInContext('DESKGROUPS = {groups: [{id: "g1", name: "Apex", kind: "together", members: ["lab_nq_orb", "nq930"]}], ok: true};', t.ctx);
+  const urls = [];
+  t.ctx.fetch = events ? jsonAnswer(events, urls) : async (u) => { urls.push(u); return { ok: false }; };
+  return { ...t, urls, page: () => vm.runInContext('groupView("g1")', t.ctx) };
+}
+const TURN_DAY = [
+  { et: '2026-10-10T10:41:12-04:00', event: 'lab_round', strategy: 'lab_nq_orb', account: 'a1', round: 1 },
+  { et: '2026-10-10T09:30:02-04:00', event: 'placed', strategy: 'nq930', account: 'a2' }];
+test('1.19: each member\'s state, last signal, position and today; the group today; the last turn of the cycle', async () => {
+  const t = groupDesk({ events: TURN_DAY });
+  t.page();
+  await tick();
+  assert.deepEqual(t.urls, ['/api/journal?group=g1&strategy=lab_nq_orb%2Cnq930&limit=2000'], 'the group\'s read, the Activity page\'s query');
+  const html = t.page(), a1 = vm.runInContext('acctShort("a1")', t.ctx), a2 = vm.runInContext('acctShort("a2")', t.ctx);
+  assert.match(html, /<h2>Today<\/h2><div class="sd-state">The group today: <b>\+\$170<\/b><\/div>/);
+  assert.match(html, new RegExp(`<span class="t dim">Last signal 10:41 · Long 1 on ${a1}</span><span class="t net pos">\\+\\$50</span>`));
+  assert.match(html, /NQ930 · <span class="dim">Done today|NQ930 · <span class="dim">Watching/);
+  assert.match(html, /<span class="t dim">Last signal 09:30<\/span><span class="t net pos">\+\$120<\/span>/);
+  assert.match(html, new RegExp(`<span class="h">Last turn 10:41: NQ ORB on ${a1}</span>`));
+  assert.ok(html.indexOf('Next account: ' + a2) < html.indexOf('Last turn'), 'beside the next account, in the cycle card');
+  assert.ok(html.indexOf('<h2>Account cycle</h2>') < html.indexOf('<h2>Today</h2>'), 'the members under the cycle card, as drawn');
+  assert.match(html, /onclick="openGroupMember\(&quot;lab_nq_orb&quot;\)"/);
+});
+
+test('1.19: a piece with no data is left out: no answer, no turn, the cycle off, no member on the Desk', async () => {
+  const none = groupDesk({ rounds: [] });
+  none.page(); await tick();
+  const html = none.page();
+  assert.doesNotMatch(html, /Last signal|Last turn/, 'the journal not answering: no time is guessed');
+  assert.match(html, /<span class="t dim"><\/span><span class="t net pos">\+\$50<\/span>/, 'flat and no signal: the cell is empty');
+  const off = groupDesk({ events: TURN_DAY, on: false });
+  off.page(); await tick();
+  assert.doesNotMatch(off.page(), /Last turn/, 'the cycle off: no turn line');
+  const skip = groupDesk({ events: [{ et: '2026-10-10T11:02:00-04:00', event: 'group_skipped', group: 'g1', strategy: 'lab_nq_orb',
+    reason: 'No account of its group could take this trade.' }, ...TURN_DAY] });
+  skip.page(); await tick();
+  assert.match(skip.page(), /Last turn 11:02: NQ ORB was skipped\. No account of its group could take this trade\.</);
+  const empty = groupDesk();
+  empty.ctx.ST.strategies = {};
+  assert.doesNotMatch(empty.page(), /<h2>Today<\/h2>|The group today/);
+  const noPnl = groupDesk();
+  noPnl.ctx.ST.strategies.lab_nq_orb.accounts = []; noPnl.ctx.ST.strategies.nq930.accounts = [];
+  assert.doesNotMatch(noPnl.page(), /The group today/, 'no trade closed today: no group total');
+  assert.match(noPnl.page(), /<h2>Today<\/h2>/);
 });

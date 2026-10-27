@@ -1,5 +1,5 @@
-"""The desk page carries the chart-trading switch + limits, and switching
-it ON goes through the confirm dialog before the POST."""
+"""The desk page carries the chart-trading switch (no limit inputs: no order path reads them), and
+switching it ON goes through the confirm dialog before the POST."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,10 +9,11 @@ from tests.desk_page_util import desk_page
 HTML = desk_page()
 
 
-def test_the_desk_page_has_the_chart_trading_switch_and_limits():
-    for needle in ('id="ctSwitch"', 'id="ctState"', 'id="ctMaxOrder"', 'id="ctMaxPos"',
-                   'id="ctSave"', 'post("/api/chart-trading"', "renderChartTrading(s.chart_trading)"):
+def test_the_desk_page_has_the_chart_trading_switch_and_no_limit_inputs():
+    for needle in ('id="ctSwitch"', 'id="ctState"', 'post("/api/chart-trading"', "renderChartTrading(s.chart_trading)"):
         assert needle in HTML, needle
+    for gone in ('id="ctMaxOrder"', 'id="ctMaxPos"', 'id="ctSave"', "Limits saved"):
+        assert gone not in HTML, gone
 
 
 def test_switching_on_asks_first():
@@ -35,8 +36,8 @@ def _fn(name):
 
 def test_chart_trading_toasts_fall_back_to_r_error():
     """Fix round 1 item 5: the write guard's 403/415 refusals carry `error`,
-    not `detail` — both the switch and Save-limits toasts must show it."""
-    for fn in (_fn("async function setChartTrading"), _fn("$(\"#ctSave\").onclick")):
+    not `detail` — the switch's toast must show it."""
+    for fn in (_fn("async function setChartTrading"),):
         assert "r.detail || r.error" in fn
 
 
@@ -44,7 +45,7 @@ def test_chart_trading_toasts_survive_post_throwing():
     """A network failure or a non-JSON 500 makes post() throw (fetch itself
     rejects, or r.json() fails to parse) — both handlers must catch it and
     tell the user, not leave an unhandled rejection with no feedback."""
-    for fn in (_fn("async function setChartTrading"), _fn("$(\"#ctSave\").onclick")):
+    for fn in (_fn("async function setChartTrading"),):
         assert "try {" in fn and "catch" in fn
         assert "Couldn't reach the desk" in fn
         # the catch must come after the post() call it's guarding

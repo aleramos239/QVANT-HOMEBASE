@@ -88,7 +88,7 @@ test('a run of routine reconnects is one Activity line; a login, or anything els
 
 test('"Last event" never points at a routine reconnect, and Raw still lists every one of them', () => {
   assert.match(HTML, /const journalNews = \(j\) => journalShown\(j\)\.filter\(r => !routineRow\(r\)\);/);
-  assert.equal((HTML.match(/journalNews\(ST\.journal\)\[0\]/g) || []).length, 2, 'the sidebar row and the Today foot');
+  assert.equal((HTML.match(/journalNews\(ST\.journal\)\[0\]/g) || []).length, 1, 'the sidebar row (WP1.11: the Today foot no longer shows a last event)');
   assert.doesNotMatch(HTML, /journalShown\(ST\.journal\)\[0\]/);
   assert.match(HTML, /\(FEED_RAW \? FEED_ROWS : foldRoutine\(FEED_ROWS\)\)\.map\(/);
 });

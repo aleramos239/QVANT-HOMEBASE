@@ -11,8 +11,10 @@ import { HTML } from './deskpage.mjs';
 const BLOCK = HTML.slice(HTML.indexOf('/* ===== Desk views'), HTML.indexOf('/* ---- sidebar ---- */'));
 const FMT = HTML.slice(HTML.indexOf('const fmt = '), HTML.indexOf('const usd = '));
 
-function load(ST, stale = false) {
-  const ctx = vm.createContext({ ST, DESK_STALE: stale, esc: (v) => String(v ?? '') });
+function load(ST, stale = false, { machine = null } = {}) {
+  const ctx = vm.createContext({ ST, DESK_STALE: stale, esc: (v) => String(v ?? ''),
+    isDemoAcct: (id) => { const a = (ST.accounts || {})[id]; return !!a && (a.env === 'demo' || a.env === 'paper'); },   // book.js's
+    deskMachine: () => machine });
   vm.runInContext(FMT + 'const usd = (v) => v == null ? "—" : (v < 0 ? "-$" : "$") + fmt(Math.abs(v));\n' + BLOCK +
     '\nglobalThis.api = { dayHeadline, stratState, todayPnl, usdS, specOf, hmin, etMin };', ctx);
   return ctx.api;
@@ -99,4 +101,23 @@ test('the controls on the new views call the same handlers the old cards did', (
 test('the switch on a row never also opens the strategy', () => {
   assert.match(HTML, /onclick="event\.stopPropagation\(\);toggleStrat\('\$\{name\}', \$\{!c\.enabled\}\)"/);
   assert.match(HTML, /if\(event\.target===event\.currentTarget&&/, 'a key on the inner switch must not navigate the row');
+});
+
+// ---- WP1.9: in session the headline says the day so far in money, LIVE apart from the rest ----
+const acct = (env, net) => ({ env, connected: true, day: { day_lock: null, closed_net: net, closes: 1, locked: null } });
+test('1.9: in session: "Live ±$X · Demo + paper ±$Y so far (closed trades)" from each account\'s closed P&L', () => {
+  const st = status('2026-10-01T10:00:00-0400', { accounts: { L1: acct('live', 120), L2: acct('live', -20), D1: acct('demo', 30), P1: acct('paper', -10) } });
+  assert.equal(load(st).dayHeadline([])[1], '1 on · 0 done today. Live +$100 · Demo + paper +$20 so far (closed trades).');
+});
+
+test('1.9: paper only says Paper; a loss has a real minus; the Mac says it is the Mac', () => {
+  const st = status('2026-10-01T10:00:00-0400', { accounts: { L1: acct('live', -250.4), P1: acct('paper', 0) } });
+  assert.equal(load(st, false, { machine: 'mac' }).dayHeadline([])[1], '1 on · 0 done today. This Mac: Live −$250 · Paper $0 so far (closed trades).');
+  assert.equal(load(st, false, { machine: 'server' }).dayHeadline([])[1], '1 on · 0 done today. Live −$250 · Paper $0 so far (closed trades).');
+});
+
+test('1.9: no account day figures: the line is what it was; out of session it is unchanged too', () => {
+  assert.equal(load(status('2026-10-01T10:00:00-0400', { accounts: { L1: { env: 'live' } } })).dayHeadline([])[1], '1 on · 0 done today.');
+  const pre = status('2026-10-01T09:12:00-0400', { accounts: { L1: acct('live', 50) } });
+  assert.deepEqual([...load(pre).dayHeadline([])], ['Opens in 18 min.', 'Desk armed · 1 strategy on.']);
 });
