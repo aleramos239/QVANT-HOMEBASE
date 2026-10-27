@@ -113,6 +113,8 @@
   .pill.on{ background:transparent; border-color:var(--foreground); color:var(--foreground); }
   .pill.on::before{ content:""; width:6px; height:6px; border-radius:9999px; background:currentColor; }
   .pill.idle{ background:transparent; border-color:var(--border); color:var(--muted-foreground); }
+  .pill.machine-server{ background:transparent; border-color:var(--foreground); color:var(--foreground); font-weight:600; }   /* the SERVER's Desk stands out */
+  #machineChip[hidden]{ display:none; }
   .pill.won{ background:color-mix(in oklch, var(--pos) 15%, transparent); color:var(--pos); border-color:color-mix(in oklch, var(--pos) 30%, transparent); }
   .pill.lost{ background:color-mix(in oklch, var(--neg) 15%, transparent); color:var(--neg); border-color:color-mix(in oklch, var(--neg) 30%, transparent); }
 
@@ -563,6 +565,7 @@
       <nav class="pgsw" id="pgSw" aria-label="Pages"><a href="http://localhost:8850/" data-page="desk" aria-current="page">Desk</a><a href="http://localhost:8852/?v=33" data-page="charts">Charts</a><a href="http://localhost:8852/backtest?v=33" data-page="backtest">Lab</a></nav>
       </div>
       <div class="tb-r hb-bar-r">
+      <span class="pill idle" id="machineChip" hidden></span>
       <span class="clock" id="clock">—</span>
       <span class="bulb" id="bulb" role="button" tabindex="0" aria-label="Readiness" onclick="openChecks()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openChecks()}" title="connecting…"></span>
       <div class="master" role="group" aria-label="Desk master controls">

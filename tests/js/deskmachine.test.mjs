@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import { readFileSync } from 'node:fs';
 
 /* WP1.18: the Desk page's ONE machine reader (desk/core.js): the native shell's window.HB_MACHINE, else /api/status `machine`
    (ST), read at call time. Confirm texts name the machine with machineWords(); unknown says nothing, never "this Mac".
@@ -60,4 +61,31 @@ test('D: Connect a LIVE account names the machine with machineWords(); unknown s
   const none = await run(undefined);
   assert.match(none.asked[0][1], /^This account trades real money\. Adding it/, 'unknown: no machine words, never a guess');
   assert.deepEqual((await run('server', 'demo')).asked, [], 'a demo login still asks nothing');
+});
+
+test('N: the plain top bar has a machine chip: Server · Chicago or This Mac, hidden while unknown; the Mac skin never shows it', () => {
+  const chipOf = (hb, ST) => {
+    const el = { hidden: false, textContent: 'x', className: '', title: '' };
+    const ctx = vm.createContext({ window: hb === undefined ? {} : { HB_MACHINE: hb }, ST, $: (sel) => sel === '#machineChip' ? el : null });
+    vm.runInContext(BLOCK + '\nrenderMachineChip();', ctx);
+    return el;
+  };
+  const server = chipOf(undefined, { machine: 'server' });
+  assert.deepEqual([server.hidden, server.textContent, server.className], [false, 'Server · Chicago', 'pill machine-server']);
+  assert.equal(server.title, 'This Desk runs on the SERVER · Chicago');
+  const mac = chipOf('mac', { machine: 'server' });
+  assert.deepEqual([mac.hidden, mac.textContent, mac.className], [false, 'This Mac', 'pill idle'], 'the shell wins, as deskMachine');
+  for (const [hb, st] of [[undefined, null], [undefined, {}], ['vps', null]]) {
+    const c = chipOf(hb, st);
+    assert.deepEqual([c.hidden, c.textContent], [true, ''], `unknown says nothing: ${hb} / ${JSON.stringify(st)}`);
+  }
+  // it sits in the plain header, which the Mac skin hides (and its CSS hides before the script runs): never two machine words
+  const head = HTML.slice(HTML.indexOf('<header class="inset-topbar hb-bar">'), HTML.indexOf('</header>'));
+  assert.match(head, /<span class="pill idle" id="machineChip" hidden><\/span>/);
+  assert.match(HTML, /#machineChip\[hidden\]\{ display:none; \}/, '.pill is inline-flex: hidden needs its own rule');
+  assert.match(HTML, /renderMaster\(\);\n  renderMachineChip\(\);/, 'drawn on every render');
+  const skin = readFileSync(new URL('../../homebase/static/apple/desk.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(skin, /machineChip/);
+  assert.match(skin, /const old = \$\('\.inset-topbar'\);\n\s*if \(old\) old\.hidden = true;/);
+  assert.match(readFileSync(new URL('../../homebase/static/apple/desk.css', import.meta.url), 'utf8'), /html\.hb-apple \.inset-topbar \{ display: none; \}/);
 });

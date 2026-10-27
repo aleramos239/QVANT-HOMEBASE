@@ -443,6 +443,7 @@ function render() {
   const s = ST;
   $("#clock").textContent = hbClock(String(s.et_now).slice(11, 19)) + " ET";
   renderMaster();
+  renderMachineChip();
   renderChartTrading(s.chart_trading);
   if ($("#settingsOverlay").classList.contains("open")) renderSettings();
 

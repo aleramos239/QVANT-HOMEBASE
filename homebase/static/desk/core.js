@@ -22,6 +22,15 @@ function machineWords() {
   const m = deskMachine();
   return m === "server" ? "on the SERVER · Chicago" : m === "mac" ? "on this Mac" : "";
 }
+/* The plain top bar's chip says the same; hidden while unknown. The Mac skin hides that bar and shows its own word. */
+function renderMachineChip() {
+  const m = deskMachine(), el = $("#machineChip");
+  if (!el) return;
+  el.hidden = m !== "server" && m !== "mac";
+  el.textContent = m === "server" ? "Server · Chicago" : m === "mac" ? "This Mac" : "";
+  el.className = "pill " + (m === "server" ? "machine-server" : "idle");
+  el.title = el.hidden ? "" : "This Desk runs " + machineWords();
+}
 
 /* ---- algo manager: which algo cards show on the home page ----
    Display-only preference, per viewer, in localStorage. Missing/unreadable
