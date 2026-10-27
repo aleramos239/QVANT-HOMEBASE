@@ -12,6 +12,7 @@ import pytest
 
 from homebase import tickarchive as A
 from homebase import ticks as T
+from homebase import tickjob as J
 from tests.test_ticks import HistoryWindow, NoWait, _ids, _minute_ticks, _write_live, run
 
 ET = T.ET
@@ -122,7 +123,7 @@ def test_a_run_already_going_is_left_to_it_and_nothing_to_do_says_nothing(tmp_pa
     state = tmp_path / "state"
     monkeypatch.setattr(T, "state_dir", lambda: state)
     with T.archive_lock(state / "ticks.lock"):
-        assert T.run(("NQ",), [D], tmp_path) == 0
+        assert J.run(("NQ",), [D], tmp_path) == 0
     assert capsys.readouterr().out == "" and broker.asked == []
     cache = {}
     run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
@@ -130,7 +131,7 @@ def test_a_run_already_going_is_left_to_it_and_nothing_to_do_says_nothing(tmp_pa
     (state / "tick_coverage.json").write_text("{}")           # a fresh report: none due
     capsys.readouterr()
     asked = len(broker.asked)
-    assert T.run(("NQ",), [D], tmp_path) == 0
+    assert J.run(("NQ",), [D], tmp_path) == 0
     assert capsys.readouterr().out == "" and len(broker.asked) == asked
 
 
@@ -195,7 +196,7 @@ def test_the_runs_cache_forgets_old_files():
     now = dt.datetime(2026, 9, 29, 12, 0, tzinfo=ET)
     cache = {"/x/NQ/2026/2026-07-01_NQU6.live.csv.gz": {}, "/x/NQ/2026/2026-09-28_NQZ6.csv.gz": {},
              T.ASKED: {"NQ 2026-07-01": [[1, 2]], "NQ 2026-09-28": [[1, 2]]}}
-    T.prune_cache(cache, now)
+    J.prune_cache(cache, now)
     assert list(cache) == [T.ASKED] and list(cache[T.ASKED]) == ["NQ 2026-09-28"]   # (the file does not exist)
 
 
@@ -411,7 +412,7 @@ class TokenDesk:
         monkeypatch.setattr(T.config_mod, "load", lambda **k: SimpleNamespace(
             accounts={"acct": SimpleNamespace(live=True)}))
         monkeypatch.setattr(T, "now_et", lambda: self.now)
-        monkeypatch.setattr(T, "report_due", lambda p: False)
+        monkeypatch.setattr(J, "report_due", lambda p: False)
 
         async def record(*a, **k):
             self.calls += 1
@@ -431,7 +432,7 @@ class TokenDesk:
 
 def test_a_run_before_the_desk_has_a_token_waits_and_retries_within_itself(tmp_path, monkeypatch, capsys):
     d = TokenDesk(tmp_path, monkeypatch, after=4)
-    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 0
+    assert J.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 0
     assert d.sleeps == [30, 30, 30, 30] and d.calls == 2          # tried, waited 2 min, tried again
     out = capsys.readouterr().out
     assert "waiting for the desk" in out and "still no valid md token" not in out and "run failed" not in out
@@ -439,7 +440,7 @@ def test_a_run_before_the_desk_has_a_token_waits_and_retries_within_itself(tmp_p
 
 def test_no_token_within_five_minutes_gives_up_quietly_until_the_next_run(tmp_path, monkeypatch, capsys):
     d = TokenDesk(tmp_path, monkeypatch, after=None)
-    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 0       # not a failure: the next hourly run tries again
+    assert J.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 0       # not a failure: the next hourly run tries again
     assert d.sleeps == [30] * 10 and d.calls == 1                  # 10 x 30 s = 5 min, then out
     out = capsys.readouterr().out
     assert "still no valid md token" in out and "run failed" not in out
@@ -449,10 +450,10 @@ def test_a_click_with_no_token_says_so_instead_of_done(tmp_path, monkeypatch, ca
     """The Refresh data button (--full) read exit 0 as Done although nothing could be fetched (2026-10-17: every
     login on the desk refused, the hourly runs logged "no valid md token" for hours). A click exits NO_TOKEN_EXIT."""
     d = TokenDesk(tmp_path, monkeypatch, after=None)
-    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep, full=True) == T.NO_TOKEN_EXIT
+    assert J.run(("NQ",), [D], tmp_path, sleep=d.sleep, full=True) == T.NO_TOKEN_EXIT
     (tmp_path / "later").mkdir()
     d = TokenDesk(tmp_path / "later", monkeypatch, after=2)
-    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep, full=True) == 0      # the desk came back within the wait
+    assert J.run(("NQ",), [D], tmp_path, sleep=d.sleep, full=True) == 0      # the desk came back within the wait
 
 
 def test_a_click_always_rewrites_the_coverage_report(tmp_path, monkeypatch):
@@ -461,10 +462,10 @@ def test_a_click_always_rewrites_the_coverage_report(tmp_path, monkeypatch):
     (d.state / "acct.tokens.json").write_text('{"md_access_token": "t", "expiration_time": "%s"}'
                                               % (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)).isoformat())
     reports = []
-    monkeypatch.setattr(T, "coverage_report", lambda *a, **k: reports.append(1))
-    monkeypatch.setattr(T, "data_watch", lambda *a, **k: None)
-    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 0 and reports == []
-    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep, full=True) == 0 and reports == [1]
+    monkeypatch.setattr(J, "coverage_report", lambda *a, **k: reports.append(1))
+    monkeypatch.setattr(J, "data_watch", lambda *a, **k: None)
+    assert J.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 0 and reports == []
+    assert J.run(("NQ",), [D], tmp_path, sleep=d.sleep, full=True) == 0 and reports == [1]
 
 
 def test_only_a_missing_token_is_waited_out(tmp_path, monkeypatch, capsys):
@@ -473,7 +474,7 @@ def test_only_a_missing_token_is_waited_out(tmp_path, monkeypatch, capsys):
     async def broken(*a, **k):
         raise RuntimeError("boom")
     monkeypatch.setattr(T, "record", broken)
-    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 1
+    assert J.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 1
     assert d.sleeps == [] and "run failed: RuntimeError: boom" in capsys.readouterr().out
 
 
@@ -663,7 +664,7 @@ class NoTokenYet:
         monkeypatch.setattr(T, "state_dir", lambda: self.state)
         monkeypatch.setattr(T.config_mod, "load", lambda **k: SimpleNamespace(
             accounts={"acct": SimpleNamespace(live=True)}))
-        monkeypatch.setattr(T, "coverage_report", lambda *a, **k: None)
+        monkeypatch.setattr(J, "coverage_report", lambda *a, **k: None)
 
         class Sock:
             connected = True
@@ -690,7 +691,7 @@ def test_a_fetch_without_a_token_reaches_the_wait_for_the_desk(tmp_path, monkeyp
     16 "FAILED no valid md token" lines in the log, not one "waiting for the desk"."""
     nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET))
     desk = NoTokenYet(tmp_path, monkeypatch, nw, after=2)
-    assert T.run(("NQ",), [D], tmp_path, sleep=desk.sleep) == 0
+    assert J.run(("NQ",), [D], tmp_path, sleep=desk.sleep) == 0
     out = capsys.readouterr().out
     assert "waiting for the desk" in out and "FAILED" not in out and "still no valid md token" not in out
     assert desk.sleeps == [30, 30] and held(path, ticks[:16 * 60 + 1])   # waited a minute, then fetched
@@ -702,9 +703,9 @@ def test_with_no_token_the_live_recordings_are_merged_all_the_same(tmp_path, mon
     nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 21, 0, tzinfo=ET))
     desk = NoTokenYet(tmp_path, monkeypatch, nw, after=None)
     reported = []
-    monkeypatch.setattr(T, "report_due", lambda p: False)
-    monkeypatch.setattr(T, "coverage_report", lambda *a, **k: reported.append(1))
-    assert T.run(("NQ",), [D], tmp_path, sleep=desk.sleep) == 0
+    monkeypatch.setattr(J, "report_due", lambda p: False)
+    monkeypatch.setattr(J, "coverage_report", lambda *a, **k: reported.append(1))
+    assert J.run(("NQ",), [D], tmp_path, sleep=desk.sleep) == 0
     out = capsys.readouterr().out
     assert "live recording merged" in out and "still no valid md token" in out and "FAILED" not in out
     assert broker.asked == [] and len(_ids(path)) == 9 * 60 + 61 and desk.sleeps == [30] * 10
@@ -763,3 +764,16 @@ def test_ids_still_missing_after_a_thinned_fetch_are_asked_again_until_the_broke
     nw.now = dt.datetime(2026, 9, 29, 10, 44, tzinfo=ET)
     run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
     assert len(broker.asked) == asked                             # whole: nothing more to ask
+
+
+def test_the_jobs_old_names_on_ticks_still_reach_tickjob_and_importing_ticks_does_not_load_it():
+    import subprocess
+    import sys
+    for n in ("REPORT_EVERY", "_wait_for_token", "argparse", "coverage_report", "data_watch", "fill_from_massive",
+              "load_cache", "main", "prune_cache", "report_due", "run"):
+        assert getattr(T, n) is getattr(J, n) and n in dir(T)
+    with pytest.raises(AttributeError, match="module 'homebase.ticks' has no attribute 'nope'"):
+        T.nope
+    out = subprocess.run([sys.executable, "-c", "import sys, homebase.ticks; print('homebase.tickjob' in sys.modules)"],
+                         capture_output=True, text=True, check=True).stdout
+    assert out.strip() == "False"

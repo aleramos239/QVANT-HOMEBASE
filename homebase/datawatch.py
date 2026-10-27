@@ -1,6 +1,6 @@
 """The data watchdog: is the desk's market data late, thin, silent, or about to be lost?
 
-Run at the end of every tick-archive run (homebase.ticks.run: hourly, on load, 17:20 and 05:30 ET). It
+Run at the end of every tick-archive run (homebase.tickjob.run: hourly, on load, 17:20 and 05:30 ET). It
 only READS -- the chart service's live recordings and the archive's files, through the run's own cache
 of what each file holds (homebase.tickarchive.file_runs) -- never the broker, and it never writes under
 the archive. Per market, while its session is under way:
@@ -32,7 +32,7 @@ from pathlib import Path
 from . import symbols
 from . import tickarchive as A
 from . import ticks as T
-from .charts.session import session_date, session_range_ms
+from .core.session import session_date, session_range_ms
 
 LATE_S = 60                 # written this long after its own time, a market's newest tick is LATE ...
 FRESH_S = 2 * 3600          # ... read only off a recording written this recently: an old write says nothing of now

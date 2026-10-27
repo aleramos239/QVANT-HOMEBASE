@@ -22,6 +22,8 @@ from array import array
 from bisect import bisect_left
 from pathlib import Path
 
+from ..core.tick import SideClassifier
+
 PEEK = 1000                                    # data rows read to tell a quoted file from one without quotes
 
 
@@ -55,7 +57,6 @@ def quote_sides(src: Path, n: int) -> array | None:
     then put in the tape's order (TapeStore's stable sort by ts) -- or None: the file's first PEEK prints are not mostly quoted
     (most of the archive: the backfill has no quotes), or it no longer lines up with the tape. Rows are read as read_archive_csv
     reads them, so the k-th row kept is the k-th print of the tape before its sort."""
-    from ..charts.tick import SideClassifier
     ts, sides, quoted, rows = [], array("b"), 0, 0
     clf = SideClassifier()
     try:

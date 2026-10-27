@@ -49,7 +49,7 @@ from ..backtest.engine import Costs, build_bars
 from ..backtest.sides import split_delta
 from ..backtest.runner import DAILY_LOOKBACK
 from ..backtest.tape import ARCHIVE, CACHE, ET, TapeStore, effective_session_window, et_ns
-from ..charts.session import session_date, session_range_ms
+from ..core.session import session_date, session_range_ms
 from ..contracts import exec_ok, point_value, tick_size
 from . import door, match, store
 from .deskclient import DeskClient

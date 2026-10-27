@@ -110,14 +110,10 @@ from . import drafthost, report, wfmonths
 from .discipline import HOLDOUT_START, RESEARCH_END, RESEARCH_START, parse_range
 from .grid import FINAL, GridManager, LooksCorrupt, _looks_lock, add_look, hm40_axes, validate_grid
 from .runner import _now, read_json, report_holes, write_json
+from .wflayout import ROLL_SELECT, ROLL_STEP, SELECT_MONTHS, STEP_MONTHS, TEST_MONTHS, step_of, steps  # noqa: F401 (re-exported)
 
-SELECT_MONTHS = 1
-TEST_MONTHS = 3            # the default OOS side of the ratio (1:3); 1 and 2 are the other choices
 RATIOS = (1, 2, 3)
-ROLL_SELECT = 3            # the 3:1 scheme (owner, 2026-10-18): select on 3 months, test the next 1 ...
-ROLL_STEP = 4              # ... then the next block: BLOCKS, ALWAYS the default -- a month is in OR out (owner, 2026-10-18)
 ROLL_STEPS = (4, 1)        # 4 = blocks; 1 = rolling, only when the owner picks it (the Lab's Range, or asking Claude)
-STEP_MONTHS = 1
 METRICS = {"net_profit": "Net $", "sharpe": "Sharpe", "profit_factor": "Profit factor", "t_stat": "t-stat"}
 DEFAULT_METRIC = "net_profit"
 DEFAULT_MIN_TRADES = 5
@@ -157,12 +153,6 @@ def select_window(select_months, test_months: int) -> int:
 
 def ratio_label(test_months: int, select_months: int = SELECT_MONTHS) -> str:
     return f"{select_months}:{test_months}"
-
-
-def step_of(select_months: int, step_months: int | None = None) -> int:
-    if select_months != ROLL_SELECT:
-        return STEP_MONTHS
-    return ROLL_STEP if step_months is None else step_months
 
 
 def step_window(step_months, select_months: int) -> int:
@@ -208,22 +198,6 @@ def month_list(start: dt.date, end: dt.date) -> list[str]:
             return out
         out.append(first.strftime("%Y-%m"))
         y, m = nxt.year, nxt.month
-
-
-def steps(months: list[str], test_months: int = TEST_MONTHS, select_months: int = SELECT_MONTHS,
-          step_months: int | None = None) -> list[dict]:
-    """Step k selects on months[k : k+select_months] and tests on the next `test_months`; a partial last
-    window is dropped. `select` is the month ('2021-10'); at 3:1 it is the label '2021-10 → 2021-12' and
-    `select_ms` holds the months, and the steps are BLOCKS (k = 0, 4, 8, ...: Jan-Mar -> Apr, May-Jul -> Aug)."""
-    n = len(months) - select_months - test_months + 1
-    out = []
-    for k in range(0, max(n, 0), step_of(select_months, step_months)):
-        sel = months[k:k + select_months]
-        s = {"k": k, "select": sel[0], "test": months[k + select_months:k + select_months + test_months]}
-        if len(sel) > 1:
-            s.update(select=f"{sel[0]} → {sel[-1]}", select_ms=sel)
-        out.append(s)
-    return out
 
 
 def chain(n_steps: int, phase: int = 0, test_months: int = TEST_MONTHS) -> list[int]:

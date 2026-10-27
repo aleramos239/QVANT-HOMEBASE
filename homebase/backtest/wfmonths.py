@@ -18,8 +18,8 @@ import datetime as dt
 import functools
 import json
 
-from .discipline import HOLDOUT_START, RESEARCH_START
 from .tape import TapeStore
+from .wflayout import HOLDOUT_START, RESEARCH_START, steps      # steps: the Lab's own 3:1 block layout (select 3, test 1, step 4)
 
 
 def _complete(store: TapeStore, root: str, d: dt.date) -> bool:
@@ -66,7 +66,6 @@ def _whole(first: dt.date) -> bool:
 
 
 def blocks(root: str, store: TapeStore | None = None) -> list:
-    from .walkforward import steps                  # the Lab's own 3:1 block layout (select 3, test 1, step 4)
     cal = calendar(root, store)
     ms = sorted({d.isoformat()[:7] for d in cal})
     if ms and not _whole(cal[0]):

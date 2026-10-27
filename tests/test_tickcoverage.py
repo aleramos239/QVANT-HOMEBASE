@@ -9,6 +9,7 @@ import json
 from homebase import tickarchive as A
 from homebase import tickcoverage as C
 from homebase import ticks as T
+from homebase import tickjob as J
 
 ET = T.ET
 NOW = dt.datetime(2026, 9, 28, 17, 30, tzinfo=ET)
@@ -169,7 +170,7 @@ def test_the_cli_writes_the_report_after_the_night_run_even_when_it_fails(tmp_pa
     async def broken(*a, **k):
         raise RuntimeError("md socket refused")
     monkeypatch.setattr(T, "record", broken)
-    assert T.main(["--dir", str(tmp_path / "arch"), "--roots", "NQ", "--sessions", "4"]) == 1
+    assert J.main(["--dir", str(tmp_path / "arch"), "--roots", "NQ", "--sessions", "4"]) == 1
     rep = json.loads((tmp_path / "state" / "tick_coverage.json").read_text())
     assert rep["summary"]["sessions"] == 4
     out = capsys.readouterr().out
@@ -181,12 +182,12 @@ def test_coverage_needs_no_market_data_and_rescan_waits_for_no_other_writer(tmp_
     monkeypatch.setattr(T, "state_dir", lambda: tmp_path / "state")
     monkeypatch.setattr(T, "now_et", lambda: NOW)
     monkeypatch.setattr(T, "connect_md", lambda *a, **k: (_ for _ in ()).throw(AssertionError("md")))
-    assert T.main(["--coverage", "--dir", str(tmp_path / "arch"), "--roots", "NQ", "--sessions", "3"]) == 0
+    assert J.main(["--coverage", "--dir", str(tmp_path / "arch"), "--roots", "NQ", "--sessions", "3"]) == 0
     assert json.loads((tmp_path / "state" / "tick_coverage.json").read_text())["summary"]["sessions"] == 3
     with T.archive_lock(tmp_path / "state" / "ticks.lock"):              # a night run in progress
-        assert T.main(["--rescan", "--dir", str(tmp_path / "arch"), "--roots", "NQ"]) == 1
+        assert J.main(["--rescan", "--dir", str(tmp_path / "arch"), "--roots", "NQ"]) == 1
     assert "another tick-archive run holds" in capsys.readouterr().out
-    assert T.main(["--rescan", "--dir", str(tmp_path / "arch"), "--roots", "NQ", "--sessions", "16"]) == 0
+    assert J.main(["--rescan", "--dir", str(tmp_path / "arch"), "--roots", "NQ", "--sessions", "16"]) == 0
     assert "rescan: 12 manifest(s) rewritten" in capsys.readouterr().out
 
 

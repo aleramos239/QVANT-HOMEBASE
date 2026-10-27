@@ -9,6 +9,7 @@ import os
 from homebase import datawatch as W
 from homebase import tickarchive as A
 from homebase import ticks as T
+from homebase import tickjob as J
 from tests.test_ticks import _minute_ticks, _write_live
 
 ET = T.ET
@@ -235,14 +236,14 @@ def test_every_run_of_the_job_ends_with_the_watchdog(tmp_path, monkeypatch, caps
     (tmp_path / "state").mkdir()
     now = at(10, 6)
     monkeypatch.setattr(T, "now_et", lambda: now)
-    monkeypatch.setattr(T, "report_due", lambda p: False)
+    monkeypatch.setattr(J, "report_due", lambda p: False)
 
     async def nothing(*a, **k):
         return []
     monkeypatch.setattr(T, "record", nothing)
     ticks = upto(_minute_ticks(D), at(9, 55))
     live(tmp_path / "ticks", "NQ", ticks, written=at(10, 5))
-    assert T.run(("NQ",), [D], tmp_path / "ticks") == 0
+    assert J.run(("NQ",), [D], tmp_path / "ticks") == 0
     st = json.loads((tmp_path / "state" / "data_watch.json").read_text())
     assert st["late_s"] == 600 and "10 min late" in capsys.readouterr().out
     saved = json.loads((tmp_path / "state" / "tick_runs.json").read_text())      # what it read is kept for the next run
@@ -259,24 +260,24 @@ def test_the_coverage_report_carries_the_watchdogs_last_reading(tmp_path, monkey
         return []
     monkeypatch.setattr(T, "record", nothing)
     live(tmp_path / "ticks", "NQ", upto(_minute_ticks(D), at(9, 55)), written=at(10, 5))
-    assert T.run(("NQ",), [D], tmp_path / "ticks", 2) == 0             # no report yet: one is due
+    assert J.run(("NQ",), [D], tmp_path / "ticks", 2) == 0             # no report yet: one is due
     rep = json.loads((tmp_path / "state" / "tick_coverage.json").read_text())
     assert rep["watch"]["late_s"] == 600 and rep["watch"]["at_utc"] == "2026-09-29T14:06:00+00:00"
     assert rep["watch"] == json.loads((tmp_path / "state" / "data_watch.json").read_text())
     (tmp_path / "state" / "data_watch.json").unlink()                  # no watchdog reading: the report says nothing of it
-    assert T.main(["--coverage", "--dir", str(tmp_path / "ticks"), "--roots", "NQ", "--sessions", "2"]) == 0
+    assert J.main(["--coverage", "--dir", str(tmp_path / "ticks"), "--roots", "NQ", "--sessions", "2"]) == 0
     assert "watch" not in json.loads((tmp_path / "state" / "tick_coverage.json").read_text())
 
 
 def test_a_watchdog_that_fails_never_fails_the_run(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(T, "state_dir", lambda: tmp_path / "state")
     monkeypatch.setattr(T, "now_et", lambda: at(10, 6))
-    monkeypatch.setattr(T, "report_due", lambda p: False)
+    monkeypatch.setattr(J, "report_due", lambda p: False)
 
     async def nothing(*a, **k):
         return []
     monkeypatch.setattr(T, "record", nothing)
     monkeypatch.setattr(W, "check", lambda *a, **k: 1 / 0)
-    assert T.run(("NQ",), [D], tmp_path / "ticks") == 0
+    assert J.run(("NQ",), [D], tmp_path / "ticks") == 0
     assert "data watch failed: ZeroDivisionError" in capsys.readouterr().out
     assert (tmp_path / "state" / "tick_runs.json").exists()                      # the run still saved its cache
