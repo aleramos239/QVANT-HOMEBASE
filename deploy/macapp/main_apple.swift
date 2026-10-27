@@ -128,7 +128,10 @@ let vpsBadgeJS = """
 (() => { if (document.getElementById('hb-vps-badge')) return; const b = document.createElement('div'); b.id = 'hb-vps-badge';
 b.textContent = 'VPS'; b.style.cssText = 'position:fixed;right:12px;bottom:10px;z-index:2147483647;pointer-events:none;' +
 'background:#d93025;color:#fff;font:600 11px/1 -apple-system,system-ui,sans-serif;letter-spacing:.06em;padding:4px 8px;border-radius:999px';
-document.documentElement.appendChild(b); })();
+document.documentElement.appendChild(b);
+// Desk only on the VPS (owner, 2026-10-26): no page switcher, no "Open in the Lab" / "Show on chart" buttons
+const st = document.createElement('style'); st.textContent = '#pgSw,button[onclick*="InLab("]{display:none!important}';
+document.documentElement.appendChild(st); })();
 """
 
 func vpsProxyUp() -> Bool {
@@ -234,6 +237,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
 
         let saved = UserDefaults.standard.object(forKey: lastTabKey) as? Int
         var startTab = saved.flatMap { Tab(rawValue: $0) } ?? .desk
+        #if VPS
+        startTab = .desk
+        #endif
         if debugDir != nil {
             let names = (env("HB_DEBUG_TABS") ?? "desk").split(separator: ",").map { String($0) }
             debugQueue = Tab.allCases.filter { names.contains($0.key) }
@@ -443,6 +449,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     }
 
     func showTab(_ tab: Tab) {
+        #if VPS
+        if tab != .desk { return }      // the VPS app is the Desk only (owner, 2026-10-26); Charts and Lab live on the Mac
+        #endif
         let target = webView(for: tab)   // creates + starts loading on first visit
         for (t, v) in webViews { v.isHidden = (t != tab) }
         currentTab = tab
@@ -641,6 +650,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         main.addItem(viewItem)
         let viewMenu = NSMenu(title: "View")
         for tab in Tab.allCases {
+            #if VPS
+            if tab != .desk { continue }
+            #endif
             let item = NSMenuItem(title: tab.title, action: #selector(selectTabFromMenu(_:)), keyEquivalent: String(tab.rawValue + 1))
             item.target = self
             item.tag = tab.rawValue
