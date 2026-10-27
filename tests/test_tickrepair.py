@@ -764,3 +764,16 @@ def test_ids_still_missing_after_a_thinned_fetch_are_asked_again_until_the_broke
     nw.now = dt.datetime(2026, 9, 29, 10, 44, tzinfo=ET)
     run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
     assert len(broker.asked) == asked                             # whole: nothing more to ask
+
+
+def test_the_jobs_old_names_on_ticks_still_reach_tickjob_and_importing_ticks_does_not_load_it():
+    import subprocess
+    import sys
+    for n in ("REPORT_EVERY", "_wait_for_token", "argparse", "coverage_report", "data_watch", "fill_from_massive",
+              "load_cache", "main", "prune_cache", "report_due", "run"):
+        assert getattr(T, n) is getattr(J, n) and n in dir(T)
+    with pytest.raises(AttributeError, match="module 'homebase.ticks' has no attribute 'nope'"):
+        T.nope
+    out = subprocess.run([sys.executable, "-c", "import sys, homebase.ticks; print('homebase.tickjob' in sys.modules)"],
+                         capture_output=True, text=True, check=True).stdout
+    assert out.strip() == "False"

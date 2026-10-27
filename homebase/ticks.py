@@ -954,6 +954,23 @@ def archive_lock(path: Path):
             fcntl.flock(f, fcntl.LOCK_UN)
 
 
+# The job's names, moved to homebase.tickjob: T.run, T.main, ... still reach them, loaded on first use so importing
+# this file never loads the job. shortcut: a patch of T.<one of these> does not reach the job -- patch tickjob instead.
+_JOB_NAMES = frozenset({"REPORT_EVERY", "_wait_for_token", "argparse", "coverage_report", "data_watch",
+                        "fill_from_massive", "load_cache", "main", "prune_cache", "report_due", "run"})
+
+
+def __getattr__(name):
+    if name in _JOB_NAMES:
+        from . import tickjob
+        return getattr(tickjob, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(set(globals()) | _JOB_NAMES)
+
+
 if __name__ == "__main__":
     from homebase.tickjob import main      # the job lives in tickjob.py (it imports this file as homebase.ticks)
     sys.exit(main())
