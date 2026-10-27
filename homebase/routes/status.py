@@ -22,7 +22,7 @@ def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapter
     # ------------------------------------------------------------ dashboard
     @app.get("/")
     async def index():
-        return FileResponse(STATIC / "index.html")
+        return FileResponse(STATIC / "index.html", headers={"cache-control": "no-cache"})   # never a cached page with newer desk/*.js
 
     journal_cache = bothistory.JournalCache()          # /api/status's read of the journal
 
