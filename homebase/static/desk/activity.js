@@ -396,16 +396,19 @@ async function loadDeskChanges(who, force) {
 const chgSay = (v) => v === true ? "on" : v === false ? "off" : v == null || v === "" ? "none" : String(v);
 const chgSameBook = (a, b) => JSON.stringify((a || []).map(x => [x.account, +x.qty]).sort()) === JSON.stringify((b || []).map(x => [x.account, +x.qty]).sort());
 const chgTell = (why) => { if (why && why !== "Not changed.") toast(why, 8000); };
-/* The book as it was -> what was booked back: one account at a time, through the same control as by hand (pickAsg asks before a
-   LIVE account is added or raised; lowering and taking off never ask). */
-function putBackBook(name, old) {
+/* The book as it was -> what was booked back: one account at a time, through the same control as by hand (pickAsg adds an account,
+   editQty's ask and body change a qty in place -- the list order is the take-turns order; lowering and taking off never ask). */
+async function putBackBook(name, old) {
   const cur = (ST.book && ST.book[name]) || [];
   const off = cur.filter(a => !old.some(b => b.account === a.account)), back = old.filter(b => !chgSameBook([b], cur.filter(a => a.account === b.account)));
   if (off.length + back.length !== 1) return;
   if (off.length) return removeAsg(name, off[0].account);
   const b = back[0], a = cur.find(x => x.account === b.account);
-  if (a && b.qty < a.qty) return setBook(name, cur.map(x => x.account === b.account ? {account: b.account, qty: b.qty} : x));
-  return pickAsg(name, b.account, b.qty);
+  if (!a) return pickAsg(name, b.account, b.qty);
+  if (b.qty > a.qty && !isDemoAcct(b.account) && !await confirmDlg(
+      `Book ${stratLabel(name)} on ${acctShort(b.account)} LIVE, qty ${a.qty} → ${b.qty}?`,
+      liveBookingNote(name, b.account) + bookMachine(), "Book live", false)) { refresh(); return; }
+  return setBook(name, cur.map(x => x.account === b.account ? {account: b.account, qty: b.qty} : x));
 }
 /* One journal line -> {text, back} (back: what Put back does, or null), or null when the line changed nothing. `prior`: the line
    before it of the same kind (the old value of a book or a group, which their lines do not carry). */

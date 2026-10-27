@@ -225,6 +225,22 @@ test('WP1.15 putting back a lower qty or taking an account off never asks, even 
   assert.equal(t.confirms.length, 0);
 });
 
+test('WP1.15 putting back a LIVE qty raise keeps the account in its place (the take-turns order), as editQty does', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a2', qty: 1 }, { account: 'a1', qty: 1 }] } });
+  changes(t, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }, { account: 'a1', qty: 1 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 3 }, { account: 'a1', qty: 1 }] })]);
+  const [x] = t.api.deskChangeList('s:lab_nq_orb');
+  assert.equal(x.text, 'APEX…048 qty 3 → 1');
+  await t.api.putBackChange('s:lab_nq_orb', x.key);
+  assert.deepEqual(t.posts, [{ url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 3 }, { account: 'a1', qty: 1 }] } }]);
+  assert.deepEqual(t.confirms.map((c) => [c.title, c.action]), [['Book NQ ORB on APEX…048 LIVE, qty 1 → 3?', 'Book live']]);
+  const no = load({ book: { lab_nq_orb: [{ account: 'a2', qty: 1 }, { account: 'a1', qty: 1 }] }, confirm: false });
+  changes(no, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }, { account: 'a1', qty: 1 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 3 }, { account: 'a1', qty: 1 }] })]);
+  await no.api.putBackChange('s:lab_nq_orb', no.api.deskChangeList('s:lab_nq_orb')[0].key);
+  assert.deepEqual(no.posts, [], 'Cancel books nothing');
+});
+
 test('WP1.15 a change no longer in force, or any group row (even on its own page), has no Put back', () => {
   const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 2 }] } });
   t.ctx.ST.strategies.lab_nq_orb.lab.limits = LIM_OLD;
