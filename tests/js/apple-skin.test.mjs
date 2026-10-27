@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import vm from 'node:vm';
 
 /* The "Homebase Next" skin (homebase/static/apple/) is PRESENTATION ONLY and must never reach the classic pages:
      - the manifest names all three tabs and only files that exist (the app loads all of the skin or none of it);
@@ -82,4 +83,28 @@ test('apple skin: the Desk skin leans only on things the Desk page still has', (
   for (const fn of ['openChecks', 'setStratRr']) assert.match(page, new RegExp(`function ${fn}\\(`), `${fn}() is the page's own`);
   // the nodes the inspector borrows from a strategy's render
   for (const cls of ['figs', 'qlinks', 'sd-actions']) assert.ok(page.includes(`class="${cls}"`), `.${cls} is rendered by the page`);
+});
+
+/* The Desk toolbar's words (apple/desk.js, the "toolbar words" block), run for real in a vm sandbox: the plain functions
+   the skin's sync() writes into the toolbar. */
+const DESK_SKIN = read('apple/desk.js');
+function toolbarWords(ctx = {}) {
+  const i = DESK_SKIN.indexOf('/* ---- toolbar words'), j = DESK_SKIN.indexOf('/* ---- end toolbar words ---- */');
+  assert.ok(i >= 0 && j > i, 'the toolbar words block');
+  const c = vm.createContext({ window: {}, ...ctx });
+  vm.runInContext(DESK_SKIN.slice(i, j) + '\nglobalThis.W = { machineWord };', c);
+  return c.W;
+}
+
+test('desk skin: the machine chip reads ONE value -- the shell\'s HB_MACHINE, else /api/status machine -- and is absent when unknown', () => {
+  const chip = (win, st) => toolbarWords({ window: win, location: { hostname: 'localhost' } }).machineWord(st);
+  assert.equal(chip({ HB_MACHINE: 'mac' }, null), 'This Mac');
+  assert.equal(chip({ HB_MACHINE: 'server' }, null), 'Server · Chicago');
+  assert.equal(chip({}, { machine: 'server' }), 'Server · Chicago');
+  assert.equal(chip({}, { machine: 'mac' }), 'This Mac');
+  assert.equal(chip({ HB_MACHINE: 'mac' }, { machine: 'server' }), 'This Mac', 'the shell\'s value wins: one reader, no mix');
+  // missing or unknown: no chip -- never "This Mac" from a localhost address
+  for (const [win, st] of [[{}, null], [{}, {}], [{}, undefined], [{ HB_MACHINE: 'vps' }, null], [{}, { machine: 'chicago' }]]) assert.equal(chip(win, st), '');
+  assert.doesNotMatch(DESK_SKIN, /location\.(hostname|host)\b/, 'the skin never guesses the machine from the address');
+  assert.match(DESK_SKIN, /el\('span', \{ class: 'hb-machine', hidden: true \}\)/, 'the chip starts hidden');
 });

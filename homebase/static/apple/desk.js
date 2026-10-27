@@ -44,6 +44,9 @@
       settings.replaceChildren(sf('gear'));
       tb.insp.prepend(el('div', { class: 'hb-platter' }, settings));
     }
+    // which machine this window is, in the fixed corner by the gear (never clipped); filled by sync(), hidden while unknown
+    const machine = el('span', { class: 'hb-machine', hidden: true });
+    tb.insp.prepend(machine);
     const old = $('.inset-topbar');
     if (old) old.hidden = true;
 
@@ -197,6 +200,12 @@
     rrCtl.input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.repeat) setRr(); });
     rrCtl.btn.addEventListener('click', setRr);
 
+    /* ---- toolbar words (plain functions of what the page already holds) ---- */
+    // ONE machine value: the native shell's window.HB_MACHINE, else the desk's /api/status `machine`. Anything else: no chip,
+    // never a guess from the address (the server's Desk can show as localhost through a tunnel).
+    const machineWord = (st) => { const m = window.HB_MACHINE ?? (st && st.machine); return m === 'mac' ? 'This Mac' : m === 'server' ? 'Server · Chicago' : ''; };
+    /* ---- end toolbar words ---- */
+
     let syncing = false;
     function sync() {
       if (syncing) return;
@@ -245,6 +254,8 @@
           }
           tb.title('Today', date);
         }
+        const mw = machineWord(st);
+        if (machine.textContent !== mw) { machine.textContent = mw; machine.dataset.m = mw === 'This Mac' ? 'mac' : 'server'; machine.hidden = !mw; }
         // readiness, in words (the bulb is the page's own verdict; the row opens the page's own System checks)
         if (bulb) {
           const lvl = bulb.classList.contains('bad') ? 'bad' : bulb.classList.contains('warn') ? 'warn' : bulb.classList.contains('ok') ? 'ok' : '';

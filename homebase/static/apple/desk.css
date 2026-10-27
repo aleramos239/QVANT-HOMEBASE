@@ -54,6 +54,11 @@ html.hb-apple #killBtn .hold-ring { width: 15px; height: 15px; }
 html.hb-apple #killBtn .hold-track { stroke: rgb(255 255 255 / .38); }
 html.hb-apple #killBtn .hold-fill { stroke: #fff; }
 html.hb-apple #settingsBtn { border: 0; background: transparent; width: 40px; height: 36px; padding: 0; transform: none; }
+/* which machine this window is (desk.js machineWord): grey "This Mac", blue "Server · Chicago"; nothing while unknown */
+html.hb-apple .hb-machine { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: var(--hb-bubble-r);
+  font-size: 11px; line-height: 14px; font-weight: 590; white-space: nowrap; background: var(--a-fill); color: var(--a-label-2); }
+html.hb-apple .hb-machine[data-m="server"] { background: color-mix(in srgb, #007aff 15%, transparent); color: #0062cc; }
+html.hb-apple[data-theme="dark"] .hb-machine[data-m="server"] { background: color-mix(in srgb, #0a84ff 22%, transparent); color: #64b0ff; }
 html.hb-apple #themeToggle { display: none; }
 /* the page's preview-mode banner: a quiet capsule at the foot, never over the toolbar */
 html.hb-apple #demoBanner { position: fixed !important; top: auto !important; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 46 !important; padding: 4px 12px !important; border-radius: 11px;
