@@ -764,3 +764,107 @@ test('the list by status and market, Dead hidden by default; sorted by name, las
   assert.equal(L.libSort(rows, g, 'groups'), rows, 'groups: left to the sections');
   assert.deepEqual(L.libMarkets(rows), ['ES', 'NQ']);
 });
+
+/* A market's in-sample months, as backtest/wfmonths.blocks lays them out (3 in, the next 1 a test month), for `n` blocks from `from`. */
+function insOf(from, n) {
+  const out = []; let [y, m] = from.split('-').map(Number);
+  for (let k = 0; k < n * 4; k++) { if (k % 4 < 3) out.push(`${y}-${String(m).padStart(2, '0')}`); m === 12 ? (y += 1, m = 1) : (m += 1); }
+  return out;
+}
+const NQ = insOf('2021-10', 15);                                         // test months Jan, May, Sep 2022 .. Sep 2026
+const E6 = insOf('2022-11', 11);                                         // 6E's tapes start in Nov 2022: Feb, Jun, Oct from 2023
+const BTC = [...insOf('2021-10', 8), '2024-10', '2024-11', '2024-12', '2026-04', '2026-05', '2026-06'];   // a gap 2025-01 .. 2026-02; Mar 2026 is a test month
+
+test('touchesTestMonths: the test months are those of the market\'s own 3:1 blocks; none known = every month from Jan 2022 (plan 4.5)', () => {
+  assert.equal(L.touchesTestMonths('2021-09-22', '2021-12-31', NQ), false);  // the first in-sample block only
+  for (const d of ['2022-01-01', '2022-01-17', '2022-01-31']) assert.equal(L.touchesTestMonths(d, d, NQ), true, d);
+  assert.equal(L.touchesTestMonths('2021-12-31', '2022-01-01', NQ), true);
+  assert.equal(L.touchesTestMonths('2021-09-22', '', NQ), true);            // open-ended, "to today"
+  assert.equal(L.touchesTestMonths('2021-09-22', null, NQ), true);
+  assert.equal(L.touchesTestMonths('2022-02-01', '2022-04-30', NQ), false); // Feb-Apr: in-sample
+  assert.equal(L.touchesTestMonths('2022-04-30', '2022-05-01', NQ), true);
+  assert.equal(L.touchesTestMonths('2025-10-01', '2025-12-31', NQ), false);
+  assert.equal(L.touchesTestMonths('2025-12-01', '2026-01-02', NQ), true);  // a December into January crosses the year
+  assert.equal(L.touchesTestMonths('2026-10-01', '2026-10-31', NQ), true);  // after the layout: may be a test month
+  assert.equal(L.touchesTestMonths('nope', '2022-03-01', NQ), true);        // not a date: counted as touching
+  // 6E: its test months are Feb, Jun, Oct -- the NQ months would let 2023-02 through
+  assert.equal(L.touchesTestMonths('2023-02-01', '2023-02-28', E6), true);
+  assert.equal(L.touchesTestMonths('2023-03-01', '2023-05-31', E6), false);
+  assert.equal(L.touchesTestMonths('2023-01-01', '2023-01-31', E6), false); // in-sample for 6E (a test month for NQ)
+  // BTC: Mar 2026 is a test month after the gap; a month in the gap may be one
+  assert.equal(L.touchesTestMonths('2026-03-01', '2026-03-31', BTC), true);
+  assert.equal(L.touchesTestMonths('2025-06-01', '2025-06-30', BTC), true);
+  assert.equal(L.touchesTestMonths('2026-04-01', '2026-06-30', BTC), false);
+  // no layout known: fail closed
+  assert.equal(L.touchesTestMonths('2022-02-01', '2022-04-30'), true);
+  assert.equal(L.touchesTestMonths('2023-01-01', '2023-01-31', []), true);
+  assert.equal(L.touchesTestMonths('2021-09-22', '2021-12-31'), false);     // before any market's first test month
+  assert.equal(L.isTestMonth('2021-09'), false);
+  assert.equal(L.isTestMonth('2022-02'), true);
+  assert.equal(L.isTestMonth('2022-02', NQ), false);
+  assert.equal(L.isTestMonth('2026-09', NQ), true);
+  // a month before the layout's first in-sample month (a later backfill) may be a test month: fail closed
+  assert.equal(L.isTestMonth('2022-05', E6), true);
+  assert.equal(L.touchesTestMonths('2022-02-01', '2022-03-31', E6), true);
+  assert.equal(L.isTestMonth('2021-11', E6), false);
+});
+
+test('layoutOf: the newest saved in-sample run of the strategy names its market and months', () => {
+  const r = (strategy, range, status = 'done') => ({ strategy, status, range });
+  const runs = [r('s', { kind: 'custom', start: '2022-02-01', end: '2022-03-31' }), r('o', { kind: 'wf_is', root: 'ES', months: ['2021-10'] }),
+    r('s', { kind: 'wf_is', root: '6E', months: ['2022-12', '2022-11'] }), r('s', { kind: 'wf_is', root: 'NQ', months: NQ })];
+  assert.deepEqual(L.layoutOf(runs, 's'), { root: '6E', months: ['2022-11', '2022-12'] });
+  assert.equal(L.layoutOf(runs, 'x'), null);
+  assert.equal(L.layoutOf([r('s', { kind: 'wf_is', start: '2021-10-01', end: '2026-08-31' })], 's'), null);   // no months on file
+  assert.equal(L.layoutOf(null, 's'), null);
+});
+
+test('rangeReadsTestMonths: a saved run\'s range, by kind (plan 4.3)', () => {
+  assert.equal(L.rangeReadsTestMonths({ kind: 'wf_is', start: '2021-10-01', end: '2026-08-31' }), false);
+  assert.equal(L.rangeReadsTestMonths({ kind: 'wf_oos', start: '2022-01-01', end: '2022-01-31' }, NQ), true);
+  assert.equal(L.rangeReadsTestMonths({ kind: 'research', start: '2021-09-22', end: '2025-06-30' }, NQ), true);
+  assert.equal(L.rangeReadsTestMonths({ kind: 'research' }, NQ), true);
+  assert.equal(L.rangeReadsTestMonths({ kind: 'custom', start: '2022-02-01', end: '2022-03-31' }, NQ), false);
+  assert.equal(L.rangeReadsTestMonths({ kind: 'custom', start: '2022-02-01', end: '2022-03-31' }), true);      // no layout: fail closed
+  assert.equal(L.rangeReadsTestMonths({ kind: 'custom', start: '2024-08-01', end: '2024-09-03' }, NQ), true);
+  assert.equal(L.rangeReadsTestMonths({ kind: 'what' }, NQ), true);
+  assert.equal(L.rangeReadsTestMonths(null, NQ), true);
+});
+
+test('triesCount: each in-sample setting, one per heat-map table, every test-months read after the first (O5)', () => {
+  const run = (kind, extra = {}) => ({ strategy: 's', status: 'done', range: { kind, start: '2022-02-01', end: kind === 'custom' ? '2022-05-10' : '2022-03-31' }, ...extra });
+  // nothing yet: the first try
+  assert.deepEqual(L.triesCount([], [], 's', []), { n: 1, reads: 0, settings: 0, tables: 0, cut: false, locked: false, tabled: false, layout: null });
+  // 3 settings, one heat-map table, an old 1:N walk-forward, one custom run into May, one 3:1 read: 3 + 2 tables + (3 reads - 1)
+  const runs = [run('wf_is'), run('wf_is'), run('wf_is'), run('custom'), run('wf_is', { status: 'error' }), run('wf_is', { strategy: 'other' })];
+  const wfs = [{ strategy: 's', scheme: 'fixed', axes: ['ctl.stop', 'ctl.target_rr'] }, { strategy: 's', scheme: 'fixed', axes: [] },
+    { strategy: 's', scheme: 'pick', axes: ['x'] }, { strategy: 'other', scheme: 'fixed', axes: ['x'] }];
+  const t = L.triesCount(runs, wfs, 's', [{ lock: { cell: 0 }, oos: { state: 'done' } }, null]);
+  assert.deepEqual(t, { n: 3 + 2 + 2, reads: 3, settings: 3, tables: 2, cut: false, locked: true, tabled: false, layout: null });
+  // a custom run inside the in-sample months is a read until the market's months are known (6E: Jan 2023 is in-sample)
+  const at = (start, end, root) => ({ strategy: 's', status: 'done', range: { kind: 'custom', start, end, ...(root ? { root } : {}) } });
+  const lay = { strategy: 's', status: 'done', range: { kind: 'wf_is', start: '2022-11-01', end: '2026-05-31', root: '6E', months: E6 } };
+  assert.equal(L.triesCount([at('2023-01-01', '2023-01-31')], [], 's', []).reads, 1);
+  assert.equal(L.triesCount([lay, at('2023-01-01', '2023-01-31')], [], 's', []).reads, 0);
+  assert.equal(L.triesCount([lay, at('2023-02-01', '2023-02-28')], [], 's', []).reads, 1);          // 6E's own test month
+  assert.equal(L.triesCount([lay, at('2023-01-01', '2023-01-31', 'NQ')], [], 's', []).reads, 1);    // another market: fail closed
+  assert.deepEqual(L.triesCount([lay], [], 's', []).layout, { root: '6E', months: E6 });
+  // one heat-map table is one try, whatever its box count
+  assert.equal(L.triesCount([], [{ strategy: 's', scheme: 'fixed', axes: ['a', 'b', 'c'] }], 's', []).n, 1);
+  assert.equal(L.triesCount([run('wf_is')], [{ strategy: 's', scheme: 'fixed', axes: ['a'] }], 's', []).n, 2);
+  // the first read is free, the second is a try
+  assert.equal(L.triesCount([run('custom')], [], 's', []).n, 1);
+  assert.equal(L.triesCount([run('custom'), run('custom')], [], 's', []).n, 1);
+  assert.equal(L.triesCount([run('wf_is'), run('custom'), run('custom')], [], 's', []).n, 2);
+  // a full page of runs (500) or of walk-forwards (20): the count may be short
+  assert.equal(L.triesCount(Array.from({ length: 500 }, () => run('wf_is')), [], 's', []).cut, true);
+  assert.equal(L.triesCount(Array.from({ length: 499 }, () => run('wf_is')), [], 's', []).cut, false);
+  assert.equal(L.triesCount([], Array.from({ length: 20 }, () => ({ strategy: 'x', scheme: 'fixed', axes: [] })), 's', []).cut, true);
+  // no pick yet: not locked, even with a table
+  assert.equal(L.triesCount([], [{ strategy: 's', scheme: 'fixed', axes: ['a'] }], 's', [{ lock: null, oos: null }]).locked, false);
+  // the step tracker's "In-sample table" ticks once a fixed table of this strategy finished
+  assert.equal(L.triesCount([], [{ strategy: 's', scheme: 'fixed', axes: ['a'], status: 'done' }], 's', []).tabled, true);
+  assert.equal(L.triesCount([], [{ strategy: 's', scheme: 'fixed', axes: ['a'], status: 'running' }], 's', []).tabled, false);
+  assert.equal(L.triesCount([], [{ strategy: 's', scheme: 'fixed', axes: [], status: 'done' }], 's', []).tabled, false);
+  assert.equal(L.triesCount([], [{ strategy: 'x', scheme: 'fixed', axes: ['a'], status: 'done' }], 's', []).tabled, false);
+});

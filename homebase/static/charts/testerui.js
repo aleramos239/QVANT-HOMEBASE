@@ -164,6 +164,10 @@ let wfScheme = null, wfSchemePromise = null, wfSchemeKey = null;   // GET /api/t
 /* ---- DOM roots, rebuilt by render(); refreshed in place by everything else ---- */
 let root = null, headerEl = null, tabsEl = null, contentEl = null;
 let errEl = null, runBtn = null, progressBarEl = null, progressTextEl = null;
+/* The Lab page (backtest.html, the only page that loads this file): the tester is the Lab's read-only Report (plan 4.6). Its Run,
+   range pill (and the old 1:1/1:2/1:3 walk-forward in it), heat-map tab and Compare are not built, and their starts refuse: the
+   Lab's own Run, 3:1 table and test months are the only way to run. lab.css hides the same by class, a second guard. */
+const labMode = !!(document.body && document.body.classList.contains('lab-page'));
 
 function notify() { for (const fn of [...listeners]) { try { fn(); } catch (e) { console.error(e); } } }
 function persist() {
@@ -493,9 +497,9 @@ function refreshHeader() {
   headerEl.replaceChildren();
   headerEl.appendChild(strategySelect(busy));
   headerEl.appendChild(iconBtn('gear', `${schema.name} · Inputs`, openInputsDialog, busy));
-  headerEl.appendChild(rangePill(busy));
+  if (!labMode) headerEl.appendChild(rangePill(busy));
   for (const [key, label, lo, hi, step] of COST_FIELDS) headerEl.appendChild(costInput(key, label, lo, hi, step, busy));
-  headerEl.appendChild(runArea());
+  if (!labMode) headerEl.appendChild(runArea());
   headerEl.appendChild(recentRunsBtn(busy));
   errEl = page.mk('span', 'tst-err', '');
   headerEl.appendChild(errEl);
@@ -600,7 +604,7 @@ function recentRunRow(r) {
   b.appendChild(line);
   if (r.holdout) b.appendChild(page.mk('span', 'env live', 'Test days'));   // this run read the test days
   if (done) b.onclick = () => { page.closeMenu(); loadRecentRun(r.id); };
-  if (!done) return b;      // only a finished run has a report to compare
+  if (!done || labMode) return b;      // only a finished run has a report to compare (none in the Lab's Report)
   const row = page.mk('div', 'menu-row');
   const cb = page.mk('input', 'tst-cmp-cb');
   cb.type = 'checkbox';
@@ -648,6 +652,7 @@ function fillRecentRunsMenu(m) {
       if (!list.length) { m.appendChild(page.mk('div', 'menu-empty', 'No runs yet')); page.placeMenu(); return; }
       compareIds = compareIds.filter((id) => list.some((r) => r.id === id && r.status === 'done'));
       for (const r of list) m.appendChild(recentRunRow(r));
+      if (labMode) { page.placeMenu(); return; }
       const footer = compareFooter();
       footer.querySelector('.tst-cmp-go').onclick = () => { const ids = compareIds; page.closeMenu(); startCompare(ids); };
       m.appendChild(footer);
@@ -659,7 +664,7 @@ function fillRecentRunsMenu(m) {
 /* ================================================================== compare two runs ================================================================== */
 
 function startCompare(ids) {
-  if (ids.length !== 2) return;
+  if (labMode || ids.length !== 2) return;
   const [aId, bId] = ids;
   compare = { aId, bId, a: null, b: null };
   compareLoading = true;
@@ -833,6 +838,7 @@ async function showFromClaude(m) {
    then belong to a different strategy or an edited form) and drops the bundle outright if the live
    strategyId has since moved on from what was actually submitted. */
 function startRun() {
+  if (labMode) return;
   const prob = computeErrorText();
   if (prob) { serverError = ''; refreshHeader(); return; }
   if (X.isWalkforward(form)) { startWf(); return; }   // the pill carries a 1:N scheme: a walk-forward, not a run
@@ -935,10 +941,11 @@ function cancelRun() {
 function refreshTabsBar() {
   if (!tabsEl) return;   // the tab has never been drawn (Claude's show with the panel left alone)
   tabsEl.replaceChildren();
-  const tabs = compare ? [...INNER_TABS, ['compare', 'Compare']] : INNER_TABS;
+  const tabs = (compare ? [...INNER_TABS, ['compare', 'Compare']] : INNER_TABS).filter(([id]) => !labMode || (id !== 'heatmap' && id !== 'compare'));
   for (const [id, label] of tabs) {
     const b = page.mk('button', 'tst-tab' + (innerTab === id ? ' active' : ''), label);
     b.type = 'button';
+    b.dataset.tab = id;                // the Lab's read-only Report hides some tabs by this (lab.css)
     b.setAttribute('role', 'tab');
     b.setAttribute('aria-selected', String(innerTab === id));
     b.onclick = () => {
@@ -1639,6 +1646,7 @@ function resumeGrid() {
     });
 }
 function startGrid() {
+  if (labMode) return;
   const schema = schemaFor(strategyId), rows = currentHeatRows();
   if (X.gridProblems(form, schema, rows)) { syncHeat(); return; }
   const bodyObj = X.gridBody(form, X.gridAxes(rows, schema, form.max_cells).axes);
@@ -2001,6 +2009,7 @@ function resumeWf() {
     });
 }
 function startWf() {
+  if (labMode) return;
   const schema = schemaFor(strategyId), rows = currentHeatRows(), pr = wfPrefs();
   if (X.wfProblems(form, schema, rows, pr.minTrades)) { refreshHeader(); return; }
   const bodyObj = X.wfBody(form, X.gridAxes(rows, schema, form.max_cells).axes, pr.metric, pr.minTrades);

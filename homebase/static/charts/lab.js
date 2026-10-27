@@ -2,13 +2,14 @@
    chart, a backtest result -- each shown or hidden from the top bar.
    A strategy here is TEXT. Saving writes ~/.homebase/strategies/<name>.py through the chart service; Run sends the
    saved text to the tester, where it runs only inside the sandboxed backtest child. Nothing on this page
-   executes a draft, and nothing here can put one on the desk: "Request review" writes a package for a person
-   (and Claude) to read first. The pure half (highlighting, keystrokes, names) is labcode.js. */
+   executes a draft. "Put it on the Desk" (promoteToDesk) adds one to the Desk switched OFF, with no account, after a
+   confirm that shows its six real-or-luck lines; "Request review" writes a package for a person (and Claude) to read
+   first. The pure half (highlighting, keystrokes, names) is labcode.js; the six lines are reallines.js. */
 (function () {
 'use strict';
 const root = document.getElementById('lab');
 if (!root || !window.HBTester || !window.HBLabCode) return;
-const X = window.HBTester, C = window.HBLabCode;
+const X = window.HBTester, C = window.HBLabCode, RL = window.HBReal;      // RL: the six real-or-luck lines (reallines.js)
 const $ = (s, el = root) => el.querySelector(s);
 const esc = (t) => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const MINUS = '−';
@@ -16,7 +17,7 @@ const MINUS = '−';
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
   view: 'lib', libQ: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plFilter: 'all', plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plExec: '', desk: null, deskBuiltins: new Set(), deskBusy: false,
-  picks: [], anchor: '', listFocus: false, delBusy: false, unlocked: new Set(), heat: {}, wf: {}, three: {} };
+  picks: [], anchor: '', listFocus: false, delBusy: false, unlocked: new Set(), heat: {}, wf: {}, three: {}, tries: {}, stepped: {} };
 /* picks: the list's rows picked for a delete (keys, shown order); anchor: where a shift-click's range starts; listFocus: the
    list was the last thing touched (a button takes no focus on a click in Safari, so the keyboard is judged by this) */
 /* view: what the sidebar lists -- 'lib' (strategies), 'tk' (the arsenal: every tool, with its code), and the strategy pipeline's three:
@@ -97,6 +98,7 @@ async function openKey(key) {
   S.run = S.run && S.run.key === key ? S.run : (S.active && !S.active.dead && S.active.key === key ? S.active : null);   // coming back to a strategy that is still running shows its progress
   paintRes();
   if (b && b.kind !== 'new' && !S.run) restoreLastRun(b);
+  if (b && (b.kind === 'builtin' || b.kind === 'draft')) loadTries(b.kind === 'builtin' ? b.id : `draft_${b.name}`);
   setHash(b);
 }
 function setHash(b) {
@@ -105,13 +107,24 @@ function setHash(b) {
 /* The most recent finished run of this strategy, so a reload (or coming back to it) shows how it last did. */
 async function restoreLastRun(b) {
   const id = b.kind === 'builtin' ? b.id : `draft_${b.name}`;
-  const l = await send('GET', '/api/tester/runs');
-  const hit = l.ok && (l.json || []).find((r) => r.strategy === id && r.status === 'done');
+  const l = await send('GET', `/api/tester/runs?strategy=${encodeURIComponent(id)}`);     // this strategy's own, however many newer runs of others there are
+  const hit = l.ok && Array.isArray(l.json) && l.json.find((r) => r.strategy === id && r.status === 'done');
   if (!hit || S.cur !== b.key || S.run) return;
   const bd = await send('GET', `/api/tester/run/${encodeURIComponent(hit.id)}/bundle`);
   if (!bd.ok || S.cur !== b.key || S.run) return;
   S.run = { key: b.key, rid: hit.id, st: { status: 'done' }, bundle: bd.json, strategy: id };
   paintRes(); syncChart();
+}
+/* Another strategy's run is still going: stop it to run this one? Keep it = nothing is sent. */
+function stopAsk(prev, go) {
+  const d = dialog(`<h2>${esc(prev.name || 'The other strategy')} is still running. Stop it?</h2><p>Only one run goes at a time here: stopping it runs this one.</p>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Keep it running</button><button class="btn btn-default" data-x="go">Stop it</button></div>`);
+  d.addEventListener('click', (e) => {
+    const x = e.target.closest('[data-x]');
+    if (!x) return;
+    closeDialog();
+    if (x.dataset.x === 'go') go();
+  });
 }
 function ensureBuf(kind, key, init) {
   if (!S.bufs.has(key)) S.bufs.set(key, { key, kind, name: '', id: '', code: null, saved: null, valid: null, savedAt: 0, ...init });
@@ -189,6 +202,7 @@ function release(run) {
 async function run(opts = {}) {
   const b = buf();
   if (!b) return;
+  if (opts.for && opts.for !== b) { log('Nothing ran: another strategy is open now.'); return; }    // a yes runs only the strategy it asked about
   if (b.kind !== 'builtin' && !metaOf(b) && (b.code || '').trim()) {   // its settings first: they decide the route (review #1)
     const v = await validateNow(b);
     if (buf() !== b) return;
@@ -197,10 +211,15 @@ async function run(opts = {}) {
   const wf0 = b.kind !== 'pipe' && formOf(b);
   if (wf0 && wf0.range.wf && !is31(wf0)) return wfRun();          // rolling: the heat-map walk-forward, as before
   const tag = is31(wf0) ? (opts.tag || 'is') : '';                  // 3:1 blocks: the strategy as set, one run (owner 2026-10-24)
+  const ask = wf0 && JSON.stringify([b.key, wf0.strategy, wf0.range]);   // a yes holds for this strategy and these dates only
+  if (!tag && wf0 && opts.asked !== ask && !(S.busy && S.active && !S.active.dead && S.active.key === b.key)
+    && !(await datedRunOk(wf0, () => run({ ...opts, asked: ask }), b))) return;
   S.deskErr = '';
   if (S.busy && S.active && !S.active.dead) {
     if (S.active.key === b.key) return;                              // this one is already running
-    const prev = S.active; prev.dead = true;
+    const prev = S.active;
+    if (opts.stop !== prev) return stopAsk(prev, () => run({ ...opts, stop: prev }));    // ask first (plan 4.8); a yes stops that run as before
+    prev.dead = true;
     if (prev.rid) send('POST', `/api/tester/run/${encodeURIComponent(prev.rid)}/cancel`);
     log(`Stopped the run of <b>${esc(prev.name || 'the other strategy')}</b> to run this one.`);
   }
@@ -219,6 +238,9 @@ async function run(opts = {}) {
   const nb = buf(), f = nb ? formOf(nb) : null;
   if (!f || !nb || nb !== b) { release(me); paintRes(); paintHead(); return; }      // another strategy was opened meanwhile
   if (!tag && f.range.wf) { release(me); paintRes(); paintHead(); return; }        // never the plain all-data run for a 3:1 form
+  if (!tag && JSON.stringify(f.range) !== JSON.stringify((wf0 || {}).range)) {     // the test-month check above read the dates of the click
+    release(me); log('Nothing ran: the dates changed while it got ready. Run it again.'); paintRes(); paintHead(); return;
+  }
   me.key = nb.key; me.strategy = f.strategy; me.name = nb.kind === 'builtin' ? nb.id : nb.name;
   if (S.cur !== nb.key) S.cur = nb.key;
   const pr = X.problems(f, { ...metaOf(nb), id: f.strategy });
@@ -276,6 +298,7 @@ async function poll(run) {
       if (run.dead) return;
       run.bundle = bd.ok ? bd.json : null;
       settle(); run.dead = true; threeKeep(run);
+      if (run.strategy) loadTries(run.strategy, true);
       const who = viewing() ? '' : ` <b>${esc(run.name || '')}</b>`;
       if (run.bundle) {
         const a = run.bundle.run.report.summary.all;
@@ -530,6 +553,17 @@ function stepTrade(d) {
   ti = Math.max(0, Math.min(n - 1, (ti == null ? (d > 0 ? -1 : n) : ti) + d));
   paintNav();
   jumpTo(ti);
+  seenTrade();
+}
+/* The code check looks at 3 chart trades (plan 4.4): each trade of the open strategy's run that was stepped to, typed or picked in
+   the report counts once, this session. The tracker ticks at the third. */
+const STEP_TRADES = 3;
+function seenTrade() {
+  const sid = S.run && shownRid === S.run.rid ? S.run.strategy : '';
+  if (!sid || ti == null) return;
+  const s = S.stepped[sid] || (S.stepped[sid] = new Set()), had = s.size;
+  s.add(`${shownRid}:${ti}`);
+  if (had < STEP_TRADES && s.size >= STEP_TRADES) paintRes();
 }
 /* Click the count and type the trade's number instead of stepping: Enter goes there (a number past either end goes to the
    nearest trade), Escape or a click away leaves things as they were. `host` is the element that shows the count; `done` runs
@@ -555,7 +589,7 @@ function askTrade(host, done) {
     const v = parseInt(String(inp.value).replace(/[^\d]/g, ''), 10);
     navEditing = null;
     host.textContent = '';
-    if (go && Number.isFinite(v) && v > 0) { ti = Math.min(n, v) - 1; paintNav(); jumpTo(ti); } else paintNav();
+    if (go && Number.isFinite(v) && v > 0) { ti = Math.min(n, v) - 1; paintNav(); jumpTo(ti); seenTrade(); } else paintNav();
     if (done) done();
   };
   inp.addEventListener('keydown', (e) => {
@@ -574,7 +608,7 @@ document.getElementById('labNav')?.addEventListener('click', (e) => {
 // a trade picked in the full report's list moves the stepper too; and a run the tester has just been handed brings it up
 if (window.HBTesterUI && window.HBTesterUI.on) window.HBTesterUI.on(() => {
   const i = window.HBTesterUI.selected;
-  if (i != null && i !== ti && i < navTrades().length) ti = i;
+  if (i != null && i !== ti && i < navTrades().length) { ti = i; seenTrade(); }
   if (ti != null && ti >= navTrades().length) ti = null;      // another run's count
   paintNav();
 });
@@ -988,8 +1022,8 @@ function allMetricsDialog() {
   const r = S.run && S.run.bundle ? S.run : null;
   if (!r || !AM) return;
   const trades = (r.bundle.trades || []).filter((t) => t && t.date), cap = r.bundle.run.capital || 0, st = amLoad();
-  const yrs = AM.years(trades), scopeName = Object.fromEntries(AM.SCOPES);
-  const wf = /^wf_/.test((r.bundle.run.range || {}).kind || '');     // a 3:1 run's months are all one kind: the old Build | Unseen cut of 2025-07 does not apply
+  const kind = (r.bundle.run.range || {}).kind || '', wf = /^wf_/.test(kind);     // a 3:1 run's months are all one kind: the old Build | Unseen cut of 2025-07 does not apply
+  const yrs = AM.years(trades), scopeName = wf ? { all: kind === 'wf_oos' ? 'Test months' : 'In-sample' } : Object.fromEntries(AM.SCOPES);
   const d = dialog('');
   d.classList.add('am-dlg');
   const cell = (unit, v, tone) => `<td class="${tone || ''}">${esc(AM.format(unit, v))}</td>`;
@@ -2314,11 +2348,14 @@ function threeTab(t) {
   paintRes(); syncChart();
 }
 /* Opening a strategy: its last finished in-sample run, test months and all-years run that Run would only repeat (the same request
-   and code) are shown, never run again. Once a strategy a page; never for unsaved code. */
-async function threeResume(b, f) {
+   and code) are shown, never run again. Once a strategy a page; never for unsaved code. The promise ends when the look is done
+   (hasPick waits for it). */
+function threeResume(b, f) {
   const T = threeState(f);
-  if (T.resumed || (b.kind !== 'builtin' && (b.kind === 'new' || isDirty(b)))) return;
-  T.resumed = true;
+  if (!T.resumed && (b.kind === 'builtin' || (b.kind !== 'new' && !isDirty(b)))) { T.resumed = true; T.found = threeFind(b, f, T); }
+  return T.found;
+}
+async function threeFind(b, f, T) {
   const look = async (tag) => {
     const m = await send('POST', '/api/tester/run-match', threeRunBody(f, tag));
     if (!m.ok || !m.json || !m.json.id || T[tag]) return;
@@ -2330,11 +2367,12 @@ async function threeResume(b, f) {
   };
   T.lookAll = () => look('all');
   look('is');
-  const m = await send('POST', '/api/tester/walkforward-match', X.wfFixedBody(f, []));
+  const set = setKey(f), m = await send('POST', '/api/tester/walkforward-match', X.wfFixedBody(f, []));
   if (!m.ok || !m.json || !m.json.id || T.oos.id) return;
   const g = await send('GET', `/api/tester/walkforward/${encodeURIComponent(m.json.id)}/result`);
   if (!g.ok || !g.json || T.oos.id) return;
-  T.oos.id = m.json.id; T.oos.result = g.json;
+  T.oos.id = m.json.id; T.oos.result = g.json; T.oos.set = set;
+  loadTries(f.strategy, true);                                         // the list may not hold it (the newest 20 of all): count it
   if (g.json.oos && !X.wfFixedOos(g.json, '').final) oosGo(b, f, T);    // a read still running: follow it (it starts nothing new)
   else if (buf() === b) paintRes();
 }
@@ -2343,17 +2381,12 @@ function threeEmpty(T) {
     <button class="btn btn-sm" data-act="runall"${S.busy ? ' disabled' : ''}>Run all years</button></div>`;
   return '<div class="rs-empty"><h3>No run yet</h3><p>Run runs your strategy as set on the 3:1 in-sample months: its curve, its numbers and every trade. The test months, all years, the heat map and the prop sim run only when you click them.</p></div>';
 }
-function runAll() {
-  const f = buf() && formOf(buf());
+async function runAll() {
+  const b = buf(), f = b && formOf(b);
   if (!is31(f) || S.busy) return;
-  const d = dialog(`<h2>Run all years?</h2><p>Your strategy as set on every month from Sep 2021 to now. It reads the test months too.</p>
-    <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">Run all years</button></div>`);
-  d.addEventListener('click', (e) => {
-    const x = e.target.closest('[data-x]');
-    if (!x) return;
-    closeDialog();
-    if (x.dataset.x === 'go') run({ tag: 'all' });
-  });
+  if (!(await hasPick(f))) { log('<span class="err">Pick a box first: all years read the test months, and they open only after a pick.</span>'); return; }
+  testMonthsAsk(f, { title: 'Run all years?', text: 'Your strategy as set on every month from Sep 2021 to now. It reads the test months too.', go: 'Run all years' },
+    () => run({ tag: 'all', for: b }));
 }
 /* The test months of the strategy as set: one box, in-sample first (the pick needs it), then its test months -- on one click, once. */
 function oosRun() {
@@ -2361,25 +2394,77 @@ function oosRun() {
   if (!is31(f)) return;
   const T = threeState(f);
   if (T.oos.busy) return;
-  const d = dialog(`<h2>Run the test months?</h2><p>Your strategy as set, on every 3:1 test month. They run once: after this they are spent.</p>
-    <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">Run them</button></div>`);
+  testMonthsAsk(f, { title: 'Run the test months?', text: 'Your strategy as set, on every 3:1 test month. They run once: after this they are spent.', go: 'Run them',
+    lock: T.oos.result && T.oos.result.lock ? '' : 'This locks the strategy as set as box #1.' }, () => oosGo(b, f, T));
+}
+/* ---- the tries count and the pick (plan 4.3, 4.5): read-only GETs, per strategy ---- */
+async function loadTries(sid, fresh = false) {
+  if (!sid) return null;
+  const old = triesOf(sid);
+  if (!fresh && old && Date.now() - old.at < 15000) return old;      // one count serves the open, the ask and the poll; a finished run refreshes it
+  const q = encodeURIComponent(sid);
+  const [r, w] = await Promise.all([send('GET', `/api/tester/runs?limit=${C.RUNS_PAGE}&strategy=${q}`), send('GET', `/api/tester/walkforwards?strategy=${q}`)]);
+  if (!r.ok || !w.ok) return triesOf(sid);
+  const wfs = Array.isArray(w.json) ? w.json : [], fixed = wfs.filter((x) => x && x.strategy === sid && x.scheme === 'fixed');
+  const got = await Promise.all(fixed.map((x) => send('GET', `/api/tester/walkforward/${encodeURIComponent(x.id)}/result`).then((g) => (g.ok ? g.json : null))));
+  // the list is the newest 20 walk-forwards of ALL strategies: this strategy's jobs the match route found (resumes) count too
+  const found = [S.wf[sid], S.three[sid] && S.three[sid].oos].filter((o) => o && o.id && o.result && !wfs.some((x) => x && x.id === o.id));
+  const res = [...got, ...found.filter((o) => o.result.scheme === 'fixed').map((o) => o.result)];
+  const more = found.map((o) => ({ id: o.id, strategy: sid, scheme: o.result.scheme, status: 'done', axes: ((o.job && o.job.axes) || []).map((a) => a.key) }));
+  S.tries[sid] = { ...C.triesCount(Array.isArray(r.json) ? r.json : [], [...wfs, ...more], sid, res), at: Date.now() };
+  S.tries[sid].read = res.find((g) => g && g.lock && g.oos && g.oos.state === 'done') || null;     // for the tracker's verdict
+  if (curSid() === sid) paintRes();
+  return S.tries[sid];
+}
+/* A box of this strategy is picked: in what is open, in its saved walk-forwards, or in the 3:1 jobs the read-only match route finds
+   for it -- waited for, since the list holds only the newest 20 of all strategies (O15: no test month before a pick). */
+const pickedNow = (f) => { const T = S.three[f.strategy], w = S.wf[f.strategy], t = triesOf(f.strategy);
+  return !!((T && T.oos.result && T.oos.result.lock) || (w && w.result && w.result.lock) || (t && t.locked)); };
+async function hasPick(f, b = buf()) {
+  const f3 = is31(f) ? f : { ...f, range: { ...X.LAB_RANGE } }, T = S.three[f.strategy];
+  // a dated form starts no in-sample look of its own (it would put the 3:1 run on its screen): it waits for one already started
+  if (b) await Promise.all([is31(f) ? threeResume(b, f) : T && T.found, wfResume(b, f3)]).catch(() => {});   // a failed look: not found
+  return pickedNow(f) || !!((await loadTries(f.strategy)) || {}).locked;
+}
+/* The one ask before a read of test months (runAll, a dated Run, oosRun): what it reads, that it counts, and which try it is.
+   `go` sends what it sent before this ask existed. */
+async function testMonthsAsk(f, what, go) {
+  const t = (await loadTries(f.strategy)) || triesOf(f.strategy), reads = t ? t.reads : 0, n = t ? t.n : 1, more = !t || t.cut ? '+' : '';
+  const d = dialog(`<h2>${esc(what.title)}</h2><p>Strategy: <b>${esc(String(f.strategy || '').replace(/^draft_/, ''))}</b></p><p>${esc(what.text)}</p>
+    <p>${esc(`They count as seen: test months read ${reads}${more} time${reads === 1 && !more ? '' : 's'} for this strategy; this is try ${reads >= 1 ? n + 1 : n}${more}.`)}</p>
+    ${what.lock ? `<p>${esc(what.lock)}</p>` : ''}
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">${esc(what.go)}</button></div>`);
   d.addEventListener('click', (e) => {
     const x = e.target.closest('[data-x]');
     if (!x) return;
     closeDialog();
-    if (x.dataset.x === 'go') oosGo(b, f, T);
+    if (x.dataset.x === 'go') go();
   });
 }
+/* A Run on dates that hold a test month (Other dates, a custom range): refused before a pick, asked after one (plan 4.5).
+   true = it may run now; `again` runs it after a yes. */
+async function datedRunOk(f, again, b = buf()) {
+  const d = X.rangeDates(f.range), t = await loadTries(f.strategy), lay = t && t.layout, root = rootOf(b);
+  const ins = lay && root && lay.root === root ? lay.months : null;          // that market's own months, or none known (fail closed)
+  if (!C.touchesTestMonths(d.start, d.end, ins)) return true;
+  const span = `${d.start || '?'} → ${d.end || 'today'}`, holds = ins ? 'holds test months' : 'may hold test months (run In-sample once and the Lab knows this market\'s months)';
+  if (!(await hasPick(f, b))) { log(`<span class="err">Pick a box first: ${esc(span)} ${esc(holds)}, and they open only after a pick.</span>`); return false; }
+  testMonthsAsk(f, { title: 'Run these dates?', text: `${span} ${holds}.`, go: 'Run them' }, again);
+  return false;
+}
+/* The market a strategy's code trades now: a built-in's, or the draft's last check of its code (none while an edit is unchecked). */
+const rootOf = (b) => (!b ? '' : b.kind === 'builtin' ? (b.meta && b.meta.root) || '' : (b.valid && b.valid.ok && !b.valid.stale && b.valid.meta && b.valid.meta.root) || '');
 async function oosGo(b, f, T) {
   const o = T.oos, token = ++o.token, id = () => encodeURIComponent(o.id), sleep = (ms) => new Promise((res) => setTimeout(res, ms));
   o.busy = true; o.err = ''; o.step = 'Starting…'; paintRes();
   try {
     if (b.kind !== 'builtin' && (b.kind === 'new' || isDirty(b)) && !(await save(b))) throw new Error('the script could not be saved');
-    const body = X.wfFixedBody(f, []);                      // one box: the strategy as set
+    const body = X.wfFixedBody(f, []), set = setKey(f);     // one box: the strategy as set
     if (!o.id) {
       const m = await send('POST', '/api/tester/walkforward-match', body);
       if (m.ok && m.json && m.json.id) o.id = m.json.id;
       else { const r = await send('POST', '/api/tester/walkforward', body); if (!r.ok) throw new Error(r.error || 'the run did not start'); o.id = r.json.id; }
+      o.set = set;
     }
     for (let lost = 0; ;) {
       const s = await send('GET', `/api/tester/walkforward/${id()}`);
@@ -2415,7 +2500,7 @@ async function oosGo(b, f, T) {
     }
   } catch (e) { if (token === o.token) o.err = e.message || String(e); }
   if (token !== o.token) return;
-  o.busy = false; o.step = ''; paintRes();
+  o.busy = false; o.step = ''; paintRes(); loadTries(f.strategy, true);
 }
 function oosHtml(T) {
   const o = T.oos, res = o.result, oo = res && res.oos, head = '<div class="rs-h"><b>Test months</b><span>Your strategy as set</span></div>';
@@ -2423,15 +2508,16 @@ function oosHtml(T) {
   if (oo && oo.state === 'done') {
     const rec = oo.record || {}, net = rec.net || 0, cell = (res.cells || [])[0], bt = cell && X.wfFixedBlocks(cell, oo);
     if (oo.equity && (oo.equity.t_ms || []).length > 1) WFEQ = oo.equity;
-    const row = X.wfFixedOos(res, '').row;
-    return `${head}<div class="rs-hero"><div class="rs-net"><i>${net > 0 ? '+' : net < 0 ? MINUS : ''}$</i>${esc(Math.abs(Math.round(net)).toLocaleString('en-US'))}</div></div>
+    const row = X.wfFixedOos(res, '').row, sid = curSid();
+    return `${head}${perYearHtml(cell ? [cell] : [], 'in-sample, as set')}<div class="rs-hero"><div class="rs-net"><i>${net > 0 ? '+' : net < 0 ? MINUS : ''}$</i>${esc(Math.abs(Math.round(net)).toLocaleString('en-US'))}</div></div>
       <div class="rs-take">${esc(`${(oo.months || []).length} test months · ${rec.trades ?? 0} trades · after fees.`)}</div>
       ${WFEQ ? EQ_BOX : ''}
       <div class="rs-trio"><div><b>${esc(X.num(rec.pf, 2, true))}</b><span>Profit factor</span></div><div><b>${esc(X.rate(rec.win_rate))}</b><span>Win rate</span></div><div><b>${esc(X.num(rec.sharpe))}</b><span>Sharpe</span></div></div>
       ${row ? `<div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr>${X.WF_FIXED_COLS.map((c) => `<th>${esc(c[1])}</th>`).join('')}</tr></thead><tbody><tr>${row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr></tbody></table></div>` : ''}
+      ${realHtml(realRead(res, sid), sid)}
       ${bt ? `<div class="rs-gh">Block by block</div><div class="wf-scroll"><table class="heat-tbl wf-steps"><thead><tr>${bt.head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${bt.rows.map((x) => `<tr>${x.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : ''}`;
   }
-  if (oo && oo.state === 'stopped') return `${head}<div class="rs-empty"><h3>The test months stopped</h3><p>${esc(oo.say || 'The read is used: there is no record.')}</p></div>`;
+  if (oo && oo.state === 'stopped') return `${head}<div class="rs-empty"><h3>The test months stopped</h3><p>${esc(oo.say || 'The read is used: there is no record.')}</p></div>${realHtml(realRead(res, curSid()), curSid())}`;
   if (o.busy || oo) return `${head}<div class="rs-prog"><div class="t">${esc(o.step || X.wfFixedOos(res, '').text || 'Starting…')}</div><div class="rs-bar ind"><i style="width:38%"></i></div></div>`;
   return `${head}<div class="rs-empty"><h3>Not run</h3><p>Your strategy as set, on the 3:1 test months (the month after each 3 in-sample months), after fees. They run once, never again.</p>
     <button class="btn btn-sm" data-act="oosrun">Run the test months</button></div>`;
@@ -2449,11 +2535,11 @@ function propHtml(r) {
   const p = r.prop || (r.bundle.propsim && r.bundle.propsim.headline ? r.bundle.propsim : null);
   if (p) {
     const h = p.headline || {}, pc = (v) => (v == null ? '—' : `${Math.round(v * 100)}%`);
-    return `<div class="rs-gh">Prop sim${p.rules && p.rules.label ? ` · ${esc(p.rules.label)}` : ''}</div><div class="rs-group">${wfKv('Passes the eval', pc(h.eval_pass_p))}${wfKv('Busts the eval', pc(h.bust_p))}
+    return `<div class="rs-gh">More numbers · Prop sim${p.rules && p.rules.label ? ` · ${esc(p.rules.label)}` : ''} · not one of the six lines</div><div class="rs-group">${wfKv('Passes the eval', pc(h.eval_pass_p))}${wfKv('Busts the eval', pc(h.bust_p))}
       ${wfKv('Days to pass', h.median_days_to_pass == null ? '—' : String(Math.round(h.median_days_to_pass)))}${wfKv('Gets a payout', pc(h.funded_payout_p))}
       ${wfKv('Expected cheque', h.funded_expected_cheque == null ? '—' : money0(h.funded_expected_cheque))}</div>`;
   }
-  return `<div class="rs-gh">Prop sim</div><div class="rs-group"><button class="rs-row" data-act="propsim"${r.propBusy ? ' disabled' : ''}><span>${r.propBusy ? 'Running the prop sim…' : 'Run the prop sim'}</span><span>›</span></button>
+  return `<div class="rs-gh">More numbers · Prop sim · not one of the six lines</div><div class="rs-group"><button class="rs-row" data-act="propsim"${r.propBusy ? ' disabled' : ''}><span>${r.propBusy ? 'Running the prop sim…' : 'Run the prop sim'}</span><span>›</span></button>
     ${r.propErr ? `<div class="heat-err">${esc(r.propErr)}</div>` : ''}</div>`;
 }
 async function propRun() {
@@ -2520,10 +2606,51 @@ function wfStepsHtml(r, axes) {
 /* The fixed walk-forward (2026-10-20): the in-sample table, win rate first, a header sorts it; a Pick per row (the pick is
    locked); then "Run test months", open only after a pick and once the owner has typed his words, which go out as typed.
    The words and numbers are tester.js (wfFixedTable, wfFixedOos); the server's refusals show as they come. */
+/* ---- real or luck: the six lines of real.py (reallines.js) under a saved 3:1 result, the per-year row first ---- */
+const curSid = () => { const b = buf(), f = b && formOf(b); return f ? f.strategy : ''; };
+const triesOf = (sid) => S.tries[sid] || null;          // {n, cut} once counted; none yet = a count that may be short
+function realRead(res, sid) { const t = triesOf(sid); return RL && res ? RL.labRead(res, t ? t.n : 1, !t || t.cut) : null; }
+/* The step tracker (plan 4.4): the blueprint's phases for the open strategy, from what the Lab already has. It only shows; every
+   lock it names is held elsewhere (the server, and the Lab's refusal of test months before a pick). */
+function steps(b, f) {
+  const sid = f.strategy, T = S.three[sid], w = S.wf[sid], t = triesOf(sid), seen = S.stepped[sid] ? S.stepped[sid].size : 0;
+  const read = [T && T.oos.result, w && w.result, t && t.read].find((r) => r && r.lock && r.oos && r.oos.state === 'done');
+  const saved = b.kind === 'builtin' || (b.kind === 'draft' && !isDirty(b) && !!(b.valid && b.valid.ok));
+  const table = !!(w && w.result && w.result.scheme === 'fixed' && (w.result.cells || []).length > 1) || !!(t && t.tabled);
+  const picked = pickedNow(f), v = read && realRead(read, sid);
+  return [
+    ['Idea card', saved, '', b.valid && b.valid.ok === false ? 'the code does not load' : 'save it'],
+    ['Code check', seen >= STEP_TRADES, '', `step through ${STEP_TRADES} trades on the chart (${seen} of ${STEP_TRADES})`],
+    ['In-sample table', table, saved ? '' : 'save it first', 'not run (only when you say so)'],
+    ['Your pick', picked, table ? '' : 'run the in-sample table first', 'pick a box in the in-sample table'],
+    ['Test months', !!read, saved ? '' : 'save it first', picked ? 'not run (only when you say so)' : 'not run: Run test months locks the strategy as set as box #1'],
+    [v ? `Verdict: ${v.verdict.word}` : 'Verdict', !!v, read ? '' : 'test months not run (only when you say so)', '', v ? v.verdict.word : ''],
+  ].map(([name, ok, lock, todo, word = '']) => ({ name, ok, lock: ok ? '' : lock, why: ok ? '' : lock || todo, word }));
+}
+function stepsHtml(b, f) {
+  const st = steps(b, f), next = st.findIndex((x) => !x.ok && !x.lock);
+  const said = st.filter((x, i) => !x.ok && (x.lock || i === next)).map((x) => `${x.name}: ${x.why}`);
+  return `<div class="lab-steps"><ol>${st.map((x, i) => {
+    const not = x.ok && x.word && x.word !== 'REAL';          // a verdict read, but not REAL: no tick
+    const k = not ? 'ok word' : x.ok ? 'ok' : x.lock ? 'lock' : i === next ? 'next' : '';
+    return `<li class="${k}" title="${esc(x.ok ? `${x.name}: done` : `${x.name}: ${x.why}`)}"><i aria-hidden="true">${not ? '·' : x.ok ? '✓' : x.lock ? ICON_LOCK : i === next ? '●' : '○'}</i>${esc(x.name)}<span class="vh">${x.ok ? ', done' : x.lock ? ', locked' : ''}</span></li>`;
+  }).join('')}</ol>${said.length ? `<p>${esc(said.join(' · '))}</p>` : ''}</div>`;
+}
+function perYearHtml(cells, what) {
+  const ys = RL ? RL.perYear(cells) : [];
+  return ys.length ? `<div class="rs-gh">Per year · ${esc(what)}</div><div class="rl-years">${ys.map(([y, v]) => `<span>${esc(y)} <b class="${X.toneOf(v)}">${esc(X.signed(v))}</b></span>`).join('')}</div>` : '';
+}
+function realHtml(rd, sid) {
+  if (!rd) return '';
+  const t = triesOf(sid), tone = (x) => (x.ok === true ? ['pass', 'PASS'] : x.ok === false ? ['fail', 'FAIL'] : ['wait', x.gap ? 'not checked' : 'not run']);
+  return `<div class="rs-gh">Real or luck</div><div class="rs-group rl">${rd.lines.map((x) => { const [c, w] = tone(x); return `<div class="rl-line ${c}"><b>${w}</b><span>${esc(x.line)}: ${esc(x.said)}</span></div>`; }).join('')}
+    <div class="rl-verdict">${esc(rd.verdict.word)}: ${esc(rd.verdict.why)}</div>
+    <div class="heat-note">${esc(t ? RL.barText(t.n, t.cut) : 'Luck test: tries not counted yet')}</div></div>`;
+}
 function wfFixedHtml(w, job) {
   const r = w.result, t = X.wfFixedTable(r, job.axes || [], w.sort), o = X.wfFixedOos(r, OOS_SAID), sk = w.sort && w.sort.key;
   const locked = t.picked != null, pickRow = t.rows.find((x) => x.i === t.picked);
-  const mb = buf(), own = mb ? X.ownStopNote(metaOf(mb), job.axes, t.rows.length) : '';
+  const mb = buf(), own = mb ? X.ownStopNote(metaOf(mb), job.axes, t.rows.length) : '', sid = (job && job.strategy) || curSid(), rd = realRead(r, sid);
   const th = t.head.map((h) => (h.key === 'box' ? `<th>${esc(h.label)}</th>`
     : `<th><button class="wf-sort${sk === h.key ? ' on' : ''}" data-act="wfsort" data-k="${esc(h.key)}" title="Sort by ${esc(h.label)}">${esc(h.label)}${sk === h.key ? (w.sort.dir < 0 ? ' ↓' : ' ↑') : ''}</button></th>`)).join('');
   const tr = t.rows.map((row) => `<tr${row.i === t.picked ? ' class="sel"' : ''}><td>${locked ? (row.i === t.picked ? '<b>Picked</b>' : '')
@@ -2540,9 +2667,13 @@ function wfFixedHtml(w, job) {
       ${o.text ? `<div class="heat-note">${esc(o.text)}</div>` : ''}
       ${o.row ? `<div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr>${t.head.slice(1).map((h) => `<th>${esc(h.label)}</th>`).join('')}</tr></thead>
         <tbody><tr>${o.row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr></tbody></table></div>` : ''}`;
-  return `<div class="rs-gh">In-sample table · ${t.rows.length} box${t.rows.length === 1 ? '' : 'es'}${win.start ? ` · ${esc(wfMon(win.start))} – ${esc(wfMon(win.end))}` : ''}</div>
+  const yc = bc ? [bc] : r.cells || [];
+  return `${perYearHtml(yc, bc ? `${X.boxNo(bi)} ${bRow ? bRow.label : ''}`.trim() : 'the average box')}
+    <div class="rs-gh">In-sample table · ${t.rows.length} box${t.rows.length === 1 ? '' : 'es'}${win.start ? ` · ${esc(wfMon(win.start))} – ${esc(wfMon(win.end))}` : ''}</div>
+    ${rd ? `<div class="rl-count">${esc(`${rd.up} of ${rd.n} boxes made money${rd.n ? ` (${Math.round(rd.up / rd.n * 100)}%)` : ''}`)}</div>` : ''}
     ${own ? `<div class="heat-note">${esc(own)}</div>` : ''}
     <div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr><th></th>${th}</tr></thead><tbody>${tr}</tbody></table></div>
+    ${realHtml(rd, sid)}
     <div class="rs-gh">Test months</div><div class="rs-group wf-oos">${test}
       ${w.say ? `<div class="heat-err">${esc(w.say)}</div>` : ''}</div>
     <div class="rs-gh">Block by block${bc ? ` · ${esc(X.boxNo(bi))} ${esc(bRow ? bRow.label : '')}` : ''}</div>${blocks}
@@ -2622,17 +2753,21 @@ function wfRunBody(b, f) {
   return { body: f.range.wf === X.WF_ROLL ? X.wfFixedBody(f, axes) : X.wfBody(f, axes, 'net_profit', 5) };
 }
 /* Opening a strategy shows its newest FINISHED 3:1 that Run would only repeat -- the same settings, months and code -- instead of
-   asking for it again (owner 2026-10-24). Once a strategy a page; never over a job of its own, never for unsaved code. */
-async function wfResume(b, f) {
+   asking for it again (owner 2026-10-24). Once a strategy a page; never over a job of its own, never for unsaved code. The promise
+   ends when the job and its result are read (hasPick waits for it). */
+function wfResume(b, f) {
   const w = wfLabState(f);
-  if (w.resumed || w.id || w.starting || w.job || (b.kind !== 'builtin' && (b.kind === 'new' || isDirty(b)))) return;
-  w.resumed = true;
+  if (!(w.resumed || w.id || w.starting || w.job || (b.kind !== 'builtin' && (b.kind === 'new' || isDirty(b))))) { w.resumed = true; w.found = wfFind(b, f, w); }
+  return w.found;
+}
+async function wfFind(b, f, w) {
   const q = wfRunBody(b, f);
   if (q.err) return;
   const r = await send('POST', '/api/tester/walkforward-match', q.body);
   if (!r.ok || !r.json || !r.json.id || w.id || w.starting) return;
   w.id = r.json.id;
-  wfPoll(w, ++w.token);
+  await wfPoll(w, ++w.token);
+  if (w.result) loadTries(f.strategy, true);                           // the list may not hold it (the newest 20 of all): count it
 }
 async function wfRun() {
   const b = buf();
@@ -2887,9 +3022,40 @@ function deskGo() {
   }
   if (st.action === 'promote') promoteToDesk(b);
 }
-async function promoteToDesk(b) {
+/* The settings a run is made with, as one key: inputs, Trade rules, size and fees (X.body's own cleaning, keys sorted). */
+function canon(v) { return JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [z]) => (a < z ? -1 : a > z ? 1 : 0))) : x)); }
+function setKey(f) { const x = X.body(f); return canon({ inputs: x.inputs, controls: x.controls || {}, qty: x.qty, commission: x.commission, slippage_ticks: x.slippage_ticks }); }
+/* The 3:1 record of the run being put on the Desk: the open one-box walk-forward (the strategy as set), only when it was opened for
+   the very settings the run was made with (its own record, not the form), and for a draft, a lock of the code saved now (the Desk
+   takes that code and refuses a run of other code). A table box, other settings or other code: none, and the dialog says so. */
+function promoteRecord(f, r, b) {
+  const T = f && S.three[f.strategy], m = r.bundle && r.bundle.run;
+  if (!T || !T.oos.result || !T.oos.set || !m) return null;
+  const lk = T.oos.result.lock;
+  if (b && b.kind === 'draft' && lk && lk.code !== shaNow(b.saved)) return null;      // '' until hashed: none (fail closed)
+  const ran = setKey({ ...f, inputs: m.inputs || {}, controls: (m.controls && m.controls.rules) || {}, qty: m.qty, commission: m.commission, slippage_ticks: m.slippage_ticks });
+  return ran === T.oos.set ? T.oos.result : null;
+}
+/* Put it on the Desk: first what the six lines say of it (plan 4.7), then the same request as before; Not yet sends nothing. */
+function promoteToDesk(b) {
   const r = S.run && S.run.key === b.key ? S.run : null;
   if (!r || !r.rid || !r.bundle || r.grid) return;      // a heat-map cell has no run of its own to promote
+  const f = formOf(b), sid = f ? f.strategy : '', w = sid && S.wf[sid], rd = realRead(promoteRecord(f, r, b), sid);
+  const word = (x) => (x.ok === true ? 'PASS' : x.ok === false ? 'FAIL' : x.gap ? 'not checked' : 'not run');
+  const tp = w && w.result && w.result.lock ? w.result.lock.cell : null;
+  const d = dialog(`<h2>Put ${esc(b.name)} on the Desk?</h2>
+    ${rd ? `<p>The six lines of this run's own settings (its in-sample months and test months, as set):</p><p><b>${esc(rd.verdict.word)}</b>: ${esc(rd.verdict.why)}</p><div class="rl">${rd.lines.map((x) => `<div class="rl-line ${x.ok === true ? 'pass' : x.ok === false ? 'fail' : 'wait'}"><b>${word(x)}</b><span>${esc(x.line)}: ${esc(x.said)}</span></div>`).join('')}</div>`
+    : `<p>No in-sample record of this run's own settings and code is open: the six lines are not read.</p>${tp != null ? `<p>Your pick in the in-sample table, box ${esc(X.boxNo(tp))}, is not matched to this run.</p>` : ''}`}
+    <p>Lands OFF, no account.</p><p>Trade rules are not applied on the Desk.</p>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">Put it on the Desk</button></div>`);
+  d.addEventListener('click', (e) => {
+    const x = e.target.closest('[data-x]');
+    if (!x) return;
+    closeDialog();
+    if (x.dataset.x === 'go') promoteGo(b, r);
+  });
+}
+async function promoteGo(b, r) {
   S.deskBusy = true; S.deskErr = ''; paintRes();
   const a = await send('POST', '/api/tester/desklab/promote', { name: b.name, run_id: r.rid });
   S.deskBusy = false;
@@ -2928,12 +3094,12 @@ function paintRes() {
   paintNav();
   if (!b) { el.innerHTML = '<div class="rs-empty rs-none"><h3>Backtest</h3><p>Pick a strategy, or paste one, to see how it would have done.</p></div>'; return; }
   const wfF = b.kind === 'pipe' ? null : formOf(b), T = is31(wfF) ? threeState(wfF) : null;
-  if (T) threeResume(b, wfF);
+  if (T) { threeResume(b, wfF); wfResume(b, wfF); }                  // its in-sample run, test months, and heat map + pick, if saved
   const r = T ? threeRun(b, T) : S.run && S.run.key === b.key ? S.run : null, settings = b.kind === 'pipe' ? '' : settingsHtml(b);
   let main = '', settingsDone = false;
   WFEQ = null; WFEQ2 = null;
   if (T && T.tab === 'oos') main = oosHtml(T);
-  else if (T && T.tab === 'heat') { main = heatTabHtml(wfF); wfResume(b, wfF); }
+  else if (T && T.tab === 'heat') main = heatTabHtml(wfF);
   else if (wfF && wfF.range.wf && !T) {
     const wr = wfLabState(wfF).result, sd = wfSide(wfF);
     const fx = !!(wr && wr.scheme === 'fixed') || (!wr && wfF.range.wf === X.WF_ROLL);
@@ -2964,7 +3130,7 @@ function paintRes() {
       <div class="rs-gh">Run settings</div>${settings}
       <div class="rs-group">${P.chart ? '' : '<button class="rs-row" data-act="show"><span>Show trades on the chart</span><span>›</span></button>'}
         <button class="rs-row" data-act="allmetrics"><span>All metrics</span><span>›</span></button>
-        <button class="rs-row" data-act="report"><span>${root.dataset.report === '1' && P.chart ? 'Hide the full report' : 'Full report'}</span><span>›</span></button>
+        <button class="rs-row" data-act="report"><span>${root.dataset.report === '1' && P.chart ? 'Hide the report' : 'Report'}</span><span>›</span></button>
         ${b.kind === 'pipe' ? '' : `<button class="rs-row" data-act="review"${b.kind === 'builtin' ? ' disabled' : ''}><span>Request a review</span><span>›</span></button>${deskRows(b)}`}</div>${b.kind === 'pipe' ? '' : deskNote(b)}`;
     main = main.replace('<div class="rs-gh">Run settings</div>', `${propHtml(r)}<div class="rs-gh">Run settings</div>`);
     settingsDone = true;
@@ -2977,7 +3143,7 @@ function paintRes() {
   } else {
     main = `<div class="rs-empty"><h3>No backtest yet</h3><p>Run it to see the P&amp;L, the equity curve and every trade. <kbd>⌘↵</kbd> runs it from the editor.</p></div>`;
   }
-  if (T) main = threeTabs(T) + main;
+  if (T) main = (b.kind === 'pipe' ? '' : stepsHtml(b, wfF)) + threeTabs(T) + main;
   el.innerHTML = settingsDone ? main : `${main}${settings ? `<div class="rs-gh">Run settings</div>${settings}` : ''}`;
   el.scrollTop = top;
   drawEq();
@@ -3152,7 +3318,8 @@ root.addEventListener('dragover', (e) => { if (!inChart(e) && [...(e.dataTransfe
 root.addEventListener('dragleave', (e) => { if (!root.contains(e.relatedTarget)) $('#edWrap')?.classList.remove('ed-drop'); });
 root.addEventListener('drop', (e) => { if (inChart(e)) return; const f = e.dataTransfer?.files?.[0]; $('#edWrap')?.classList.remove('ed-drop'); if (f) { e.preventDefault(); readFile(f); } });
 $('#labFile').addEventListener('change', (e) => { readFile(e.target.files[0]); e.target.value = ''; });
-window.addEventListener('beforeunload', (e) => { if ([...S.bufs.values()].some(isDirty)) { e.preventDefault(); e.returnValue = ''; } });
+window.hbHasUnsaved = () => [...S.bufs.values()].some(isDirty);     // for the app shell (plan 4.12): a script edited and not saved
+window.addEventListener('beforeunload', (e) => { if (window.hbHasUnsaved()) { e.preventDefault(); e.returnValue = ''; } });
 for (const x of document.querySelectorAll('#labPanels [data-panel]')) x.addEventListener('click', () => setPanel(x.dataset.panel));
 setInterval(() => { const b = buf(); if (b && b.savedAt && !isDirty(b)) paintHead(); }, 30000);
 

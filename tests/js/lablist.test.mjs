@@ -266,7 +266,8 @@ function page({ drafts, groups, refuse = {}, gone = [] }) {
     if (method === 'GET' && url === '/api/tester/drafts') return [200, list];
     if (method === 'GET' && url === '/api/tester/groups') return [200, groups];
     if (method === 'GET' && (m = /^\/api\/tester\/strategies\/draft_(\w+)\/source$/.exec(url))) return [200, { files: [{ path: `${m[1]}.py`, text: `# ${m[1]}\n` }] }];
-    if (method === 'GET' && url === '/api/tester/runs') return [200, []];
+    if (method === 'GET' && (url === '/api/tester/runs' || url.startsWith('/api/tester/runs?'))) return [200, []];
+    if (method === 'GET' && (url === '/api/tester/walkforwards' || url.startsWith('/api/tester/walkforwards?'))) return [200, []];
     if (method === 'DELETE' && (m = /^\/api\/tester\/drafts\/(\w+)$/.exec(url))) {
       if (refuse[m[1]]) return [409, { detail: refuse[m[1]] }];
       if (gone.includes(m[1])) { list = list.filter((d) => d.name !== m[1]); return [200, { deleted: false }]; }
@@ -299,7 +300,7 @@ function page({ drafts, groups, refuse = {}, gone = [] }) {
     S: win.HBLab.state, setList(names) { list = list.filter((d) => names.includes(d.name)); },
     hold(name) { let release; gates[name] = new Promise((r) => { release = r; }); return release; },
     edit(name) { const b = win.HBLab.state.bufs.get(`d:${name}`); b.code = `${b.code}# an edit\n`; },
-    picks: () => [...win.HBLab.state.picks], lib, requests, made, flush, keydown, pointerdown, fire,
+    picks: () => [...win.HBLab.state.picks], unsaved: () => win.hbHasUnsaved(), lib, requests, made, flush, keydown, pointerdown, fire,
     clickRow(key, mods = {}) { fire('click', { target: lookup({ '[data-key]': row(key) }), shiftKey: !!mods.shift, metaKey: !!mods.meta, ctrlKey: !!mods.ctrl }); },
     clickMore(id, name, rowKey) { const dataset = { act: 'file', id, name, ...(rowKey ? { row: rowKey } : {}) };
       fire('click', { target: lookup({ '[data-act]': { dataset, getBoundingClientRect: () => ({ left: 5, right: 25, top: 5, bottom: 25 }) } }) }); },
@@ -557,4 +558,48 @@ test('withDeskGroup: the strategies on the Desk are one group of their own, firs
   assert.deepEqual(keys(L.shownRows(secs, new Set(['On the Desk']))), ['d:b', 'd:d', 'n:1', 'b:nq930']);   // it folds like any group
   // nothing on the Desk: no group, nothing moves
   assert.deepEqual(L.withDeskGroup(L.sections(rows, groups)).map((s) => s.name), ['Fades', 'Empty', '']);
+});
+
+test('page: opening a strategy asks for its own last run and its tries, read-only (plan 4.3, 4.9)', async () => {
+  const p = page({ drafts: ['a', 'b'], groups: G });
+  await p.flush();
+  p.clickRow('d:a');
+  await p.flush();
+  assert.ok(p.requests.includes('GET /api/tester/runs?strategy=draft_a'), p.requests.join(', '));      // not the newest 50 of every strategy
+  assert.ok(!p.requests.includes('GET /api/tester/runs'));
+  assert.ok(p.requests.includes('GET /api/tester/runs?limit=500&strategy=draft_a'));
+  assert.ok(p.requests.includes('GET /api/tester/walkforwards?strategy=draft_a'));   // the route ignores it today (newest 20 of all)
+  assert.ok(p.requests.every((r) => r.startsWith('GET ')), 'opening sends nothing but GETs');
+});
+
+test('another strategy still running: "X is still running. Stop it?" -- Keep it sends nothing, Stop it cancels it as before (plan 4.8)', () => {
+  const a = LAB_SRC.indexOf('function stopAsk'), code = LAB_SRC.slice(a, LAB_SRC.indexOf('function ensureBuf', a));
+  const dialogs = [], did = [];
+  const c = vm.createContext({ esc: (t) => String(t), closeDialog() {},
+    dialog: (html) => { const d = { html, on: null, addEventListener(t, f) { d.on = f; } }; dialogs.push(d); return d; } });
+  vm.runInContext(`${code}\nglobalThis.stopAsk = stopAsk;`, c);
+  const press = (x) => dialogs.at(-1).on({ target: { closest: () => ({ dataset: { x } }) } });
+  c.stopAsk({ name: 'nq930' }, () => did.push('go'));
+  assert.match(dialogs[0].html, /<h2>nq930 is still running\. Stop it\?<\/h2>/);
+  press('cancel');
+  assert.deepEqual(did, []);
+  c.stopAsk({ name: 'nq930' }, () => did.push('go'));
+  press('go');
+  assert.deepEqual(did, ['go']);
+  // run(): the ask comes before the cancel, and a yes is the same cancel route as before
+  const r = LAB_SRC.slice(LAB_SRC.indexOf('async function run('), LAB_SRC.indexOf('async function openRecordRun'));
+  assert.ok(r.indexOf('stopAsk(prev') < r.indexOf("/cancel`)"));
+  assert.match(r, /if \(opts\.stop !== prev\) return stopAsk\(prev, \(\) => run\(\{ \.\.\.opts, stop: prev \}\)\);/);
+  assert.match(r, /send\('POST', `\/api\/tester\/run\/\$\{encodeURIComponent\(prev\.rid\)\}\/cancel`\)/);
+});
+
+test('window.hbHasUnsaved: true once a script is edited and not saved, for the app shell (plan 4.12)', async () => {
+  const p = page({ drafts: ['a'], groups: G });
+  await p.flush();
+  p.clickRow('d:a');
+  await p.flush();
+  assert.equal(p.unsaved(), false);
+  p.edit('a');
+  assert.equal(p.unsaved(), true);
+  assert.match(LAB_SRC, /addEventListener\('beforeunload', \(e\) => \{ if \(window\.hbHasUnsaved\(\)\) \{ e\.preventDefault\(\); e\.returnValue = ''; \} \}\)/);
 });

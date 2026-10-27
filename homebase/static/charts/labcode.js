@@ -847,6 +847,66 @@ function fmFirstError(errors, order) {
   return keys.length ? e[keys[0]] : '';
 }
 
+/* ---- the 3:1 test months and the tries count (plan 4.3, 4.5; the owner, O5 and O15) ----
+   The server lays out each market's 3:1 blocks from that market's own months (backtest/wfmonths.blocks): for NQ the test months
+   are Jan, May, Sep from 2022 (Oct-Dec 2021 -> Jan 2022, Feb-Apr -> May, ...), but a market whose tapes start later (6E: Nov 2022)
+   or have a gap (BTC) has others. The Lab learns a market's layout from a saved in-sample run: range kind wf_is carries its root and
+   its in-sample `months` (layoutOf). `ins` = those months. A month is safe only before Jan 2022 (no market's first test month is
+   earlier) or as one of them; any other month (a test month, a gap, a part block, a month before or after the layout) may be a
+   test month (fail closed: a layout learned before a backfill must not let the new early months through). */
+const isTestMonth = (ym, ins) => ym >= '2022-01' && !(ins || []).includes(ym);
+/* Does a run from `start` to `end` (YYYY-MM-DD) read a test month? No end = "to today": yes. Not a date: yes (fail closed). */
+function touchesTestMonths(start, end, ins) {
+  if (!end) return true;
+  const a = String(start || '2021-09-22'), z = String(end).slice(0, 7);
+  let y = +a.slice(0, 4), m = +a.slice(5, 7);
+  if (!/^\d{4}-\d\d/.test(a) || !/^\d{4}-\d\d$/.test(z) || m < 1 || m > 12) return true;
+  for (let ym = `${y}-${String(m).padStart(2, '0')}`; ym <= z; m === 12 ? (y += 1, m = 1) : (m += 1), ym = `${y}-${String(m).padStart(2, '0')}`) {
+    if (isTestMonth(ym, ins)) return true;
+  }
+  return false;
+}
+/* The newest saved in-sample run's layout, {root, months} (the runs list comes newest first), or null.
+   shortcut: a layout is as of its run; a month added since is "may be a test month" until the next in-sample run. */
+function layoutOf(runs, sid) {
+  const r = (runs || []).find((x) => x && x.strategy === sid && x.range && x.range.kind === 'wf_is' && x.range.root
+    && Array.isArray(x.range.months) && x.range.months.length);
+  return r ? { root: r.range.root, months: [...r.range.months].sort() } : null;
+}
+/* A saved run's range (Range.to_dict) reads test months? wf_is never, wf_oos always, a dated one by its dates, anything else yes.
+   shortcut: is_months is judged by its whole span (its Jan/Apr/Jul/Oct days only would read fewer) -- over-counts, never under. */
+function rangeReadsTestMonths(r, ins) {
+  if (!r || typeof r !== 'object') return true;
+  if (r.kind === 'wf_is') return false;
+  if (r.kind === 'wf_oos') return true;
+  if (r.kind === 'research' && !r.end) return true;
+  if (r.kind === 'research' || r.kind === 'is_months' || r.kind === 'custom') return touchesTestMonths(r.start, r.end, ins);
+  return true;
+}
+/* GET /api/tester/runs?limit=500; GET /api/tester/walkforwards: the newest 20 of every strategy (the route has no strategy
+   filter yet: the page sends strategy= for when it has one), so 20 back = the count may be short. */
+const RUNS_PAGE = 500, WFS_PAGE = 20;
+/* The tries of one strategy (O5): every in-sample run of a setting (wf_is runs) + one per heat-map table (a walk-forward with
+   boxes) + every test-months read after the first. Reads: saved runs whose range touches a test month (by the strategy's layout;
+   a run on another market, or with no layout, by the fail-closed rule), the old 1:N walk-forwards (they ran out-of-sample months),
+   and every 3:1 walk-forward whose test months were started. `results`: the GET .../result of this strategy's fixed walk-forwards
+   (null = not loaded). A full page of either list = `cut`: the count may be short.
+   shortcut: each wf_is run counts as a setting (the runs list carries no inputs; a repeat is found by run-match and not run again),
+   so it over-counts, never under. `locked`: a box of this strategy is picked (O15: no test month before a pick). `tabled`: an
+   in-sample table (a fixed walk-forward with a heat map) finished, for the step tracker. `layout`: layoutOf(runs). */
+function triesCount(runs, wfs, sid, results) {
+  const rs = (runs || []).filter((r) => r && r.strategy === sid && r.status !== 'error');
+  const ws = (wfs || []).filter((w) => w && w.strategy === sid), got = (results || []).filter(Boolean), lay = layoutOf(rs, sid);
+  const insOf = (r) => (lay && (!r || !r.root || r.root === lay.root) ? lay.months : null);
+  const settings = rs.filter((r) => r.range && r.range.kind === 'wf_is').length;
+  const tables = ws.filter((w) => (w.axes || []).length > 0).length;
+  const reads = rs.filter((r) => rangeReadsTestMonths(r.range, insOf(r.range))).length + ws.filter((w) => w.scheme && w.scheme !== 'fixed').length
+    + got.filter((g) => g.oos).length;
+  return { n: Math.max(1, settings + tables + Math.max(0, reads - 1)), reads, settings, tables,
+    cut: (runs || []).length >= RUNS_PAGE || (wfs || []).length >= WFS_PAGE, locked: got.some((g) => !!g.lock),
+    tabled: ws.some((w) => w.scheme === 'fixed' && (w.axes || []).length > 0 && w.status === 'done'), layout: lay };
+}
+
 const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, withDeskGroup, ON_DESK, INDENT,
   shownRows, canPick, pickRange, prunePicks, rowClick, draftName, deleteItem, deleteTargets, deleteConfirm, deleteConfirmHtml, deleteLine, goneLine, unsavedLine, deleteKey, isTyping,
   libFilter, MARKS, LIB_SORTS, LIB_SHOWS, markOf, libShow, libSort, libMarkets, tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
@@ -854,7 +914,8 @@ const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, 
   plPick, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend,
   plUsable, plRules, plMainSetting, plIndicators, plSessionsFor, plNeed, plValueError, plSettingWords, plPrefill,
   FM_LATEST, fmShown, fmKeys, fmKinds, fmSides, fmWords, fmHasValue, fmKindValue, fmFit, fmSetMarket, fmStarts, fmSize, fmSuggest, fmStart, fmSwitch, fmFill, fmNumberError, fmErrors, fmAnswers, fmFirstError, fmId, fmKeepErrors,
-  plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, promoteState, deskSaid };
+  plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, promoteState, deskSaid,
+  isTestMonth, touchesTestMonths, layoutOf, rangeReadsTestMonths, triesCount, RUNS_PAGE, WFS_PAGE };
 if (typeof window !== 'undefined') window.HBLabCode = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

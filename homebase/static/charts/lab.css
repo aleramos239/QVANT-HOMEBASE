@@ -790,3 +790,35 @@ html.hb-apple .lab-dlg.am-dlg { width: min(1040px, calc(100vw - 32px)); max-heig
 .wf-key.oos { background: var(--hb-accent); }
 .wf-key.is { background: var(--hb-fg2); opacity: .55; }
 #labRes #wfRes .rs-trio { grid-template-columns: repeat(2, 1fr); row-gap: 12px; }
+
+/* the six real-or-luck lines under a 3:1 result (reallines.js: real.py's own words), the verdict, and the per-year row before them */
+.rl-line { display: grid; grid-template-columns: 58px 1fr; gap: 8px; padding: 6px 12px; font-size: var(--hb-fs-ui); line-height: 1.4; }
+.rl-line b { font-weight: 600; }
+.rl-line.pass b { color: var(--hb-gain, #2e6b4f); }
+.rl-line.fail b { color: var(--down); }
+.rl-line.wait b { color: var(--hb-fg2); font-weight: 500; }
+.rl-verdict { padding: 8px 12px; font-weight: 600; }
+.rl .heat-note, .rl-count { padding: 0 12px 8px; font-size: var(--hb-fs-ui); color: var(--hb-fg2); }
+.rl-years { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 4px 6px; font-variant-numeric: tabular-nums; font-size: var(--hb-fs-ui); }
+.rl-years b { font-weight: 600; }
+.rl-years .up { color: var(--up); } .rl-years .down { color: var(--down); }
+
+/* the step tracker above a 3:1 result (lab.js stepsHtml): done, the next step, locked; the locked steps' reasons in words under it */
+.lab-steps { margin: 0 6px 12px; font-size: var(--hb-fs-ui); line-height: 1.4; }
+.lab-steps ol { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; padding: 0; list-style: none; }
+.lab-steps li { display: inline-flex; align-items: center; gap: 4px; color: var(--hb-fg2); }
+.lab-steps li i { font-style: normal; display: inline-flex; }
+.lab-steps li svg { width: 11px; height: 11px; }
+.lab-steps li.ok { color: var(--hb-fg); } .lab-steps li.ok i { color: var(--hb-gain, #2e6b4f); }
+.lab-steps li.ok.word i { color: var(--hb-fg2); }        /* Verdict: LUCK, FAKE or NOT YET -- read, but no green tick */
+.lab-steps li.next { color: var(--hb-fg); font-weight: 600; } .lab-steps li.next i { color: var(--hb-accent); }
+.lab-steps li.lock { opacity: .7; }
+.lab-steps p { margin: 4px 0 0; color: var(--hb-fg2); }
+.lab-steps .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* The Strategy Tester under the chart is a read-only Report on the Lab page (plan 4.6): its trades, metrics and properties stay;
+   its own Run, the range pill, the heat map (with the old walk-forward's settings) and Compare are hidden -- the Lab's Run, its
+   3:1 in-sample table and its test months are the only way to run. The Recent runs menu sits outside the panel (#menuRoot). */
+.lab[data-report="1"] .bpanel .tst-run-area, .lab[data-report="1"] .bpanel .tst-range,
+.lab[data-report="1"] .bpanel .tst-tab[data-tab="heatmap"], .lab[data-report="1"] .bpanel .tst-tab[data-tab="compare"],
+.lab-page .menu-tester-runs .tst-cmp-cb, .lab-page .menu-tester-runs .tst-cmp-footer { display: none !important; }
