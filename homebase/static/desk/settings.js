@@ -138,7 +138,7 @@ async function setChartTrading(enabled) {
   if (switchBounced("chartTrading")) return;         // a double-click is one flip
   const where = machineWords();                       // "on the SERVER · Chicago" / "on this Mac" / "" (unknown)
   if (needsConfirm("chartTrading", enabled) && !await confirmDlg("Turn chart trading ON?",
-      `Chart pages${where ? " " + where : ""} can then place REAL orders on the LIVE accounts you tick there. No size limit. A bot's symbol stays locked on its accounts while the bot is working. Kill turns it off.`,
+      `Chart pages${where ? " " + where : ""} can then place REAL orders on the accounts you tick there. No size limit. A bot's symbol stays locked on its accounts while the bot is working. Kill turns it off.`,
       "Turn on", false)) { refresh(); return; }
   try {
     const r = await post("/api/chart-trading", {enabled});

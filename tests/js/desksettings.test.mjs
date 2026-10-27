@@ -381,9 +381,9 @@ test('the chart-trading switch never asks when turning OFF -- the safer directio
 });
 
 test('1.1: the ON confirm names the machine, says no size limit, and never says "at most"', async () => {
-  for (const [machine, where] of [['server', /^Chart pages on the SERVER · Chicago can then place REAL orders on the LIVE accounts/],
-                                  ['mac', /^Chart pages on this Mac can then place REAL orders on the LIVE accounts/],
-                                  [null, /^Chart pages can then place REAL orders on the LIVE accounts/]]) {
+  for (const [machine, where] of [['server', /^Chart pages on the SERVER · Chicago can then place REAL orders on the accounts you tick there\. No size limit\./],
+                                  ['mac', /^Chart pages on this Mac can then place REAL orders on the accounts you tick there\. No size limit\./],
+                                  [null, /^Chart pages can then place REAL orders on the accounts you tick there\. No size limit\./]]) {
     const { api, els, confirms, posts } = load({ machine });
     api.renderSettings();
     api.ST = { armed: false, chart_trading: { enabled: false, max_order_qty: 10, max_position_qty: 20 } };
@@ -391,7 +391,7 @@ test('1.1: the ON confirm names the machine, says no size limit, and never says 
     assert.equal(confirms.length, 1, 'ON still asks');
     assert.match(confirms[0].body, where);
     assert.match(confirms[0].body, /No size limit\./);
-    assert.doesNotMatch(confirms[0].body, /at most|per order|per position|undefined/);
+    assert.doesNotMatch(confirms[0].body, /at most|per order|per position|undefined|LIVE accounts/, 'it trades ticked demo and paper accounts too');
     assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ url: '/api/chart-trading', body: { enabled: true } }], 'same body as before');
   }
 });
