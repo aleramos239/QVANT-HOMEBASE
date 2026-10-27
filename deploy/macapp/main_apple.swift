@@ -468,8 +468,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     }
 
     // ---------------------------------------------------------------- tabs: lazy web views on one content view
-    private func webView(for tab: Tab) -> WKWebView {
-        if let existing = webViews[tab] { return existing }
+    /// `fragment`: a link's #part (the Lab's "On the Desk" is <desk>/#lab=<name>): set on an open tab, kept on a new one.
+    private func webView(for tab: Tab, fragment: String? = nil) -> WKWebView {
+        if let existing = webViews[tab] {
+            if let f = fragment { existing.evaluateJavaScript("location.hash=\(jsString("#" + f))", completionHandler: nil) }
+            return existing
+        }
         let config = WKWebViewConfiguration()
         config.userContentController.add(self, name: "hb")
         installScripts(config.userContentController, tab: tab)
@@ -485,7 +489,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         wv.isHidden = true
         window.contentView!.addSubview(wv)
         webViews[tab] = wv
-        wv.load(URLRequest(url: startURL(for: tab)))
+        var start = URLComponents(url: startURL(for: tab), resolvingAgainstBaseURL: true)
+        if let f = fragment { start?.fragment = f }
+        wv.load(URLRequest(url: start?.url ?? startURL(for: tab)))
         return wv
     }
 
@@ -493,11 +499,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         webViews.first(where: { $0.value === webView })?.key
     }
 
-    func showTab(_ tab: Tab) {
+    func showTab(_ tab: Tab, fragment: String? = nil) {
         #if VPS
         if tab != .desk { return }      // the VPS app is the Desk only (owner, 2026-10-26); Charts and Lab live on the Mac
         #endif
-        let target = webView(for: tab)   // creates + starts loading on first visit
+        let target = webView(for: tab, fragment: fragment)   // creates + starts loading on first visit
         for (t, v) in webViews { v.isHidden = (t != tab) }
         currentTab = tab
         if debugDir == nil { UserDefaults.standard.set(tab.rawValue, forKey: lastTabKey) }
@@ -559,7 +565,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         if let target = tabFor(url: url) {
             if target != sourceTab {
                 decisionHandler(.cancel)
-                showTab(target)
+                showTab(target, fragment: target == .desk ? url.fragment(percentEncoded: false) : nil)   // the Desk opens the Lab strategy the link names
             } else {
                 decisionHandler(.allow)
             }
