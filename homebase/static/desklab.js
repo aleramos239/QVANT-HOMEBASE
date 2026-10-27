@@ -30,7 +30,7 @@
   var NET_WORDS = "What it would have made today, after costs";
   var REBUILT = "rebuilt from today's prices";
   var NOTE = "From the Lab. Switched on, it runs on live prices in shadow: it writes down its orders and nothing is sent.";
-  var GONE = "That strategy is not on the Desk any more. Promote it again from the Lab.";
+  var GONE = "That strategy is not on the Desk any more.";
   var EMPTY_DAY = "Nothing yet today.";
   var NOT_ANSWERING = "The chart service is not answering, so this strategy cannot be shown right now.";
   var NOT_CHECKED = "Not checked yet.";
@@ -195,11 +195,11 @@
      run on the unseen days, and the prop sim of its build run and of that run. `res` = {unseen, prop: {build, unseen}};
      undefined while the first answer is on its way. Saved runs only: a strategy with no run on the unseen days says so. ---- */
   var RES_WAIT = "Reading…";
-  var NO_UNSEEN = "Not run on the test days yet. It starts by itself.";
+  var NO_UNSEEN = "Not run on the test days (the old route, retired). Nothing starts it any more.";
   // A Desk straddle (nq930, gc_nfp): its tester twin is read by hand, so nothing starts by itself and a changed Desk setting says so.
   var NO_UNSEEN_MANUAL = "Not run on the test days at the Desk's setting. Run its tester twin from the Lab.";
   var RUNNING_UNSEEN = "Reading the test days now. This shows here when it is done.";
-  var FAILED_UNSEEN = "The test-days run did not finish. Run it again from the Lab.";
+  var FAILED_UNSEEN = "The test-days run did not finish.";
   var NO_PROP = "No prop sim: its backtest run is not saved any more.";
   // A promoted strategy's build and unseen days are the 3:1 walk-forward of the strategy as set: its in-sample months (Build) and
   // its out-of-sample months (Unseen), in blocks (owner, 2026-10-18). On screen (owner 2026-10-25: in- and out-of-sample are ONLY
@@ -210,12 +210,14 @@
   function heads(wf, both) {
     return (wf ? ["In-sample", "Test months"] : ["Build days", "Test days"]).concat(both ? ["Both"] : []);
   }
+  // S4: nothing starts the card's own 3:1, and the Lab's Run 3:1 is another kind of run (fixed boxes) that the card does not read
+  var NO_NEW_WF = "This card cannot get a new 3:1 today: nothing starts one any more, and a 3:1 run in the Lab does not show here.";
   var WF_NOTES = {
-    none: "The 3:1 walk-forward has not run yet. It starts by itself.",
+    none: "The 3:1 walk-forward has not run. " + NO_NEW_WF,
     pending: "Running the 3:1 walk-forward over all the data now. This shows here when it is done.",
-    failed: "The 3:1 walk-forward did not finish. Run it again from the Lab.",
-    changed: "The Lab's code changed since it was promoted. Promote it again to run its walk-forward.",
-    no_data: "This computer's ticks do not reach back to 2021, so the 3:1 walk-forward does not run here. Run it on the Mac and copy it over.",
+    failed: "The 3:1 walk-forward did not finish. " + NO_NEW_WF,
+    changed: "The Lab's draft changed or was deleted since it went on the Desk, so this copy's 3:1 walk-forward cannot run.",
+    no_data: "This computer's ticks do not reach back to 2021, so the 3:1 walk-forward does not run here. " + NO_NEW_WF,
   };
   var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   function share(v) {            // 0.3688 -> "37%"
@@ -225,6 +227,18 @@
   function monthOf(day) {        // "2025-07-01" -> "Jul 2025"
     var m = /^(\d{4})-(\d\d)-\d\d$/.exec(text(day)), name = m ? MONTHS[+m[2] - 1] : "";
     return name ? name + " " + m[1] : "";
+  }
+  // An older 3:1 shown because nothing starts one by itself (S4): through "2026-08", to "2026-09" ->
+  // "3:1 through Aug 2026; Sep 2026 not run. This card cannot get a new 3:1 today: ..." ("" when the months cannot be read).
+  function lateMonths(through, to) {      // the months an older 3:1 lacks: "2026-08", "2026-09" -> "Sep 2026"; "2026-07" -> "Aug 2026 to Sep 2026"
+    var m = /^(\d{4})-(\d\d)$/.exec(text(through)), last = monthOf(text(to) + "-01");
+    if (!m || !last) return "";
+    var y = +m[1], n = +m[2] % 12 + 1, next = monthOf((n === 1 ? y + 1 : y) + "-" + (n < 10 ? "0" : "") + n + "-01");
+    return next === last ? last : next + " to " + last;
+  }
+  function throughNote(res) {
+    var late = lateMonths(res.through, res.to);
+    return late ? "3:1 through " + monthOf(res.through + "-01") + "; " + late + " not run. " + NO_NEW_WF : "";
   }
   function propCells(p) {        // one run's prop sim, in the rows' order; all "—" for a run with none
     p = p && typeof p === "object" ? p : {};
@@ -369,7 +383,7 @@
         title: w31 ? WF_TITLE : OLD_RECORD,
         head: bu ? heads(wf, !!bo) : null,
         rows: rows,
-        note: wait ? RES_WAIT : wf ? (u ? "" : WF_NOTES[res.unseen_state] || WF_NOTES.none)
+        note: wait ? RES_WAIT : wf ? (u ? throughNote(res) : WF_NOTES[res.unseen_state] || WF_NOTES.none)
           : u ? "" : res.unseen_state === "pending" ? RUNNING_UNSEEN : res.unseen_state === "failed" ? FAILED_UNSEEN : res.manual === true ? NO_UNSEEN_MANUAL : NO_UNSEEN,
       },
       prop: {
@@ -416,9 +430,20 @@
     return text(id).replace(/^lab_/, "").replace(/_/g, " ");
   }
   function memberState(m) {
-    var st = text(m.state);
-    return st === "done" ? "" : st === "pending" ? "Running the 3:1 walk-forward…" : st === "failed" ? "The 3:1 walk-forward did not finish"
-      : st === "no_data" ? "No 3:1 walk-forward here: run it on the Mac" : st === "changed" ? "Code changed: promote it again" : "No 3:1 walk-forward yet";
+    var st = text(m.state), thru = monthOf(text(m.through) + "-01");      // an older 3:1 (S4) says its last month
+    return st === "done" ? (thru ? "3:1 through " + thru : "") : st === "pending" ? "Running the 3:1 walk-forward…" : st === "failed" ? "The 3:1 walk-forward did not finish"
+      : st === "no_data" ? "No 3:1 walk-forward here" : st === "changed" ? "Lab draft changed or deleted since it went on the Desk" : "No 3:1 walk-forward";
+  }
+  // Members whose 3:1 stops before the last whole month (S4: nothing starts a new one): named, with the months they lack, and said when
+  // the sum then puts different months together ("" when every member is up to date).
+  function groupLate(members) {
+    var done = members.filter(function (m) { return isObj(m) && text(m.state) === "done"; });
+    var old = done.filter(function (m) { return lateMonths(m.through, m.to); });
+    if (!old.length) return "";
+    var first = old.reduce(function (a, m) { return text(m.through) < text(a.through) ? m : a; }, old[0]);
+    var mixed = old.length < done.length || old.some(function (m) { return m.through !== old[0].through; });
+    return " Not up to date: " + old.map(function (m) { return groupLabelOf(m.strategy, members) + " through " + monthOf(m.through + "-01"); }).join(", ") +
+      "; " + lateMonths(first.through, first.to) + " not run" + (mixed ? ", so the sum is not all on the same months" : "") + ".";
   }
   /* A group's page: `group` = its record {id, name, kind, members}, `res` = its entry of /deskgroups/results (undefined while
      the first answer is on its way). Plain text everywhere; the page escapes it. */
@@ -443,7 +468,7 @@
     ] : [];
     var note = wait ? RES_WAIT : count === 0 ? EMPTY_GROUP : NO_GROUP_RUNS;
     return {
-      title: text(g.name), kind: kindLabel(kind), kindNote: kindOf(kind).note, note: GROUP_NOTE,
+      title: text(g.name), kind: kindLabel(kind), kindNote: kindOf(kind).note, note: GROUP_NOTE + groupLate(members),
       lead: count + (count === 1 ? " strategy" : " strategies") + " · " + kindLabel(kind),
       empty: count === 0,
       figs: { head: heads(w31, wf),
@@ -511,9 +536,11 @@
   function switchTitle(on) {
     return on ? "ON: it runs in shadow" : "OFF: it does nothing";
   }
-  // the confirm dialog's two lines: "Remove <name> from the Desk? Its history is kept."
+  // the confirm dialog's lines: "Remove <name> from the Desk? Its history is kept. ..."
+  // NO_BACK: while desklab_unproven() refuses every promote (S4), a removed strategy cannot come back from the Lab; Archive can
+  var NO_BACK = "It cannot go back on the Desk from the Lab today. To put it back later, Archive it instead.";
   function removeAsk(name) {
-    return { title: "Remove " + name + " from the Desk?", body: "Its history is kept." };
+    return { title: "Remove " + name + " from the Desk?", body: "Its history is kept. " + NO_BACK };
   }
 
 
@@ -856,7 +883,7 @@
     return Array.isArray(book) && book.length > 0 ? switchOff(n) : n + " is OFF: it does nothing.";
   }
   function removeAskDesk(name) {
-    return { title: "Remove " + name + " from the Desk?", body: "Its history is kept. Its accounts come off." };
+    return { title: "Remove " + name + " from the Desk?", body: "Its history is kept. Its accounts come off. " + NO_BACK };
   }
   function switchOff(n) { return n + " is OFF. Unfilled orders are cancelled. An open position keeps its stop and is closed at the flat time. It trades again from the next session."; }
   // The toast after a switch-on: stopped for today first (the ruling), then with accounts, then shadow.

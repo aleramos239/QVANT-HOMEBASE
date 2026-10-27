@@ -125,10 +125,12 @@ TIE_BREAK = "best metric (equal to 6 decimals = a tie) → more trades that mont
 SCHEMES = ("fixed", "pick")
 # The owner, 2026-10-25: in-sample and out-of-sample are ONLY the 3:1 blocks, every cell fixed. The pick scheme (1:1 / 1:2 / 1:3, the
 # code's own pick) and rolling (step 1) start no more; their code stays below so the old jobs on file still read. The one pick-path
-# body still allowed is the Desk's own: 3 in, 1 out, blocks, no axes (a promoted strategy as set, nothing searched).
+# body still allowed is the Desk's own: 3 in, 1 out, blocks, no axes (a promoted strategy as set, nothing searched), and only while
+# the Desk starts its own (tester_api.DESKLAB_AUTO_UNSEEN, off since S4).
 OLD_SCHEMES = False        # TEST ONLY: True lets the old code's own tests start a pick / rolling job
 RETIRED = ("only the 3:1 block walk-forward runs (the owner, 2026-10-25): every cell fixed on the in-sample months of the 3:1 blocks; "
            "rolling and the pick scheme (1:1 / 1:2 / 1:3, the code's own pick) are retired -- send it with scheme fixed, no step_months")
+DESK_31_OFF = "The Desk 3:1 run is off: nothing starts the Desk card's walk-forward now."   # S4: DESKLAB_AUTO_UNSEEN is off
 PICK_FIELDS = ("test_months", "select_months", "compare", "metric", "min_trades")   # the old scheme's own fields
 LOCK, CLAIM, OOS = "lock.json", "oos-claim.json", "oos.json"
 READS_LOG = "wf-oos-reads.jsonl"     # in the shared folder (slots.shared_dir), beside the looks counter
@@ -605,6 +607,10 @@ def validate_wf(body) -> dict:
     # Only the Desk's own run of a promoted strategy as set stays: 3 months in, the next 1 out, blocks, no axes (nothing searched)
     if not OLD_SCHEMES and (compare or (select_months, test_months, step_months) != (3, 1, 4) or b.get("axes")):
         raise ValueError(RETIRED)
+    if not OLD_SCHEMES:              # that body's stitched result is the test months: only the Desk's own start sends it (S4)
+        from ..charts import tester_api      # noqa: PLC0415 -- the Desk's switch lives there (the tests patch it there)
+        if not tester_api.DESKLAB_AUTO_UNSEEN:
+            raise ValueError(DESK_31_OFF)
     if isinstance(b.get("range"), dict) and b["range"].get("kind") == "is_months":
         raise ValueError("a walk-forward steps whole calendar months, so it cannot run on IS months only "
                          "(Jan/Apr/Jul/Oct): pick a continuous window")

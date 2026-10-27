@@ -187,11 +187,12 @@ test('the words the page shows, exactly', () => {
   assert.equal(D.switchTitle(true), 'ON: it runs in shadow');
   assert.equal(D.switchTitle(false), 'OFF: it does nothing');
   assert.equal(D.NOTE, 'From the Lab. Switched on, it runs on live prices in shadow: it writes down its orders and nothing is sent.');
-  assert.equal(D.GONE, 'That strategy is not on the Desk any more. Promote it again from the Lab.');
+  assert.equal(D.GONE, 'That strategy is not on the Desk any more.');
   assert.equal(D.EMPTY_DAY, 'Nothing yet today.');
   assert.equal(D.ACCOUNTS_CAPTION, 'Accounts come with the Desk update. Until then it runs in shadow.');
-  assert.deepEqual({ ...D.removeAsk('nq_orb') }, { title: 'Remove nq_orb from the Desk?', body: 'Its history is kept.' });
-  assert.deepEqual({ ...D.removeAskDesk('NQ ORB') }, { title: 'Remove NQ ORB from the Desk?', body: 'Its history is kept. Its accounts come off.' });
+  const noBack = 'It cannot go back on the Desk from the Lab today. To put it back later, Archive it instead.';      // S4: promote is refused
+  assert.deepEqual({ ...D.removeAsk('nq_orb') }, { title: 'Remove nq_orb from the Desk?', body: 'Its history is kept. ' + noBack });
+  assert.deepEqual({ ...D.removeAskDesk('NQ ORB') }, { title: 'Remove NQ ORB from the Desk?', body: 'Its history is kept. Its accounts come off. ' + noBack });
 });
 
 /* ---- the page (index.html): what it may call, and that nothing from the network reaches a template raw ---- */
@@ -304,8 +305,13 @@ test('the page: "Today, in shadow", the size in the net\'s tooltip, and "rebuilt
   assert.match(ctx.rowHtml, /title="What it would have made today, after costs, 2 contracts"/);
 });
 
-test('removeDeskLab renders only once the desk\'s status is in, like its neighbours', async () => {
-  const fn = LABBLOCK.slice(LABBLOCK.indexOf('async function removeDeskLab'), LABBLOCK.indexOf('function openDeskLabInLab'));
+test('removeLabRow (the Lab page\'s Remove) renders only once the desk\'s status is in, like its neighbours', async () => {
+  // S4 moved it out of desk/views.js (its removeDeskLab is left there, unused): the Lab page's button calls removeLabRow
+  assert.match(LABVIEW, /onclick="removeLabRow\(/);
+  assert.match(LABVIEW, /title="Takes it off the Desk\. Its history is kept\. It cannot go back from the Lab today; Archive keeps it to restore\.">Remove from Desk/);
+  assert.doesNotMatch(HTML.replace(/async function removeDeskLab\(/, ''), /removeDeskLab\(/, 'nothing calls removeDeskLab any more');
+  const fn = HTML.slice(HTML.indexOf('async function removeLabRow'), HTML.indexOf("/* The chart service's delete"));
+  assert.ok(fn.length > 200 && /is off the Desk\. Its history is kept, and it is still in the Lab\./.test(fn));
   assert.equal((fn.match(/render\(\)/g) || []).length, 2);
   assert.equal((fn.match(/if \(ST\) render\(\)/g) || []).length, 2, 'never a bare render()');
   const run = async (ST) => {
@@ -313,7 +319,7 @@ test('removeDeskLab renders only once the desk\'s status is in, like its neighbo
     const ctx = vm.createContext({ ST, DEMO: false, FREEZE: false, CHART: '', VIEW: { k: 'lab', name: 'nq_orb' }, DeskLab: D, document: { hidden: true },
       location: { hash: '' }, history: { replaceState() {} }, switchBounced: () => false, toast() {}, confirmDlg: async () => true,
       chartPost: async () => ({ ok: true }), render() { if (!ST) throw new Error('render() with no status'); renders += 1; } });
-    vm.runInContext(`${LABBLOCK}\nDESKLAB = { strategies: [{ name: 'nq_orb' }], runner: null };\nglobalThis.go = () => removeDeskLab('nq_orb'); globalThis.left = () => DESKLAB.strategies.length;`, ctx);
+    vm.runInContext(`${LABBLOCK}\n${fn}\nDESKLAB = { strategies: [{ name: 'nq_orb' }], runner: null };\nglobalThis.go = () => removeLabRow('nq_orb'); globalThis.left = () => DESKLAB.strategies.length;`, ctx);
     await ctx.go();
     return [renders, ctx.left()];
   };
@@ -337,7 +343,7 @@ test('the Lab asks the Desk list, promotes and removes by name, and never on a t
   assert.ok(LABDESK.length > 1500, 'the section is there');
   const urls = [...new Set([...LAB.matchAll(/['"`](\/api\/tester\/desklab[^'"`$?]*)/g)].map((m) => m[1]))].sort();
   assert.deepEqual(urls, ['/api/tester/desklab', '/api/tester/desklab/promote', '/api/tester/desklab/remove']);
-  assert.match(LAB, /send\('POST', '\/api\/tester\/desklab\/promote', \{ name: b\.name, run_id: r\.rid \}\)/);
+  assert.match(LAB, /send\('POST', '\/api\/tester\/desklab\/promote', \{ name: b\.name, run_id: r\.rid, owner_said: said \}\)/);
   assert.match(LAB, /send\('POST', '\/api\/tester\/desklab\/remove', \{ name \}\)/);
   assert.doesNotMatch(LABDESK, /setInterval|setTimeout/, 'asked when the list opens and after each action only: nothing polls, hidden or not');
   assert.doesNotMatch(LAB, /:8850/, 'the Desk is reached through the page switcher\'s own link');
@@ -368,7 +374,7 @@ test('missingText: Loading until a read finished, "not answering" after a failed
   assert.equal(D.missingText(null), 'Loading…');
   assert.equal(D.missingText(undefined), 'Loading…');
   assert.equal(D.missingText(false), 'The chart service is not answering, so this strategy cannot be shown right now.');
-  assert.equal(D.missingText(true), 'That strategy is not on the Desk any more. Promote it again from the Lab.');
+  assert.equal(D.missingText(true), 'That strategy is not on the Desk any more.');
 });
 
 test('the page reads the list\'s outcome: only a good read can say the strategy is gone', () => {
@@ -1223,12 +1229,12 @@ test('results: the saved run on the unseen days and the prop sim of both runs, i
   // no run saved on the unseen days: it says so, and that column is dashes
   const build = D.results({ unseen: null, prop: { build: head, unseen: null } });
   assert.deepEqual(build.unseen.rows, []);
-  assert.equal(build.unseen.note, 'Not run on the test days yet. It starts by itself.');
+  assert.equal(build.unseen.note, 'Not run on the test days (the old route, retired). Nothing starts it any more.');
   const going = D.results({ unseen: null, unseen_state: 'pending', prop: { build: head, unseen: null } });
   assert.equal(going.unseen.note, 'Reading the test days now. This shows here when it is done.');
   assert.deepEqual(going.unseen.rows, []);
   assert.equal(D.results({ unseen: null, unseen_state: 'failed', prop: { build: head, unseen: null } }).unseen.note,
-    'The test-days run did not finish. Run it again from the Lab.');
+    'The test-days run did not finish.');
   assert.equal(D.results({ unseen, unseen_state: 'done', prop: { build: head, unseen: head } }).unseen.note, '', 'a result needs no note');
   // a Desk straddle (nq930, gc_nfp) is read by hand: nothing "starts by itself", and a changed Desk setting says why the run is gone
   assert.equal(D.results({ unseen: null, unseen_state: 'none', manual: true, prop: { build: head, unseen: null } }).unseen.note,
@@ -1280,6 +1286,27 @@ test('a group page: the combined figures, the prop rows that fit its kind, and t
   assert.deepEqual(fu.prop.rows.map((r) => r.k), ['Gets a payout', 'Expected cheque']);
   assert.equal(D.groupPage({ id: 'g3', name: 'T', kind: 'together', members: [] }, res).prop.rows.length, 5);
   assert.equal(fu.empty, true);
+});
+
+test('a group member that has no 3:1 says why, and promises no run (S4): changed or deleted draft, no ticks, none', () => {
+  const m = (state) => ({ strategy: 'lab_nq_a', label: 'NQ A', state, build: null, unseen: null });
+  const states = (...xs) => D.groupPage({ id: 'g1', name: 'E', kind: 'eval', members: ['lab_nq_a'] }, { members: xs.map(m), left_out: [] }).members.map((x) => x.state);
+  assert.deepEqual(states('changed', 'no_data', 'none', 'failed'),
+    ['Lab draft changed or deleted since it went on the Desk', 'No 3:1 walk-forward here', 'No 3:1 walk-forward', 'The 3:1 walk-forward did not finish']);
+});
+
+test('a group with a member whose 3:1 is older says so (S4): the member row, and the group note when the sum mixes months', () => {
+  const m = (id, label, extra) => ({ strategy: id, label, state: 'done', build: { net: 1 }, unseen: { net: 2 }, ...extra });
+  const page = (...ms) => D.groupPage({ id: 'g1', name: 'E', kind: 'eval', members: ms.map((x) => x.strategy) }, { walkforward: true, members: ms, left_out: [] });
+  const cur = m('lab_a', 'NQ A'), aug = m('lab_b', 'NQ B', { through: '2026-08', to: '2026-09' }), jul = m('lab_c', 'NQ C', { through: '2026-07', to: '2026-09' });
+  assert.equal(page(cur).note, D.GROUP_NOTE, 'every member up to date: the note is as it was');
+  assert.deepEqual(page(cur, aug).members.map((x) => x.state), ['', '3:1 through Aug 2026']);
+  assert.equal(page(cur, aug).note, D.GROUP_NOTE + ' Not up to date: NQ B through Aug 2026; Sep 2026 not run, so the sum is not all on the same months.');
+  assert.equal(page(aug, jul).note, D.GROUP_NOTE + ' Not up to date: NQ B through Aug 2026, NQ C through Jul 2026; Aug 2026 to Sep 2026 not run, so the sum is not all on the same months.');
+  assert.equal(page(aug, { ...aug, strategy: 'lab_d', label: 'NQ D' }).note, D.GROUP_NOTE + ' Not up to date: NQ B through Aug 2026, NQ D through Aug 2026; Sep 2026 not run.',
+    'all on the same months: no "not all on the same months"');
+  assert.equal(page(cur, m('lab_e', 'NQ E', { state: 'none', through: '2026-08', to: '2026-09' })).note, D.GROUP_NOTE, 'a member left out is not named here');
+  assert.equal(page(cur, m('lab_f', 'NQ F', { through: 'junk', to: '2026-09' })).note, D.GROUP_NOTE, 'unreadable months say nothing');
 });
 
 test('a 3:1 group page (owner 2026-10-25): In-sample, Test months and Both columns, and three curve lines', () => {
@@ -1343,7 +1370,21 @@ test('build and unseen days are the 3:1 walk-forward of the strategy as set: two
   assert.equal(done.unseen.rows.some((r) => r.k === 'Max drawdown') && !done.unseen.rows.some((r) => r.k === 'Deepest drawdown'), true);
   assert.equal(done.unseen.note, '');
   assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'pending', prop: {} }).unseen.note, /^Running the 3:1 walk-forward/);
-  assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'changed', prop: {} }).unseen.note, /Promote it again/);
+  assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'changed', prop: {} }).unseen.note, /this copy's 3:1 walk-forward cannot run/);
+  // S4: no promise of a start, and no errand that changes nothing (the Lab's Run 3:1 is not the run the card reads)
+  assert.equal(D.results({ walkforward: true, unseen: null, unseen_state: 'none', prop: {} }).unseen.note,
+    'The 3:1 walk-forward has not run. This card cannot get a new 3:1 today: nothing starts one any more, and a 3:1 run in the Lab does not show here.');
+  assert.equal(D.results({ walkforward: true, unseen: null, unseen_state: 'failed', prop: {} }).unseen.note,
+    'The 3:1 walk-forward did not finish. This card cannot get a new 3:1 today: nothing starts one any more, and a 3:1 run in the Lab does not show here.');
+  assert.equal(D.results({ walkforward: true, unseen: null, unseen_state: 'no_data', prop: {} }).unseen.note,
+    "This computer's ticks do not reach back to 2021, so the 3:1 walk-forward does not run here. This card cannot get a new 3:1 today: nothing starts one any more, and a 3:1 run in the Lab does not show here.");
+  // S4: an older 3:1 of the same copy is shown with the months it lacks (Dec -> Jan crosses the year)
+  const older = (through, to) => D.results({ walkforward: true, build: run(4000, '2021-10-01', '2026-07-31'),
+    unseen: run(1234.5, '2022-01-01', '2026-08-31'), unseen_state: 'done', through, to, prop: {} }).unseen.note;
+  assert.equal(older('2026-09', '2026-10'), '3:1 through Sep 2026; Oct 2026 not run. This card cannot get a new 3:1 today: nothing starts one any more, and a 3:1 run in the Lab does not show here.');
+  assert.equal(older('2025-12', '2026-02'), '3:1 through Dec 2025; Jan 2026 to Feb 2026 not run. This card cannot get a new 3:1 today: nothing starts one any more, and a 3:1 run in the Lab does not show here.');
+  assert.equal(older('junk', '2026-02'), '');
+  assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'changed', prop: {} }).unseen.note, /draft changed or was deleted since it went on the Desk, so this copy's 3:1 walk-forward cannot run\.$/);
   assert.equal(D.curve({ walkforward: true, curve: { days: ['2022-01-03', '2022-01-04'], vals: [300, 200] } }).title,
     '3:1 test months, after costs');
 });

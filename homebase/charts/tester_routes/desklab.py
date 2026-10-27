@@ -77,7 +77,8 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
         beat = store.get_runner() or {}
         archived = [{k: rec.get(k) for k in ("name", "label", "root", "run", "archived_utc", "promoted_utc")} for rec in store.archived()]
         archived += [{"name": k, "builtin": True, "archived_utc": v.get("archived_utc")} for k, v in store.archived_builtins().items()]
-        return watch_answer(request, {"strategies": out, "archived": archived, "builtins": api.desk_strategy_ids(), "runner": {
+        return watch_answer(request, {"strategies": out, "archived": archived, "builtins": api.desk_strategy_ids(),
+                                      "promote_refused": api.desklab_unproven(), "runner": {
             "alive": runner_alive(beat.get("seen_utc")), "seen_utc": beat.get("seen_utc"), "prices": beat.get("prices") or {}}})
 
     @r.get("/desklab/shadow")
@@ -149,13 +150,14 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
 
     def ensure_wf(rec: dict) -> dict:
         """The state of the record's 3:1 walk-forward (deskresults.wf_state); when there is none, start it -- once, as
-        ensure_unseen does. {"state": "changed"} when the Lab's code is no longer the promoted copy (a run of it would never
-        match). Never raises."""
+        ensure_unseen does, and only while DESKLAB_AUTO_UNSEEN is on. Off (S4) nothing starts: the newest done one of this copy
+        that ends a month or more earlier is shown, with the month it reaches. {"state": "changed"} when the Lab's code is no
+        longer the promoted copy (a run of it would never match). Never raises."""
         today = slots.et_now().date()
         try:
             with wf_lock:
-                got = deskresults.wf_state(wfs.grids, rec, today)
-                if got["state"] != "none" or not api.DESKLAB_AUTO_UNSEEN:
+                got = deskresults.wf_state(wfs.grids, rec, today, older=not api.DESKLAB_AUTO_UNSEEN)
+                if got["state"] != "none":
                     return got
                 try:
                     src = draftstore.read(rec["name"])
@@ -166,6 +168,8 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
                 req = deskresults.wf_request(rec, today)
                 if not covers(rec, req):
                     return {"state": "no_data"}
+                if not api.DESKLAB_AUTO_UNSEEN:      # only the start is off (S4): "changed" and "no_data" above still say so
+                    return got
                 try:
                     wfs.submit(req)
                 except Exception:      # noqa: BLE001 -- not now: refused in words by the tester, or not working
@@ -254,7 +258,7 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
 
     def read_wf(rec: dict) -> dict:
         """ensure_wf without the start: the warm-up reads saved walk-forwards only."""
-        return deskresults.wf_state(wfs.grids, rec, slots.et_now().date())
+        return deskresults.wf_state(wfs.grids, rec, slots.et_now().date(), older=not api.DESKLAB_AUTO_UNSEEN)
 
     def warm_desklab_results() -> None:
         """Score every promoted strategy's (and the two built-in straddles' twins') saved runs, so the Desk's first results
@@ -297,10 +301,13 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
         out = {}
         for rec in store.listing():
             # build and unseen days ARE the 3:1 walk-forward's in- and out-of-sample months, the strategy as set (owner, 2026-10-18)
-            w = wf_block(rec)               # takes desk_res_lock itself, only to work a block out
+            got = ensure_wf(rec)
+            w = wf_block(rec, lambda _: got)    # takes desk_res_lock itself, only to work a block out
             out[rec["name"]] = {"build": w["build"], "unseen": w["unseen"], "both": w["both"], "unseen_state": w["unseen_state"],
                                 "curve": w["curve"], "curve_build": w["curve_build"], "walkforward": True,
                                 "prop": {"build": w["prop_build"], "unseen": w["prop_unseen"], "both": w["prop_both"]}}
+            if got.get("through") and w["unseen"]:      # an older 3:1 (S4): the card names the months it lacks
+                out[rec["name"]].update(through=got["through"], to=got["to"])
         with desk_res_lock:
             # the Desk's own straddles (nq930, gc_nfp): their tester twin's SAVED runs, at the Desk's size and setting. Nothing here
             # starts a run (the unseen days of a built-in are read by hand, once, from the Lab): "manual" says so to the page.
@@ -334,6 +341,9 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
             source = draftstore.read(name)
         except (FileNotFoundError, ValueError, OSError):
             raise HTTPException(404, "That strategy is not in the Lab.") from None
+        why = api.desklab_unproven()         # the six real-or-luck lines, all PASS, no override (S4); first: no run fixes it
+        if why:
+            raise HTTPException(409, why)
         run_first = HTTPException(409, "Run a backtest of this strategy first.")
         try:
             d = manager.dir(run_id)
@@ -371,7 +381,7 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
             trades = read_json(d / "trades.json", None)
             trades = trades.get("trades") if isinstance(trades, dict) else trades
             store.put(store.snapshot(name, source, meta, {"run": run, "trades": trades}, run_id, notes))
-        ensure_wf(store.get(name))          # its unseen days (the 3:1 walk-forward) run by themselves (owner 2026-10-11, 2026-10-18)
+        ensure_wf(store.get(name))          # starts its 3:1 walk-forward only while DESKLAB_AUTO_UNSEEN is on (off, S4)
         return {"ok": True, "name": name, "notes": notes}
 
     def desklab_remove(name: str) -> dict:
@@ -505,7 +515,7 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
 
     @r.post("/desklab/{what}")
     async def desklab_write(what: str, request: Request):
-        """promote {name, run_id}: a draft that was backtested goes on the Desk, frozen. remove {name}: its record goes
+        """promote {name, run_id, owner_said}: a draft that was backtested goes on the Desk, frozen. remove {name}: its record goes
         (the history stays). onoff {name, on}: the runner hosts it or leaves it be. A refusal the page may read is answered
         with its own words ({ok: false, detail})."""
         watch_guard(request)
@@ -518,7 +528,7 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
                 body = await request.json()
             except ValueError:
                 raise HTTPException(400, "the body is JSON") from None
-            keys = {"promote": {"name", "run_id"}, "remove": {"name"}, "delete": {"name"}, "onoff": {"name", "on"},
+            keys = {"promote": {"name", "run_id", "owner_said"}, "remove": {"name"}, "delete": {"name"}, "onoff": {"name", "on"},
                     "open": {"name"},
                     "archive": {"name"}, "filed": {"name"}, "restore": {"name"},
                     "archive_builtin": {"name"}, "restore_builtin": {"name"}}[what]
@@ -545,10 +555,12 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
             if not isinstance(body, dict) or set(body) != keys or not isinstance(body["name"], str) \
                     or not draftstore.NAME_RE.fullmatch(body["name"]):
                 raise HTTPException(400, "{" + ", ".join(sorted(keys)) + "}: a Lab strategy's name" + (
-                    ", the backtest's run id" if what == "promote" else ", on: true or false" if what == "onoff" else ""))
+                    ", the backtest's run id, your own words" if what == "promote" else ", on: true or false" if what == "onoff" else ""))
             name = body["name"]
             if what == "promote" and not isinstance(body["run_id"], str):
                 raise HTTPException(400, "run_id: the backtest's run id")
+            if what == "promote" and (not isinstance(body["owner_said"], str) or not body["owner_said"].strip()):
+                raise HTTPException(400, "owner_said: your own words that it goes on the Desk. Nothing was sent to the Desk.")
             if what == "onoff" and not isinstance(body["on"], bool):
                 raise HTTPException(400, "on: true or false")
             try:
@@ -684,8 +696,10 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
                             "build": {k: v for k, v in deskresults.wf_summary(got["id"], res, "stitched_is").items() if k in heads}
                             if res else None,
                             "unseen": {k: v for k, v in deskresults.wf_summary(got["id"], res).items() if k in heads} if res else None})
+            if res and got.get("through"):      # an older 3:1 (S4): the group page names the months this member lacks
+                members[-1].update(through=got["through"], to=got["to"])
             if res is None:
-                left_out.append({"strategy": sid, "why": "no 3:1 walk-forward yet"})
+                left_out.append({"strategy": sid, "why": "no 3:1 walk-forward"})
                 continue
             sides["build"].append((sid, got["id"], ins))
             sides["unseen"].append((sid, got["id"], oos))
@@ -703,8 +717,8 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
         same on the in-sample months (build), the out-of-sample months (unseen) and all of them together (both): net, win
         rate, PF, drawdown, days, the curve, the prop sim on DESKLAB_PROP (owner 2026-10-25: the group's curve is the 3:1, three
         lines -- as each strategy's card). A member that is not a Lab strategy, or whose 3:1 walk-forward is not done, is left
-        out and named. Reads saved walk-forwards; ensure_wf may START a missing one on a host that has the data (the Mac, the
-        first view of a new month), never on one without it (the server: no_data)."""
+        out and named. Reads saved walk-forwards only: nothing starts one while DESKLAB_AUTO_UNSEEN is off (S4), and a member
+        with none to the last whole month counts its newest done 3:1 of the same copy (code, settings, size)."""
         watch_guard(request)
         out = {}
         with desk_res_lock:

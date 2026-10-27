@@ -931,7 +931,7 @@ test('Enter in a field saves, a held key does not; Escape closes through the pag
 test('Remove asks, posts the desk id to /api/lab-remove, and goes to Today; a refusal is shown as the Desk\'s sentence', async () => {
   const t = load({ view: { k: 'strat', name: 'lab_nq_orb' } });
   await t.api.removeLabStrat('lab_nq_orb');
-  assert.deepEqual(t.confirms, [{ title: 'Remove NQ ORB from the Desk?', body: 'Its history is kept. Its accounts come off.', action: 'Remove', destructive: false }]);
+  assert.deepEqual(t.confirms, [{ title: 'Remove NQ ORB from the Desk?', body: 'Its history is kept. Its accounts come off. It cannot go back on the Desk from the Lab today. To put it back later, Archive it instead.', action: 'Remove', destructive: false }]);
   assert.deepEqual(t.posts, [{ url: '/api/lab-remove', body: { strategy: 'lab_nq_orb' } }]);
   assert.match(t.toasts[0], /^NQ ORB is off the Desk\. Its history is kept/);
   assert.equal(t.api.VIEW.k, 'today');
@@ -976,7 +976,7 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=40"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=41"><\/script>/);
   assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=4"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
@@ -1277,7 +1277,7 @@ test('m10 a flatten with a failed step and a switch that did not turn off says w
 test('m13 the Remove confirm says its accounts come off', async () => {
   const t = load();
   await t.api.removeLabStrat('lab_nq_orb');
-  assert.equal(t.confirms[0].body, 'Its history is kept. Its accounts come off.');
+  assert.equal(t.confirms[0].body, 'Its history is kept. Its accounts come off. It cannot go back on the Desk from the Lab today. To put it back later, Archive it instead.');      // S4: promote is refused, so a removed one cannot come back from the Lab
 });
 
 test('m14 in shadow the Today row, the sidebar and the page show what the day would have made, as Step A did', () => {

@@ -168,7 +168,8 @@ def prop_headline(prop) -> dict | None:
 # ---------------------------------------------------------------- the 3:1 walk-forward on the Desk card (owner, 2026-10-18)
 # The card shows the strategy AS SET (its own settings, no search -- "i just want it to show the metrics for the one i have set"), run
 # through the 3:1 walk-forward in BLOCKS over all the data: Build = its in-sample months (3 of every 4), Unseen = its out-of-sample
-# months (the 4th). Started by itself once per code, settings, size and last whole month.
+# months (the 4th). Started by itself once per code, settings, size and last whole month only while DESKLAB_AUTO_UNSEEN is
+# on; off (S4), nothing starts it: the card shows the newest done one of the same copy and the months it lacks.
 WF_START = discipline.RESEARCH_START
 
 
@@ -185,11 +186,13 @@ def wf_request(rec: dict, today) -> dict:
             "select_months": 3, "test_months": 1, "step_months": 4}
 
 
-def wf_state(grids: Path, rec: dict, today) -> dict:
+def wf_state(grids: Path, rec: dict, today, older: bool = False) -> dict:
     """Where this copy's 3:1 walk-forward stands (same code, settings, size and window, nothing searched), newest first:
-    {"state": "done", "id"}, {"state": "pending"}, {"state": "failed"} (never started again by itself), {"state": "none"}."""
+    {"state": "done", "id"}, {"state": "pending"}, {"state": "failed"} (never started again by itself), {"state": "none"}.
+    older (nothing starts one by itself, S4): with none to the last whole month, the newest DONE one of the same copy that ends
+    earlier, {"state": "done", "id", "through": "2026-08", "to": "2026-09"} -- the card says which months it lacks."""
     want, base = wf_request(rec, today), resolved_params(rec)
-    seen = set()
+    seen, last = set(), None
     for d in sorted(grids.glob(f"*-{rec.get('id')}-*"), key=lambda p: p.name, reverse=True):
         g, c0 = read_json(d / "grid.json", None), read_json(d / "cells" / "00" / "request.json", None)
         if not isinstance(g, dict) or not isinstance(c0, dict) or g.get("strategy") != rec.get("id"):
@@ -198,12 +201,19 @@ def wf_state(grids: Path, rec: dict, today) -> dict:
         if c0.get("draft_sha256") != rec.get("sha256") or cfg.get("select_months") != 3 or g.get("qty") != want["qty"] \
                 or cfg.get("step_months") != 4 or g.get("axes"):         # blocks, the strategy as set: never a search
             continue
-        if (rng.get("start"), rng.get("end")) != (want["range"]["start"], want["range"]["end"]) \
-                or not same_settings(g.get("base"), base):
+        if rng.get("start") != want["range"]["start"] or not same_settings(g.get("base"), base):
+            continue
+        end = rng.get("end")
+        if end != want["range"]["end"]:
+            if older and g.get("status") == "done" and isinstance(end, str) and end < want["range"]["end"] \
+                    and (last is None or end > last[1]):
+                last = (d.name, end)
             continue
         if g.get("status") == "done":
             return {"state": "done", "id": d.name}
         seen.add("failed" if g.get("status") in ("error", "cancelled") else "pending")
+    if not seen and last:
+        return {"state": "done", "id": last[0], "through": last[1][:7], "to": want["range"]["end"][:7]}
     return {"state": "pending" if "pending" in seen else "failed" if seen else "none"}
 
 
