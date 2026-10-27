@@ -233,6 +233,42 @@ def test_feed_step_runs_the_rule_on_a_closed_bar(tmp_path, monkeypatch):
         assert app.state.feed_box["feed"] is None
 
 
+def test_a_bars_strategy_not_watched_yet_is_subscribed_on_the_next_step(tmp_path, monkeypatch):
+    """A bars strategy enabled after the feed connected gets its subscription on the next
+    step (the 09:20-09:35 deferral was removed 2026-10-16; its leftover name raised NameError)."""
+    monkeypatch.setitem(RULES, "fake_rule", fake_rule)
+    from fastapi.testclient import TestClient
+    import homebase.config as config_mod
+    from homebase.server import create_app
+    monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.engine.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
+    cfg = mkcfg(shadow=True)
+    feed = mkfeed()
+    feed._connected_flag = True
+
+    async def fake_connect():
+        feed._ws = type("W", (), {"connected": True})()
+    feed.connect = fake_connect
+    watched = []
+
+    async def fake_watch(root, minutes, warmup=60):
+        watched.append((root, minutes))
+        return "NQZ6"
+    feed.watch_bars = fake_watch
+    app = create_app(cfg, {"main": FakeAdapter("main")}, background=False,
+                     adapter_factory=lambda aid, a: FakeAdapter(aid),
+                     feed_factory=lambda c, a: feed)
+    with TestClient(app):
+        now = dt.datetime(2026, 9, 22, 10, 0, 0, tzinfo=ET)
+        app.state.engine._now = lambda: now.astimezone(UTC)
+        assert run(app.state.feed_step(now)) == []              # connects and subscribes
+        assert watched == [("NQ", 1)]
+        feed._hist.clear()                                        # as if enabled after the connect
+        assert run(app.state.feed_step(now)) == []
+        assert watched == [("NQ", 1), ("NQ", 1)]
+
 def test_watch_bars_clears_a_penalty_with_its_ticket():
     """A rate-limit penalty is a state: plain requests stay refused until one
     is resent WITH the p-ticket after p-time. watch_bars must do that dance."""

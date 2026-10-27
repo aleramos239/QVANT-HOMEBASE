@@ -565,7 +565,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 engine.journal("feed_error", error=str(e)[:200], penalized=penalized)
                 return []
         for s in strategies.values():           # a strategy enabled after start
-            if (s.symbol, int(s.bar_minutes)) not in f.watching() and not deferred:
+            if (s.symbol, int(s.bar_minutes)) not in f.watching():
                 try:
                     await f.watch_bars(s.symbol, int(s.bar_minutes), int(s.warmup_bars))
                 except Exception as e:  # noqa: BLE001
