@@ -14,6 +14,7 @@ import pytest
 from homebase import tickarchive as A
 from homebase import tickmassive as M
 from homebase import ticks as T
+from homebase import tickjob as J
 
 ET = T.ET
 NOW = dt.datetime(2026, 9, 29, 17, 30, tzinfo=ET)
@@ -267,7 +268,7 @@ def test_a_weekend_crypto_session_comes_from_mondays_file(tmp_path):
 
 def test_the_cli_needs_holes_or_dates(capsys):
     with pytest.raises(SystemExit):
-        T.main(["--fill-from-massive"])
+        J.main(["--fill-from-massive"])
     assert "exactly one of --holes or --dates" in capsys.readouterr().err
 
 
