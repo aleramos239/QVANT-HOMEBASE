@@ -150,7 +150,7 @@ def test_a_groups_results_are_its_members_3to1_walkforwards_put_together(c, tmp_
     got = c.get("/api/tester/deskgroups/results", headers=DESK).json()["results"]
     g = got["g1"]
     assert (g["name"], g["kind"], g["walkforward"]) == ("Eval group", "eval", True)
-    assert [m["state"] for m in g["members"]] == ["done", "done", "none"]
+    assert [m["state"] for m in g["members"]] == ["done", "done", "changed"]     # nq_c has no Lab draft (S4: still said with the start off)
     assert g["members"][0]["unseen"]["net"] == 1234.5 and g["members"][0]["build"]["net"] == 4000.0 and g["members"][2]["unseen"] is None
     assert [x["strategy"] for x in g["left_out"]] == ["lab_nq_c", "nq930"]
     assert g["in"] == {k: ["lab_nq_a", "lab_nq_b"] for k in ("build", "unseen", "both")}
@@ -163,6 +163,34 @@ def test_a_groups_results_are_its_members_3to1_walkforwards_put_together(c, tmp_
     assert sorted(seen) == [2, 4, 6], "each side is scored once, as one account's trades"
     empty = got["g2"]
     assert empty["members"] == [] and empty["unseen"] is None and empty["both"] is None
+
+
+def test_a_member_with_an_older_3to1_says_which_months_it_lacks(c, tmp_path, monkeypatch):
+    """S4: nothing starts a 3:1 by itself, so a member may only have last month's. Its row carries through/to (the page says
+    which months are missing and that the sum mixes months); a member up to date carries neither. Nothing is submitted."""
+    import datetime as dt
+    from homebase import draftstore
+    from homebase.backtest.walkforward import WalkForwardManager
+    from tests.test_tester_desklab import CODE, at_et, wf_result, write_wf
+    calls = []
+    monkeypatch.setattr(WalkForwardManager, "submit", lambda self, body: calls.append(body))
+    monkeypatch.setattr(tester_api, "_run_propsim", lambda trades, req: ({"rules": {"label": "LucidPro 50K"}, "headline": {}, "breach": {}}, False))
+    at_et(monkeypatch, 2026, 10, 25, 12, 0)                              # the last whole month is September
+    for n, asked in (("nq_a", dt.date(2026, 10, 25)), ("nq_b", dt.date(2026, 9, 18))):      # nq_b's walk-forward ends in August
+        store.put({**_record(n, f"20261001-100000-draft_{n}-aa"), "params": {"lookback": 6, "sl_pts": 20.0, "tp_pts": 40.0}})
+        (draftstore.drafts_dir() / f"{n}.py").write_text(CODE.replace("nq_bars", n))
+        rec = store.get(n)
+        write_wf(tmp_path, rec, asked, result=wf_result(), sha256=rec["sha256"])
+    post(c, "create", {"name": "Eval group", "kind": "eval"})
+    for sid in ("lab_nq_a", "lab_nq_b"):
+        post(c, "move", {"strategy": sid, "group": "g1"})
+    g = c.get("/api/tester/deskgroups/results", headers=DESK).json()["results"]["g1"]
+    a, b = g["members"]
+    assert (a["state"], b["state"]) == ("done", "done") and g["left_out"] == []
+    assert "through" not in a and "to" not in a
+    assert (b["through"], b["to"]) == ("2026-08", "2026-09")
+    assert g["in"]["unseen"] == ["lab_nq_a", "lab_nq_b"], "still counted: the page says the months differ"
+    assert calls == []
 
 
 

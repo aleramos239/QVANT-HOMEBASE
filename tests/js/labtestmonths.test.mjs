@@ -217,7 +217,7 @@ test('the test months of the strategy as set: the same ask, which says it locks 
   assert.match(LAB, /Run the test months \(the owner clicked it in the Lab\)/);     // OOS_SAID stays
 });
 
-test('Put it on the Desk: the confirm shows the verdict and the six lines of the run\'s own settings, lands OFF and no Trade rules; Not yet sends nothing (plan 4.7)', async () => {
+test('Put it on the Desk: the confirm shows the verdict and the six lines of the run\'s own settings, lands OFF and no Trade rules; Not yet or no words sends nothing; the owner\'s words go as owner_said (plan 4.7, S4)', async () => {
   const RL = require('../../homebase/static/charts/reallines.js');
   const a = LAB.indexOf('function canon'), code = LAB.slice(LAB.indexOf('const curSid'), LAB.indexOf('function wfFixedHtml'))
     + LAB.slice(a, LAB.indexOf('function deskOffDialog', a));
@@ -225,7 +225,9 @@ test('Put it on the Desk: the confirm shows the verdict and the six lines of the
   const res = { cells: [{ i: 0, is: { net: 900, trades: 250 }, blocks: [] }, { i: 1, is: { net: -50, trades: 40 }, blocks: [] }], lock: { cell: 0 }, oos: null };
   const f = { strategy: 'draft_x', inputs: { len: 5 }, range: R31, qty: 1, commission: 4, slippage_ticks: 1, prop_rules: null, controls: {} };
   const ran = (inputs) => ({ run: { inputs, qty: 1, commission: 4, slippage_ticks: 1, range: { kind: 'wf_is' } } });
+  const said = { value: '' }, go = { disabled: null };      // the sheet's words box and its Put it on the Desk button
   const c = vm.createContext({ X, C, RL, esc: (t) => String(t == null ? '' : t), closeDialog() {}, paintRes() {}, paintLib() {}, log() {}, loadDesk: async () => {},
+    $: (sel) => (sel === '#pdSaid' ? Object.assign(said, { focus() {}, addEventListener(t, fn) { said.input = fn; } }) : sel === '[data-x="go"]' ? go : null),
     S: { run: { key: 'd:x', rid: 'r1', bundle: ran({ len: 5 }) }, tries: {}, three: { draft_x: { oos: { result: res, set: '' } } }, wf: {} },
     buf: () => null, formOf: () => f, shaNow: (code) => (code === 'saved code' ? 'sha1' : ''),
     dialog: (html) => { const d = { html, on: null, addEventListener(t, fn) { d.on = fn; } }; dialogs.push(d); return d; },
@@ -233,9 +235,16 @@ test('Put it on the Desk: the confirm shows the verdict and the six lines of the
   vm.runInContext(`${code}\nObject.assign(globalThis, { promoteToDesk, setKey });`, c);
   c.S.three.draft_x.oos.set = c.setKey(f);                 // the one-box record was opened for these settings
   const press = (x) => dialogs.at(-1).on({ target: { closest: () => ({ dataset: { x } }) } });
-  const POST = [['POST', '/api/tester/desklab/promote', { name: 'x', run_id: 'r1' }]];      // the same request as before, whatever the dialog says
+  const POST = [['POST', '/api/tester/desklab/promote', { name: 'x', run_id: 'r1', owner_said: 'put x on the desk' }]];   // whatever the dialog says
   c.promoteToDesk({ key: 'd:x', name: 'x' });
   const h = dialogs[0].html;
+  assert.match(h, /<label for="pdSaid">Your words, that it goes on the Desk<\/label><textarea id="pdSaid" maxlength="400"><\/textarea>/);
+  assert.match(h, /data-x="go" disabled>Put it on the Desk</);         // grey until there are words
+  for (const [v, off] of [['  ', true], ['put x on the desk', false], ['', true]]) { said.value = v; said.input(); assert.equal(go.disabled, off, v); }
+  press('go');                                                          // no words: nothing is sent
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(sent, []);
+  said.value = '  put x on the desk \n';
   assert.match(h, /Put x on the Desk\?/);
   assert.match(h, /The six lines of this run's own settings \(its in-sample months and test months, as set\):/);
   assert.match(h, /<b>LUCK<\/b>: 1 of 2 boxes made money in-sample/);
@@ -274,6 +283,18 @@ test('Put it on the Desk: the confirm shows the verdict and the six lines of the
   }
   sent.length = 0; press('go'); await new Promise((r) => setImmediate(r));
   assert.deepEqual(JSON.parse(JSON.stringify(sent)), POST);                // the same request, whatever the dialog says
+  // S4: while the server says no promote can pass, a press that still reaches the sheet is told why: no words box, nothing to send
+  const shut = 'Nothing new can go on the Desk yet: two of the six real-or-luck lines cannot pass in the Lab.', n = dialogs.length;
+  c.S.deskShut = shut; sent.length = 0;
+  c.promoteToDesk({ key: 'd:x', name: 'x' });
+  const sh = dialogs.at(-1).html;
+  assert.equal(dialogs.length, n + 1);
+  assert.match(sh, /Put x on the Desk\?/);
+  assert.ok(sh.includes(shut), sh);
+  assert.ok(!/pdSaid|data-x="go"|six lines of this run/.test(sh), 'no words box, no Put it button, no verdict to hope on');
+  press('go'); await new Promise((r) => setImmediate(r));
+  assert.deepEqual(sent, []);
+  c.S.deskShut = '';
 });
 
 test('words (plan 4.10): a 3:1 run\'s All metrics says In-sample or Test months; the prop sim is not one of the six lines', () => {

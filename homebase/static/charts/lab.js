@@ -1929,7 +1929,7 @@ function paintHead() {
   const ro = b.kind === 'builtin', busy = !!(S.busy && S.active && S.active.key === b.key), dirty = isDirty(b);
   let cls = '', text = '', tip = '';
   if (ro) text = 'Built-in · read-only';
-  else if (locked(b)) { cls = ''; text = 'On the Desk · locked'; tip = 'It is the code the Desk copied. Press the lock to edit it; the copy on the Desk changes only when you promote it again.'; }
+  else if (locked(b)) { cls = ''; text = 'On the Desk · locked'; tip = 'It is the code the Desk copied. Press the lock to edit it; the copy on the Desk does not change.'; }
   else if (b.valid && !b.valid.ok) { const st = C.statusOf(b.valid); cls = 'err'; text = st.text; }
   else if (b.kind === 'new') text = (b.code || '').trim() ? 'Not saved yet' : '';
   else if (dirty) { cls = 'edited'; text = 'Edited'; }
@@ -2985,7 +2985,9 @@ async function loadDesk() {
   const was = key(S.desk);
   S.desk = new Map((r.json.strategies || []).filter((x) => x && x.name).map((x) => [x.name, x]));
   S.deskBuiltins = new Set((Array.isArray(r.json.builtins) ? r.json.builtins : []).filter((x) => typeof x === 'string'));      // the built-ins the Desk itself runs
-  if (key(S.desk) === was) return;                   // nothing changed: the page stays as it is (a field being typed in is not rebuilt)
+  const shut = typeof r.json.promote_refused === 'string' ? r.json.promote_refused : '', shutWas = S.deskShut;
+  S.deskShut = shut;                                  // why no promote can pass now (S4), '' when one may
+  if (key(S.desk) === was && shut === shutWas) return;                   // nothing changed: the page stays as it is (a field being typed in is not rebuilt)
   paintLib(); paintRes();
   if (buf() && buf().kind === 'draft') paintEditor();          // its lock may have changed (promoted, or taken off the Desk)
 }
@@ -2997,8 +2999,10 @@ function deskState(b) {
   /* the hash only tells the same code on the Desk from other code; it never gates Promote -- the Desk judges the run when it is asked */
   /* a written record's run is the research engine's, not the file's code: the Desk would refuse it (the file places no orders) */
   if (r && r.record) return { label: 'Promote to Desk', hint: RECORD_NO_DESK, disabled: true, action: null };
-  return C.promoteState({ kind: 'draft', dirty, hasRun: !!(r && r.bundle && r.rid), row: (S.desk && S.desk.get(b.name)) || null, sha });
+  return C.promoteState({ kind: 'draft', dirty, hasRun: !!(r && r.bundle && r.rid), row: (S.desk && S.desk.get(b.name)) || null, sha, shut: S.deskShut });
 }
+const REMOVE_TIP = 'Takes it off the Desk. Its history is kept.';
+const NO_BACK = 'It cannot go back on the Desk from the Lab today. To put it back later, archive it on the Desk instead.';      // while no promote can pass (S4)
 const RECORD_NO_DESK = 'Cannot go on the Desk: this file is a written record and places no orders. Rebuild the idea as a real strategy first.';
 /* The hint of the row, as a line under the group: what a keyboard or a screen reader reaches (the row's title is for the mouse). */
 function deskNote(b) {
@@ -3010,7 +3014,7 @@ function deskRows(b) {
   if (!st) return '';
   const on = !!(S.desk && S.desk.has(b.name));
   return `<button class="rs-row" data-act="deskgo" data-fk="deskgo" aria-describedby="deskHint" title="${esc(st.hint)}"${st.disabled ? ' aria-disabled="true"' : ''}${S.deskBusy ? ' disabled' : ''}><span>${esc(st.label)}</span><span>›</span></button>`
-    + (on ? `<button class="rs-row" data-act="deskoff" data-fk="deskoff" title="Takes it off the Desk. Its history is kept."${S.deskBusy ? ' disabled' : ''}><span>Remove from Desk</span><span>›</span></button>` : '');
+    + (on ? `<button class="rs-row" data-act="deskoff" data-fk="deskoff" title="${esc(REMOVE_TIP + (S.deskShut ? ' ' + NO_BACK : ''))}"${S.deskBusy ? ' disabled' : ''}><span>Remove from Desk</span><span>›</span></button>` : '');
 }
 function deskGo() {
   const b = buf(), st = deskState(b);
@@ -3036,8 +3040,17 @@ function promoteRecord(f, r, b) {
   const ran = setKey({ ...f, inputs: m.inputs || {}, controls: (m.controls && m.controls.rules) || {}, qty: m.qty, commission: m.commission, slippage_ticks: m.slippage_ticks });
   return ran === T.oos.set ? T.oos.result : null;
 }
-/* Put it on the Desk: first what the six lines say of it (plan 4.7), then the same request as before; Not yet sends nothing. */
+/* Put it on the Desk: first what the six lines say of it (plan 4.7), then the owner's own words (S4: the server refuses a promote
+   without them, and unless the six lines all PASS, shown as it says); Not yet, or no words, sends nothing. While the server says
+   no promote can pass (S.deskShut) the row is grey with that sentence; a press that still gets here (the answer came after the
+   row was drawn) is told the same sentence, with no words box: words cannot help. */
 function promoteToDesk(b) {
+  if (S.deskShut) {
+    const d = dialog(`<h2>Put ${esc(b.name)} on the Desk?</h2><p>${esc(S.deskShut)}</p>
+      <div class="acts"><button class="btn btn-outline" data-x="cancel">Close</button></div>`);
+    d.addEventListener('click', (e) => { if (e.target.closest('[data-x]')) closeDialog(); });
+    return;
+  }
   const r = S.run && S.run.key === b.key ? S.run : null;
   if (!r || !r.rid || !r.bundle || r.grid) return;      // a heat-map cell has no run of its own to promote
   const f = formOf(b), sid = f ? f.strategy : '', w = sid && S.wf[sid], rd = realRead(promoteRecord(f, r, b), sid);
@@ -3047,17 +3060,21 @@ function promoteToDesk(b) {
     ${rd ? `<p>The six lines of this run's own settings (its in-sample months and test months, as set):</p><p><b>${esc(rd.verdict.word)}</b>: ${esc(rd.verdict.why)}</p><div class="rl">${rd.lines.map((x) => `<div class="rl-line ${x.ok === true ? 'pass' : x.ok === false ? 'fail' : 'wait'}"><b>${word(x)}</b><span>${esc(x.line)}: ${esc(x.said)}</span></div>`).join('')}</div>`
     : `<p>No in-sample record of this run's own settings and code is open: the six lines are not read.</p>${tp != null ? `<p>Your pick in the in-sample table, box ${esc(X.boxNo(tp))}, is not matched to this run.</p>` : ''}`}
     <p>Lands OFF, no account.</p><p>Trade rules are not applied on the Desk.</p>
-    <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">Put it on the Desk</button></div>`);
+    <div class="bp-f"><label for="pdSaid">Your words, that it goes on the Desk</label><textarea id="pdSaid" maxlength="400"></textarea></div>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go" disabled>Put it on the Desk</button></div>`);
+  const ta = $('#pdSaid', d), go = $('[data-x="go"]', d);
+  ta.focus();
+  ta.addEventListener('input', () => { go.disabled = !ta.value.trim(); });
   d.addEventListener('click', (e) => {
-    const x = e.target.closest('[data-x]');
+    const x = e.target.closest('[data-x]'), said = ta.value.trim();
     if (!x) return;
     closeDialog();
-    if (x.dataset.x === 'go') promoteGo(b, r);
+    if (x.dataset.x === 'go' && said) promoteGo(b, r, said);      // no words: nothing is sent
   });
 }
-async function promoteGo(b, r) {
+async function promoteGo(b, r, said) {
   S.deskBusy = true; S.deskErr = ''; paintRes();
-  const a = await send('POST', '/api/tester/desklab/promote', { name: b.name, run_id: r.rid });
+  const a = await send('POST', '/api/tester/desklab/promote', { name: b.name, run_id: r.rid, owner_said: said });
   S.deskBusy = false;
   const j = a.json || {};
   if (!a.ok || j.ok === false) { S.deskErr = String(j.detail || a.error || 'It did not work.'); log(`<span class="err">${esc(S.deskErr)}</span>`); }
@@ -3069,7 +3086,7 @@ function deskOffDialog() {
   const b = buf();
   if (!b || b.kind !== 'draft' || S.deskBusy) return;
   const name = b.name;
-  const d = dialog(`<h2>Remove ${esc(name)} from the Desk?</h2><p>Its history is kept.</p>
+  const d = dialog(`<h2>Remove ${esc(name)} from the Desk?</h2><p>Its history is kept.</p>${S.deskShut ? `<p>${NO_BACK}</p>` : ''}
     <div class="acts"><button class="btn btn-outline" data-x="cancel">Keep it</button><button class="btn btn-default" data-x="go">Remove</button></div>`);
   d.addEventListener('click', async (e) => {
     const x = e.target.closest('[data-x]');
@@ -3180,7 +3197,7 @@ function act(name, el) {
   else if (name === 'deskgo') deskGo();
   else if (name === 'deskoff') deskOffDialog();
   else if (name === 'save') save(b);
-  else if (name === 'unlock' && b) { S.unlocked.add(b.name); log('Unlocked. The copy on the Desk does not change until you promote it again.'); paintLib(); paintEditor(); }
+  else if (name === 'unlock' && b) { S.unlocked.add(b.name); log('Unlocked. The copy on the Desk does not change.'); paintLib(); paintEditor(); }
   else if (name === 'lock' && b) { S.unlocked.delete(b.name); paintLib(); paintEditor(); }
   else if (name === 'fold') foldGroup(el);
   else if (name === 'file') fileMenu(el);

@@ -24,6 +24,9 @@ RUN_FIRST = "Run a backtest of this strategy first."
 CHANGED = "The code changed since this backtest. Run it again, then promote."
 CARRY = "It must not carry anything from one day to the next (set session_independent = True)."
 NO_SANDBOX = "The sandbox is not working, so it cannot run."
+UNPROVEN = tester_api.desklab_unproven      # the real answer (S4): the Lab cannot pass luck and worse fills yet
+AUTO_UNSEEN = tester_api.DESKLAB_AUTO_UNSEEN   # the default, read before any fixture patches it
+SAID = "put nq_bars on the desk"           # the owner's words, which every promote carries (S4)
 
 
 def sha(text):
@@ -35,6 +38,7 @@ def c(tmp_path, monkeypatch):
     monkeypatch.setenv(store.ENV_ROOT, str(tmp_path / "desklab"))
     monkeypatch.setattr(sandbox, "available", lambda: True)
     monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", False)     # a promote starts no run here unless a test says so
+    monkeypatch.setattr(tester_api, "desklab_unproven", lambda: "")   # a fake: the six lines all PASS, unless a test says not
     return TestClient(app(tmp_path), base_url="http://localhost:8852")
 
 
@@ -62,8 +66,8 @@ def draft(drafts_dir, code=CODE, name="nq_bars"):
     (drafts_dir / f"{name}.py").write_text(code)
 
 
-def promote(c, name="nq_bars", run_id="x", **kw):
-    return c.post("/api/tester/desklab/promote", json={"name": name, "run_id": run_id}, **kw)
+def promote(c, name="nq_bars", run_id="x", owner_said=SAID, **kw):
+    return c.post("/api/tester/desklab/promote", json={"name": name, "run_id": run_id, "owner_said": owner_said}, **kw)
 
 
 def mark(name="nq_bars"):
@@ -93,28 +97,37 @@ def test_each_refusal_says_its_sentence_in_order(c, drafts_dir, make_run, monkey
     monkeypatch.setattr(sandbox, "available", lambda: False)
     assert sentence(promote(c, run_id="nope"), 404) == LAB
     draft(drafts_dir)
-    # 2 the run is unknown / not finished / of another strategy
+    # 2 the six real-or-luck lines come next (S4), before anything of the run: no new run can pass them, so it never
+    # says "run it again, then promote" first. Today the Lab cannot pass luck and worse fills: every promote is refused.
+    monkeypatch.setattr(tester_api, "desklab_unproven", UNPROVEN)
+    older = make_run(code=CODE + "# older\n")
+    assert sentence(promote(c, run_id="nope"), 409) == UNPROVEN() != ""
+    assert sentence(promote(c, run_id=older), 409) == UNPROVEN()
+    assert "Luck: the Lab's 3:1 walk-forward saves no t-statistic" in UNPROVEN() and "Worse fills" in UNPROVEN()
+    assert c.get("/api/tester/desklab").json()["promote_refused"] == UNPROVEN()     # the Lab's Promote row says it before a press
+    monkeypatch.setattr(tester_api, "desklab_unproven", lambda: "")    # the fake again: the later lines
+    # 3 the run is unknown / not finished / of another strategy
     assert sentence(promote(c, run_id="20261009-120000-draft_nq_bars-ab12"), 409) == RUN_FIRST
     assert sentence(promote(c, run_id=make_run(status="running"))) == RUN_FIRST
     assert sentence(promote(c, run_id=make_run(strategy="draft_other"))) == RUN_FIRST
     assert sentence(promote(c, run_id=make_run(strategy="nq930"))) == RUN_FIRST
-    # 3 made from other code
-    assert sentence(promote(c, run_id=make_run(code=CODE + "# older\n"))) == CHANGED
+    # 4 made from other code
+    assert sentence(promote(c, run_id=older)) == CHANGED
     good = make_run()
-    # 4 the text cannot be read statically
+    # 5 the text cannot be read statically
     draft(drafts_dir, "x = 1\n", "nq_two")
     msg = sentence(promote(c, "nq_two", make_run("x = 1\n", "nq_two")))
     assert "exactly one class" in msg
-    # 5 it carries from one day to the next (or does not say)
+    # 6 it carries from one day to the next (or does not say)
     for code in (CODE.replace("session_independent = True", "session_independent = False"),
                  CODE.replace("    session_independent = True\n", "")):
         draft(drafts_dir, code, "nq_carry")
         assert sentence(promote(c, "nq_carry", make_run(code, "nq_carry"))) == CARRY
-    # 6 a market this service does not stream
+    # 7 a market this service does not stream
     other = CODE.replace('root = "NQ"', 'root = "CL"')
     draft(drafts_dir, other, "cl_bars")
     assert sentence(promote(c, "cl_bars", make_run(other, "cl_bars"))) == "No live prices for CL here."
-    # 7 the sandbox is last
+    # 8 the sandbox
     r = promote(c, run_id=good)
     assert sentence(r) == NO_SANDBOX
     assert c.get("/api/tester/desklab").json()["strategies"] == []              # nothing was written by any refusal
@@ -171,7 +184,8 @@ def test_promoting_again_replaces_the_record_and_keeps_the_history(c, drafts_dir
 
 def test_the_list_shows_today_the_days_and_whether_the_runner_is_alive(c, drafts_dir, make_run, tmp_path):
     at = tmp_path / "desklab"
-    assert c.get("/api/tester/desklab").json() == {"strategies": [], "archived": [], "builtins": [], "runner": {"alive": False, "seen_utc": None, "prices": {}}}
+    assert c.get("/api/tester/desklab").json() == {"strategies": [], "archived": [], "builtins": [], "promote_refused": "",
+                                                    "runner": {"alive": False, "seen_utc": None, "prices": {}}}
     draft(drafts_dir)
     promote(c, run_id=make_run())
     today = slots.et_now().date().isoformat()                                  # conftest pins this to 2026-09-28
@@ -235,9 +249,11 @@ def test_delete_takes_the_history_too_but_only_once_it_is_off_the_desk_and_let_g
     assert c.post("/api/tester/desklab/delete", json={"name": "../x"}).status_code == 400
 
 @pytest.mark.parametrize("what,body", [
-    ("promote", {"name": "nq_bars"}), ("promote", {"name": "nq_bars", "run_id": "x", "z": 1}),
-    ("promote", {"name": "Bad Name", "run_id": "x"}), ("promote", {"name": "nq_bars", "run_id": 5}),
-    ("promote", {"name": 5, "run_id": "x"}), ("promote", []), ("promote", "nq_bars"),
+    ("promote", {"name": "nq_bars"}), ("promote", {"name": "nq_bars", "run_id": "x", "owner_said": SAID, "z": 1}),
+    ("promote", {"name": "Bad Name", "run_id": "x", "owner_said": SAID}), ("promote", {"name": "nq_bars", "run_id": 5, "owner_said": SAID}),
+    ("promote", {"name": 5, "run_id": "x", "owner_said": SAID}), ("promote", []), ("promote", "nq_bars"),
+    ("promote", {"name": "nq_bars", "run_id": "x"}), ("promote", {"name": "nq_bars", "run_id": "x", "owner_said": ""}),
+    ("promote", {"name": "nq_bars", "run_id": "x", "owner_said": "  \n "}), ("promote", {"name": "nq_bars", "run_id": "x", "owner_said": 5}),
     ("remove", {}), ("remove", {"name": "nq_bars", "on": True}), ("remove", {"name": "../x"}), ("remove", {"name": 5}),
     ("onoff", {"name": "nq_bars"}), ("onoff", {"name": "nq_bars", "on": "yes"}), ("onoff", {"name": "nq_bars", "on": 1}),
     ("onoff", {"name": "nq_bars", "on": None}), ("onoff", {"on": True}), ("onoff", {"name": "nq_bars", "on": True, "z": 1})])
@@ -275,6 +291,7 @@ def test_the_desk_page_calls_cross_origin_and_nobody_else_does(c, drafts_dir, ma
 def test_only_markets_the_service_streams_can_be_promoted(tmp_path, drafts_dir, make_run, monkeypatch):
     monkeypatch.setenv(store.ENV_ROOT, str(tmp_path / "desklab"))
     monkeypatch.setattr(sandbox, "available", lambda: True)
+    monkeypatch.setattr(tester_api, "desklab_unproven", lambda: "")   # the six lines come first (S4): a fake PASS reaches this one
     a = FastAPI()
     a.include_router(tester_api.tester_router(lambda request: None, tmp_path / "ticks", tmp_path / "state2", live_roots=("ES",)))
     es = TestClient(a, base_url="http://localhost:8852")
@@ -303,6 +320,7 @@ def test_promote_checks_the_markets_this_service_really_streams(tmp_path, monkey
     from tests.backtest_util import D1, nq_archive
     monkeypatch.setenv(store.ENV_ROOT, str(tmp_path / "desklab"))
     monkeypatch.setattr(sandbox, "available", lambda: True)
+    monkeypatch.setattr(tester_api, "desklab_unproven", lambda: "")   # the six lines come first (S4): a fake PASS reaches this one
     es_only = create_app(roots=["ES"], base=nq_archive(tmp_path / "ticks"), replay=D1, speed=1, start_et=dt.time(9, 30),
                          state=tmp_path / "state")
     c = TestClient(es_only, base_url="http://localhost:8852")
@@ -578,8 +596,10 @@ def test_a_setting_the_record_leaves_out_is_the_codes_default_when_a_run_is_matc
 
 def write_wf(tmp_path, rec, today, status="done", result=None, sha256=None):
     """A walk-forward job folder as the tester leaves it, built from the Desk's own request (deskresults.wf_request)."""
+    from unittest import mock
     from homebase.backtest import walkforward
-    g = walkforward.validate_wf(deskresults.wf_request(rec, today))
+    with mock.patch.object(tester_api, "DESKLAB_AUTO_UNSEEN", True):      # the job as the Desk's own start wrote it (off since S4)
+        g = walkforward.validate_wf(deskresults.wf_request(rec, today))
     cells = g.pop("cells")
     gid = f"{today:%Y%m%d}-120000-{rec['id']}-{len(list((tmp_path / 'state' / 'tester' / 'walkforward').glob('*'))):04x}"
     d = tmp_path / "state" / "tester" / "walkforward" / gid
@@ -614,6 +634,7 @@ def test_the_card_shows_build_and_unseen_from_the_walkforward_of_the_strategy_as
     monkeypatch.setattr(tester_api, "_run_propsim", fake)
     at_et(monkeypatch, 2026, 10, 18, 12, 0)
     assert c.get("/api/tester/desklab/results", headers=EVIL).status_code == 403
+    first_day(tmp_path)                 # a host that has the data: with the start off, the card says "none", not "no_data" (S4)
     draft(drafts_dir)
     build = make_run()
     (tmp_path / "state" / "tester" / "runs" / build / "trades.json").write_text("[]")
@@ -624,10 +645,13 @@ def test_the_card_shows_build_and_unseen_from_the_walkforward_of_the_strategy_as
     req = deskresults.wf_request(rec, today)
     assert req["axes"] == [] and req["inputs"] == rec["params"] and req["step_months"] == 4      # as set, blocks, nothing searched
     write_wf(tmp_path, rec, today, result=wf_result(), sha256="other code")                      # not this copy
-    write_wf(tmp_path, rec, dt.date(2026, 9, 18), result=wf_result())                            # last month's window
     assert lab_results(c)["nq_bars"]["unseen_state"] == "none"
+    old = write_wf(tmp_path, rec, dt.date(2026, 9, 18), result=wf_result())                      # last month's window: shown, with its month (S4)
+    got = lab_results(c)["nq_bars"]
+    assert (got["unseen_state"], got["unseen"]["id"], got["through"], got["to"]) == ("done", old, "2026-08", "2026-09")
     gid = write_wf(tmp_path, rec, today, result=wf_result())
     r = lab_results(c)["nq_bars"]
+    assert "through" not in r and "to" not in r, "the one to the last whole month wins"
     assert r["unseen"] == {"id": gid, "range": {"start": "2022-04-01", "end": "2026-08-31"}, "walkforward": "3:1", "months": 2,
                            "net": 1234.5, "trades": 41, "win_rate": 48.8, "profit_factor": 1.31, "max_drawdown": -2100.0,
                            "rr": 3.0, "rr_label": "1:3.00", "sharpe": 0.5}
@@ -700,6 +724,89 @@ def test_a_host_whose_ticks_do_not_reach_back_starts_no_walkforward(c, tmp_path,
     draft(drafts_dir)
     assert promote(c, run_id=make_run(), headers=DESK).json()["ok"] is True
     assert lab_results(c)["nq_bars"]["unseen_state"] == "no_data" and calls == []
+
+
+def test_nothing_runs_by_itself_a_promote_and_the_desks_ask_start_no_walkforward(c, tmp_path, drafts_dir, make_run, monkeypatch):
+    """S4: DESKLAB_AUTO_UNSEEN is off (it gates both warm-up paths, ensure_wf and ensure_unseen), on a host that has the data."""
+    from homebase.backtest.walkforward import WalkForwardManager
+    assert AUTO_UNSEEN is False
+    monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", AUTO_UNSEEN)
+    at_et(monkeypatch, 2026, 10, 12, 12, 0)
+    calls = []
+    monkeypatch.setattr(WalkForwardManager, "submit", lambda self, body: calls.append(body))
+    first_day(tmp_path)
+    draft(drafts_dir)
+    assert promote(c, run_id=make_run(), headers=DESK).json()["ok"] is True
+    assert lab_results(c)["nq_bars"]["unseen_state"] == "none" and calls == []
+
+
+def test_with_the_start_off_the_desks_own_3to1_body_is_refused_at_the_tester(c, tmp_path, drafts_dir, make_run, monkeypatch):
+    """S4: POST /api/tester/walkforward with the Desk's own body (3 in, 1 out, blocks, no axes) starts nothing while
+    DESKLAB_AUTO_UNSEEN is off: its stitched result is the test months, and no owner click or chat sends that body."""
+    from homebase.backtest import walkforward
+    from homebase.backtest.walkforward import WalkForwardManager
+    monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", AUTO_UNSEEN)
+    started = []
+    monkeypatch.setattr(WalkForwardManager, "submit", lambda self, body: (self._validate(body), started.append(body), "x")[2])
+    draft(drafts_dir)
+    assert promote(c, run_id=make_run(), headers=DESK).json()["ok"] is True
+    body = deskresults.wf_request(store.get("nq_bars"), dt.date(2026, 10, 12))
+    r = c.post("/api/tester/walkforward", json=body)
+    assert r.status_code == 400 and r.json()["detail"] == walkforward.DESK_31_OFF == (
+        "The Desk 3:1 run is off: nothing starts the Desk card's walk-forward now.")
+    assert started == []
+    other = {**body, "axes": [{"key": "lookback", "values": [8, 10]}]}                # a search: retired, as before
+    assert c.post("/api/tester/walkforward", json=other).json()["detail"] == walkforward.RETIRED
+    monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", True)        # the Desk's own start, were it on again: the body is taken
+    assert c.post("/api/tester/walkforward", json=body).json() == {"id": "x"} and started == [body]
+
+
+@pytest.mark.parametrize("why", ["no_data", "changed"])
+def test_with_the_start_off_the_card_still_says_no_data_and_changed(c, tmp_path, drafts_dir, make_run, monkeypatch, why):
+    """S4 turns off only the start: a host whose ticks do not reach back (the VPS) still says so, and so does a record whose
+    Lab code changed -- not "none", which the card would read as a walk-forward still to come."""
+    from homebase.backtest.walkforward import WalkForwardManager
+    monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", AUTO_UNSEEN)
+    at_et(monkeypatch, 2026, 10, 12, 12, 0)
+    calls = []
+    monkeypatch.setattr(WalkForwardManager, "submit", lambda self, body: calls.append(body))
+    first_day(tmp_path, "2026-08-18" if why == "no_data" else "2021-09-22")
+    draft(drafts_dir)
+    assert promote(c, run_id=make_run(), headers=DESK).json()["ok"] is True
+    if why == "changed":
+        draft(drafts_dir, CODE + "# newer\n")
+    assert lab_results(c)["nq_bars"]["unseen_state"] == why and calls == []
+
+
+def test_with_the_start_off_an_older_3to1_of_this_copy_is_shown_with_its_month_and_nothing_starts(c, tmp_path, drafts_dir, make_run,
+                                                                                                   monkeypatch):
+    """S4: a new month leaves no walk-forward to the last whole month and none starts by itself, so the card shows the newest
+    DONE one of the same code, settings and size that ends earlier, and the months it lacks. Another copy's is never shown."""
+    from homebase.backtest.walkforward import WalkForwardManager
+    monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", AUTO_UNSEEN)
+    monkeypatch.setattr(tester_api, "_run_propsim", lambda trades, req: ({"rules": {"label": "LucidFlex 50K"}, "headline": HEAD,
+                                                                           "breach": {}}, False))
+    at_et(monkeypatch, 2026, 11, 3, 12, 0)              # the last whole month is October
+    calls = []
+    monkeypatch.setattr(WalkForwardManager, "submit", lambda self, body: calls.append(body))
+    first_day(tmp_path)
+    draft(drafts_dir)
+    assert promote(c, run_id=make_run(), headers=DESK).json()["ok"] is True
+    rec, sep = store.get("nq_bars"), dt.date(2026, 10, 3)           # a walk-forward asked in October ends 2026-09-30
+    write_wf(tmp_path, {**rec, "params": {**rec["params"], "lookback": 9}}, sep, result=wf_result())     # other settings
+    write_wf(tmp_path, {**rec, "qty": 5}, sep, result=wf_result())                                      # other size
+    write_wf(tmp_path, rec, sep, result=wf_result(), sha256="other code")                               # other code
+    write_wf(tmp_path, rec, sep, status="error")                                                         # this copy, not done
+    got = lab_results(c)["nq_bars"]
+    assert got["unseen_state"] == "none" and got["unseen"] is None and "through" not in got
+    write_wf(tmp_path, rec, dt.date(2026, 9, 3), result=wf_result())                                    # this copy, to August
+    newest = write_wf(tmp_path, rec, sep, result=wf_result())                                           # this copy, to September
+    got = lab_results(c)["nq_bars"]
+    assert (got["unseen_state"], got["unseen"]["id"], got["through"], got["to"]) == ("done", newest, "2026-09", "2026-10")
+    assert got["unseen"]["net"] == 1234.5 and got["build"]["net"] == 4000.0
+    draft(drafts_dir, CODE + "# newer\n")              # the Lab's code changed: the Desk copy's older 3:1 is still its own
+    assert lab_results(c)["nq_bars"]["unseen"]["id"] == newest
+    assert calls == [], "nothing is submitted"
 
 
 def test_the_curve_of_an_unseen_run_is_its_running_total_by_day_after_costs(tmp_path):

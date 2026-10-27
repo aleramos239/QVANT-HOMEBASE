@@ -2,7 +2,11 @@
 has (claude_mcp.blueprint_tools.SPECS) and runs them through the same code -- against a FAKE toolkit: a small script
 written here that answers in the toolkit's JSON and echoes the command line it was given. No tape, no engine."""
 import json
+import os
+import shutil
+import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,7 +19,7 @@ from tests.test_tester_api import EVIL, app
 FAKE = r'''
 import json, sys
 argv = sys.argv[1:]
-if argv[:1] == ["card"] and "bad_name" in argv:
+if argv[:1] == ["status"] and "bad_name" in argv:
     print(json.dumps({"ok": False, "command": "card", "name": None, "status": None, "phase": 0, "round": None, "lines": [], "text": "REFUSED: no such idea",
                       "next": "", "job": None, "saved": [], "error": "no such idea"}))
     sys.exit(2)
@@ -72,10 +76,61 @@ def test_a_tool_runs_as_a_chat_runs_it_and_answers_in_its_own_words(c, ideas_roo
     assert f"RAN status nq_orb_pre --root={ideas_root} --json" in text          # the toolkit's own command line, the app's idea folder
     assert "RAN blocks" in run(c, "blueprint_blocks").json()["text"]              # no arguments at all
     # a refusal of the toolkit is the tool's answer, not a broken request: nothing was changed
-    r = run(c, "blueprint_card", {"name": "bad_name", "card": {}, "settings": {}})
+    r = run(c, "blueprint_status", {"name": "bad_name"})
     assert r.status_code == 200 and r.json()["ok"] is False and "no such idea" in r.json()["text"]
     r = run(c, "blueprint_status", {"name": "Not A Name"})                        # the connector's own input check
     assert r.status_code == 200 and r.json()["ok"] is False and "name" in r.json()["text"]
+
+
+WRITES = {"blueprint_card", "blueprint_code_check", "blueprint_sim", "blueprint_portfolio", "blueprint_eval_card",
+          "blueprint_wf", "blueprint_wf_pick", "blueprint_wf_oos"}
+
+
+def test_a_page_can_only_look_a_heat_map_a_pick_or_the_test_months_start_from_a_chat(c, tmp_path):
+    """S1: the route runs only the tools that read what is saved. Every other tool is refused before the toolkit is started,
+    whatever owner_said a page puts in."""
+    assert set(tester_api.BP_PAGE_TOOLS) == {"blueprint_blocks", "blueprint_status", "blueprint_heatmap", "blueprint_mc"}
+    assert {s["name"] for s in blueprint_tools.SPECS} - set(tester_api.BP_PAGE_TOOLS) == WRITES       # a new tool is refused until listed
+    said = {"owner_said": "run it"}
+    for tool, args in {"blueprint_wf_oos": {"name": "nq_orb_pre", "box": 1, **said}, "blueprint_wf": {"name": "nq_orb_pre", **said},
+                       "blueprint_wf_pick": {"name": "nq_orb_pre", "box": 1}, "blueprint_card": {"name": "x1", "card": {}, "settings": {}},
+                       "blueprint_code_check": {"name": "nq_orb_pre", "looked": True}, "blueprint_eval_card": {"name": "nq_orb_pre"},
+                       "blueprint_sim": {"name": "nq_orb_pre", "account": "a", "attempts": 1, "fee_budget": 1},
+                       "blueprint_portfolio": {"names": ["a1", "b1"], "account": "a"}}.items():
+        r = run(c, tool, args)
+        assert r.status_code == 403 and r.json()["detail"].startswith(f"{tool} cannot be run from a page: here you can only look"), tool
+    assert run(c, "blueprint_heatmap", {"name": "nq_orb_pre"}).json()["text"].endswith("\nRAN heatmap nq_orb_pre --root=" + str(ideastore.ideas_root()) + " --json")
+    assert run(c, "blueprint_mc", {"name": "nq_orb_pre"}).json()["text"].endswith("\nRAN mc nq_orb_pre --root=" + str(ideastore.ideas_root()) + " --json")
+
+
+def test_the_pipeline_refuses_while_it_is_switched_off(tmp_path, monkeypatch):
+    """Row S1 (safety #52): with ~/.homebase/pipeline/DISABLED on file (a temp HOME), the REAL toolkit's `bp.py pipe` and the
+    Lab's pipeline routes refuse. Read-only: the toolkit refuses before it reads or runs anything, and only looks are asked
+    (list, book, pause, mode off). Skipped where the research toolkit is not installed (HOMEBASE_BP / HOMEBASE_BP_PYTHON name it)."""
+    python, script = blueprint_tools.toolkit()
+    if not Path(script).is_file() or shutil.which(python) is None:
+        pytest.skip("the research toolkit (bp.py) is not installed here")
+    home = tmp_path / "home"
+    proot = home / ".homebase" / "pipeline"
+    proot.mkdir(parents=True)
+    (proot / "DISABLED").write_text("off\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("HOMEBASE_PIPELINE_ROOT", raising=False)
+    monkeypatch.setenv("PYTHONDONTWRITEBYTECODE", "1")
+    monkeypatch.setattr(tester_api.Slots, "quiet", lambda self: False)
+    for sub in (["list"], ["book"]):
+        p = subprocess.run([python, script, "pipe", *sub, f"--root={proot}", "--json"], capture_output=True, text=True, timeout=60,
+                           cwd=str(Path(script).parent), stdin=subprocess.DEVNULL, env={**os.environ})
+        got = json.loads(p.stdout)
+        assert got["ok"] is False and "the pipeline is OFF" in got["error"], (sub, p.stdout, p.stderr)
+    c = TestClient(app(tmp_path), base_url="http://localhost:8852")
+    r = c.get("/api/tester/pipeline")
+    assert r.status_code == 503 and "the pipeline is OFF" in r.json()["detail"]
+    assert "the pipeline is OFF" in c.get("/api/tester/pipeline/idea/nq_x").json()["detail"]
+    for path, body in (("/api/tester/pipeline/run", {"action": "pause"}), ("/api/tester/pipeline/mode", {"mode": "off"})):
+        r = c.post(path, json=body)
+        assert r.status_code == 200 and r.json()["ok"] is False and "the pipeline is OFF" in r.json()["text"], (path, r.json())
+    assert sorted(x.name for x in proot.iterdir()) == ["DISABLED"]       # nothing was written beside the switch
 
 
 def test_what_the_route_refuses(c, monkeypatch):

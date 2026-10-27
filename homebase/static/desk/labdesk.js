@@ -182,7 +182,7 @@ function labDeskView(name, s) {
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat(${jsArg(name)})" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       ${deskMachine() === "server" ? "" : `<button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>`}
       <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(lab.name || "")}, ${jsArg(name)})"${busy || ro || !lab.name ? " disabled" : ""} title="Off the Desk, switched off, its accounts off, and kept. Restore it from Archive any time.">Archive</button>
-      <button class="btn btn-outline btn-sm" onclick="removeLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Takes it off the Desk. Its history is kept.">Remove from Desk</button>
+      <button class="btn btn-outline btn-sm" onclick="removeLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Takes it off the Desk. Its history is kept. It cannot go back from the Lab today; Archive keeps it to restore.">Remove from Desk</button>
       <button class="btn btn-outline btn-sm" onclick="deleteLabStrat(${jsArg(name)}, ${jsArg(lab.name || "")})"${busy || ro || !lab.name ? " disabled" : ""} title="Takes it off the Desk and deletes its shadow and day history for good. Its Lab draft stays.">Delete</button></div>`;
 }
 /* The Limits dialog: filled when it opens, never while it is open. Save posts exactly what the fields say, after the same checks the Desk makes. */
@@ -272,9 +272,29 @@ async function removeLabStrat(name) {
   DESKLAB_BUSY = "";
   if (!err && r && r.ok === true) {
     if (VIEW.k === "strat" && VIEW.name === name) VIEW = {k: "today"};
-    toast(`${stratLabel(name)} is off the Desk. Its history is kept; promote it again from the Lab any time.`);
+    toast(`${stratLabel(name)} is off the Desk. Its history is kept, and it is still in the Lab.`);
   } else toast(DeskLab.refusalText(r, err), 7000);
   await refresh();
+  loadDeskLab();
+}
+/* Remove from the Desk, from a Lab strategy's own page (labView): the chart service takes it off its list; its history stays.
+   removeDeskLab of desk/views.js, with S4's words (the confirm names Archive; the toast no longer says "promote it again").
+   views.js is left as it was on purpose: its ?v= line in index.html sits next to activity.js's, which S2 bumps, and two bumps
+   on neighbouring lines stop either commit from being dropped alone. Nothing calls removeDeskLab now: delete it with the
+   next edit of views.js. */
+async function removeLabRow(name) {
+  if (DESKLAB_BUSY) return;
+  const ask = DeskLab.removeAsk(name);
+  if (!await confirmDlg(ask.title, ask.body, "Remove", false)) return;
+  DESKLAB_BUSY = name; if (ST) render();
+  const r = await chartPost("/api/tester/desklab/remove", {name});
+  DESKLAB_BUSY = "";
+  if (r && r.ok === true) {
+    DESKLAB.strategies = DESKLAB.strategies.filter(w => w.name !== name);
+    if (VIEW.k === "lab" && VIEW.name === name) VIEW = {k: "today"};
+    toast(`${name} is off the Desk. Its history is kept, and it is still in the Lab.`);
+  } else toast(`Could not remove ${name}: ${(r && r.detail) || "no answer"}`, 7000);
+  if (ST) render();
   loadDeskLab();
 }
 /* The chart service's delete of an off-the-Desk strategy's history (draft: its Lab draft too). The runner needs a few seconds to let

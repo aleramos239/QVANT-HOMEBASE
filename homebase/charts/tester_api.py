@@ -38,7 +38,8 @@
                                           inputs: its JSON schema}], ideas: [each idea's idea.json]} -- THE SAME tool
                                           definitions every chat has (claude_mcp.blueprint_tools.SPECS)
     POST /api/tester/blueprint/run       {tool, args} -> {ok, text}: that tool run as a chat runs it (the research
-                                          toolkit bp.py as a child process; it saves in the app itself)
+                                          toolkit bp.py as a child process; it saves in the app itself). Only the
+                                          tools that read (BP_PAGE_TOOLS); any other is a 403
     GET  /api/tester/pipeline            the strategy pipeline as the Lab shows it (its Queue, Book and Guide):
                                           {runner: {running, paused}, counts: {label: n}, ideas: [the toolkit's state
                                           rows, each with the page's `label`], book: [the book cards], stages: [{n,
@@ -63,8 +64,9 @@
                                           record WITHOUT its code, plus `today` (the day summary of the session day the
                                           runner is on, or null) and `days` (of the last 10, those this promotion wrote,
                                           each cut to {date, state, why, net, match, rebuilt})],
-                                          runner: {alive, seen_utc, prices}} -- alive = the runner's heartbeat is under
-                                          20 s old
+                                          runner: {alive, seen_utc, prices}, promote_refused} -- alive = the runner's heartbeat
+                                          is under 20 s old; promote_refused = desklab_unproven(): why no promote can pass
+                                          now ('' when one may), so the Lab's Promote row says it before it is pressed (S4)
     GET  /api/tester/desklab/results     {results: {name: {unseen, prop: {build, unseen}}}}: for each promoted strategy, its
                                           saved run on the unseen days (the newest finished run of the same code, settings
                                           and size; cut as the record's `run`, or null when none is saved) and the prop
@@ -74,7 +76,10 @@
                                           is run by this route. `curve` = {days, vals}: that run's running total by day,
                                           after costs. A strategy with no unseen-days run of its code + settings
                                           gets one started by itself, once (its `unseen_state`: done | pending | failed |
-                                          none; a failed or cancelled one is not started again). A promote starts it too.
+                                          none; a failed or cancelled one is not started again) -- only while DESKLAB_AUTO_UNSEEN is on (off, S4).
+                                          Off, a Lab card with none to the last whole month shows the newest done 3:1 of
+                                          the same copy that ends earlier, with `through` and `to` (its last month, the last
+                                          whole month: "2026-08", "2026-09").
                                           The Desk's own straddles (nq930, gc_nfp) answer under their Desk id with `twin` (the
                                           tester strategy that mirrors them) and `manual: true`: their saved runs at the Desk's
                                           size and setting; nothing starts one (it is read by hand, from the Lab)
@@ -86,13 +91,15 @@
     GET  /api/tester/desklab/shadow?name= {name, days: [{date, state, why, net, match, trades}]}: the shadow calendar, every day
                                           this promotion wrote (oldest first, at most DESKLAB_SHADOW_DAYS); a booked day
                                           shows its shadow copy (store.get_shadow_day) or is left out; 404 off the Desk
-    POST /api/tester/desklab/promote     {name, run_id} -> {ok, name, notes} | {ok: false, detail}: a frozen copy of the
-                                          draft's text, its settings and that backtest's headline numbers. Refused (in
-                                          words) for a draft not in the Lab, a run that is not a finished run of it, code
-                                          that changed since, code that cannot be read, one that is not
-                                          session_independent, a market this service does not stream, a sandbox that does
-                                          not work. No draft runs here and no order goes anywhere; it does queue the copy's
-                                          unseen-days backtest (once per code + settings, a tester run like the Lab's Run)
+    POST /api/tester/desklab/promote     {name, run_id, owner_said} -> {ok, name, notes} | {ok: false, detail}: a frozen copy of
+                                          the draft's text, its settings and that backtest's headline numbers. owner_said:
+                                          the owner's own words, not empty (400). Refused (in words) for a draft not in the
+                                          Lab, then unless the six real-or-luck lines all PASS (desklab_unproven: today
+                                          never, S4), then for a run that is not a finished run of it, code that changed
+                                          since, code that cannot be read, one that is not session_independent, a market
+                                          this service does not stream, a sandbox that does not work. No draft runs here
+                                          and no order goes anywhere; it starts no walk-forward (DESKLAB_AUTO_UNSEEN is
+                                          off, S4)
     POST /api/tester/desklab/remove      {name} -> {ok, removed, name}: the record goes, its days and journal stay
     POST /api/tester/desklab/delete      {name} -> {ok, deleted, name}: once removed, its history goes too (409 while on the
                                           Desk or while the runner still hosts it); {name, draft: true} (the Archive's Delete) also
@@ -146,7 +153,9 @@
                                           metric / min_trades) = the old one: + {metric?, min_trades?, test_months? | compare?}:
                                           1 month to select, the next N to test, stepping monthly, over the
                                           body's own range; `compare: true` = ONE job (one grid run) selected
-                                          and stitched at 1:1, 1:2 and 1:3 (homebase.backtest.walkforward)
+                                          and stitched at 1:1, 1:2 and 1:3 (homebase.backtest.walkforward). The old one
+                                          is retired except the Desk's own 3:1 (3 in, 1 out, blocks, no axes), and that one
+                                          only while DESKLAB_AUTO_UNSEEN is on (off, S4: 400, "The Desk 3:1 run is off: ...")
     GET  /api/tester/walkforward/{id}    status, per-cell status (never full-window P&L), progress, eta_s
     GET  /api/tester/walkforward/{id}/result   the steps, the stitched OOS equity + stats (409 until done);
                                           ?test_months=N picks a compare job's 1:N scheme (a compare job
@@ -248,7 +257,17 @@ def desk_strategy_ids() -> list[str]:
                   if isinstance(k, str) and isinstance(v, dict) and (v.get("cfg") or {}).get("kind") != "lab")
 
 
-DESKLAB_AUTO_UNSEEN = True   # a promoted strategy's unseen-days run starts by itself, once per code + settings (owner 2026-10-11)
+DESKLAB_AUTO_UNSEEN = False  # nothing runs by itself (S4): a promote or a Desk ask starts no walk-forward (it did, owner 2026-10-11)
+
+
+def desklab_unproven() -> str:
+    """Why promote is refused on the six real-or-luck lines ('' = all six PASS; there is no override). Today two of them
+    cannot PASS for any Lab run (S4): its 3:1 walk-forward saves no t-statistic and the Lab runs no worse fills (S11)."""
+    # the same words are the Lab's Promote row hint (GET /desklab promote_refused) and the 409 of a promote
+    return ("Nothing new can go on the Desk yet: two of the six real-or-luck lines cannot pass in the Lab. Luck: the Lab's "
+            "3:1 walk-forward saves no t-statistic. Worse fills: the Lab does not run them.")
+
+
 PIPE_KEYS = {"add": ("card", "inbox"), "start": (), "pause": (), "resume": (), "approve": ("name",), "refuse": ("name", "why")}
 PIPE_QUIET = ("add", "start", "resume")      # what can start heavy work: not in a quiet window of the tester
 PIPE_SHAPE = ("{action: add, card: {...}, inbox?: true | false} | {action: start | pause | resume} | "
@@ -258,6 +277,10 @@ PIPE_SHAPE = ("{action: add, card: {...}, inbox?: true | false} | {action: start
 class _Blueprint(pipeline_tools.PipelineMixin, blueprint_tools.BlueprintMixin):
     """The blueprint tools as the connector has them (one per phase, each a command of the research toolkit), and the
     pipeline's, for the Lab's own panels: the same code path, so the page and a chat can never disagree about a tool."""
+
+
+# what POST /blueprint/run may run: the tools that only read what is saved and start nothing (S1)
+BP_PAGE_TOOLS = ("blueprint_blocks", "blueprint_status", "blueprint_heatmap", "blueprint_mc")
 
 
 _HOST_RE = re.compile(r"^(127\.0\.0\.1|localhost)(:\d+)?$", re.IGNORECASE)
@@ -342,6 +365,9 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         tool, args = body.get("tool"), body.get("args", {})
         if set(body) - {"tool", "args"} or not isinstance(tool, str) or tool not in bp_specs or not isinstance(args, dict):
             raise HTTPException(400, "{tool: one of " + ", ".join(bp_specs) + ", args: {...}}")
+        if tool not in BP_PAGE_TOOLS:     # a page may only look: a heat map, the test months or a pick start from a chat (S1)
+            raise HTTPException(403, f"{tool} cannot be run from a page: here you can only look ("
+                                     + ", ".join(BP_PAGE_TOOLS) + "). Ask for it in a chat, in your own words.")
         if Slots().quiet():       # a quiet window of the tester: nothing is started from the page then
             raise HTTPException(409, "paused for a quiet window of the tester (tester_slots.json): run it later")
         fn = getattr(box, f"t_{tool}")

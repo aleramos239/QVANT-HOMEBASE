@@ -213,8 +213,18 @@ const ACTIVITY = {
   rule_error: (r) => [`${actStrat(r)} rule error — ${actErr(r.error)}`, "neg"],
   clock_error: (r) => [`Clock error — ${actErr(r.error)}`, "neg"],
   desk_key_error: (r) => [`Desk key problem — ${actErr(r.error)}`, "neg"],
-  selftest_order: (r) => [`Self-test order${actOn(r)}${r.placed ? (r.placed.ok ? " — placed and cancelled" : " — refused: " + actErr(r.placed.error)) : ""}`,
-    r.placed && !r.placed.ok ? "warn" : ""],
+  selftest_order: (r) => {
+    const on = `Self-test order${actOn(r)}`, p = r.placed;
+    if (!p) return [on, ""];
+    if (!p.ok) return [`${on} — refused: ${actErr(p.error)}`, "warn"];
+    const ok = (k) => (r[k] ? r[k].ok : undefined);      // the route's trace: cancelled, cancel_all_fallback, emergency_flatten (true | false | not run)
+    const gone = ok("cancelled") === true, swept = ok("cancel_all_fallback") === true;      // swept: cancel-all ran (paper, or disarmed)
+    const lost = !gone && !swept, flat = ok("emergency_flatten") === true, open = ok("emergency_flatten") === false;      // open: held (armed) or failed
+    const head = gone ? "placed and cancelled" : swept ? "placed; its own cancel failed, so every order on the account was cancelled"
+      : r.cancelled ? "placed, but its cancel failed: it may still be on the account" : "placed, but it has no order id, so it was not cancelled: it may still be on the account";
+    const tail = flat ? "; a position was left, so every position on the account was flattened" : open ? "; a position may be open" : "";
+    return [`${on} — ${head}${tail}${lost || open ? ". Check it on the broker." : ""}`, lost || open ? "neg" : swept || flat ? "warn" : ""];
+  },
   selftest_order_rest: (r) => [`Self-test order${actOn(r)} (REST) — HTTP ${r.http_status}`],
   group_set: (r) => [`${actCycle(r)} ${r.on ? "ON" : "OFF"} — ${(r.members || []).length} strategies on ` +
       `${(r.accounts || []).map(acctShort).join(", ") || "no accounts"}${r.risk_usd ? ` · $${fmt(r.risk_usd, 0)} a trade` : ""}`],

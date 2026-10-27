@@ -33,5 +33,5 @@ def test_every_name_read_through_api_is_on_tester_api():
     for m in MODULES[1:]:
         tree = ast.parse(Path(importlib.import_module(m).__file__).read_text(encoding="utf-8"))
         read |= {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == "api"}
-    assert read == {"desk_strategy_ids", "DESKLAB_AUTO_UNSEEN", "_run_propsim"}
+    assert read == {"desk_strategy_ids", "DESKLAB_AUTO_UNSEEN", "_run_propsim", "desklab_unproven"}
     assert all(hasattr(tester_api, n) for n in read)
