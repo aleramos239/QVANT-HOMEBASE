@@ -73,7 +73,7 @@ from .broker.tradovate_ws import TradovateWS
 from .core.clock import epoch_ms as _ms
 from .core.session import always_open, session_bounds    # the session clock (callers still read T.always_open / T.session_bounds)
 from .marketdata import MD_DEMO, MD_LIVE
-from .paths import state_dir
+from .paths import state_dir, ticks_archive
 
 ET = ZoneInfo("America/New_York")
 UTC = dt.timezone.utc
@@ -87,7 +87,7 @@ HISTORY_UTC_DAYS = 2        # the feed serves ticks from 00:00 UTC of the previo
 # ~5.5 h at PAGE_INTERVAL_S of the 14.7 h between 17:20 and 08:00, the first
 # hours first. What a night leaves, the next runs take.
 ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI")
-ARCHIVE = Path.home() / "futures_ticks"
+ARCHIVE = ticks_archive()
 PAGE = 4096                 # the feed caps a tick request at about this
 MAX_PAGES = 3000            # ~12M ticks — far above any session
 SESSION_GRACE_MIN = 5       # record a session this long after its close

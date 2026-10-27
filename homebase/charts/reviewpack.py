@@ -9,9 +9,10 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
-import os
 import re
 from pathlib import Path
+
+from .. import paths
 
 ENV = "HOMEBASE_REVIEW_DIR"
 MIN_TRADES = 30
@@ -27,8 +28,7 @@ MANUAL = (
 
 
 def review_dir() -> Path:
-    v = os.environ.get(ENV)
-    return Path(v).expanduser() if v else Path.home() / ".homebase" / "review-requests"
+    return paths.from_env(ENV, ".homebase", "review-requests")
 
 
 def _summary(bundle: dict | None) -> dict | None:

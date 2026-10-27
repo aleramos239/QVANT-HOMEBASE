@@ -31,10 +31,11 @@ from operator import itemgetter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from .. import paths
 from .. import tickarchive as TA
 from .tick import SideClassifier, Tick
 
-ARCHIVE = Path.home() / "futures_ticks"
+ARCHIVE = paths.ticks_archive()
 LIVE_SUFFIX = ".live.csv.gz"
 
 

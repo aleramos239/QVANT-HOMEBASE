@@ -46,11 +46,12 @@ from pathlib import Path
 
 from zoneinfo import ZoneInfo
 
+from .. import paths
 from . import minutebars
 from .sides import order_sides, quote_sides
 
-ARCHIVE = Path.home() / "futures_ticks"
-CACHE = Path.home() / "futures_derived" / "homebase_tape"
+ARCHIVE = paths.ticks_archive()
+CACHE = paths.tape_cache()
 MIN_TICKS = 1000
 MAGIC = b"HBTAPE1\n"
 CACHE_VERSION = 1

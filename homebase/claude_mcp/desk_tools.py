@@ -253,7 +253,7 @@ class DeskMixin:
 
     _desk: DeskClient | None = None
     _charts_export: Client | None = None
-    _tick_archive: Path = Path.home() / "futures_ticks"
+    _tick_archive: Path = paths.ticks_archive()
     _now_et = staticmethod(_now_et)
     _launchctl = staticmethod(lambda args: subprocess.run(args, capture_output=True, text=True, timeout=5))
 

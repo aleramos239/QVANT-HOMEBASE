@@ -54,7 +54,7 @@ import re
 from contextlib import contextmanager
 from pathlib import Path
 
-from . import draftstore
+from . import draftstore, paths
 from .core import atomic
 from .core.clock import utc_iso as _now
 
@@ -100,8 +100,7 @@ class ReadLogUnreadable(ValueError):
 def ideas_root(root=None) -> Path:
     if root is not None:
         return Path(root)
-    v = os.environ.get(ENV)
-    return Path(v).expanduser() if v else Path.home() / ".homebase" / "ideas"
+    return paths.from_env(ENV, ".homebase", "ideas")
 
 
 def validate_name(name) -> str:
@@ -136,7 +135,7 @@ RETIRED = "the old split (build days, lock, the one read of the test days) is re
 def old_split_open(root=None) -> bool:
     """Retired: False, but in tests (ENV_ROUTE_END set, an idea folder other than the app's own) so the old code's own tests still run."""
     return bool(os.environ.get(ENV_ROUTE_END)) and \
-        ideas_root(root).resolve() != (Path.home() / ".homebase" / "ideas").resolve()
+        ideas_root(root).resolve() != (paths.user_dir() / "ideas").resolve()
 
 
 def old_route(utc, root=None) -> bool:
@@ -563,7 +562,7 @@ def lab_dir(root=None, drafts=None) -> Path:
     the real Lab. ValueError then."""
     if drafts is not None:
         return Path(drafts)
-    own = Path.home() / ".homebase" / "ideas"
+    own = paths.user_dir() / "ideas"
     if not os.environ.get(draftstore.ENV) and ideas_root(root).resolve() != own.resolve():
         raise ValueError(f"the idea folder is not the app's own ({ideas_root(root)}): say where its Lab drafts go "
                          f"({draftstore.ENV}, or drafts=) -- a moved idea folder never writes the real Lab")

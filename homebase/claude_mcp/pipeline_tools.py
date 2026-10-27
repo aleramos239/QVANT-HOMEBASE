@@ -36,10 +36,10 @@ FOR THE PAGE ONLY (a chat's tools say what they always said):
 """
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 
+from .. import paths
 from .blueprint_tools import PIPE, SHORT_S, _spec
 from .client import ToolError
 
@@ -72,8 +72,7 @@ LABELS = {"queued": "Waiting", "running": "Running", "stopped": "Stopped", "code
 
 def pipeline_root() -> Path:
     """The pipeline's own folder, where the toolkit looks for it too (pipe_store.root) -- whether or not it is there."""
-    v = os.environ.get(ENV_ROOT)
-    return Path(v).expanduser() if v else Path.home() / ".homebase" / "pipeline"
+    return paths.from_env(ENV_ROOT, ".homebase", "pipeline")
 
 
 # ---------------------------------------------------------------- the page's words

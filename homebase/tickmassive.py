@@ -42,12 +42,12 @@ import zlib
 from pathlib import Path
 from urllib.parse import quote
 
-from . import symbols
+from . import paths, symbols
 from . import tickarchive as A
 from . import tickcoverage as C
 from . import ticks as T
 
-RAW = Path.home() / "massive_raw"
+RAW = paths.massive_raw()
 SINCE = dt.date(2026, 9, 22)
 BUCKET = "flatfiles"
 ENDPOINT = "https://files.massive.com"

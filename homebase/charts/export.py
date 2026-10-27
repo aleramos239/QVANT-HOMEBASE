@@ -57,7 +57,7 @@ from .. import qos
 from ..contracts import tick_size as contract_tick_size
 from ..core.clock import utc_iso as _now
 from ..core.jsonio import read_json, write_json
-from ..paths import repo_root, state_dir
+from ..paths import from_env, repo_root, state_dir
 from .bars import BarSpec, build as build_bars
 from .depth import DEPTH_ARCHIVE, read_depth
 from .session import ET, always_open
@@ -412,8 +412,7 @@ def validate(body: dict) -> dict:
 # ---------------------------------------------------------------------------------- output naming
 
 def export_dir() -> Path:
-    v = os.environ.get("HB_EXPORT_DIR")
-    return Path(v).expanduser() if v else Path.home() / "Downloads"
+    return from_env("HB_EXPORT_DIR", "Downloads")
 
 
 def output_name(req: dict) -> str:

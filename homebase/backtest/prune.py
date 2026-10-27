@@ -19,7 +19,7 @@ import sys
 import time
 from pathlib import Path
 
-from ..paths import state_dir
+from ..paths import state_dir, user_dir
 
 KINDS = ("runs", "grids", "walkforward")
 ID = re.compile(r"\d{8}-\d{6}-[A-Za-z0-9_]+-[0-9a-f]{4}")
@@ -107,7 +107,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--days", type=float, default=7.0, help="keep anything touched within this many days (default 7)")
     ap.add_argument("--yes", action="store_true", help="delete (the default is a dry run)")
-    ap.add_argument("--home", type=Path, default=Path.home() / ".homebase")
+    ap.add_argument("--home", type=Path, default=user_dir())
     a = ap.parse_args(argv)
     tester = state_dir() / "tester"
     refs = referenced([a.home, state_dir() / "charts", state_dir() / "journal.jsonl", state_dir() / "config.json"])

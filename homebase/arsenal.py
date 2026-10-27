@@ -42,8 +42,7 @@ PLAIN_SUFFIX = {".md": 1, ".json": 1, ".txt": 1, ".sh": 1, ".yaml": 1, ".yml": 1
 
 
 def arsenal_path() -> Path:
-    v = os.environ.get(ENV)
-    return Path(v).expanduser() if v else Path.home() / ".homebase" / "arsenal.json"
+    return paths.from_env(ENV, ".homebase", "arsenal.json")
 
 
 def research_bp() -> Path:

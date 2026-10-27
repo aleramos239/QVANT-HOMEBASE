@@ -31,6 +31,7 @@ import threading
 import time
 from pathlib import Path
 
+from . import paths
 from .contracts import exec_ok
 from .core import atomic
 
@@ -56,8 +57,7 @@ _STDLIB = frozenset(getattr(sys, "stdlib_module_names", ())) | frozenset(sys.bui
 
 
 def drafts_dir() -> Path:
-    v = os.environ.get(ENV)
-    return Path(v).expanduser() if v else Path.home() / ".homebase" / "strategies"
+    return paths.from_env(ENV, ".homebase", "strategies")
 
 
 _BUILTIN_NAMES: tuple | None = None      # (the strategies dir's mtime_ns, its names): builtin_names
