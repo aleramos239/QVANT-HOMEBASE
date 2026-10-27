@@ -22,6 +22,7 @@ from homebase.charts.server import (MAX_DRAWINGS, MAX_PRESET_BYTES, MAX_TEMPLATE
                                     check_drawings, check_template_name, create_app)
 from homebase.charts.session import session_range_ms
 from homebase.charts.store import read_table
+from homebase.charts.tickfeed import session_contract
 from tests.charts_util import D, ET, rows, session_ms, weekdays_before, write_archive, write_gz
 
 P = D - dt.timedelta(days=1)
@@ -928,7 +929,7 @@ def test_a_24_7_restart_refills_from_its_last_recorded_tick(tmp_path, monkeypatc
     not Monday's (the classic weekend rule) -- or, just past a 24/7 root's
     18:00 roll with nothing recorded in the new session yet, in the
     previous session's file (same contract)."""
-    contract = symbols.resolve_contract("BTC")
+    contract = session_contract("BTC", now / 1000)      # the contract of the test's own clock (not the host's: the 18:00 ET roll of the real day moved it)
     base = tmp_path / "ticks"
     write_gz(base / "BTC" / "2026" / f"{day}_{contract}.live.csv.gz", rows(last, [100_000.0]))
     calls: list = []
