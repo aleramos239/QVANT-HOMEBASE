@@ -54,7 +54,7 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
     },
     showOverlay: (id) => shown.push(id), hideOverlay: (id) => hidden.push(id), closeAsgMenus() {},
     switchBounced: () => false, render() {}, loadDeskLab() {}, refresh: async () => { refreshes.push(1); },
-    fetch: async () => ({ ok: false }), setView() {}, URLSearchParams,
+    fetch: async () => ({ ok: false }), setView() {}, URLSearchParams, AbortSignal,
   });
   const code = SLICE('/* ---- which machine this Desk runs on', '/* ---- algo manager') + SLICE('const esc = (v) =>', 'async function chartPost(') + SLICE('const stratLabel = ', 'const actStrat = ') + SLICE('const fmt = ', 'const usd = ') +
     'const usd = (v) => v == null ? "—" : (v < 0 ? "-$" : "$") + fmt(Math.abs(v));\n' +
@@ -1561,18 +1561,31 @@ test('1.10: the last signal comes from /api/journal, read at most once a minute;
   assert.equal(urls.length, 2, 'a minute later it reads again');
 });
 
-test('B: a read that never answers does not hold the slot: a minute on the next read goes out; still one a minute', async () => {
-  const t = load(), urls = [];
-  t.ctx.fetch = async (u) => { urls.push(u); return new Promise(() => {}); };          // the desk never answers
+test('B: a read that never answers is cut off at 30 s, so the next minute\'s read goes out and at most one is ever open', async () => {
+  const t = load(), urls = [], timers = [];
+  let open = 0;
+  t.ctx.AbortSignal = { timeout: (ms) => { const a = new AbortController(); timers.push([ms, a]); return a.signal; } };
+  t.ctx.fetch = (u, o) => {                                                         // the desk never answers
+    urls.push(u);
+    assert.ok(o && o.signal, 'the read has a time limit');
+    open++;
+    return new Promise((_, no) => o.signal.addEventListener('abort', () => { open--; no(new Error('timed out')); }));
+  };
   const row = () => t.api.todayRow('nq930', t.ctx.ST.strategies.nq930);
   row(); await tick();
   assert.equal(urls.length, 1);
   vm.runInContext('JREAD.today.at -= 30000;', t.ctx);                                 // 30 s on: still inside its minute
   row(); await tick();
   assert.equal(urls.length, 1, 'at most one read a minute');
-  vm.runInContext('JREAD.today.at -= 30000;', t.ctx);                                 // a minute on, the first read still hanging
-  row(); await tick();
-  assert.equal(urls.length, 2, 'the hung read no longer blocks the next one');
+  for (let m = 1; m <= 10; m++) {                                                     // ten minutes of a desk that never answers
+    for (const [ms, a] of timers.splice(0)) { assert.equal(ms, 30000); a.abort(); }   // each read's 30 s are up
+    await tick();
+    assert.equal(open, 0, 'the hung read was cut off');
+    vm.runInContext('JREAD.today.at -= 60000;', t.ctx);
+    row(); await tick();
+    assert.equal(open, 1, `minute ${m}: one read open, never more`);
+  }
+  assert.equal(urls.length, 11, 'still one read a minute');
   t.ctx.fetch = jsonAnswer([{ et: '2026-10-10T09:30:02-04:00', event: 'placed', strategy: 'nq930', account: 'a1' }], urls);
   vm.runInContext('JREAD.today.at -= 60000;', t.ctx);
   row(); await tick();

@@ -424,10 +424,10 @@ const JREAD = {};
 function journalToday(slot, q) {
   let c = JREAD[slot];
   if (!c || c.q !== q) c = JREAD[slot] = {q, at: 0, rows: null};
-  // one read a minute, timed from its start; a read that never answers holds nothing, and once the next one is out its late answer is dropped
+  // one read a minute, timed from its start; a read that hangs is cut off at 30 s, so it never holds a connection to the desk
   if (!DEMO && !document.hidden && Date.now() - c.at >= 60000) {
     const at = c.at = Date.now();
-    fetch(q).then(r => r.ok ? r.json() : null).then(j => { if (j && JREAD[slot] === c && c.at === at) c.rows = Array.isArray(j.events) ? j.events : []; })
+    fetch(q, {signal: AbortSignal.timeout(30000)}).then(r => r.ok ? r.json() : null).then(j => { if (j && JREAD[slot] === c && c.at === at) c.rows = Array.isArray(j.events) ? j.events : []; })
       .catch(() => {});
   }
   return c.rows;
