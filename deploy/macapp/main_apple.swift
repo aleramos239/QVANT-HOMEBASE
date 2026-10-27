@@ -30,7 +30,9 @@
 // HOMEBASE VPS (build_app_apple.sh --vps, compiled with -D VPS; the owner, 2026-10-18): the same viewer, seeing the
 // SERVER's Homebase. The pages build their links and API calls as <same host>:8850 / :8852, so a port tunnel cannot
 // do it: this app starts an SSH SOCKS proxy to the server (Info.plist HomebaseVPSHost) and sends every page and its own
-// fetches through it, so localhost:8850 / :8852 in this app are the server's. A red "VPS" badge marks every page.
+// fetches through it, so localhost:8850 / :8852 in this app are the server's. Every page gets window.HB_MACHINE = 'server'
+// (the Mac app: 'mac'); the page's toolbar chip shows it. While the proxy comes up a small window says "Connecting to the
+// Chicago server…"; a page that does not load is covered by a plain "not reachable" line until a retry gets through.
 import Cocoa
 import WebKit
 #if VPS
@@ -154,13 +156,10 @@ let vpsHost = (Bundle.main.object(forInfoDictionaryKey: "HomebaseVPSHost") as? S
 let vpsPort: UInt16 = 1081            // not server-window.sh's 1080: this app owns its proxy
 let vpsProxy = ProxyConfiguration(socksv5Proxy: .hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: vpsPort)!))
 var vpsTunnel: Process?
-let vpsBadgeJS = """
-(() => { if (document.getElementById('hb-vps-badge')) return; const b = document.createElement('div'); b.id = 'hb-vps-badge';
-b.textContent = 'VPS'; b.style.cssText = 'position:fixed;right:12px;bottom:10px;z-index:2147483647;pointer-events:none;' +
-'background:#d93025;color:#fff;font:600 11px/1 -apple-system,system-ui,sans-serif;letter-spacing:.06em;padding:4px 8px;border-radius:999px';
-document.documentElement.appendChild(b);
-// Desk only on the VPS (owner, 2026-10-26): no page switcher, no "Open in the Lab" / "Show on chart" buttons
-const st = document.createElement('style'); st.textContent = '#pgSw,button[onclick*="InLab("]{display:none!important}';
+// Desk only on the VPS (owner, 2026-10-26): no page switcher, no "Open in the Lab" / "Show on chart" buttons. No pill: the
+// machine is the page's own toolbar chip (window.HB_MACHINE = 'server'); with no skin, the title bar says the app's name.
+let vpsDeskOnlyJS = """
+(() => { const st = document.createElement('style'); st.textContent = '#pgSw,button[onclick*="InLab("]{display:none!important}';
 document.documentElement.appendChild(st); })();
 """
 
@@ -198,6 +197,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     var lastMouseDown: NSEvent?
     var relayouting = false
     var systemToolbar = false
+    var notice: (box: NSBox, label: NSTextField)?     // over the tabs while the current tab's page does not load
+    var down: Set<Tab> = []                            // the tabs whose last load failed (retrying)
+    var connecting: NSWindow?                          // VPS: "Connecting to the Chicago server…" until the window opens
 
     private let lastTabKey = "HomebaseLastTab"
     private let appName = (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? "Homebase"
@@ -213,13 +215,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         #if VPS
         // macOS 26 dark icon style darkens the bundle icon; a set image is shown as drawn (white, black house)
         if let p = Bundle.main.path(forResource: "HomebaseVPS", ofType: "icns") { NSApp.applicationIconImage = NSImage(contentsOfFile: p) }
-        vpsEnsureTunnel()
         WKWebsiteDataStore.default().proxyConfigurations = [vpsProxy]     // before any web view exists
-        Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in   // a dropped link comes back by itself
-            DispatchQueue.global().async { vpsEnsureTunnel() }
+        // the proxy comes up (up to 10 s) and the skin loads through it off the main thread; a small window says so meanwhile
+        buildMenu()     // ⌘Q works while it waits (built again, skinned or not, when the window opens)
+        let wait = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 140), styleMask: [.titled, .closable],
+                            backing: .buffered, defer: false)
+        wait.title = appName
+        wait.isReleasedWhenClosed = false
+        _ = addNotice(to: wait.contentView!, "Connecting to the Chicago server…")
+        wait.center()
+        wait.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        connecting = wait
+        DispatchQueue.global().async {
+            vpsEnsureTunnel()
+            let s = self.loadSkin()
+            DispatchQueue.main.async {
+                Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in   // a dropped link comes back by itself
+                    DispatchQueue.global().async { vpsEnsureTunnel() }
+                }
+                self.skin = s
+                self.openWindow()
+            }
         }
-        #endif
+        #else
         skin = loadSkin()
+        openWindow()
+        #endif
+    }
+
+    private func openWindow() {
         if skinned { chrome = measureChrome() }
         if env("HB_DEBUG_APPEARANCE") == "dark" { NSApp.appearance = NSAppearance(named: .darkAqua) }
         else if env("HB_DEBUG_APPEARANCE") == "light" { NSApp.appearance = NSAppearance(named: .aqua) }
@@ -256,6 +281,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             win.setFrameAutosaveName(skinned ? "HomebaseNextMain" : "HomebaseNextClassic")
         }
         window = win
+        notice = addNotice(to: win.contentView!, "")
+        notice?.box.isHidden = true
 
         NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] e in self?.lastMouseDown = e; return e }
         let nc = NotificationCenter.default
@@ -285,6 +312,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             self.showTab(startTab)
             self.window.makeKeyAndOrderFront(nil)
             self.layoutTrafficLights()
+            self.connecting?.close()      // after the window is up: closing the last window quits
+            self.connecting = nil
         }
 
         NSApp.setActivationPolicy(.regular)
@@ -292,6 +321,40 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { true }
+
+    /// A plain sentence in the middle of a filled view: what the window shows instead of a blank page.
+    private func addNotice(to view: NSView, _ text: String) -> (box: NSBox, label: NSTextField) {
+        let box = NSBox(frame: view.bounds)
+        box.boxType = .custom
+        box.titlePosition = .noTitle
+        box.borderWidth = 0
+        box.fillColor = .windowBackgroundColor
+        box.autoresizingMask = [.width, .height]
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.alignment = .center
+        label.font = .systemFont(ofSize: 15)
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+        box.contentView!.addSubview(label)
+        NSLayoutConstraint.activate([label.centerXAnchor.constraint(equalTo: box.centerXAnchor),
+                                     label.centerYAnchor.constraint(equalTo: box.centerYAnchor),
+                                     label.widthAnchor.constraint(lessThanOrEqualToConstant: 480)])
+        view.addSubview(box)
+        return (box, label)
+    }
+
+    /// The current tab's page did not load: say so over it, plainly, until a retry gets through.
+    private func showNotice() {
+        guard let n = notice else { return }
+        n.box.isHidden = !down.contains(currentTab)
+        if n.box.isHidden { return }
+        #if VPS
+        n.label.stringValue = "The Chicago server is not reachable.\nTrying again…"
+        #else
+        n.label.stringValue = (currentTab == .desk ? "The Desk is not running on this Mac." : "Charts and the Lab are not running on this Mac.") + "\nTrying again…"
+        #endif
+        window.contentView!.addSubview(n.box, positioned: .above, relativeTo: nil)    // over the web views (added later)
+    }
 
     // ---------------------------------------------------------------- unsaved Lab code: ⌘R, ⌘W, ⌘Q ask first
     // A web view shows no beforeunload prompt, so the Lab's own guard never fires in the app: the app asks the Lab page
@@ -493,7 +556,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         controller.removeAllUserScripts()
         controller.addUserScript(WKUserScript(source: "window.HB_MACHINE='\(machine)';", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if VPS
-        controller.addUserScript(WKUserScript(source: vpsBadgeJS, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        controller.addUserScript(WKUserScript(source: vpsDeskOnlyJS, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         #endif
         guard let s = skin?.tabs[tab] else { return }
         controller.addUserScript(WKUserScript(source: startScript(for: tab), injectionTime: .atDocumentStart, forMainFrameOnly: true))
@@ -550,6 +613,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         if debugDir == nil { UserDefaults.standard.set(tab.rawValue, forKey: lastTabKey) }
         window.makeFirstResponder(target)
         layoutTrafficLights()
+        showNotice()
     }
 
     // ---------------------------------------------------------------- the page asks for the window
@@ -662,10 +726,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     }
 
     // service mid-restart? retry until that tab's page answers -- per tab, so one tab's outage never touches another's
-    func webView(_ w: WKWebView, didFail n: WKNavigation!, withError e: Error) { retry(w) }
-    func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError e: Error) { retry(w) }
-    private func retry(_ w: WKWebView) {
+    func webView(_ w: WKWebView, didFail n: WKNavigation!, withError e: Error) { retry(w, e) }
+    func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError e: Error) { retry(w, e) }
+    private func retry(_ w: WKWebView, _ e: Error) {
         guard let tab = tab(for: w) else { return }
+        let err = e as NSError      // a cancelled load (another one took its place) is not a page that is down
+        if !(err.domain == NSURLErrorDomain && err.code == NSURLErrorCancelled) && !(err.domain == "WebKitErrorDomain" && err.code == 102) {
+            down.insert(tab)
+            showNotice()
+        }
         if debugDir != nil { debugLog.append("load failed: \(tab.key)") }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self, weak w] in
             guard let self = self else { return }
@@ -674,6 +743,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     }
 
     func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
+        if let t = tab(for: w) { down.remove(t) }
+        showNotice()
         windowChanged(Notification(name: NSWindow.didBecomeKeyNotification))
         guard debugDir != nil, let tab = tab(for: w), debugQueue.first == tab else { return }
         if env("HB_DEBUG_ROUTED") != nil { NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil) }
