@@ -80,6 +80,12 @@ class SettingsStore:
             return []
         return list(dict.fromkeys(x.upper() for x in v if isinstance(x, str) and x.strip()))
 
+    def md_account(self) -> str | None:
+        """"md_account": the account id whose md token the chart feed takes (ticks.md_token's
+        account=), or None = the freshest token, as before. Set by hand in the file, read at start-up."""
+        v = self._read().get("md_account")
+        return v.strip() if isinstance(v, str) and v.strip() else None
+
     def set_md(self, md: str) -> dict:
         if md not in MD_CHOICES:
             raise ValueError(f"md must be one of {MD_CHOICES}")

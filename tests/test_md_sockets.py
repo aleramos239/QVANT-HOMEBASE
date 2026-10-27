@@ -220,3 +220,27 @@ def test_a_strategy_that_needs_bars_inside_the_window_is_never_deferred(tmp_path
     assert len(made) == 1 and made[0].connected
 
 
+
+
+def _pin_setup(tmp_path, monkeypatch):
+    cfg = NS(accounts={"funded": NS(live=False, label="F"),
+                                    "apex": NS(live=False, label="A")})
+    monkeypatch.setattr(T.config_mod, "load", lambda **k: cfg)
+    monkeypatch.setattr(T, "state_dir", lambda: tmp_path)
+    now = dt.datetime.now(dt.timezone.utc)
+    for aid, hours in (("apex", 1), ("funded", 2)):           # "funded" expires last = the freshest
+        (tmp_path / f"{aid}.tokens.json").write_text(json.dumps(
+            {"md_access_token": f"tok-{aid}", "expiration_time": (now + dt.timedelta(hours=hours)).isoformat()}))
+
+
+def test_md_token_account_pin_takes_that_accounts_token_not_the_freshest(tmp_path, monkeypatch):
+    _pin_setup(tmp_path, monkeypatch)
+    assert T.md_token(prefer_live=False) == ("tok-funded", "demo")
+    assert T.md_token(prefer_live=False, account="apex") == ("tok-apex", "demo")
+
+
+def test_md_token_account_pin_falls_back_to_the_freshest_and_says_so(tmp_path, monkeypatch, capsys):
+    _pin_setup(tmp_path, monkeypatch)
+    assert T.md_token(prefer_live=False, account="gone") == ("tok-funded", "demo")
+    assert "md_account gone has no valid demo md token" in capsys.readouterr().out
+    assert T.md_token(prefer_live=True, account="apex")[1] == "demo"      # wrong login: ignored, falls back

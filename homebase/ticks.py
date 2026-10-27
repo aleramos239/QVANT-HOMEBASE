@@ -470,7 +470,7 @@ def _freshest(cands: list):
     return max(cands, key=lambda c: c[3])
 
 
-def md_token(prefer_live: bool = True, strict: bool = False) -> tuple[str, str]:
+def md_token(prefer_live: bool = True, strict: bool = False, account: "str | None" = None) -> tuple[str, str]:
     """(md token, env) from an account the desk already logged in — never a
     login of its own (logins are rate-limited and precious). prefer_live
     (the default, for bulk paging) takes the LIVE login first so the demo
@@ -479,7 +479,9 @@ def md_token(prefer_live: bool = True, strict: bool = False) -> tuple[str, str]:
     expires last (_freshest). strict (the nightly job): the preferred login
     or nothing -- never a fallback to the other one. The config is only read
     here, and a key this code does not know is left out, not raised (the desk
-    that wrote it may run newer code: homebase.config.load)."""
+    that wrote it may run newer code: homebase.config.load). account: take THIS account's token
+    when it is of the login taken and valid, else the freshest, with a log line (a login nobody
+    opens by hand: Tradovate drops a user's md session when that user logs in on the web)."""
     cfg = config_mod.load(unknown="ignore")
     cands = _valid_md_tokens(sorted(cfg.accounts.items(),
                                     key=lambda kv: kv[1].live != prefer_live))
@@ -490,7 +492,14 @@ def md_token(prefer_live: bool = True, strict: bool = False) -> tuple[str, str]:
         want = "live" if prefer_live else "demo"
         raise RuntimeError(f"no valid {want} md token on disk — the tick archive never pages on the "
                            "other login (the demo login feeds the 9:30 bot); is the live account connected?")
-    _, a, tok, _ = _freshest([c for c in cands if c[1].live == live])
+    group = [c for c in cands if c[1].live == live]
+    if account:
+        pinned = [c for c in group if c[0] == account]
+        if pinned:
+            group = pinned
+        else:
+            log(f"md_account {account} has no valid {'live' if live else 'demo'} md token: using the freshest")
+    _, a, tok, _ = _freshest(group)
     return tok, ("live" if a.live else "demo")
 
 
@@ -512,8 +521,8 @@ def accounts_by_env() -> dict[str, "str | None"]:
     return out
 
 
-async def connect_md(prefer_live: bool = True, strict: bool = False) -> TradovateWS:
-    tok, env = md_token(prefer_live, strict)
+async def connect_md(prefer_live: bool = True, strict: bool = False, account: "str | None" = None) -> TradovateWS:
+    tok, env = md_token(prefer_live, strict, account)
     ws = TradovateWS(tok, env)
     ws.url = MD_LIVE if env == "live" else MD_DEMO
     await ws.connect()
