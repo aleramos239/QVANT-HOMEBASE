@@ -570,12 +570,24 @@ def test_three_rounds_in_a_day_then_the_limit(tmp_path):
     assert {st.account: st for st in eng.day_states(LAB)} == {"a1": third}
     assert [(r["round"], r["exit_reason"], r["pnl"]) for r in eng.lab_rounds(LAB)] == \
         [(1, "tp", 200.0), (2, "sl", -100.0), (3, "tp", 200.0)]
+    fee = eng.cfg.strategies[LAB].fee_rt
+    assert [r["net"] for r in eng.lab_rounds(LAB)] == [round(200.0 - fee, 2), round(-100.0 - fee, 2), round(200.0 - fee, 2)]
     assert [e["round"] for e in events(tmp_path, "lab_round")] == [1, 2, 3]
     assert len(ad.brackets) == 3 and eng.book("a1").closes == 3
     out = go(eng, leg())
     assert out["accounts"]["a1"] == {"ok": False, "round": None, "reason": "Daily limit reached (3 trades)."}
     assert len(ad.brackets) == 3 and list(eng.states)[-1] == f"{LAB}@a1" and rnd(eng) is third
     assert eng.day_status(LAB) == "done"
+
+
+def test_a_limit_cancelled_unfilled_is_not_a_trade_for_the_daily_limit(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    for n in range(1, 4):                                # three entries cancelled unfilled (owner 2026-10-27)
+        assert go(eng, leg(n))["accounts"]["a1"]["ok"]
+        run(eng.lab_cancel(LAB, n))
+        tick(eng)
+        assert (rnd(eng).status, rnd(eng).exit_reason) == ("done", "cancelled")
+    assert go(eng, leg(4))["accounts"]["a1"]["ok"]       # cap 3: no trade has filled yet
 
 
 def test_day_status_ignores_archived_rounds(tmp_path):
@@ -2290,7 +2302,8 @@ def test_i1_a_stop_with_no_target_needs_no_target_id(tmp_path):
 
 # ------------------------------------------------------------------------------------------------ I2
 CLEAR_REJECTS = ["adapter not connected", "OSO rejected (no orderId returned)", "order rejected (no orderId returned)",
-                 "a Stop Limit order needs both a limit price and a trigger", "bracketed stop entries need a broker OSO"]
+                 "a Stop Limit order needs both a limit price and a trigger", "bracketed stop entries need a broker OSO",
+                 "no answer in time: the order was found at the broker and cancelled before it filled"]
 
 
 def test_i2_the_clear_refusals_are_the_adapters_own_fixed_phrases():

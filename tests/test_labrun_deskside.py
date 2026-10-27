@@ -392,3 +392,10 @@ def test_the_side_knows_when_the_desks_stream_is_on_another_day():
     assert s.other_day is False
     s.on_day(DATE)
     assert s.other_day is False
+
+
+def test_a_trade_is_shown_after_its_fee_as_the_desk_books_it():
+    # owner 2026-10-27: the Lab showed live trades gross (762) while the Desk booked them net (759)
+    s = side(accounts=("a1",))
+    s.take(snap(rounds=[rnd(pnl=762.0, net=759.4)]))
+    assert [t["net"] for t in s.trades()] == [759.4]

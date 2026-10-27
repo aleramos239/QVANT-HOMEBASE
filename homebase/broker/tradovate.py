@@ -160,6 +160,7 @@ def reconnect_buffer_s(now: dt.datetime) -> float:
 
 
 STOPLIMIT_INCOMPLETE = "a Stop Limit order needs both a limit price and a trigger"
+LOST_OSO_CANCELLED = "no answer in time: the order was found at the broker and cancelled before it filled"
 
 
 def _stoplimit_incomplete(req: OrderRequest) -> bool:
@@ -1023,6 +1024,7 @@ class TradovateAdapter(BrokerAdapter):
         if self.live:
             _log(f"{self.account_id}: LIVE BRACKET {req.side} {req.qty} {sym} "
                  f"stop={req.stop_price} tp={req.tp_price}")
+        sent_utc = dt.datetime.now(dt.timezone.utc)
         try:
             d = await self._ws.place_oso(
                 account_id=self._acct_num, symbol=sym, side=req.side,
@@ -1049,8 +1051,64 @@ class TradovateAdapter(BrokerAdapter):
                                raw={**raw, "sl_order_id": sl_id, "tp_order_id": tp_id})
         except Exception as e:
             # incl. a timeout, where the OSO may exist at the broker — loud
-            _log(f"{self.account_id}: OSO failed: {e}")
-            return OrderResult(ok=False, error=f"OSO failed: {e}")
+            words = f"{type(e).__name__}: {e}".rstrip(": ")
+            _log(f"{self.account_id}: OSO failed: {words}")
+            try:
+                found = await asyncio.wait_for(self._find_lost_oso(req, sym, sent_utc), timeout=30)
+            except Exception as e2:  # noqa: BLE001 -- not found is unknown, as before
+                _log(f"{self.account_id}: looking for the lost OSO failed: {type(e2).__name__}: {e2}")
+                found = None
+            return found or OrderResult(ok=False, error=f"OSO failed: {words}")
+
+    async def _find_lost_oso(self, req: OrderRequest, sym: str, sent_utc: dt.datetime) -> Optional[OrderResult]:
+        """An OSO whose answer never came may still be at the broker (2026-10-27: a market buy of 5 sat unseen for
+        88 minutes, then filled 84 points away). Look it up: an unfilled MARKET entry is stale, so cancel it and say so
+        (a clear refusal: nothing is left at the broker); any other order found (a resting entry, or one that filled)
+        is handed back as placed, with its bracket ids, so the Desk manages and books it. None = not found for sure
+        (none, or more than one candidate, or a part fill): the outcome stays unknown."""
+        cid = await self.contract_id(sym)
+        listed = await self._ws.order_list() or []
+        seen = {int(o["id"]): o for o in listed if o.get("id") is not None}
+        for oid, o in list(self._orders.items()):
+            seen.setdefault(int(oid), o)
+        action = "Buy" if req.side.lower() == "buy" else "Sell"
+        since = sent_utc - dt.timedelta(seconds=5)   # clock skew between us and the broker
+
+        def at(o) -> Optional[dt.datetime]:
+            try:
+                return dt.datetime.fromisoformat(str(o.get("timestamp")).replace("Z", "+00:00"))
+            except ValueError:
+                return None
+
+        cands = [oid for oid, o in seen.items()
+                 if o.get("accountId") == self._acct_num and o.get("contractId") == cid
+                 and o.get("action") == action and o.get("parentId") is None and o.get("ocoId") is None
+                 and oid not in self._order_symbols and (at(o) or since) > since]
+        if len(cands) != 1:
+            _log(f"{self.account_id}: lost OSO: {len(cands)} candidate orders, outcome stays unknown")
+            return None
+        entry = cands[0]
+        b1 = next((oid for oid, o in seen.items() if o.get("parentId") == entry), None)
+        b2 = (seen.get(b1) or {}).get("ocoId") if b1 is not None else None
+        sl_id, tp_id = (b1, b2) if req.stop_price is not None else (None, b1)
+        status = seen[entry].get("ordStatus")
+        if req.order_type == "Market" and status in self._WORKING_STATUSES:
+            await self.cancel_order_by_id(str(entry))
+            full = await self._ws.order_item(entry)
+            status = (full or {}).get("ordStatus") if isinstance(full, dict) else None
+            if status == "Canceled":
+                if self._order_filled.get(entry) or await self.get_net_position(sym):
+                    _log(f"{self.account_id}: lost OSO {entry} part-filled before its cancel: outcome stays unknown")
+                    return None
+                for b in (b1, b2):
+                    if b is not None:
+                        await self.cancel_order_by_id(str(b))   # TooLate: already gone with its parent
+                _log(f"{self.account_id}: lost OSO {entry} found working and cancelled")
+                return OrderResult(ok=False, error=LOST_OSO_CANCELLED)
+        self._order_symbols[entry] = sym
+        _log(f"{self.account_id}: lost OSO {entry} found ({status}): handed back as placed")
+        return OrderResult(ok=True, order_id=str(entry),
+                           raw={"orderId": entry, "recovered": True, "sl_order_id": sl_id, "tp_order_id": tp_id})
 
     async def place_oco(self, symbol: str, exit_side: str, qty: int, stop_price: float,
                         limit_price: float, *, text: str = "homebase:chart-exit",

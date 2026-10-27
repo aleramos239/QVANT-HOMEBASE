@@ -357,7 +357,8 @@ def test_the_daily_limit_holds_for_an_account_that_sat_an_earlier_trade_out(tmp_
     d.ads["a1"]._connected = False
     out = send(d, entry(1), seq=1)                                                 # a2 takes it, a1 sits it out
     assert out["results"][0]["accounts"]["a1"]["round"] is None and out["results"][0]["accounts"]["a2"]["round"] == 1
-    send(d, {"op": "cancel", "id": 1}, seq=2)
+    fill_entry(d.eng, d.ads["a2"], st(d, "a2"), 110.25)                           # a2's trade fills and ends
+    fill_exit(d.eng, d.ads["a2"], st(d, "a2"), 120.0, "tp")
     tick(d)
     d.ads["a1"]._connected = True
     out = send(d, entry(2), seq=3)                                                 # a1 has had no round of its own today

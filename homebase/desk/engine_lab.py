@@ -66,6 +66,8 @@ LAB_NO_STOP_ID = "Check it: the Desk does not know this trade's stop order."
 LAB_BAD_RECORD = "The Desk cannot read yesterday's record for this account."
 LAB_OLD_ORDER_WORKING = "An old order of this trade is still working. Cancel it first."
 LAB_LOST_ACT = "check it — this trade's record was lost: nothing is sent or cancelled for it"
+LAB_PLACED_CAP = 50                            # shortcut: placements a day per account, filled or not, before the
+                                               # daily limit stops it (a runaway re-placer); raise if a strategy needs more
 LAB_NET_AGAIN_MS = 2000                        # a position read that disagrees counts again after this long (M2)
 LAB_ID_FIELDS = ("upper_id", "lower_id", "up_sl_id", "up_tp_id", "dn_sl_id", "dn_tp_id")
 LAB_NO_BLOCK = "This account has no block to clear."
@@ -77,6 +79,7 @@ LAB_CLEAR_REJECTS = (
     "order rejected (no orderId returned)",                         # tradovate.py place_order: answered, no order
     "a Stop Limit order needs both a limit price and a trigger",    # tradovate.py STOPLIMIT_INCOMPLETE: not sent
     "bracketed stop entries need a broker OSO",                     # base.py place_bracket (legged fallback): not sent
+    "no answer in time: the order was found at the broker and cancelled before it filled",   # tradovate.py LOST_OSO_CANCELLED
 )
 LAB_BAD_ORDER = "The Desk cannot check this order."
 GROUP_HEDGE = "Opposite to a trade open on another account of its group."    # engine_groups (no hedging)
@@ -838,7 +841,8 @@ class LabMixin:
                         "entry_qty": st.qty if st.entry_side and not st.entry_qty else st.entry_qty,
                         "entry_fill": st.entry_fill, "exit_qty": st.exit_qty,
                         "exit_fill": st.exit_fill, "exit_reason": st.exit_reason, "sl": sl, "tp": tp,
-                        "pnl": st.pnl, "clean": self._lab_clean(st), "entry_ms": x.get("entry_ms"),
+                        "pnl": st.pnl, "net": self._net_pnl(st, cfg, st.pnl),       # net: after the fee, as booked
+                        "clean": self._lab_clean(st), "entry_ms": x.get("entry_ms"),
                         "exit_ms": x.get("exit_ms"), "why": x.get("why") or (st.note or None if st.status == "error" else None),
                         "cancelled": list(x.get("cancelled") or []), "closing": x.get("closing"),
                         "placed_ms": x.get("placed_ms"),
@@ -994,9 +998,11 @@ class LabMixin:
                 return LAB_ONE_AT_A_TIME
             if not self._lab_clean(cur):
                 return LAB_CANNOT_CHECK
-        n = 1 + max([int(self._lab_x(s).get("round") or 0) for s in self.day_states(name)
-                     if s.account == account and s.status != "idle"], default=0)
-        if n > max_rounds:
+        rounds = [s for s in self.day_states(name) if s.account == account and s.status != "idle"]
+        # the cap counts trades that filled (as the backtest that set it did): a limit cancelled unfilled is not a
+        # trade (owner 2026-10-27). A round that ended in error may have filled: it counts.
+        used = sum(1 for s in rounds if s.entry_side or s.entry_qty or s.status == "error")
+        if used >= max_rounds or len(rounds) >= LAB_PLACED_CAP:
             return f"Daily limit reached ({max_rounds} trade{'' if max_rounds == 1 else 's'})."
         return None
 
