@@ -8,10 +8,10 @@ from dataclasses import asdict
 
 import pytest
 
-from homebase import labcfg
+from homebase.desk import labcfg
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
 from homebase.config import assignments as desk_config_assignments
-from homebase.labcfg import LabLimits
+from homebase.desk.labcfg import LabLimits
 from homebase.labrun import store
 
 LIMITS = {"max_trades_day": 2, "max_qty": 1, "max_risk_usd": 300, "last_entry_et": "11:00", "flat_et": "15:55"}
@@ -351,7 +351,7 @@ def test_forget_takes_a_strategy_off_the_config_and_out_of_what_is_written():
 
 # ---- strategy code never runs in the desk process
 def test_importing_labcfg_loads_nothing_of_the_tester():
-    code = ("import sys; import homebase.labcfg\n"
+    code = ("import sys; import homebase.desk.labcfg\n"
             "bad = sorted(m for m in sys.modules if m.startswith('homebase.backtest'))\n"
             "print(bad); sys.exit(1 if bad else 0)\n")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)

@@ -7,7 +7,7 @@ import sys
 import pytest
 from fastapi.testclient import TestClient
 
-from homebase import ideastore
+from homebase.store import ideastore
 from homebase.charts import tester_api
 from homebase.claude_mcp import blueprint_tools
 from tests.test_tester_api import EVIL, app

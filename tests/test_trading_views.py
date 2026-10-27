@@ -11,7 +11,7 @@ import pytest
 
 import homebase.config as config_mod
 from homebase.config import ChartTradingCfg
-from homebase.trading import state_view
+from homebase.desk.trading import state_view
 from tests.trading_util import NQC, drain, journal, mkdesk, run
 
 
@@ -116,7 +116,7 @@ def test_flush_publishes_only_what_changed(tmp_path):
 
 
 def test_a_reader_that_falls_behind_is_dropped_with_an_end_marker(tmp_path, monkeypatch):
-    monkeypatch.setattr("homebase.trading.SUB_QUEUE_MAX", 3)
+    monkeypatch.setattr("homebase.desk.trading.SUB_QUEUE_MAX", 3)
     desk, *_ = mkdesk(tmp_path)
 
     async def go():
@@ -293,7 +293,7 @@ def test_a_finished_chart_order_publishes_its_account_at_once(tmp_path):
 
 
 def test_a_burst_of_pushes_goes_out_at_once_then_once_more_complete(tmp_path, monkeypatch):
-    monkeypatch.setattr("homebase.trading.FLUSH_GAP_S", 5.0)     # long: no wall-clock race
+    monkeypatch.setattr("homebase.desk.trading.FLUSH_GAP_S", 5.0)     # long: no wall-clock race
     desk, eng, ads, *_ = mkdesk(tmp_path)
     desk.attach("a1", ads["a1"])
     a1 = ads["a1"]
@@ -328,7 +328,7 @@ def test_a_burst_of_pushes_goes_out_at_once_then_once_more_complete(tmp_path, mo
 
 
 def test_a_flush_that_publishes_nothing_starts_no_gap(tmp_path, monkeypatch):
-    monkeypatch.setattr("homebase.trading.FLUSH_GAP_S", 5.0)
+    monkeypatch.setattr("homebase.desk.trading.FLUSH_GAP_S", 5.0)
     desk, eng, ads, *_ = mkdesk(tmp_path)
     desk.attach("a1", ads["a1"])
 

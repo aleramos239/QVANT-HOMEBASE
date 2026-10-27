@@ -30,6 +30,8 @@ from pathlib import Path
 from typing import Callable
 from zoneinfo import ZoneInfo
 
+from .. import paths
+
 ET = ZoneInfo("America/New_York")
 CAP = 2                                        # during desk hours (weekdays 08:00-16:15 ET)
 CAP_OFF_HOURS = 4                              # evenings, nights and weekends: the desk is idle
@@ -47,12 +49,12 @@ NO_BACKTESTS = ("This computer does not run backtests: the Chicago server is for
 def backtests_off() -> bool:
     """The trading server's switch (owner, 2026-10-24: "i dont want to use the chicago server to backtest ever"): while
     ~/.homebase/no_backtests exists, no run, heat map or walk-forward starts on this machine. The Mac has no such file."""
-    return (Path.home() / ".homebase" / "no_backtests").exists()
+    return (paths.user_dir() / "no_backtests").exists()
 
 
 def shared_dir() -> Path:
     v = os.environ.get(ENV)
-    return Path(v) if v else Path.home() / ".homebase" / "tester"
+    return Path(v) if v else paths.user_dir() / "tester"
 
 
 def et_now() -> dt.datetime:
@@ -61,7 +63,7 @@ def et_now() -> dt.datetime:
 
 def override_path() -> Path:
     v = os.environ.get(OVERRIDE_ENV)
-    return Path(v) if v else Path.home() / ".homebase" / "tester_slots.json"
+    return Path(v) if v else paths.user_dir() / "tester_slots.json"
 
 
 _ov_cache: list = [None, None, {}]      # [path, (mtime_ns, size), parsed]

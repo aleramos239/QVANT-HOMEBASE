@@ -28,7 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.websockets import WebSocketClose
 
 from .. import netguard, symbols
-from .. import ticks as T
+from ..data import ticks as T
 from ..contracts import tick_size as contract_tick_size
 from ..paths import state_dir
 from . import DEFAULT_ROOTS, DEPTH_RECORD_ROOTS
@@ -65,6 +65,18 @@ from .tapelive import TapeLive
 from .tick import SideClassifier, from_row
 from .tester_api import tester_router
 from .tickfeed import MD_ENVS, SwitchInProgress, TickFeed, session_contract
+from . import routes
+# moved to routes/ (2026-10-26 split): still importable from here, as tests and callers do
+from .routes.common import LOCAL_HOSTS, browser_write_ok, origin_ok, read_json, read_json_list, write_json  # noqa: F401
+from .routes.drawings import (  # noqa: F401
+    DRAWING_CAPS, DRAWING_LABEL_ALIGN, DRAWING_LABEL_POS, DRAWING_LINE_STYLES, DRAWING_POINTS, DRAWING_STYLE_BOOLS,
+    DRAWING_STYLE_FIELDS, DRAWING_VIS_MAX_S, FIB_MAX, FIB_MIN, MAX_DRAWING_LABEL_TEXT, MAX_DRAWING_WIDTH, MAX_DRAWINGS,
+    MAX_FIB_LEVELS, MAX_TEMPLATE_BYTES, MAX_TEMPLATE_NAME, POSITION_QTY_MAX, _BOX_POS, _HEX_COLOR, _LINE_POS, _POS_FIELDS,
+    _RGBA_COLOR, _TEXT_FIELDS, _check_levels, _check_position, _finite, _no_constant, _valid_color, check_alert,
+    check_drawings, check_style, check_template_name, check_vis)
+from .routes.pages import TIMEFRAMES, _TickStream  # noqa: F401
+from .routes.settings import (BOT_BUSY_STATUSES, MD_SWITCH_BUDGET_HEADROOM, MD_SWITCH_COOLDOWN_S)  # noqa: F401
+from .routes.ws import SEND_QUEUE_MAX, Conn  # noqa: F401
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
 PUMP_S = 0.25                 # <= 4 updates a second per chart
@@ -74,7 +86,6 @@ CLOSE_GRACE_MS = 1500         # a time bar closes this long after its end if no 
 ROLL_GRACE_MS = 60_000        # a 24/7 root rolls at 18:00 with no dead hour: its old session's last
                               # prints can reach us after the clock passed 18:00 and are kept this long
 REFILL_BUDGET = 60            # this process's own chart requests per hour
-SEND_QUEUE_MAX = 400
 WARM_EVERY_S = 120.0          # the Desk results pre-warm repeats this often (saved runs only; a run already scored is a cache hit)
 REPAIR_POLL_S = 60.0           # how often today's archive files are stat'ed for a repair that landed (a stat per root)
 PAST_REDRAW_S = 600.0          # a root's charts reload for a repaired PAST session at most this often: a fill lands piece
@@ -84,66 +95,9 @@ PAPER_POLL_S = 0.25            # the paper runner is asked this often; it runs a
 LABRUN_QUEUE_MAX = 2000        # live batches a reader of /api/labrun/ticks may fall behind before it is dropped
 LABRUN_CHUNK = 5000            # backlog rows in one of its events
 LABRUN_CLOCK_S = 1.0           # its clock event, which is also its heartbeat
-TIMEFRAMES = [["5s", "time:5"], ["15s", "time:15"], ["30s", "time:30"], ["1m", "time:60"],
-              ["2m", "time:120"], ["3m", "time:180"], ["5m", "time:300"], ["10m", "time:600"],
-              ["15m", "time:900"], ["30m", "time:1800"], ["1h", "time:3600"], ["4h", "time:14400"],
-              ["1D", "time:86400"], ["500T", "tick:500"], ["1000T", "tick:1000"],
-              ["2000V", "volume:2000"], ["10R", "range:10"], ["20R", "range:20"]]
 MIN_BAR = {"time": 5, "tick": 100, "volume": 100, "range": 2}   # finer bars cost too much to build/ship
 MAX_STUDIES = 16              # per subscription
-LOCAL_HOSTS = ("localhost", "127.0.0.1")
-MAX_DRAWINGS = 500            # per symbol
-# 2026-10-09: a ray, an extended line and a Fib retracement are two points like a trend line; a vertical line is one TIME
-# 2026-10-11: an arrow (two points, a line with a head), a parallel channel (a line and a third point that sets the
-# parallel), a note (one point and its text) and an anchored VWAP (one point: the bar it starts at)
-DRAWING_POINTS = {"trend": 2, "ray": 2, "xline": 2, "rect": 2, "fib": 2, "hline": 1, "vline": 1, "long": 3, "short": 3,
-                  "arrow": 2, "channel": 3, "note": 1, "avwap": 1}
-POSITION_QTY_MAX = 10_000     # a long/short box's quantity
-MAX_TEMPLATE_BYTES = 16 * 1024   # one chart-settings template, as JSON
-MAX_TEMPLATE_NAME = 40
-_HEX_COLOR = re.compile(r"#[0-9A-Fa-f]{6}")
-# 2026-09-27 draw-tools plan: a drawing's colour (and style.fillColor / style.textColor) may also
-# carry opacity, the same shape the chart-settings colours already use (settings.js' fmtColor).
-_RGBA_COLOR = re.compile(r"rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(0|1|0?\.\d+)\s*\)")
-DRAWING_LINE_STYLES = ("solid", "dashed", "dotted")
-_LINE_POS, _BOX_POS = ("above", "below", "middle"), ("top", "middle", "bottom")
-DRAWING_LABEL_POS = {"trend": _LINE_POS, "ray": _LINE_POS, "xline": _LINE_POS, "hline": _LINE_POS, "rect": _BOX_POS, "vline": _BOX_POS,
-                     "arrow": _LINE_POS}
-DRAWING_LABEL_ALIGN = ("left", "center", "right")
-_TEXT_FIELDS = {"text", "fontSize", "textColor", "bold", "labelPos"}
-DRAWING_CAPS = ("none", "arrow", "circle")      # the mark at a line's end (2026-10-11); a field left out = none
-MAX_DRAWING_WIDTH = 8
-# a position box (2026-10-11): zone colours, label size / colour / weight, whether labels show (showLabels), on hover or always
-# (hoverLabels), which label parts and the played-out path show, and its entry line's colour / width / style
-_POS_FIELDS = {"profitColor", "lossColor", "fontSize", "showLabels", "entryColor", "width", "lineStyle", "textColor", "bold",
-               "hoverLabels", "showTarget", "showStop", "showRR", "showResult", "showPrice", "showPoints", "showTicks", "showMoney", "showPath", "showZoneMoney"}
-# exactly the style fields each drawing type takes (drawstyle.js' FIELDS mirrors this)
-DRAWING_STYLE_FIELDS = {
-    "trend": {"width", "lineStyle", "extendLeft", "extendRight", "priceLabel", "stats", "startCap", "endCap", "hoverLabels"} | _TEXT_FIELDS,
-    "ray": {"width", "lineStyle", "priceLabel", "stats", "startCap", "endCap", "hoverLabels"} | _TEXT_FIELDS,
-    "xline": {"width", "lineStyle", "priceLabel", "stats", "hoverLabels"} | _TEXT_FIELDS,
-    "hline": {"width", "lineStyle", "axisLabel", "labelAlign"} | _TEXT_FIELDS,
-    "vline": {"width", "lineStyle", "timeLabel"} | _TEXT_FIELDS,
-    "rect": {"width", "lineStyle", "fillColor", "border", "midline", "quarters", "midStyle", "extendRight", "priceLabels", "hoverLabels"} | _TEXT_FIELDS,
-    "fib": {"width", "lineStyle", "extendLeft", "extendRight", "levels", "showLevels", "showPrices", "fill", "fillOpacity", "reverse", "fontSize"},
-    "arrow": {"width", "lineStyle", "priceLabel", "stats", "hoverLabels"} | _TEXT_FIELDS,
-    "channel": {"width", "lineStyle", "extendLeft", "extendRight", "fillColor", "midline"},
-    "note": {"text", "fontSize", "textColor", "bold", "fillColor"},
-    "avwap": {"width", "lineStyle"},
-    # a position box: its zone colours, its label size, whether its labels show
-    "long": _POS_FIELDS, "short": _POS_FIELDS,
-}
-DRAWING_STYLE_BOOLS = ("extendLeft", "extendRight", "axisLabel", "bold", "priceLabel", "stats", "timeLabel", "border", "midline",
-                       "quarters", "priceLabels", "showLevels", "showPrices", "fill", "reverse", "showLabels", "hoverLabels",
-                       "showTarget", "showStop", "showRR", "showResult", "showPrice", "showPoints", "showTicks", "showMoney", "showPath", "showZoneMoney")
-MAX_FIB_LEVELS, FIB_MIN, FIB_MAX = 16, -10, 10      # a retracement's levels: how many, and the ratios they may be
-DRAWING_VIS_MAX_S = 31 * 86400                      # `vis` (which intervals a drawing shows on): bar seconds, at most a month
-MAX_DRAWING_LABEL_TEXT = 200
-# Task 4 app-settings plan, Fix round 1 (review of bdaccbd):
-BOT_BUSY_STATUSES = ("placing", "placed", "live", "error")   # C3: trading.BOT_BUSY + "error"
-MD_SWITCH_COOLDOWN_S = 600         # I3: at most one switch ATTEMPT every 10 min
-MD_SWITCH_BUDGET_HEADROOM = 120    # I3/N4: refuse a switch once the TARGET login is this close to 180/h
-MD_SWITCH_TIMEOUT_S = 600          # N3: the PUT never waits longer than this for the feed
+MD_SWITCH_TIMEOUT_S = 600          # N3: the PUT never waits longer than this for the feed (routes/settings.py reads it here)
 
 
 def tick_job_running() -> bool:
@@ -166,19 +120,6 @@ def log(msg: str) -> None:
 async def sleep(s: float) -> None:      # one seam for the tests to remove the waits
     await asyncio.sleep(s)
 
-
-def origin_ok(origin: str | None, host: str | None) -> bool:
-    """May a page from `origin` open /ws on `host`? Browsers apply no CORS
-    to websocket handshakes, so without this any site open in the desk
-    machine's browser could drive the chart process. Allowed: this
-    service's own host, localhost, and no Origin at all (not a browser)."""
-    if origin is None:
-        return True
-    try:
-        o, h = urlsplit(origin).hostname, urlsplit("//" + (host or "")).hostname
-    except ValueError:                  # e.g. a malformed IPv6 literal
-        return False
-    return o is not None and (o in LOCAL_HOSTS or o == h)
 
 
 class HostGuard:
@@ -210,252 +151,6 @@ class HostGuard:
         await self.app(scope, receive, send)
 
 
-def _finite(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
-
-
-def _check_position(kind: str, pts: list) -> None:
-    """A long/short box: [entry, target, stop], target and stop on the box's right edge (one t)."""
-    entry, target, stop = (p["p"] for p in pts)
-    if pts[1]["t"] != pts[2]["t"]:
-        raise ValueError(f"a {kind}'s target and stop share the box's right edge (the same t)")
-    if kind == "long" and not stop < entry < target:
-        raise ValueError("a long has stop < entry < target")
-    if kind == "short" and not target < entry < stop:
-        raise ValueError("a short has target < entry < stop")
-
-
-def _valid_color(s) -> bool:
-    """#RRGGBB, or rgba(r,g,b,a) with r/g/b <= 255 and a in [0,1] (2026-09-27 draw-tools plan:
-    widened from hex-only so a drawing's colour can carry opacity, the same shape the chart
-    settings' own colours already use -- settings.js' fmtColor)."""
-    if not isinstance(s, str):
-        return False
-    if _HEX_COLOR.fullmatch(s):
-        return True
-    m = _RGBA_COLOR.fullmatch(s)
-    if not m:
-        return False
-    r, g, b = int(m.group(1)), int(m.group(2)), int(m.group(3))
-    return r <= 255 and g <= 255 and b <= 255
-
-
-def check_style(kind: str, style) -> dict:
-    """A drawing's optional visual style, stripped to exactly the fields that type takes (junk, a
-    field the type does not carry, or one with a wrong type/range/length fails the whole PUT --
-    fail closed, never silently dropped): width 1-4 and lineStyle solid/dashed/dotted (trend,
-    hline, rect); extendLeft/extendRight (trend only); fillColor (rect only); axisLabel (hline
-    only); text (<= 200 characters), fontSize 10-28, textColor, bold and labelPos (trend/hline:
-    above/below/middle; rect: top/middle/bottom) on trend, hline and rect. long/short take no style
-    object (DRAWING_STYLE_FIELDS[kind] is empty for them: any key at all raises). ValueError (with
-    a message for the page) on anything outside this."""
-    if not isinstance(style, dict):
-        raise ValueError("style: an object")
-    allowed = DRAWING_STYLE_FIELDS.get(kind, set())
-    for key in style:
-        if key not in allowed:
-            raise ValueError(f"style.{key} does not apply to a {kind}")
-    out = {}
-    if "width" in style:
-        w = style["width"]
-        if not isinstance(w, int) or isinstance(w, bool) or not 1 <= w <= MAX_DRAWING_WIDTH:
-            raise ValueError(f"style.width: a whole number from 1 to {MAX_DRAWING_WIDTH}")
-        out["width"] = w
-    if "lineStyle" in style:
-        if style["lineStyle"] not in DRAWING_LINE_STYLES:
-            raise ValueError("style.lineStyle: solid, dashed or dotted")
-        out["lineStyle"] = style["lineStyle"]
-    for key in DRAWING_STYLE_BOOLS:
-        if key in style:
-            if not isinstance(style[key], bool):
-                raise ValueError(f"style.{key}: true or false")
-            out[key] = style[key]
-    if "midStyle" in style:
-        if style["midStyle"] not in DRAWING_LINE_STYLES:
-            raise ValueError("style.midStyle: solid, dashed or dotted")
-        out["midStyle"] = style["midStyle"]
-    if "labelAlign" in style:
-        if style["labelAlign"] not in DRAWING_LABEL_ALIGN:
-            raise ValueError("style.labelAlign: left, center or right")
-        out["labelAlign"] = style["labelAlign"]
-    if "levels" in style:
-        out["levels"] = _check_levels(style["levels"])
-    for key in ("startCap", "endCap"):
-        if key in style:
-            if style[key] not in DRAWING_CAPS:
-                raise ValueError(f"style.{key}: none, arrow or circle")
-            out[key] = style[key]
-    for key in ("fillColor", "profitColor", "lossColor", "entryColor"):
-        if key in style:
-            if not _valid_color(style[key]):
-                raise ValueError(f"style.{key}: #RRGGBB or rgba(r,g,b,a)")
-            out[key] = style[key]
-    if "text" in style:
-        t = style["text"]
-        if not isinstance(t, str) or len(t) > MAX_DRAWING_LABEL_TEXT:
-            raise ValueError(f"style.text: a string of at most {MAX_DRAWING_LABEL_TEXT} characters")
-        out["text"] = t
-    if "fontSize" in style:
-        fs = style["fontSize"]
-        if not isinstance(fs, int) or isinstance(fs, bool) or not 10 <= fs <= 28:
-            raise ValueError("style.fontSize: a whole number from 10 to 28")
-        out["fontSize"] = fs
-    if "fillOpacity" in style:
-        fo = style["fillOpacity"]
-        if not isinstance(fo, int) or isinstance(fo, bool) or not 0 <= fo <= 100:
-            raise ValueError("style.fillOpacity: a whole number from 0 to 100")
-        out["fillOpacity"] = fo
-    if "textColor" in style:
-        if not _valid_color(style["textColor"]):
-            raise ValueError("style.textColor: #RRGGBB or rgba(r,g,b,a)")
-        out["textColor"] = style["textColor"]
-    if "labelPos" in style:
-        choices = DRAWING_LABEL_POS.get(kind, ())
-        if style["labelPos"] not in choices:
-            raise ValueError(f"style.labelPos: {', '.join(choices)}")
-        out["labelPos"] = style["labelPos"]
-    return out
-
-
-def _check_levels(levels) -> list:
-    """A Fib retracement's levels: 1-16 of {v: the ratio (-10 .. 10), on: drawn or not, color?}; nothing else is kept."""
-    if not isinstance(levels, list) or not 1 <= len(levels) <= MAX_FIB_LEVELS:
-        raise ValueError(f"style.levels: a list of 1 to {MAX_FIB_LEVELS} levels")
-    out = []
-    for lv in levels:
-        if not isinstance(lv, dict) or not _finite(lv.get("v")) or not FIB_MIN <= lv["v"] <= FIB_MAX:
-            raise ValueError(f"style.levels: each level has v, a number from {FIB_MIN} to {FIB_MAX}")
-        if not isinstance(lv.get("on"), bool):
-            raise ValueError("style.levels: each level has on, true or false")
-        item = {"v": lv["v"], "on": lv["on"]}
-        if "color" in lv:
-            if not _valid_color(lv["color"]):
-                raise ValueError("style.levels: a level's color is #RRGGBB or rgba(r,g,b,a)")
-            item["color"] = lv["color"]
-        out.append(item)
-    return out
-
-
-def check_alert(kind: str, alert) -> dict:
-    """A price alert, which only a horizontal line carries: {dir: "up" | "down" (which way the price must cross it),
-    fired: true | false (it has gone off; armed again by the page)}. Anything else fails the whole PUT."""
-    if kind != "hline":
-        raise ValueError("alert: only a horizontal line carries one")
-    if not isinstance(alert, dict) or set(alert) - {"dir", "fired"} or alert.get("dir") not in ("up", "down"):
-        raise ValueError("alert: {dir: up or down, fired: true or false}")
-    fired = alert.get("fired", False)
-    if not isinstance(fired, bool):
-        raise ValueError("alert.fired: true or false")
-    return {"dir": alert["dir"], "fired": fired}
-
-
-def check_vis(vis) -> dict | None:
-    """Which intervals a drawing shows on: {min, max} in bar SECONDS, either one null (no bound); None when both are
-    (it shows everywhere, and nothing is stored). ValueError on anything else."""
-    if not isinstance(vis, dict) or set(vis) - {"min", "max"}:
-        raise ValueError("vis: {min, max} in bar seconds, either one null")
-    out = {}
-    for key in ("min", "max"):
-        v = vis.get(key)
-        if v is not None and (not isinstance(v, int) or isinstance(v, bool) or not 1 <= v <= DRAWING_VIS_MAX_S):
-            raise ValueError(f"vis.{key}: null, or whole seconds from 1 to {DRAWING_VIS_MAX_S}")
-        out[key] = v
-    if out["min"] is None and out["max"] is None:
-        return None
-    if out["min"] is not None and out["max"] is not None and out["min"] > out["max"]:
-        raise ValueError("vis: min is at most max")
-    return out
-
-
-def check_drawings(body) -> list:
-    """The page's drawings for one symbol, validated and stripped to what
-    the page draws: [{id, type, points: [{t?, p?}], color?, qty?, locked?,
-    style?, vis?}] (a horizontal line's point is a price, a vertical line's a
-    time; `vis` = the intervals it shows on, check_vis). A long / short position is [entry, target, stop] with target
-    and stop on the box's right edge (same t), stop < entry < target (long)
-    or target < entry < stop (short), and an optional qty 1-10000 (kept for
-    positions only). `style` (2026-09-27 draw-tools plan) is per-type --
-    see check_style. ValueError (with a message for the page) on anything
-    else."""
-    if not isinstance(body, list) or len(body) > MAX_DRAWINGS:
-        raise ValueError(f"drawings are a list of at most {MAX_DRAWINGS}")
-    out = []
-    for d in body:
-        if not isinstance(d, dict):
-            raise ValueError("each drawing is an object")
-        did, kind, pts = d.get("id"), d.get("type"), d.get("points")
-        if not isinstance(did, str) or not 1 <= len(did) <= 40:
-            raise ValueError("id: a string of 1-40 characters")
-        n = DRAWING_POINTS.get(kind)
-        if n is None:
-            raise ValueError("type: trend, ray, xline, arrow, hline, vline, rect, fib, channel, note, avwap, long or short")
-        if not isinstance(pts, list) or len(pts) != n or not all(isinstance(p, dict) for p in pts):
-            raise ValueError(f"a {kind} has exactly {n} point(s)")
-        clean = []
-        for p in pts:
-            t = p.get("t")
-            if kind == "vline":                       # a time and nothing else
-                if not isinstance(t, int) or isinstance(t, bool):
-                    raise ValueError("a point's t is an integer (epoch ms)")
-                clean.append({"t": t})
-                continue
-            if not _finite(p.get("p")):
-                raise ValueError("a point's p is a finite number")
-            if kind == "hline":
-                clean.append({"p": p["p"]})
-                continue
-            if not isinstance(t, int) or isinstance(t, bool):
-                raise ValueError("a point's t is an integer (epoch ms)")
-            clean.append({"t": t, "p": p["p"]})
-        item = {"id": did, "type": kind, "points": clean}
-        if kind in ("long", "short"):
-            _check_position(kind, clean)
-            if "qty" in d:
-                q = d["qty"]
-                if not isinstance(q, int) or isinstance(q, bool) or not 1 <= q <= POSITION_QTY_MAX:
-                    raise ValueError(f"qty: a whole number from 1 to {POSITION_QTY_MAX}")
-                item["qty"] = q
-        if "color" in d:
-            if not _valid_color(d["color"]):
-                raise ValueError("color: #RRGGBB or rgba(r,g,b,a)")
-            item["color"] = d["color"]
-        if "locked" in d:
-            if not isinstance(d["locked"], bool):
-                raise ValueError("locked: true or false")
-            item["locked"] = d["locked"]
-        if "style" in d:
-            style = check_style(kind, d["style"])
-            if style:
-                item["style"] = style
-        if "vis" in d:
-            vis = check_vis(d["vis"])
-            if vis:
-                item["vis"] = vis
-        if "alert" in d:
-            item["alert"] = check_alert(kind, d["alert"])
-        out.append(item)
-    return out
-
-
-def check_template_name(name) -> str:
-    """A chart-settings template's name: 1-40 characters, no / \\ .. and no
-    control characters (it rides in the URL path), and not "." on its own
-    (the browser resolves /api/templates/. as a path step, landing on the
-    list route rather than this name). ValueError otherwise."""
-    if not isinstance(name, str) or not 1 <= len(name) <= MAX_TEMPLATE_NAME:
-        raise ValueError(f"a template name has 1-{MAX_TEMPLATE_NAME} characters")
-    if name == ".":
-        raise ValueError('a template name cannot be "."')
-    if "/" in name or "\\" in name or ".." in name or any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
-        raise ValueError("a template name has no / \\ .. or control characters")
-    return name
-
-
-def _no_constant(c: str):
-    """json.loads hook: NaN / Infinity are not JSON (the page's r.json() could not read them back)."""
-    raise ValueError(f"{c} is not JSON")
-
-
 class RevalidatedFiles(StaticFiles):
     """The page's files keep their URLs across builds, so a browser must never
     pair a new charts.html with a heuristically cached old app.js: every
@@ -466,44 +161,6 @@ class RevalidatedFiles(StaticFiles):
         resp = super().file_response(*args, **kwargs)
         resp.headers["cache-control"] = "no-cache"
         return resp
-
-
-class Conn:
-    """One browser socket. Sends go through a bounded queue drained by a
-    writer task, so one slow page can never stall the pump; a page that
-    falls SEND_QUEUE_MAX messages behind is disconnected (it reconnects)."""
-
-    def __init__(self, ws: WebSocket, page: str = "charts"):
-        self.ws = ws
-        # 2026-09-28 three-tabs plan: which page this socket is (?page=backtest on /ws, "charts" by
-        # default) -- lets fan_count target only Backtest-tab connections (show_on_chart).
-        self.page = page
-        self.q: asyncio.Queue = asyncio.Queue(maxsize=SEND_QUEUE_MAX)
-        self.dead = False
-        self.task = asyncio.create_task(self._writer())
-
-    def send(self, msg: dict) -> None:
-        if self.dead:
-            return
-        try:
-            self.q.put_nowait(msg)
-        except asyncio.QueueFull:
-            self.dead = True
-            self.task.cancel()
-            asyncio.create_task(self._close())
-
-    async def _close(self) -> None:
-        try:
-            await self.ws.close()
-        except Exception:  # noqa: BLE001
-            pass
-
-    async def _writer(self) -> None:
-        try:
-            while True:
-                await self.ws.send_json(await self.q.get())
-        except Exception:  # noqa: BLE001 — socket gone; the handler cleans up
-            self.dead = True
 
 
 def server_stopping(getsignal=signal.getsignal) -> bool:
@@ -616,18 +273,6 @@ class TickFan:
             self.readers.discard(rd)
 
 
-class _TickStream(StreamingResponse):
-    """A StreamingResponse that closes its generator whatever ends it -- the reader hung up, the task was cancelled --
-    so the reader leaves the fan-out at once, not when its queue fills."""
-
-    async def __call__(self, scope, receive, send) -> None:
-        try:
-            await super().__call__(scope, receive, send)
-        finally:
-            with suppress(Exception):
-                await self.body_iterator.aclose()
-
-
 class Throttle:
     """fn() soon after kick(), at most once every `gap_s` (fast-paper: the PAPER accounts' push). The first kick
     after a quiet spell runs it on the loop's next turn -- never inside the caller, so the tick path and a POST
@@ -679,7 +324,6 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     # Task 4, 2026-09-27 app-settings plan: the market-data login choice (more app-wide settings
     # land in the same file later). MD_ENV is the default until the user picks one.
     settings_store = SettingsStore(sd / "settings.json")
-    last_md_switch_attempt = [0.0]   # epoch s of the last PUT /api/settings that actually switched (I3 cooldown)
     # ForexFactory's calendar; calendar_fetch None never fetches (tests); python -m homebase.charts passes http_get
     cal = Calendar(sd / "calendar", fetch=calendar_fetch)
     # news.py: no fetching in replay mode, whatever the caller passes (a replayed price must never
@@ -1167,44 +811,6 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             except Exception as e:  # noqa: BLE001 — the paper runner must never take the service down
                 log(f"paper: {type(e).__name__}: {e}")
 
-    older_busy: set = set()     # (conn, chart id, stream identity) with a scroll-back chunk being built --
-                                # keyed by the STREAM (not just conn/cid) so a fresh subscription after an
-                                # interval switch is never blocked by the old stream's still-running chunk
-    older_tasks: set = set()    # the answering tasks, referenced until they finish
-
-    def ask_older(conn: Conn, cid: str, before, fp: bool = True, big: bool = True, flow: bool = True) -> None:
-        """A chart scrolled back to its first bar ({"op": "older", "id", "before": that bar's ms}): build the
-        next chunk of older sessions off the loop and answer {"type": "older", "id", "before", "bars",
-        "studies", "repair", "sessions", "done"}, or with an "error" (the page waits, then may ask again).
-        fp / big ("fp"?, "big"? on the request, as on the chart's `sub`): whether the bars carry them.
-        One at a time per chart+stream; it never touches the broker. A request that lands while the
-        previous one for the same chart+stream is still building answers {"error": "busy"} rather than
-        being silently dropped, so the page can retry instead of the chart losing scroll-back forever."""
-        s = hub.stream_of((conn, cid))
-        if s is None or not isinstance(before, int) or isinstance(before, bool):
-            conn.send({"type": "older", "id": cid, "before": before,
-                       "error": "not subscribed" if s is None else "before: the first bar's time (epoch ms)"})
-            return
-        key = (conn, cid, id(s))
-        if key in older_busy:
-            conn.send({"type": "older", "id": cid, "before": before, "error": "busy"})
-            return
-        older_busy.add(key)
-        task = asyncio.create_task(answer_older(conn, cid, key, s, before, fp, big, flow))
-        older_tasks.add(task)
-        task.add_done_callback(older_tasks.discard)
-
-    async def answer_older(conn: Conn, cid: str, key: tuple, s: Stream, before: int, fp: bool, big: bool,
-                           flow: bool = True) -> None:
-        try:
-            ans = await asyncio.to_thread(hub.older, s, before, fp, big, flow)
-        except Exception as e:  # noqa: BLE001 — a failed chunk is the page's to retry, never the socket's end
-            log(f"older {cid} ({s.root} {s.spec.key}): {type(e).__name__}: {e}")
-            ans = {"error": str(e) or type(e).__name__}
-        finally:
-            older_busy.discard(key)
-        conn.send({"type": "older", "id": cid, "before": before, **ans})
-
     async def pump() -> None:
         last_flush = last_status = 0.0
         while True:
@@ -1372,125 +978,15 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     app.add_middleware(HostGuard)   # M4: the Host allowlist on every /api/* route and /ws
     app.mount("/static", RevalidatedFiles(directory=STATIC), name="static")
 
-    @app.get("/")
-    async def index():
-        return FileResponse(STATIC / "charts.html", headers={"cache-control": "no-cache"})
+    routes.pages.register(app, STATIC=STATIC, status=status, burst_book=burst_book, app_roots=app_roots,
+                          tick_fan=tick_fan)
 
-    @app.get("/backtest")
-    async def backtest_index():
-        """2026-09-28 three-tabs plan: the same chart shell as / (charts.html), minus every trading
-        module -- see docs/superpowers/specs/2026-09-28-three-tabs-design.md. Its own page, not a
-        query param on /, so a plain <link> to it works with no JS and WKWebView's navigation
-        delegate can tell the two apart by path alone."""
-        return FileResponse(STATIC / "backtest.html", headers={"cache-control": "no-cache"})
-
-    @app.get("/api/status")
-    async def api_status(request: Request, response: Response):
-        """Desk-settings plan: also answers the desk page's origin (the last switch error and
-        any md login mismatch feed the Settings dialog there) -- same exact-origin CORS as
-        /api/settings and the paper-account routes; everything else stays same-origin."""
-        bad = desk_origin_refusal(request.headers)
-        if bad is not None:
-            raise HTTPException(*bad)
-        _cors(response, request)
-        return status()
-
-    @app.get("/api/bursts/now")
-    async def api_bursts_now():
-        # Task 2, the burst radar strip: every streamed root's current ratio, for the page's
-        # first paint before its /ws status (which carries the same thing every STATUS_S) lands.
-        # Reads BurstBook's own cached per-root ratio -- no new md request, no event-loop work.
-        return burst_book.now()
-
-    @app.get("/api/symbols")
-    async def api_symbols():
-        return {"roots": roots, "timeframes": TIMEFRAMES}
-
-    @app.get("/api/labrun/ticks")
-    async def api_labrun_ticks(request: Request, roots: str = "", since_ms: int = 0):
-        """The Lab strategy runner's tick stream (python -m homebase.labrun), Server-Sent Events: TickFan.stream.
-        Read-only, and for a local process only: the Host must be 127.0.0.1 or localhost, and ANY request that
-        carries an Origin -- a browser's -- is refused (the gate the desk keeps on /api/trade/*). A market this
-        service does not chart is left out; no market at all still gets the clock. No broker request is made."""
-        if not netguard.host_allowed(request.headers.get("host"), frozenset(LOCAL_HOSTS)):
-            raise HTTPException(403, "the tick stream answers only as 127.0.0.1 or localhost")
-        if request.headers.get("origin") is not None:
-            raise HTTPException(403, "browser requests are refused")
-        want = dict.fromkeys(r.strip().upper() for r in roots.split(","))
-        return _TickStream(tick_fan.stream([r for r in want if r in app_roots], since_ms),
-                           media_type="text/event-stream", headers={"cache-control": "no-cache"})
-
-    def read_json(path: Path) -> dict:
-        try:
-            v = json.loads(path.read_text())
-        except (OSError, ValueError):
-            return {}
-        return v if isinstance(v, dict) else {}
-
-    def write_json(path: Path, data: dict | list) -> None:
-        """Via a temp file + atomic rename: a crash or a full disk mid-write
-        must never tear the file (torn, it reads back as {} and the next
-        save would wipe everything in it)."""
-        tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text(json.dumps(data, indent=2))
-        os.replace(tmp, path)
-
-    def read_json_list(path: Path) -> list:
-        try:
-            v = json.loads(path.read_text())
-        except (OSError, ValueError):
-            return []
-        return v if isinstance(v, list) else []
-
-    def browser_write_ok(request: Request) -> None:
-        """Browsers send a cross-site PUT/DELETE after a preflight that this
-        app never answers, but a simple no-CORS request could still reach
-        us; refuse any write from a page that is not this service's own
-        (same rule as the /ws handshake).
-
-        Desk-settings plan: /api/settings' PUT and /api/paper/accounts*'s
-        writes now ALSO answer the desk page's exact origin with a CORS
-        header, so "no CORS request could still reach us" is no longer true
-        for those two routes specifically -- they add their own exact-origin
-        check (desk_origin_refusal) and only emit the header for that exact
-        match, in front of this same-origin check, rather than loosening it."""
-        if not origin_ok(request.headers.get("origin"), request.headers.get("host")):
-            raise HTTPException(403, "writes from another site are refused")
 
     def known_root(root: str) -> str:
         r = root.upper()
         if r not in roots:
             raise HTTPException(404, f"{root!r} is not a charted symbol")
         return r
-
-    def bot_placing() -> bool:
-        """True while the desk reports ANY account working a bot -- trading.py's own BOT_BUSY =
-        ("placing", "placed", "live"), plus "error" (cheap to include, and an account in a state
-        this process cannot make sense of should read as busy, not idle). Review C3: the desk
-        pauses its OWN view publishing for the entire "placing" span (trading.py's
-        _views_paused), so this process's DeskLink.state never actually holds "placing" -- it
-        jumps idle -> placed directly. Blocking on "placed"/"live" too is what makes this a real
-        guard rather than a state this process can never observe.
-
-        Fail closed (review C3): a link that is CONFIGURED but whose state is unknown (never
-        received one) or reports `down` reads as busy -- an md switch is optional work, and it
-        must never fire blind into a desk this process has lost contact with. `link is None`
-        (replay, or no desk link at all) is the one case that is genuinely never busy."""
-        if link is None:
-            return False
-        if link.state is None or link.down is not None:
-            return True
-        strategies = (link.state.get("bot") or {}).get("strategies") or {}
-        return any(a.get("status") in BOT_BUSY_STATUSES
-                  for s in strategies.values()
-                  for a in (s.get("accounts") or {}).values())
-
-    def md_switch_refused() -> str | None:
-        """None, or the one sentence the Settings dialog shows: refused while the desk reports a bot
-        actually working (any status, any strategy -- not just today's booked ones)."""
-        if bot_placing():
-            return "Not while the 9:30 bot is working — try after 09:35."
-        return None
 
     register_desk(app, link=link, quotes=quotes, browser_write_ok=browser_write_ok)
     register_paperbook(app, books=book, browser_write_ok=browser_write_ok)
@@ -1520,601 +1016,25 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     app.include_router(refresh_rt)
     app.include_router(pine_routes())      # the Pine runtime and the owner's scripts (~/.homebase/pine)
 
-    @app.get("/api/settings")
-    async def get_settings(request: Request, response: Response):
-        """{"md": ..., "accounts": {"live": "···885"|None, "demo": "···021"|None}}. `accounts`
-        (review M2) is read from the desk's own config + token files at request time, masked to
-        the last 3 characters -- never the settings file, never hard-coded (the Apex login has
-        already changed once). None means that login currently has no valid md token, i.e. a
-        switch to it would fail (this also surfaces a C2 mismatch before it's ever attempted).
+    routes.settings.register(app, settings_store=settings_store, feed=feed, clock=clock, roots=roots, link=link, log=log,
+                             md_switch_timeout_s=lambda: MD_SWITCH_TIMEOUT_S)
+    routes.layouts.register(app, route_prefix="/api", layouts_path=layouts_path, layout_order_path=layout_order_path)
+    routes.layouts.register(app, route_prefix="/api/bt", layouts_path=bt_layouts_path,
+                            layout_order_path=bt_layout_order_path)
 
-        Desk-settings plan (2026-09-27): answers the desk page's origin too (paperbook's exact-
-        origin CORS, extended to this route -- everything else on this service stays same-origin)."""
-        bad = desk_origin_refusal(request.headers)
-        if bad is not None:
-            raise HTTPException(*bad)
-        _cors(response, request)
-        d = settings_store.get()
-        if getattr(feed, "switch_in_progress", False):
-            d["md"] = feed.md_env   # the file already names the target; the feed is not there yet
-        d["clock"] = settings_store.clock()
-        try:
-            accts = T.accounts_by_env()
-        except Exception:  # noqa: BLE001 — a broken config must never break the dialog, only omit the note
-            accts = {"live": None, "demo": None}
-        d["accounts"] = {env: (f"···{label[-3:]}" if label and len(label) > 3 else label)
-                         for env, label in accts.items()}
-        return d
+    routes.drawings.register(app, drawings_path=drawings_path, templates_path=templates_path, presets_store=presets_store,
+                             known_root=known_root)
+    routes.events.register(app, paper=paper, cal=cal, news=news)
 
-    @app.options("/api/settings")
-    async def settings_preflight(request: Request):
-        """The desk page's CORS preflight for PUT /api/settings -- allowed for DESK_ORIGINS only
-        (anything else: no allow-origin header, so the browser never sends the write)."""
-        o = request.headers.get("origin")
-        if o not in DESK_ORIGINS:
-            return JSONResponse({"detail": "origin not allowed"}, status_code=403)
-        return Response(status_code=204, headers={
-            "access-control-allow-origin": o, "vary": "Origin", "access-control-allow-methods": "PUT",
-            "access-control-allow-headers": "content-type", "access-control-max-age": "600"})
-
-    @app.put("/api/settings")
-    async def put_settings(request: Request):
-        """{"md": "live"|"demo"}: switches the chart feed's md login in place (TickFeed.switch_md)
-        and persists the choice (written first, put back if the switch fails). JSON-only (like the desk proxy) on top
-        of the Host check every /api/* route already gets from HostGuard.
-
-        Refused, in order: a bad body (400); replay, which has no switchable feed (503); a switch
-        already in flight (409, TickFeed's own SwitchInProgress); a cooldown since the last
-        ATTEMPT, successful or not (429, review I3 -- a switch costs roughly 2 requests per root,
-        subscribe plus its gap refill, so unthrottled clicking can spend the whole hourly budget
-        in under ten); the TARGET login too close to its own hourly budget to afford one
-        switch's worth of requests (429); a bot working (423). Any OTHER failure -- a bad connect,
-        an environment mismatch, every root refused -- is TickFeed's own RuntimeError (502); nothing else is
-        allowed to reach this route as an unhandled 500. A feed that has not answered in
-        MD_SWITCH_TIMEOUT_S is 504; the switch still finishes and keeps the file right.
-
-        Desk-settings plan: the exact-origin check (desk_origin_refusal) plus CORS (_cors) wrap
-        the whole thing, like paperbook's account-write routes -- a refusal AFTER that check is
-        still readable by the desk page, never just "unreachable"."""
-        bad = desk_origin_refusal(request.headers)
-        if bad is not None:
-            raise HTTPException(*bad)
-        try:
-            result = await do_put_settings(request)
-        except HTTPException as e:
-            return _cors(JSONResponse({"detail": e.detail}, status_code=e.status_code), request)
-        return _cors(JSONResponse(result), request)
-
-    async def do_put_settings(request: Request) -> dict:
-        bad = netguard.refusal(request.method, request.scope["headers"], netguard.allowlist())
-        if bad is not None:
-            raise HTTPException(*bad)
-        browser_write_ok(request)
-        try:
-            body = await request.json()
-        except ValueError:
-            raise HTTPException(400, "the body is not JSON") from None
-        if isinstance(body, dict) and set(body) == {"clock"}:
-            # the clock format is a display choice: nothing of the feed moves, so none of the md
-            # switch's refusals below apply to it
-            if body["clock"] not in CLOCK_CHOICES:
-                raise HTTPException(400, f"""the clock is {' or '.join(CLOCK_CHOICES)}""")
-            return {"clock": settings_store.set_clock(body["clock"])}
-        if not isinstance(body, dict) or "clock" in body or body.get("md") not in MD_CHOICES:
-            raise HTTPException(400, f"""a settings update is {{"md": {' or '.join(MD_CHOICES)}}}"""
-                                f""" or {{"clock": {' or '.join(CLOCK_CHOICES)}}}""")
-        md = body["md"]
-        if md_only() not in (None, md):
-            raise HTTPException(409, f"this machine's charts use the {md_only()} login only")
-        if not hasattr(feed, "switch_md"):
-            raise HTTPException(503, "the market-data login can't be switched here (replay)")
-        if getattr(feed, "switch_in_progress", False):
-            # before the no-op path: its write would overwrite the file the switch in flight
-            # already wrote, and a landing switch would then disagree with it
-            raise HTTPException(409, "a market-data login switch is already in progress")
-        if md == getattr(feed, "md_env", None):
-            settings_store.set_md(md)   # already on it -- still make the file agree
-            return settings_store.get()
-        now_s = clock() / 1000
-        since_last = now_s - last_md_switch_attempt[0]
-        if since_last < MD_SWITCH_COOLDOWN_S:
-            wait = int(MD_SWITCH_COOLDOWN_S - since_last)
-            raise HTTPException(429, f"switching logins is limited to once every "
-                                     f"{MD_SWITCH_COOLDOWN_S // 60:.0f} minutes — try again in {wait}s")
-        if feed.budget_used(md) + 2 * len(roots) > MD_SWITCH_BUDGET_HEADROOM:
-            # N4: the switch's getCharts and gap refills are spent on the login switched TO
-            raise HTTPException(429, f"the {md} login is close to its hourly market-data budget "
-                                     "— try again after it resets")
-        reason = md_switch_refused()
-        if reason:
-            raise HTTPException(423, reason)
-        last_md_switch_attempt[0] = now_s   # counts the ATTEMPT, whatever it ends up doing
-        previous_md = feed.md_env
-
-        async def switch_and_save() -> None:
-            """The file is written FIRST (a write failure then switches nothing) and put back
-            if the switch fails -- so the file, status() and the dialog never disagree, and no
-            second switch is ever needed to undo one (re-review M-d). Runs as its own task: a
-            PUT that times out or is dropped does not cut the bookkeeping short."""
-            try:
-                settings_store.set_md(md)
-            except Exception as e:  # noqa: BLE001
-                raise RuntimeError(f"could not save the setting ({type(e).__name__}: {e}) — "
-                                   "nothing was switched") from None
-            try:
-                await feed.switch_md(md)
-            except BaseException:
-                try:
-                    settings_store.set_md(previous_md)
-                except Exception as e:  # noqa: BLE001
-                    log(f"md switch failed AND the setting could not be put back: {e}")
-                raise
-
-        job = asyncio.ensure_future(switch_and_save())
-        job.add_done_callback(lambda t: t.cancelled() or t.exception())   # never "never retrieved"
-        try:
-            await asyncio.wait_for(asyncio.shield(job), MD_SWITCH_TIMEOUT_S)
-        except asyncio.TimeoutError:
-            raise HTTPException(504, "the market-data switch is taking too long — its outcome "
-                                     "will show in Settings") from None
-        except SwitchInProgress as e:
-            raise HTTPException(409, str(e)) from None
-        except RuntimeError as e:
-            raise HTTPException(502, str(e)) from None
-        except Exception as e:  # noqa: BLE001 — belt & suspenders: this route must never 500
-            raise HTTPException(502, f"{type(e).__name__}: {e}") from None
-        return settings_store.get()
-
-    def register_layout_routes(route_prefix: str, layouts_path: Path, layout_order_path: Path) -> None:
-        """The layouts + layout-order routes, parametrized by prefix and backing files -- registered
-        once for /api (the Charts tab) and once for /api/bt (the Backtest tab, 2026-09-28 three-tabs
-        plan): each tab's chart layouts are a separate namespace, so writing one never touches the
-        other's file on disk. Route bodies identical to before this split."""
-
-        @app.get(f"{route_prefix}/layouts")
-        async def get_layouts():
-            return read_json(layouts_path)
-
-        @app.put(f"{route_prefix}/layouts/{{name:path}}")
-        async def put_layout(name: str, request: Request):
-            browser_write_ok(request)
-            body = await request.json()
-            if not isinstance(body, dict) or not isinstance(body.get("cells"), list):
-                raise HTTPException(400, "a layout is {grid, cells: [...]}")
-            all_ = read_json(layouts_path)
-            all_[name] = body
-            write_json(layouts_path, all_)
-            return {"ok": True}
-
-        @app.delete(f"{route_prefix}/layouts/{{name:path}}")
-        async def delete_layout(name: str, request: Request):
-            browser_write_ok(request)
-            all_ = read_json(layouts_path)
-            all_.pop(name, None)
-            write_json(layouts_path, all_)
-            return {"ok": True}
-
-        @app.post(f"{route_prefix}/layouts/{{name:path}}/rename")
-        async def rename_layout(name: str, request: Request):
-            """One atomic dict-key move plus the same temp-file+rename write as every other layouts.json
-            write (write_json) -- never a client-side PUT-new-then-DELETE-old, which would leave two copies
-            on disk (and no way to tell which is live) if the DELETE leg failed after a successful PUT.
-            A crash or a full disk here lands exactly like any other write_json failure: the file on disk is
-            untouched (see test_a_failed_rename_leaves_the_saved_layouts_untouched), never half-renamed."""
-            browser_write_ok(request)
-            body = await request.json()
-            new = body.get("to") if isinstance(body, dict) else None
-            if not isinstance(new, str) or not new:
-                raise HTTPException(400, "a rename is {to: <new name>}")
-            # the browser resolves .../. and .../.. as path steps: the PUT/DELETE route would miss it
-            if new in (".", ".."):
-                raise HTTPException(400, "“.” and “..” cannot be layout names")
-            all_ = read_json(layouts_path)
-            if name not in all_:
-                raise HTTPException(404, f"{name!r} is not a saved layout")
-            if new == name:
-                return {"ok": True}
-            if new in all_:
-                raise HTTPException(409, f"a layout named {new!r} already exists")
-            all_[new] = all_.pop(name)
-            write_json(layouts_path, all_)
-            return {"ok": True}
-
-        @app.get(f"{route_prefix}/layout-order")
-        async def get_layout_order():
-            # a distinct path from .../layouts/{name:path} on purpose -- sharing the prefix would make
-            # "order" just another layout name under that route, whichever one FastAPI matched first
-            return read_json_list(layout_order_path)
-
-        @app.put(f"{route_prefix}/layout-order")
-        async def put_layout_order(request: Request):
-            browser_write_ok(request)
-            body = await request.json()
-            if not isinstance(body, list) or not all(isinstance(x, str) for x in body):
-                raise HTTPException(400, "a layout order is a list of names")
-            write_json(layout_order_path, body)
-            return {"ok": True}
-
-    register_layout_routes("/api", layouts_path, layout_order_path)
-    register_layout_routes("/api/bt", bt_layouts_path, bt_layout_order_path)
-
-    @app.get("/api/drawings/{root}")
-    async def get_drawings(root: str):
-        return read_json(drawings_path).get(known_root(root), [])
-
-    @app.put("/api/drawings/{root}")
-    async def put_drawings(root: str, request: Request):
-        browser_write_ok(request)
-        r = known_root(root)
-        try:
-            body = await request.json()
-        except ValueError:
-            raise HTTPException(400, "the body is not JSON") from None
-        try:
-            clean = check_drawings(body)
-        except ValueError as e:
-            raise HTTPException(400, str(e)) from None
-        all_ = read_json(drawings_path)
-        all_[r] = clean
-        write_json(drawings_path, all_)
-        return {"ok": True, "count": len(clean)}
-
-    @app.get("/api/templates")
-    async def get_templates():
-        return read_json(templates_path)
-
-    @app.put("/api/templates/{name:path}")
-    async def put_template(name: str, request: Request):
-        browser_write_ok(request)
-        try:
-            check_template_name(name)
-        except ValueError as e:
-            raise HTTPException(400, str(e)) from None
-        raw = await request.body()
-        if len(raw) > MAX_TEMPLATE_BYTES:
-            raise HTTPException(400, f"a template is at most {MAX_TEMPLATE_BYTES // 1024} KB of JSON")
-        try:
-            body = json.loads(raw, parse_constant=_no_constant)
-        except ValueError:
-            raise HTTPException(400, "the body is not JSON") from None
-        if not isinstance(body, dict):
-            raise HTTPException(400, "a template is a JSON object of chart settings")
-        all_ = read_json(templates_path)
-        all_[name] = body
-        write_json(templates_path, all_)
-        return {"ok": True}
-
-    @app.delete("/api/templates/{name:path}")
-    async def delete_template(name: str, request: Request):
-        browser_write_ok(request)
-        all_ = read_json(templates_path)
-        all_.pop(name, None)
-        write_json(templates_path, all_)
-        return {"ok": True}
-
-    # 2026-09-27 draw-tools plan: a generic named-preset store, by "kind" ("drawing:<tool>" today,
-    # "indicator:<tool>" once the indicator dialog reuses it). Same write guard, same atomic write,
-    # same body-size cap and JSON-object-only rule as templates above.
-    @app.get("/api/preset-defaults/{family}")
-    async def get_preset_defaults(family: str):
-        try:
-            return presets_store.defaults(family)
-        except ValueError as e:
-            raise HTTPException(400, str(e)) from None
-
-    @app.get("/api/presets/{kind}")
-    async def get_presets(kind: str):
-        try:
-            return presets_store.list(kind)
-        except ValueError as e:
-            raise HTTPException(400, str(e)) from None
-
-    @app.put("/api/presets/{kind}/{name:path}")
-    async def put_preset(kind: str, name: str, request: Request):
-        browser_write_ok(request)
-        raw = await request.body()
-        if len(raw) > MAX_PRESET_BYTES:
-            raise HTTPException(400, f"a preset is at most {MAX_PRESET_BYTES // 1024} KB of JSON")
-        try:
-            body = json.loads(raw, parse_constant=_no_constant)
-        except ValueError:
-            raise HTTPException(400, "the body is not JSON") from None
-        if not isinstance(body, dict):
-            raise HTTPException(400, "a preset is a JSON object")
-        try:
-            presets_store.put(kind, name, body)
-        except ValueError as e:
-            raise HTTPException(400, str(e)) from None
-        return {"ok": True}
-
-    @app.delete("/api/presets/{kind}/{name:path}")
-    async def delete_preset(kind: str, name: str, request: Request):
-        browser_write_ok(request)
-        try:
-            presets_store.delete(kind, name)
-        except ValueError as e:
-            raise HTTPException(400, str(e)) from None
-        return {"ok": True}
-
-    @app.get("/api/paper/strategies")
-    async def paper_strategies():
-        return [paper_describe()]
-
-    @app.get("/api/paper/history")
-    async def paper_history(strategy: str = PAPER_ID):
-        if strategy != PAPER_ID:
-            raise HTTPException(404, f"no paper strategy {strategy!r}")
-        return paper.history()
-
-    @app.get("/api/calendar")
-    async def api_calendar(request: Request):
-        q = request.query_params
-        try:
-            frm, to = int(q.get("from", 0)), int(q.get("to", 2 ** 62))
-        except ValueError:
-            raise HTTPException(400, "from / to: epoch ms") from None
-        countries = [c.strip() for c in q.get("countries", "").split(",") if c.strip()]
-        return cal.events(frm, to, countries or None)
-
-    @app.get("/api/news")
-    async def api_news(request: Request):
-        bad = netguard.refusal(request.method, request.scope["headers"], netguard.allowlist())
-        if bad is not None:
-            raise HTTPException(*bad)
-        q = request.query_params
-        try:
-            frm, to = int(q.get("from", 0)), int(q.get("to", 2 ** 62))
-        except ValueError:
-            raise HTTPException(400, "from / to: epoch ms") from None
-        tags = [t.strip() for t in q.get("tags", "").split(",") if t.strip()]
-        sources = [s.strip() for s in q.get("sources", "").split(",") if s.strip()]
-        return news.items(frm, to, tags or None, sources or None)
-
-    # the liquidity heatmap's history (depthgrid.py): the recorded depth files as a down-sampled grid, built
-    # in ONE spawned worker process (never this process, never the default thread pool), one request at a
-    # time (busy -> 503, never queued), <= 2 MB, never past now (a replay's own clock in a replay: no
-    # look-ahead), and never decoded 08:29:30-08:31 ET on weekdays, by the wall clock
-    # (the service's clock when live, so tests can place it)
-    def depth_wall_ms() -> float:
-        return time.time() * 1000 if replay else clock()
-
+    # the liquidity heatmap's and the book indicators' histories (routes/depthbook.py): their workers live here, the
+    # lifespan shuts them down
     depth_pool = HistoryPool(depth_base or DEPTH_ARCHIVE,
                              **({"executor_factory": depth_executor} if depth_executor else {}))
-
-    @app.get("/api/depth/history")
-    async def api_depth_history(request: Request):
-        q = request.query_params
-        root = known_root(q.get("root", ""))
-        now = clock()
-        try:
-            frm, to = int(q["from_ms"]), int(q["to_ms"])
-            cols = int(q.get("cols", DEPTH_MAX_COLS // 2))
-        except (KeyError, ValueError):
-            raise HTTPException(400, "from_ms / to_ms: epoch ms; cols: a whole number") from None
-        if frm < 0 or to > now + 86_400_000 or to <= frm or to - frm > DEPTH_MAX_SPAN_MS:
-            raise HTTPException(400, f"0 <= from_ms < to_ms <= now + 1 day, "
-                                     f"at most {DEPTH_MAX_SPAN_MS // 3_600_000} h apart")
-        wall = depth_wall_ms()
-        why = paused_reason(wall / 1000)
-        if why:
-            raise HTTPException(503, why)
-        try:
-            body = await depth_pool.grid(root, frm, to, cols, now, wall - time.time() * 1000)
-        except (Busy, Paused) as e:
-            raise HTTPException(503, str(e)) from None
-        except ValueError as e:
-            raise HTTPException(400, str(e)) from None
-        return Response(body, media_type="application/json")
-
-    # the book indicators' history (bookhist.py): the recorded depth files + the tick archive replayed through the
-    # same BookTracker the live feed runs; one spawned worker, one request at a time (busy -> 503), the same
-    # paused windows as the depth history, never past now
     book_pool = BookPool(depth_base or DEPTH_ARCHIVE, base, depth_executor)
-
-    @app.get("/api/book/history")
-    async def api_book_history(request: Request):
-        q = request.query_params
-        root = known_root(q.get("root", ""))
-        now = clock()
-        try:
-            frm, to = int(q["from_ms"]), int(q["to_ms"])
-        except (KeyError, ValueError):
-            raise HTTPException(400, "from_ms / to_ms: epoch ms") from None
-        if frm < 0 or to > now + 86_400_000 or to <= frm or to - frm > BOOK_MAX_SPAN_MS:
-            raise HTTPException(400, f"0 <= from_ms < to_ms <= now + 1 day, "
-                                     f"at most {BOOK_MAX_SPAN_MS // 3_600_000} h apart")
-        wall = depth_wall_ms()
-        why = paused_reason(wall / 1000)
-        if why:
-            raise HTTPException(503, why)
-        try:
-            body = await book_pool.window(root, frm, to, now, wall - time.time() * 1000)
-        except (Busy, Paused) as e:
-            raise HTTPException(503, str(e)) from None
-        except ValueError as e:
-            raise HTTPException(400, str(e)) from None
-        return Response(body, media_type="application/json")
-
-    @app.websocket("/ws/depth-in")
-    async def ws_depth_in(sock: WebSocket):
-        """The book relay (depthrelay.py): the Mac's books, into this service's Depth (HOMEBASE_DEPTH_RELAY_IN=1 only).
-        Only a local non-browser client (no Origin): the pusher on the Mac, through its ssh tunnel."""
-        if relay is None or sock.headers.get("origin") is not None:
-            await sock.close(code=1008)
-            return
-        await sock.accept()
-        relay.ws.pushers += 1
-        try:
-            while True:
-                try:
-                    relay.ws.push(json.loads(await sock.receive_text()))
-                except (WebSocketDisconnect, RuntimeError):
-                    raise
-                except Exception:  # noqa: BLE001 — a bad frame is skipped
-                    continue
-        except (WebSocketDisconnect, RuntimeError):
-            pass
-        finally:
-            relay.ws.pushers -= 1
-
-    @app.websocket("/ws")
-    async def ws_endpoint(sock: WebSocket):
-        if not origin_ok(sock.headers.get("origin"), sock.headers.get("host")):
-            await sock.close(code=1008)     # before accept(): the handshake is refused (403)
-            return
-        if not netguard.host_allowed(sock.headers.get("host"), netguard.allowlist()):
-            # origin_ok() alone waves through a DNS-rebinding page: it is
-            # served AS the attacker's own hostname, so its Origin and Host
-            # both read e.g. evil.example and satisfy origin_ok's Origin==Host
-            # rule. This service now carries balances, positions and orders
-            # for every account, so the Host header itself must also be on
-            # netguard's shared allowlist (loopback only here -- this
-            # process has no cfg.allowed_hosts of its own) before the
-            # handshake is accepted.
-            await sock.close(code=1008)
-            return
-        await sock.accept()
-        page = sock.query_params.get("page", "charts")
-        conn = Conn(sock, page=page if page == "backtest" else "charts")
-        conns.add(conn)
-        conn.send({"type": "status", **status()})
-        if paper.current is not None:
-            conn.send(paper.current)            # the paper run's state, like every later change
-        def room() -> bool:
-            return not conn.dead and conn.q.qsize() < SEND_QUEUE_MAX // 2
-
-        desk_fan.attach(conn, conn.send, room)
-        if book is not None:
-            conn.send(book.message(clear=False))   # the PAPER account as it stands (every other page keeps its update)
-        try:
-            while True:
-                # Only a framing/decoding problem is swallowed here. Receiving
-                # itself is NOT wrapped in a broad except: after an app-side
-                # close (Conn._close(), on a SEND_QUEUE_MAX overflow), starlette
-                # raises WebSocketDisconnect OR a RuntimeError SYNCHRONOUSLY --
-                # before any await -- so a broad `except Exception: continue`
-                # around the receive call would never yield control back to the
-                # loop, spinning it at 100% CPU forever instead of ending here.
-                try:
-                    raw = await sock.receive_text()
-                except (WebSocketDisconnect, RuntimeError):
-                    raise
-                except Exception:  # noqa: BLE001 — a non-text (binary) frame is skipped
-                    continue
-                try:
-                    msg = json.loads(raw)
-                except ValueError:
-                    continue
-                if not isinstance(msg, dict):
-                    continue
-                op, cid = msg.get("op"), str(msg.get("id", ""))
-                if op == "unsub":
-                    replays.stop(conn, cid, notify=False)
-                    hub.unsubscribe((conn, cid))
-                    if depth is not None:
-                        depth.unview((conn, cid))
-                        booklive.unview((conn, cid))
-                    continue
-                if op == "older":
-                    if not replays.ask_older(conn, cid, msg.get("before")):
-                        ask_older(conn, cid, msg.get("before"), bool(msg.get("fp", True)), bool(msg.get("big", True)),
-                                  bool(msg.get("flow", True)))
-                    continue
-                if op == "replay_start":
-                    if await replays.start(conn, cid, msg, live=hub.stream_of((conn, cid))):
-                        hub.unsubscribe((conn, cid))    # the chart leaves the live stream
-                    continue
-                if op == "replay_ctl":
-                    await replays.control(conn, cid, msg)
-                    continue
-                if op == "replay_stop":
-                    replays.stop(conn, cid)
-                    continue
-                if op == "tape":
-                    # the Time & Sales panel follows one root per page; null or an uncharted root closes it
-                    root = str(msg.get("root") or "").upper()
-                    if root in roots:
-                        tapelive.view((conn, "tape"), root, conn.send, room)
-                    else:
-                        tapelive.unview((conn, "tape"))
-                    continue
-                if op != "sub":
-                    continue
-                try:
-                    root = str(msg.get("root", "")).upper()
-                    if root not in roots:
-                        raise ValueError(f"{root!r} is not recorded (have {', '.join(roots)})")
-                    spec = BarSpec.parse(msg.get("spec", ""))
-                    if spec.size < MIN_BAR[spec.kind]:
-                        raise ValueError(f"{spec.key} is too fine for the live charts "
-                                         f"(minimum {spec.kind}:{MIN_BAR[spec.kind]})")
-                    studies = msg.get("studies") or []
-                    if len(studies) > MAX_STUDIES:
-                        raise ValueError(f"{len(studies)} studies on one chart (at most {MAX_STUDIES})")
-                    keys = [str(k) for k in studies]
-                    for k in keys:
-                        if k != "profile":
-                            make(k)     # ValueError on an unknown study or a length outside 1..1000
-                except Exception as e:  # noqa: BLE001 — a malformed sub (bad root/spec/study, too
-                                        # fine, too many) answers an error, never kills the connection
-                    conn.send({"type": "error", "id": cid, "error": str(e)})
-                    continue
-                s = None
-                replays.stop(conn, cid, notify=False)   # a sub on a replaying chart returns it to live
-                try:
-                    # An indicator added is this same chart asking again for the same market and interval with one
-                    # more study: its stream is kept (not rebuilt from every session, 1-4 s on a cold 5m..1D chart)
-                    # and only the new study is run over it. A stream marked for reset is never reused.
-                    same = hub.streams.get((root, spec.key))
-                    hub.unsubscribe((conn, cid), keep=same if same is not None and not same.reset else None)
-                    s = hub.streams.get((root, spec.key))
-                    if s is None:
-                        s = hub.attach(await asyncio.to_thread(hub.prepare, root, spec, keys))
-                    await asyncio.to_thread(hub.ensure_prime, s, keys)   # sessions the new studies read (noise band ...)
-                    # an smt study reads the partner market (NQ against ES): its stream is built beside this one
-                    hub.link_peer(s, await asyncio.to_thread(hub.prepare_peer, root, spec, keys))
-                    if not s.subs:
-                        s.retain(keys)      # the studies this chart no longer asks for stop running
-                    for k in keys:
-                        s.add_study(k)
-                    hub.subscribe(s, (conn, cid), bool(msg.get("flow", True)))
-                    # fp / big: a chart that draws no footprint / no big prints asks for its bars without
-                    # them (cell.js need()); a sub that says nothing gets both, as before
-                    conn.send({"type": "history", "id": cid,
-                               **s.payload(bool(msg.get("fp", True)), bool(msg.get("big", True)),
-                                           bool(msg.get("flow", True)))})
-                    if depth is not None:
-                        depth.view((conn, cid), root, conn.send, room)   # after `history`: depth follows it
-                        booklive.view((conn, cid), root, conn.send, room)   # and the book flow's recent state
-                except Exception as e:  # noqa: BLE001 — an unexpected failure building the
-                                        # stream must not drop every chart on the page either
-                    log(f"sub {cid} ({root} {spec.key}): {type(e).__name__}: {e}\n{traceback.format_exc()}")
-                    conn.send({"type": "error", "id": cid, "error": str(e)})
-                    # never leave this id subscribed to a stream it only got an
-                    # error for (the pump would keep sending it `update`s for
-                    # an id that never got `history`), and never leave a
-                    # freshly attached, now-subscriberless stream in hub.streams
-                    hub.unsubscribe((conn, cid))
-                    if depth is not None:
-                        depth.unview((conn, cid))
-                        booklive.unview((conn, cid))
-                    if s is not None and not s.subs and hub.streams.get(s.key) is s:
-                        del hub.streams[s.key]
-                    continue
-        except (WebSocketDisconnect, RuntimeError):
-            # RuntimeError: starlette raises this on the receive loop if Conn's
-            # writer already closed the socket out from under us (SEND_QUEUE_MAX
-            # overflow) -- same clean-up as an ordinary client disconnect.
-            pass
-        finally:
-            conns.discard(conn)
-            desk_fan.detach(conn)
-            if depth is not None:
-                depth.drop_conn(conn)
-                booklive.drop_conn(conn)
-            tapelive.drop_conn(conn)
-            hub.drop_conn(conn)
-            replays.drop_conn(conn)
-            conn.task.cancel()
+    routes.depthbook.register(app, known_root=known_root, clock=clock, replay=replay, depth_pool=depth_pool,
+                              book_pool=book_pool)
+    routes.ws.register(app, relay=relay, conns=conns, status=status, paper=paper, desk_fan=desk_fan, book=book,
+                       replays=replays, hub=hub, depth=depth, booklive=booklive, tapelive=tapelive, roots=roots,
+                       MIN_BAR=MIN_BAR, MAX_STUDIES=MAX_STUDIES, log=log)
 
     return app

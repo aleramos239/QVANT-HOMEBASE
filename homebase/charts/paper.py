@@ -85,8 +85,8 @@ FF_TITLES = {"Non-Farm Employment Change": "NFP", "CPI m/m": "CPI", "CPI y/y": "
 EVENT_TIME = "08:30"
 BACKTEST_WINDOW = "2021-2024"
 PAPER_LABEL = "paper (forward)"
-FORBIDDEN_IMPORTS = ("homebase.broker", "homebase.trading", "homebase.desk_api", "homebase.engine",
-                     "homebase.timer", "homebase.charts.desk", "homebase.server", "homebase.risk")
+FORBIDDEN_IMPORTS = ("homebase.broker", "homebase.desk.trading", "homebase.desk.desk_api", "homebase.desk.engine",
+                     "homebase.desk.timer", "homebase.charts.desk", "homebase.server", "homebase.desk.risk")
 
 
 def params() -> dict:

@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import pytest
 
-from homebase.engine import Engine
-from homebase.engine_groups import GroupError
-from homebase.engine_lab import GROUP_HEDGE
-from homebase import labdesk
+from homebase.desk.engine import Engine
+from homebase.desk.engine_groups import GroupError
+from homebase.desk.engine_lab import GROUP_HEDGE
+from homebase.desk import labdesk
 from tests import test_engine_lab as tlab
 
 TWO = "lab_two"
@@ -265,7 +265,7 @@ def test_saving_an_on_cycle_leaves_a_take_turns_switched_off_by_hand(tmp_path):
 
 
 def test_follow_group_keeps_name_and_members_in_step(tmp_path):
-    from homebase.engine_groups import GroupMissing
+    from homebase.desk.engine_groups import GroupMissing
     eng, ads, _ = mk(tmp_path)
     group(eng)
     v = eng.follow_group("g", "Apex 300k", [TWO, "nq930_not_lab"])

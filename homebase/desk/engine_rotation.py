@@ -9,7 +9,8 @@ import json
 import sys
 from typing import Optional
 
-from .config import StrategyCfg, assignments
+from ..config import StrategyCfg, assignments
+from ..core import atomic
 from .engine_lab import LAB_ACCOUNT_STOPPED, LAB_NOT_CONNECTED, LAB_SLOT_BUSY
 
 ROTATION_NONE = "No booked account could take this trade."
@@ -32,9 +33,8 @@ class RotationMixin:
 
     def _save_rotation(self) -> None:
         p = self._rotation_path()
-        tmp = p.with_suffix(".tmp")                   # never half a file: a lost switch would trade every account
-        tmp.write_text(json.dumps(self.rotation, indent=2) + "\n")
-        tmp.replace(p)
+        # never half a file: a lost switch would trade every account
+        atomic.write_text(p, json.dumps(self.rotation, indent=2) + "\n", tmp=p.with_suffix(".tmp"))
 
     def rotating(self, name: str) -> bool:
         return bool(self.rotation.get(name, {}).get("on"))

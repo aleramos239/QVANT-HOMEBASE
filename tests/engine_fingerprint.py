@@ -17,8 +17,8 @@ import sys
 import types
 
 sys.path.insert(0, ".")
-import homebase.engine as engine_mod  # noqa: E402
-from homebase.engine import Engine  # noqa: E402
+import homebase.desk.engine as engine_mod  # noqa: E402
+from homebase.desk.engine import Engine  # noqa: E402
 
 SKIP = {"__dict__", "__weakref__", "__module__", "__doc__", "__qualname__", "__firstlineno__", "__static_attributes__"}
 GLOBAL_OPS = {"LOAD_GLOBAL", "LOAD_NAME", "STORE_GLOBAL", "DELETE_GLOBAL"}

@@ -13,7 +13,7 @@ from ..broker.base import AccountNotOnLogin, BrokerAdapter
 from ..broker.login_budget import LoginDeferred, is_rate_limited
 from ..broker.paper import PaperAdapter
 from ..broker.tradovate import TradovateAdapter
-from ..feed import MarketFeed
+from ..data.feed import MarketFeed
 
 RECONNECT_INTERVAL_S = 5   # cheap now: reconnects reuse the token
 GONE_CONFIRM_S = 300       # an account missing from its login is removed only when a 2nd

@@ -194,7 +194,7 @@ def test_the_chart_service_and_the_tick_job_find_their_login_in_a_file_with_a_ke
         cfg_path, tmp_path, monkeypatch):
     import datetime as dt
 
-    from homebase import ticks as T
+    from homebase.data import ticks as T
     cfg_path.write_text(json.dumps(NEWER))
     monkeypatch.setattr(T, "state_dir", lambda: tmp_path)
     exp = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)).isoformat()

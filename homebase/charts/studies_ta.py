@@ -47,7 +47,7 @@ from __future__ import annotations
 import datetime as dt
 import math
 
-from .session import ET
+from ..core.clock import ET
 
 
 def _et(bar) -> dt.datetime:

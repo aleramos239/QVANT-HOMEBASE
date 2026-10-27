@@ -62,7 +62,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import math
-import os
+import os  # noqa: F401 -- unused here now, kept: tests patch paperbook.os.fsync (the global os the atomic write calls)
 import re
 import time
 import unicodedata
@@ -78,6 +78,8 @@ from fastapi.responses import JSONResponse, Response
 from .. import netguard
 from ..backtest.engine import Costs, tick_cmp, to_tick
 from ..contracts import MICRO_COMMISSION_RT, micro_of, point_value, price_root, tick_size
+from ..core import atomic
+from ..core.num import finite_no_overflow as _finite
 from ..symbols import resolve_contract
 from . import _jsonl
 
@@ -159,15 +161,6 @@ def _session_until(ts_ms: int, root: str) -> int:
     return int(dt.datetime.combine(day, roll, _ET).timestamp() * 1000)
 
 
-def _finite(v) -> bool:
-    if not isinstance(v, (int, float)) or isinstance(v, bool):
-        return False
-    try:
-        return math.isfinite(v)
-    except OverflowError:                       # fix round 1 (M1): a 400-digit int is not a number we take
-        return False
-
-
 def clean_name(raw) -> str:
     """A paper account's name, or ValueError (fix round 1, I2): NFKC-normalised, trimmed, 1-NAME_MAX characters,
     at least one visible one, and none in Unicode category C* (control, format -- zero-width, bidi overrides and
@@ -198,17 +191,7 @@ def looks_like_paper(name: str) -> bool:
 def _atomic_json(path: Path, data) -> None:
     """Fix round 1 (I3): write, fsync the file, rename over, fsync the directory -- a power loss leaves the old
     file or the new one, never an empty one."""
-    tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(json.dumps(data))
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
-    fd = os.open(path.parent, os.O_RDONLY)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+    atomic.write_text(path, json.dumps(data), encoding="utf-8", fsync=True, fsync_dir=True)
 
 
 def _price(v, name: str, required: bool = False) -> Optional[float]:

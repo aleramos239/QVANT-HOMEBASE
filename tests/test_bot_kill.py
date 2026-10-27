@@ -10,9 +10,9 @@ import pytest
 
 from homebase.broker.base import OrderResult
 from homebase.config import AccountCfg, AppCfg, ChartTradingCfg, StrategyCfg
-from homebase.engine import Engine
-from homebase.timer import SelfTimer
-from homebase.trading import ChartDesk
+from homebase.desk.engine import Engine
+from homebase.desk.timer import SelfTimer
+from homebase.desk.trading import ChartDesk
 from tests.test_desk_api import desk_client  # noqa: F401 — the fixture
 from tests.test_engine import Clock
 from tests.test_timer import FakeMD

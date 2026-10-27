@@ -10,9 +10,9 @@ import os
 
 import pytest
 
-from homebase import tickarchive as A
-from homebase import ticks as T
-from homebase import tickjob as J
+from homebase.data import tickarchive as A
+from homebase.data import ticks as T
+from homebase.data import tickjob as J
 from tests.test_ticks import HistoryWindow, NoWait, _ids, _minute_ticks, _write_live, run
 
 ET = T.ET
@@ -772,8 +772,8 @@ def test_the_jobs_old_names_on_ticks_still_reach_tickjob_and_importing_ticks_doe
     for n in ("REPORT_EVERY", "_wait_for_token", "argparse", "coverage_report", "data_watch", "fill_from_massive",
               "load_cache", "main", "prune_cache", "report_due", "run"):
         assert getattr(T, n) is getattr(J, n) and n in dir(T)
-    with pytest.raises(AttributeError, match="module 'homebase.ticks' has no attribute 'nope'"):
+    with pytest.raises(AttributeError, match="module 'homebase.data.ticks' has no attribute 'nope'"):
         T.nope
-    out = subprocess.run([sys.executable, "-c", "import sys, homebase.ticks; print('homebase.tickjob' in sys.modules)"],
+    out = subprocess.run([sys.executable, "-c", "import sys, homebase.data.ticks; print('homebase.data.tickjob' in sys.modules)"],
                          capture_output=True, text=True, check=True).stdout
     assert out.strip() == "False"

@@ -307,14 +307,14 @@ def test_what_the_child_was_told_before_is_put_back_and_only_the_difference_is_t
 def test_the_desk_id_is_built_with_the_desks_own_prefix_and_the_runner_never_imports_the_desks_module():
     import subprocess
     import sys
-    from homebase import labcfg
+    from homebase.desk import labcfg
     from homebase.labrun import deskside
     assert deskside.PREFIX == labcfg.PREFIX and deskside.desk_id("pp_orb") == labcfg.desk_id("pp_orb") == "lab_pp_orb"
     assert deskside.FLAT_LATEST == labcfg.FLAT_LATEST
     code = ("import sys; import homebase.labrun.host, homebase.labrun.deskside, homebase.labrun.deskclient, "
             "homebase.labrun.__main__; "
-            "bad = [m for m in sys.modules if m in ('homebase.labcfg', 'homebase.labdesk', 'homebase.engine', "
-            "'homebase.server', 'homebase.desk_api', 'homebase.trading')]; print(bad)")
+            "bad = [m for m in sys.modules if m in ('homebase.desk.labcfg', 'homebase.desk.labdesk', 'homebase.desk.engine', "
+            "'homebase.server', 'homebase.desk.desk_api', 'homebase.desk.trading')]; print(bad)")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
     assert out.stdout.strip() == "[]", out.stdout + out.stderr              # the runner loads nothing the Desk owns
 
@@ -335,7 +335,7 @@ LIMIT_CASES = [
 
 
 def test_limits_read_exactly_when_the_desk_itself_would_take_them():
-    from homebase import labcfg
+    from homebase.desk import labcfg
     from homebase.labrun import deskside
 
     def desk_takes(limits, rec):

@@ -33,7 +33,6 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
-import math
 import multiprocessing
 import threading
 import time
@@ -47,6 +46,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from ..contracts import tick_size as contract_tick_size
+from ..core.num import finite as _finite
 from .session import ET, session_date
 
 SUFFIX = ".depth.jsonl.gz"     # depth.py's (not imported: the worker never loads the md feed's modules)
@@ -113,10 +113,6 @@ def _parse_member(raw: bytes) -> list[dict]:
         if isinstance(v, dict):
             out.append(v)
     return out
-
-
-def _finite(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 class _File:

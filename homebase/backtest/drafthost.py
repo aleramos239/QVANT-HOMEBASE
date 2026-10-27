@@ -20,7 +20,7 @@ import time
 import types
 from pathlib import Path
 
-from .. import draftstore
+from ..store import draftstore
 from ..strategies.base import Input, Strategy
 
 

@@ -342,7 +342,7 @@ def test_i4_a_switch_at_0925_on_a_weekday_is_not_refused_for_the_time(tmp_path):
 
 def test_m2_get_settings_carries_an_accounts_block(tmp_path, monkeypatch):
     # accounts_by_env reads the machine's own config + token files; the route's job is the masking
-    monkeypatch.setattr("homebase.ticks.accounts_by_env", lambda: {"live": "1552885", "demo": None})
+    monkeypatch.setattr("homebase.data.ticks.accounts_by_env", lambda: {"live": "1552885", "demo": None})
     app = app_with(tmp_path, {"demo": FakeMdWS()})
     with TestClient(app, base_url=BASE_URL) as c:
         d = c.get("/api/settings").json()

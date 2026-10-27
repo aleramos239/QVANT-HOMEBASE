@@ -1,7 +1,7 @@
 """The arsenal (homebase/arsenal.py): every tool we have in one catalog, derived from the code and the skill folders, saved in the app."""
 import json
 
-from homebase import arsenal
+from homebase.store import arsenal
 from homebase.claude_mcp import tools
 
 RESEARCH = {"groups": [{"id": "filters", "title": "Filters", "words": "w", "items": [{"id": "filter:x", "name": "x", "parts": []}]}], "sources": {}}

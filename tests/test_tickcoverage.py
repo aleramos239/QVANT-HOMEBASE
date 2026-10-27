@@ -6,10 +6,10 @@ import datetime as dt
 import gzip
 import json
 
-from homebase import tickarchive as A
-from homebase import tickcoverage as C
-from homebase import ticks as T
-from homebase import tickjob as J
+from homebase.data import tickarchive as A
+from homebase.data import tickcoverage as C
+from homebase.data import ticks as T
+from homebase.data import tickjob as J
 
 ET = T.ET
 NOW = dt.datetime(2026, 9, 28, 17, 30, tzinfo=ET)

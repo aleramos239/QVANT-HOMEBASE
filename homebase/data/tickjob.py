@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from . import datawatch, tickcoverage
+from .. import paths
 from . import ticks as T
 
 
@@ -115,7 +116,7 @@ def main(argv=None) -> int:
                     help="--holes: also what the broker's history still has")
     fm.add_argument("--dry-run", action="store_true",
                     help="list every file, hour and MB it would touch; download and write nothing")
-    fm.add_argument("--raw-dir", default=str(Path.home() / "massive_raw"),
+    fm.add_argument("--raw-dir", default=str(paths.massive_raw()),
                     help="Massive's raw files, kept here (research/massive_ticks.py's layout)")
     a = ap.parse_args(argv)
     roots = tuple(r.strip().upper() for r in a.roots.split(",") if r.strip())

@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from homebase import config as desk_config
-from homebase import labcfg
+from homebase.desk import labcfg
 from homebase.config import AccountCfg, AppCfg, ChartTradingCfg
 from homebase.labrun import store
 from tests.levels_util import _straddles

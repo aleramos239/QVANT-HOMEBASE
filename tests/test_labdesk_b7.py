@@ -8,8 +8,8 @@ import json
 
 import pytest
 
-from homebase import labdesk
-from homebase.labdesk import LabDesk
+from homebase.desk import labdesk
+from homebase.desk.labdesk import LabDesk
 from homebase.labrun import store
 from tests.labdesk_util import DATE, LAB, MARK, Stepper, body, entry, journal, mkdesk, pair, send
 from tests.test_engine import run

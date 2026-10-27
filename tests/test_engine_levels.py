@@ -13,8 +13,8 @@ import pytest
 from homebase.broker.base import FillEvent
 from homebase.config import AccountCfg, AppCfg
 from tests.levels_util import strategy_cfg
-from homebase.engine import TAKE_GRACE_S, Engine
-from homebase.levels import Geometry
+from homebase.desk.engine import TAKE_GRACE_S, Engine
+from homebase.desk.levels import Geometry
 from tests.test_engine import Clock, FakeAdapter, run
 
 GEO = Geometry("atr_straddle", upper=24510.0, lower=24490.0, sl_pts=130.0, atr=43.5, atr_bars=19, anchor=24500.0)

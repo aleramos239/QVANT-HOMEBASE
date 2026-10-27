@@ -10,13 +10,13 @@ import json
 
 import pytest
 
-from homebase import engine as engine_mod
-from homebase import engine_lab
-from homebase import labcfg
+from homebase.desk import engine as engine_mod
+from homebase.desk import engine_lab
+from homebase.desk import labcfg
 from homebase.broker.base import FillEvent, OrderRequest, OrderResult
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
-from homebase.dayrules import DayBook
-from homebase.engine import PLACING_UNKNOWN, Engine, LabLeg
+from homebase.desk.dayrules import DayBook
+from homebase.desk.engine import PLACING_UNKNOWN, Engine, LabLeg
 from tests import test_engine as te
 from tests import test_engine_levels as tl
 from tests import test_feed_rules as tf
@@ -2296,7 +2296,7 @@ CLEAR_REJECTS = ["adapter not connected", "OSO rejected (no orderId returned)", 
 def test_i2_the_clear_refusals_are_the_adapters_own_fixed_phrases():
     """Each phrase is in homebase/broker/ as the answer of a path that sends nothing, or of an answered reject."""
     import pathlib
-    src = "".join((pathlib.Path(engine_mod.__file__).parent / "broker" / f).read_text()
+    src = "".join((pathlib.Path(engine_mod.__file__).parents[1] / "broker" / f).read_text()
                   for f in ("tradovate.py", "base.py"))
     assert sorted(engine_mod.LAB_CLEAR_REJECTS) == sorted(CLEAR_REJECTS)
     assert all(f'"{phrase}"' in src for phrase in CLEAR_REJECTS)
@@ -2933,7 +2933,7 @@ def test_ra_the_chart_is_free_on_an_account_with_a_block_and_nothing_of_the_desk
     """The reviewer's X3: the owner can place, flatten and cancel the old stop from the chart."""
     from types import SimpleNamespace
 
-    from homebase import trading
+    from homebase.desk import trading
     eng, ad, clock, st = unresolved_day_one(tmp_path)
     next_day(clock)
     eng.lab_open(LAB)

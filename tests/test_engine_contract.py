@@ -8,7 +8,7 @@ import inspect
 import textwrap
 
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
-from homebase.engine import Engine
+from homebase.desk.engine import Engine
 from tests.test_engine import FakeAdapter
 
 # Made by the Lab through self.__dict__ on first use, never in __init__: _lab_mem reads labday-<date>.json only while

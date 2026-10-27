@@ -22,6 +22,7 @@ import json
 import os
 from pathlib import Path
 
+from ..core import atomic
 from . import MD_ENV
 
 MD_CHOICES = ("live", "demo")
@@ -55,12 +56,8 @@ class SettingsStore:
         disk -- a full disk here raises (OSError), and the caller (server.py's PUT /api/settings)
         rolls the feed itself back rather than leaving it switched with a stale file underneath."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_name(self.path.name + ".tmp")
-        with open(tmp, "w") as f:
-            f.write(json.dumps(data, indent=2))
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, self.path)
+        atomic.write_text(self.path, json.dumps(data, indent=2), tmp=self.path.with_name(self.path.name + ".tmp"),
+                          fsync=True)
 
     def get(self) -> dict:
         """{"md": "live"|"demo"} -- MD_ENV when the file has none yet or its

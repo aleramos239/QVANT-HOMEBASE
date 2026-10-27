@@ -10,9 +10,10 @@ page's call. This module only stores and validates.
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
+
+from ..core import atomic
 
 KIND_RE = re.compile(r"^(drawing|indicator):[a-z0-9_-]{1,32}$")
 DEFAULT_NAME = "__default__"
@@ -60,9 +61,7 @@ class PresetsStore:
 
     def _write_all(self, data: dict) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_name(self.path.name + ".tmp")
-        tmp.write_text(json.dumps(data, indent=2))
-        os.replace(tmp, self.path)
+        atomic.write_text(self.path, json.dumps(data, indent=2), tmp=self.path.with_name(self.path.name + ".tmp"))
 
     def list(self, kind: str) -> dict:
         """{name: payload} for one kind, or {} when none are saved yet. ValueError on a bad kind."""

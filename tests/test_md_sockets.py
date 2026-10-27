@@ -12,7 +12,7 @@ import json
 from types import SimpleNamespace as NS
 
 import homebase.config as config_mod
-from homebase import ticks as T
+from homebase.data import ticks as T
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
 from tests.test_engine import FakeAdapter
 
@@ -55,7 +55,7 @@ def test_md_source_takes_the_freshest_token_of_the_preferred_login():
 def test_the_timers_md_socket_starts_on_the_renewed_md_token(tmp_path, monkeypatch):
     """The early renewal rolled the login's md token; the timer's md socket (09:20 gate /
     09:28:30 stage), built through md_source, is authorized with the NEW one."""
-    import homebase.marketdata as md_mod
+    import homebase.data.marketdata as md_mod
     from homebase.server import md_source
     monkeypatch.setattr(md_mod, "state_dir", lambda: tmp_path)
     authorized = []
@@ -80,7 +80,7 @@ def test_the_timers_md_socket_starts_on_the_renewed_md_token(tmp_path, monkeypat
 
 
 def test_an_md_socket_knows_when_its_login_renewed_its_token(tmp_path, monkeypatch):
-    import homebase.marketdata as md_mod
+    import homebase.data.marketdata as md_mod
     monkeypatch.setattr(md_mod, "state_dir", lambda: tmp_path)
     cur = {"tok": "md-1"}
     m = md_mod.TradovateMD("k", "demo", token_provider=lambda: cur["tok"])
@@ -162,7 +162,7 @@ def bars_strategy(symbol="NQ", start="09:59", until="10:05"):
 def feed_app(tmp_path, monkeypatch, strategies):
     from homebase.server import create_app
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.engine.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.desk.engine.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     cfg = AppCfg(armed=True,

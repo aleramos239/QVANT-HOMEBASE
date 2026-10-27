@@ -673,7 +673,7 @@ def test_a_refused_rebuild_gets_the_supervisors_cooldown_not_a_login_a_minute(
     import homebase.config as config_mod
     from homebase.server import create_app
     from tests.test_broker_reconnect_cooldown import _run_broker_loop_passes
-    for mod in ("homebase.paths", "homebase.engine", "homebase.server"):
+    for mod in ("homebase.paths", "homebase.desk.engine", "homebase.server"):
         monkeypatch.setattr(f"{mod}.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     monkeypatch.setattr(tradovate, "get_credentials", lambda k: {"username": "u", "password": "p"})

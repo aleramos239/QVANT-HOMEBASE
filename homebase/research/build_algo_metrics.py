@@ -35,6 +35,7 @@ for _p in (str(REPO), str(HERE)):
 from build_metrics import ledger_table, money, pct          # noqa: E402
 from homebase.backtest.propsim import load_rules            # noqa: E402
 from homebase.config import _defaults                       # noqa: E402
+from homebase import paths                                  # noqa: E402
 
 MAIN = Path.home() / "ramos-quant-homebase"                 # research/ lives in the main checkout
 GC = "gc_nfp"
@@ -183,7 +184,7 @@ def build_gc(a: argparse.Namespace) -> dict:
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--nfp", type=Path, default=MAIN / "research/nfp-2026-10-02")
-    ap.add_argument("--ticks", type=Path, default=Path.home() / "futures_ticks")
+    ap.add_argument("--ticks", type=Path, default=paths.ticks_archive())
     ap.add_argument("--out", type=Path, default=HERE)
     a = ap.parse_args(argv)
     art = build_gc(a)

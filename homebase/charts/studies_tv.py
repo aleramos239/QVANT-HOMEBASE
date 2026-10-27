@@ -51,7 +51,7 @@ import datetime as dt
 import math
 
 from .session import ET, always_open, month_key, week_key
-from .studies_ta import _Study, make_ta_num
+from .studies_ta import _Study, _true_range as _tr, make_ta_num
 from .studies_tv2 import PARAMS as PARAMS2, WARM as WARM2
 
 SOURCES = {"close": lambda b: b.c, "open": lambda b: b.o, "high": lambda b: b.h, "low": lambda b: b.l,
@@ -82,11 +82,6 @@ def _smooth(st, x, n, alpha):
     else:
         v = alpha * x + (1.0 - alpha) * v
     return (w, v), v
-
-
-def _tr(bar, pc):
-    """ta.tr(true): the plain range on the first bar."""
-    return bar.h - bar.l if pc is None else max(bar.h - bar.l, abs(bar.h - pc), abs(bar.l - pc))
 
 
 class _MA(_Study):

@@ -127,7 +127,7 @@ def test_a_groups_results_are_its_members_3to1_walkforwards_put_together(c, tmp_
     """Owner 2026-10-25: the group's curve is the 3:1 -- in-sample, out-of-sample and both together, three lines, as each
     strategy's card. Each member's walk-forward (deskresults.wf_state) is read; one not done is left out and named."""
     import datetime as dt
-    from homebase import draftstore
+    from homebase.store import draftstore
     from tests.test_tester_desklab import CODE, at_et, wf_result, write_wf
     seen = []
 

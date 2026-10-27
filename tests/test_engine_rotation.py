@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
-from homebase.engine import Engine
+from homebase.desk.engine import Engine
 from tests import test_engine_lab as tlab
 from tests.test_engine import ALERT, Clock, FakeAdapter, run
 

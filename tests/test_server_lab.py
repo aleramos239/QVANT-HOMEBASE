@@ -16,10 +16,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 import homebase.config as config_mod
-from homebase import desk_api, labcfg, labdesk
+from homebase.desk import desk_api, labcfg, labdesk
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
-from homebase.engine import Engine
-from homebase.labdesk import LabDesk, Refused
+from homebase.desk.engine import Engine
+from homebase.desk.labdesk import LabDesk, Refused
 from homebase.labrun import store
 from homebase.server import compute_readiness, create_app
 from tests.test_engine import FakeAdapter
@@ -61,9 +61,9 @@ def _never_the_real_config_file(tmp_path, monkeypatch):
 @pytest.fixture()
 def paths(tmp_path, monkeypatch):
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.engine.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.desk.engine.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.secrets_store.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.store.secrets_store.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     return tmp_path
 
@@ -803,7 +803,7 @@ def test_check_book_and_refused_carry_the_sentence(tmp_path):
 
 
 def test_strategy_code_never_runs_in_the_desk_process():
-    code = ("import sys; import homebase.labdesk, homebase.labcfg\n"
+    code = ("import sys; import homebase.desk.labdesk, homebase.desk.labcfg\n"
             "bad = sorted(m for m in sys.modules if m.startswith('homebase.backtest'))\n"
             "print(bad); sys.exit(1 if bad else 0)\n")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)

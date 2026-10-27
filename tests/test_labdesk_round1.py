@@ -11,9 +11,9 @@ import time
 
 import pytest
 
-from homebase import desk_api, engine as engine_mod, labcfg, labdesk
+from homebase.desk import desk_api, engine as engine_mod, labcfg, labdesk
 from homebase.broker.base import OrderResult
-from homebase.labdesk import LabDesk, Refused
+from homebase.desk.labdesk import LabDesk, Refused
 from homebase.labrun import door
 from tests.labdesk_util import DATE, LAB, MARK, Stepper, body, entry, journal, mkdesk, pair, send
 from tests.test_engine import run

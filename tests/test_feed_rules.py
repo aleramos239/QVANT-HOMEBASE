@@ -7,9 +7,9 @@ import datetime as dt
 import json
 
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
-from homebase.engine import Engine
-from homebase.feed import Bar, MarketFeed
-from homebase.rules import RULES, Signal
+from homebase.desk.engine import Engine
+from homebase.data.feed import Bar, MarketFeed
+from homebase.desk.rules import RULES, Signal
 from tests.test_engine import Clock, FakeAdapter
 
 UTC = dt.timezone.utc
@@ -193,7 +193,7 @@ def test_feed_step_runs_the_rule_on_a_closed_bar(tmp_path, monkeypatch):
     import homebase.config as config_mod
     from homebase.server import create_app
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.engine.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.desk.engine.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     cfg = mkcfg(shadow=True)
@@ -241,7 +241,7 @@ def test_a_bars_strategy_not_watched_yet_is_subscribed_on_the_next_step(tmp_path
     import homebase.config as config_mod
     from homebase.server import create_app
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.engine.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.desk.engine.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     cfg = mkcfg(shadow=True)

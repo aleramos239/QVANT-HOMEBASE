@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 from .. import config as config_mod
 from ..broker.tradovate import RENEW_EARLY_FROM, RENEW_EARLY_UNTIL
-from ..rules import RULES
+from ..desk.rules import RULES
 
 FEED_FROM = (8, 55)        # the price feed runs through the RTH day, weekdays
 FEED_UNTIL = (16, 10)

@@ -1,9 +1,7 @@
-"""The daily rules (day_take / day_lock / target_take, sizing tiers, the eval standing) are in
-homebase.dayrules, re-exported at the bottom of this module.
-"""
-from __future__ import annotations
+"""Moved to homebase.desk.risk. This name is the SAME module object (sys.modules), so `homebase.risk`, a monkeypatch through
+either name and `from homebase.risk import ...` all reach it."""
+import sys
 
-# Daily rules (day_take / day_lock / target_take, sizing tiers, the eval standing) live in homebase.dayrules
-# and are re-exported here: one place to import "risk" from.
-from .dayrules import (LOCK_LOCK, LOCK_TAKE, DayBook, DayRules, ceil_to_tick, merge_rules,  # noqa: E402,F401
-                       round_trip_fee, size_for_profit, standing, take_level, take_points)
+from .desk import risk as _moved
+
+sys.modules[__name__] = _moved

@@ -60,10 +60,10 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from homebase import bothistory
+from homebase.desk import bothistory
 from homebase.contracts import point_value, round_to_tick
 from homebase.paths import state_dir
-from homebase.trading import (Refused, check_prices, exit_levels, parse_cancel, parse_exits, parse_modify,
+from homebase.desk.trading import (Refused, check_prices, exit_levels, parse_cancel, parse_exits, parse_modify,
                               parse_order, parse_symbol_action)
 
 PORT = 8859
@@ -848,7 +848,7 @@ def lab_key_path() -> Path:
     The real Desk's key files (desk_api.KEY_FILE, desk_api.LAB_KEY_FILE) are never opened by this tool, in any
     checkout, for reading or for writing: nothing here calls desk_api.ensure_key, and a name that is one of theirs
     is refused here."""
-    from homebase import desk_api
+    from homebase.desk import desk_api
     if LAB_KEY_FILE in (desk_api.KEY_FILE, desk_api.LAB_KEY_FILE) or not LAB_KEY_FILE.startswith("fake-"):
         raise ValueError(f"{LAB_KEY_FILE} is a real Desk's key file: the practice Desk only writes its own")
     return state_dir() / LAB_KEY_FILE
@@ -893,9 +893,9 @@ class LabRig:
     LabDesk. `store`: the Lab store; `root`: the engine's folder (also the simulated accounts' books)."""
 
     def __init__(self, store, root, *, clock=None, placement_ms: int | None = None):
-        from homebase import labdesk as labdesk_mod
+        from homebase.desk import labdesk as labdesk_mod
         from homebase.config import AccountCfg, AppCfg
-        from homebase.engine import Engine
+        from homebase.desk.engine import Engine
         from tools.sim_adapter import PLACEMENT_MS, SimAdapter
         for d in (store, root):
             why = refused_folder(d)
@@ -1020,7 +1020,7 @@ class LabRig:
                 self._timer.cancel()
             self.engine.states.pop(TIMER_STATE, None)
             if body["timer_placing_s"]:
-                from homebase.engine import DayState
+                from homebase.desk.engine import DayState
                 # a state of a strategy that is not from the Lab, placing: what LabDesk.held() looks for. No such
                 # strategy and no such account exist here, so nothing else of the engine acts on it
                 self.engine.states[TIMER_STATE] = DayState(strategy="fake_timer", account="timer",
@@ -1045,8 +1045,8 @@ class LabRig:
         readiness holds only the Mode line and the two Lab lines (labdesk.readiness_line / orphan_line) -- the real
         compute_readiness lives in server.py; timer / levels / feed are empty (no timer, no feed here); no notices."""
         from dataclasses import asdict as _asdict
-        from homebase import labdesk as labdesk_mod
-        from homebase.metrics import live_metrics
+        from homebase.desk import labdesk as labdesk_mod
+        from homebase.desk.metrics import live_metrics
         cfg, engine, labdesk = self.cfg, self.engine, self.labdesk
         accounts = {}
         for aid, a in cfg.accounts.items():
@@ -1158,8 +1158,8 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
     import httpx
     from fastapi.responses import HTMLResponse, JSONResponse, Response
 
-    from homebase import desk_api
-    from homebase import labdesk as labdesk_mod
+    from homebase.desk import desk_api
+    from homebase.desk import labdesk as labdesk_mod
 
     rig = LabRig(store, root, clock=clock, placement_ms=placement_ms)
     cfg, engine, labdesk, adapters = rig.cfg, rig.engine, rig.labdesk, rig.adapters
@@ -1430,7 +1430,7 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
     @app.get("/api/strategy-live")
     async def strategy_live(strategy: str):
         """routes/records.py `strategy_live`: metrics.strategy_live_detail on this Desk's own journal."""
-        from homebase.metrics import strategy_live_detail
+        from homebase.desk.metrics import strategy_live_detail
         if strategy not in cfg.strategies:
             raise HTTPException(404, f"unknown strategy {strategy!r}")
         return strategy_live_detail(rig.root / "journal.jsonl", strategy, cfg)

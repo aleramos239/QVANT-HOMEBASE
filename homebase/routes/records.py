@@ -8,8 +8,8 @@ import json
 
 from fastapi import HTTPException
 
-from .. import equity
-from ..metrics import strategy_live_detail
+from ..desk import equity
+from ..desk.metrics import strategy_live_detail
 
 
 def register(app, *, STATIC, _equity_path, adapters, cfg, journal_cache, state_dir) -> None:

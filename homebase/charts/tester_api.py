@@ -200,7 +200,8 @@ from typing import Callable
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
-from .. import arsenal, draftstore, ideastore, netguard, strategies
+from ..store import arsenal, draftstore, ideastore
+from .. import netguard, strategies
 from ..backtest import drafthost
 from ..backtest import propsim, sandbox, slots
 from ..backtest.grid import GridManager, LooksCorrupt

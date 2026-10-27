@@ -8,8 +8,8 @@ import asyncio
 import contextlib
 import sys
 
-from .. import desk_api, equity
-from .. import inactive as inactive_mod
+from ..desk import desk_api, equity
+from ..desk import inactive as inactive_mod
 from .readiness import compute_readiness, power_status, should_fire_readiness
 
 CLOCK_INTERVAL_S = 1       # also paces the sibling-cancel backstop (cache reads)

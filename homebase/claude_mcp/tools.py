@@ -17,16 +17,15 @@ import datetime as dt
 import inspect
 import re
 import time
-import urllib.parse
 from collections import OrderedDict
 from zoneinfo import ZoneInfo
 
-from .. import draftstore
+from ..store import draftstore
 from .blueprint_tools import SPECS as BLUEPRINT_SPECS
 from .blueprint_tools import _SAID, BlueprintMixin, _said
 from .client import Client, ToolError, base_url
 from .desk_tools import SPECS as DESK_SPECS
-from .desk_tools import DeskMixin
+from .desk_tools import DeskMixin, _kv, _q, _spec, _usd
 from .pipeline_tools import SPECS as PIPELINE_SPECS
 from .pipeline_tools import PipelineMixin
 
@@ -102,12 +101,6 @@ _WAIT = {"type": "integer", "minimum": 0, "maximum": MAX_WAIT_S,
 _RUN_REF = {"run_id": {"type": "string", "description": "A run id (from backtest / list_runs)."},
             "grid_id": {"type": "string", "description": "A heat-map id; with `cell`, one of its cells."},
             "cell": {"type": "integer", "minimum": 0, "description": "The heat-map cell index (with grid_id)."}}
-
-
-def _spec(name, description, props=None, required=()):
-    return {"name": name, "description": description,
-            "inputSchema": {"type": "object", "properties": props or {}, "required": list(required),
-                            "additionalProperties": False}}
 
 
 SPECS = [
@@ -249,12 +242,6 @@ def _num(v, fmt="{:,.2f}", dash="—"):
         return str(v)
 
 
-def _usd(v):
-    if v is None:
-        return "—"
-    return f"-${abs(v):,.0f}" if v < 0 else f"${v:,.0f}"
-
-
 def _pct(v, frac=False):
     if v is None:
         return "—"
@@ -280,10 +267,6 @@ def _et(ms):
     if ms is None:
         return "—"
     return dt.datetime.fromtimestamp(ms / 1000, ET).strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _kv(d):
-    return ", ".join(f"{k}={v}" for k, v in (d or {}).items()) or "(none)"
 
 
 def _prop_line(p) -> str:
@@ -399,10 +382,6 @@ def _ref(args: dict) -> dict:
     if args.get("grid_id") is None or args.get("cell") is None:
         raise ToolError("a heat-map cell needs both grid_id and cell")
     return {"grid_id": str(args["grid_id"]), "cell": int(args["cell"])}
-
-
-def _q(s: str) -> str:
-    return urllib.parse.quote(str(s), safe="")
 
 
 def _compare_text(wid: str, s: dict) -> str:

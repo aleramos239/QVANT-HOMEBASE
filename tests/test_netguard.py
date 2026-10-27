@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 import homebase.config as config_mod
 from homebase import netguard
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
-from homebase.desk_api import same_origin_json
+from homebase.desk.desk_api import same_origin_json
 from homebase.server import create_app
 from tests.test_engine import FakeAdapter
 
@@ -93,11 +93,11 @@ def test_json_content_type(ctype, ok):
 @pytest.fixture()
 def desk(tmp_path, monkeypatch):
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.engine.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.desk.engine.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.secrets_store.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.store.secrets_store.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
-    monkeypatch.setattr("homebase.trading.ChartDesk._views_paused", lambda self: False)
+    monkeypatch.setattr("homebase.desk.trading.ChartDesk._views_paused", lambda self: False)
     cfg = AppCfg(armed=False,
                  accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
                  book={"nq930": [{"account": "main", "qty": 3}]},

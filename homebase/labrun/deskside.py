@@ -30,14 +30,14 @@ it. The lead account is the first account of the Desk's book for this strategy t
 Also here, because the runner must import nothing the Desk owns: the desk id of a store name (PREFIX: a test holds it
 equal to homebase.labcfg.PREFIX) and booked(), which reads the Desk's sidecar the way the Desk does.
 
-Stdlib and labrun.store only. Nothing here sends anything.
+Stdlib, labrun.store and homebase.core only. Nothing here sends anything.
 """
 from __future__ import annotations
 
-import math
-import re
 import time
 
+from ..core.clock import HHMM as _HHMM, is_hhmm as _hhmm
+from ..core.num import finite_no_overflow as _num, is_int as _whole
 from . import store
 
 PREFIX = "lab_"                  # desk id = PREFIX + the store name (homebase.labcfg.PREFIX: tests hold them equal)
@@ -46,29 +46,11 @@ FIELDS = ("status", "fill_px", "fill_sl", "fill_tp", "fill_ms")      # what an u
 WORKING, CANCELLED = ("working", None, None, None, None), ("cancelled", None, None, None, None)
 SIDE = {"Buy": "long", "Sell": "short"}
 FLAT_LATEST = "15:55"            # the Desk's own bound on the flat time (labcfg.FLAT_LATEST)
-_HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 def desk_id(name: str) -> str:
     """The name a promoted strategy has on the Desk and on the wire."""
     return PREFIX + name
-
-
-def _whole(v) -> bool:
-    return isinstance(v, int) and not isinstance(v, bool)
-
-
-def _num(v) -> bool:
-    if isinstance(v, bool) or not isinstance(v, (int, float)):
-        return False
-    try:
-        return math.isfinite(v)
-    except OverflowError:
-        return False
-
-
-def _hhmm(v) -> bool:
-    return isinstance(v, str) and _HHMM.fullmatch(v) is not None
 
 
 def _evening(w) -> bool:

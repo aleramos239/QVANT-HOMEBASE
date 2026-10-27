@@ -14,13 +14,13 @@ routes() is registered by server.py."""
 from __future__ import annotations
 
 import hashlib
-import os
 import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse, Response
 
+from .. import paths
 from .tester_api import host_ok
 
 ENV = "HOMEBASE_PINE_DIR"
@@ -35,8 +35,7 @@ _HEAD_RE = re.compile(r"^\s*(indicator|strategy|study)\s*\(\s*(?:title\s*=\s*)?(
 
 
 def pine_dir() -> Path:
-    v = os.environ.get(ENV)
-    return Path(v).expanduser() if v else Path.home() / ".homebase" / "pine"
+    return paths.from_env(ENV, ".homebase", "pine")
 
 
 def runtime_path() -> Path:

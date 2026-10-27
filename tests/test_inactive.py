@@ -5,12 +5,12 @@ import datetime as dt
 import json
 from zoneinfo import ZoneInfo
 
-from homebase import inactive
+from homebase.desk import inactive
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
 from tests.levels_util import strategy_cfg
-from homebase.engine import Engine
-from homebase.levels import Geometry
-from homebase.rules import RULES
+from homebase.desk.engine import Engine
+from homebase.desk.levels import Geometry
+from homebase.desk.rules import RULES
 from homebase.server import compute_readiness
 from tests.test_engine import Clock, FakeAdapter
 from tests.test_leveltimer import FIRE_NYAM, Rig, run

@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 
 import homebase.config as config_mod
-from homebase.review import review
+from homebase.desk.review import review
 
 DATE = "2026-09-26"
 
@@ -18,7 +18,7 @@ def _write_journal(tmp_path, events):
 
 
 def _patch(monkeypatch, tmp_path):
-    monkeypatch.setattr("homebase.review.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.desk.review.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
 
 

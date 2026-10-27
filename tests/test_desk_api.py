@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 import homebase.config as config_mod
 from homebase.config import AccountCfg, AppCfg, ChartTradingCfg, StrategyCfg
-from homebase.desk_api import ensure_key, event_stream, host_is_local, trade_router
+from homebase.desk.desk_api import ensure_key, event_stream, host_is_local, trade_router
 from homebase.server import create_app
 from tests.trading_util import NQC, TradeAdapter, journal, mkdesk, run
 
@@ -27,12 +27,12 @@ DESK = "http://127.0.0.1:8850"
 @pytest.fixture()
 def desk_client(tmp_path, monkeypatch):
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.engine.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.desk.engine.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.secrets_store.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.store.secrets_store.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     # the real clock would pause the views at 09:29:50-09:30:30 ET: never flake then
-    monkeypatch.setattr("homebase.trading.ChartDesk._views_paused", lambda self: False)
+    monkeypatch.setattr("homebase.desk.trading.ChartDesk._views_paused", lambda self: False)
     cfg = AppCfg(armed=False,
                  accounts={"a1": AccountCfg(keyring_key="k", account_name="A1", label="A1")},
                  book={},                                  # nothing booked: never bot-locked
@@ -225,7 +225,7 @@ def test_stream_sends_state_first_then_events_in_order_and_heartbeats(tmp_path):
 
 
 def test_stream_ends_when_the_reader_was_dropped(tmp_path, monkeypatch):
-    monkeypatch.setattr("homebase.trading.SUB_QUEUE_MAX", 2)
+    monkeypatch.setattr("homebase.desk.trading.SUB_QUEUE_MAX", 2)
     desk, *_ = mkdesk(tmp_path)
 
     async def go():
@@ -243,7 +243,7 @@ def test_stream_ends_with_a_marker_when_the_pause_holds_too_much(tmp_path):
     """More than HELD_MAX events held in the pause: the stream ends with an
     SSE comment (no parser turns it into an event), the reader is dropped,
     and the client reconnects for a fresh state."""
-    from homebase.desk_api import HELD_MAX
+    from homebase.desk.desk_api import HELD_MAX
     assert HELD_MAX == 200
     desk, eng, ads, clock, *_ = mkdesk(tmp_path)
 

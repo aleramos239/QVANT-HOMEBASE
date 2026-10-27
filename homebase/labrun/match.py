@@ -22,11 +22,12 @@ import sys
 import time
 from pathlib import Path
 
-from .. import tickarchive
+from ..data import tickarchive
 from ..backtest import drafthost, runner, sandbox
 from ..backtest.slots import Slots
-from ..backtest.tape import ET, TapeStore, et_ns
+from ..backtest.tape import TapeStore, et_ns
 from ..contracts import tick_size
+from ..core.clock import et_hms as _hms
 
 TIME_NS = 2_000_000_000          # two trades agree on a time within this
 TICKS = 2                        # ... and on a price within this many ticks
@@ -46,10 +47,6 @@ class StrategyFailed(Exception):
 
 class DoesNotTrade(Exception):
     """The day is recorded but the strategy does not trade it (its trades_on says no): nothing to check."""
-
-
-def _hms(ns: int) -> str:
-    return dt.datetime.fromtimestamp(ns // 1_000_000_000, ET).strftime("%H:%M:%S")
 
 
 def _px(v: float, tick: float) -> str:

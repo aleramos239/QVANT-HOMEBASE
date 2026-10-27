@@ -6,7 +6,7 @@ import datetime as dt
 
 import pytest
 
-from homebase.marketdata import TradovateMD
+from homebase.data.marketdata import TradovateMD
 
 
 class Md(TradovateMD):

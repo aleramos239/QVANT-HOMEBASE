@@ -12,7 +12,7 @@ import pytest
 
 from homebase.broker.base import BrokerAdapter, FillEvent, OrderRequest, OrderResult
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
-from homebase.engine import Engine
+from homebase.desk.engine import Engine
 
 UTC = dt.timezone.utc
 
@@ -521,7 +521,7 @@ def test_failed_sibling_cancel_is_retried(tmp_path):
 def _later(monkeypatch, seconds):
     """`seconds` later on the engine's wall clock."""
     now = time.time() + seconds
-    monkeypatch.setattr("homebase.engine.time", SimpleNamespace(
+    monkeypatch.setattr("homebase.desk.engine.time", SimpleNamespace(
         time=lambda: now, perf_counter=time.perf_counter, monotonic=time.monotonic))
 
 

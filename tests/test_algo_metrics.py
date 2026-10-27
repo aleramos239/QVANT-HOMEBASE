@@ -19,9 +19,9 @@ from homebase.server import create_app
 @pytest.fixture
 def desk(tmp_path, monkeypatch):
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.engine.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.desk.engine.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.secrets_store.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.store.secrets_store.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     app = create_app(config_mod._defaults(), {}, background=False)        # disarmed, no account, nothing booked
     with TestClient(app, base_url="http://127.0.0.1:8850") as c:

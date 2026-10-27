@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from homebase import draftstore
+from homebase.store import draftstore
 from homebase.backtest import drafthost
 
 CODE = draftstore.DRAFT_TEMPLATE

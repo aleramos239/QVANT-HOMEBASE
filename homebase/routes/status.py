@@ -11,9 +11,9 @@ from pathlib import Path
 
 from fastapi.responses import FileResponse
 
-from .. import labdesk as labdesk_mod
 from ..backtest.slots import backtests_off
-from ..metrics import live_metrics
+from ..desk import labdesk as labdesk_mod
+from ..desk.metrics import live_metrics
 
 
 def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapters, cfg, compute_readiness, engine,

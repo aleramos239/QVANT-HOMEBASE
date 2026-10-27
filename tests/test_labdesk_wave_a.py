@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import pytest
 
-from homebase import labcfg
+from homebase.desk import labcfg
 from homebase.broker.base import FillEvent
-from homebase.labdesk import Refused
+from homebase.desk.labdesk import Refused
 from homebase.labrun import store
 from tests.labdesk_util import DATE, LAB, LIMITS, entry, mkdesk, rec, send
 from tests.test_engine import run
@@ -271,7 +271,7 @@ def _refused(coro_or_fn):
 
 
 def test_the_sentence_is_the_engines_own():
-    from homebase import engine, labdesk
+    from homebase.desk import engine, labdesk
     assert labdesk.OLD_ORDER_WORKING == engine.LAB_OLD_ORDER_WORKING == OLD_ORDER
 
 
@@ -343,7 +343,7 @@ def test_a_day_file_that_cannot_be_written_either_still_answers_nothing_was_sent
 
 # ---------------------------------------------------------------- M-W: the words an owner reads
 def test_the_new_words_on_the_server_side():
-    from homebase import labdesk
+    from homebase.desk import labdesk
     assert labdesk.OTHER_DESK == "Another copy of the Desk is using the Lab strategies."
     assert labdesk.READ_ONLY_HERE == "Another copy of the Desk is using the Lab strategies. They are read-only here."
     assert labdesk.RECORD_CHANGED == "This strategy changed. Try again."
@@ -356,12 +356,12 @@ def test_the_risk_sentence_is_the_same_on_the_server_and_the_page():
     assert f'var SAY_RISK = "{labcfg.SAY_RISK}";' in page
     for name in ("SAY_TRADES", "SAY_QTY", "SAY_LAST", "SAY_FLAT"):
         assert f'var {name} = "{getattr(labcfg, name)}";' in page, name
-    from homebase import labdesk
+    from homebase.desk import labdesk
     assert f'var OTHER_DESK = "{labdesk.OTHER_DESK}";' in page
 
 
 def test_a_row_whose_placement_outcome_is_unknown_never_shows_the_engines_raw_note():
-    from homebase import labdesk
+    from homebase.desk import labdesk
     got = labdesk.LabDesk._row_why(labdesk.PLACING_UNKNOWN)
     assert got == {"why": "The Desk restarted while this entry was going out. Check it at the broker."}
     assert labdesk.LabDesk._row_why("entry: margin") == {"why": labdesk.NOT_PLACED, "detail": "entry: margin"}

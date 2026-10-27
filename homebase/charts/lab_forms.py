@@ -21,8 +21,10 @@ import keyword
 import math
 import re
 
-from .. import draftstore
+from ..store import draftstore
 from ..contracts import tick_size
+from ..core.clock import hhmm_minutes as _mins
+from ..core.num import finite_no_overflow as _num
 
 MARKETS = ("NQ", "ES", "YM", "RTY", "GC", "SI")
 SIDES = (("both", "Both"), ("long", "Long only"), ("short", "Short only"))
@@ -83,16 +85,6 @@ class FormError(ValueError):
 
 # ---------------------------------------------------------------- small helpers
 
-def _num(v) -> bool:
-    """A finite number a float can hold (a bool, a string or None is not one; neither is an int past float range)."""
-    if isinstance(v, bool) or not isinstance(v, (int, float)):
-        return False
-    try:
-        return math.isfinite(float(v))
-    except OverflowError:
-        return False
-
-
 def _whole(v):
     """v as an int when it is a whole number (6 or 6.0), else None."""
     if isinstance(v, bool) or not isinstance(v, (int, float)):
@@ -115,10 +107,6 @@ def _n(x) -> str:
 
 def _pts(x) -> str:
     return "1 point" if float(x) == 1 else f"{_n(x)} points"
-
-
-def _mins(hhmm: str) -> int:
-    return int(hhmm[:2]) * 60 + int(hhmm[3:])
 
 
 def _hhmm(minutes: int) -> str:

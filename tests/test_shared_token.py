@@ -131,7 +131,7 @@ def test_a_dropped_healthy_socket_retries_in_place_at_once_during_a_cooldown(des
 
 
 # ---------------------------------------------------------------- review 2026-09-29
-from homebase import ticks  # noqa: E402
+from homebase.data import ticks  # noqa: E402
 from homebase.broker.login_budget import LoginBudget  # noqa: E402
 from homebase.broker.tradovate_auth import TradovateTokens  # noqa: E402
 from tests.test_engine import FakeAdapter  # noqa: E402

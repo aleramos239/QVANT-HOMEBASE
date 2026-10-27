@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from homebase import draftstore
+from homebase.store import draftstore
 from homebase.backtest import drafthost
 from homebase.charts import lab_templates
 from homebase.charts.server import create_app

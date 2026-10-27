@@ -11,10 +11,10 @@ import json
 import httpx
 import pytest
 
-from homebase import tickarchive as A
-from homebase import tickmassive as M
-from homebase import ticks as T
-from homebase import tickjob as J
+from homebase.data import tickarchive as A
+from homebase.data import tickmassive as M
+from homebase.data import ticks as T
+from homebase.data import tickjob as J
 
 ET = T.ET
 NOW = dt.datetime(2026, 9, 29, 17, 30, tzinfo=ET)

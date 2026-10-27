@@ -18,7 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from homebase import draftstore, ideastore, paths
+from homebase.store import draftstore, ideastore
+from homebase import paths
 from homebase.claude_mcp import blueprint_tools, protocol, tools
 from homebase.claude_mcp.client import Client, ToolError
 

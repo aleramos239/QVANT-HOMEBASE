@@ -11,10 +11,11 @@ appear under many strategies.
 from __future__ import annotations
 
 import json
-import os
+import os  # noqa: F401 -- unused here now, kept: tests patch config.os.replace (the global os the atomic write calls)
 import logging
 from dataclasses import asdict, dataclass, field, fields
 
+from .core import atomic
 from .netguard import clean_entry
 from .paths import config_path
 
@@ -286,9 +287,7 @@ def save(cfg: AppCfg) -> None:
     # atomic: a crash mid-write must never leave a truncated config (the desk now
     # rewrites it on its own, e.g. removing a closed account)
     path = config_path()
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
-    os.replace(tmp, path)
+    atomic.write_text(path, json.dumps(d, indent=2, ensure_ascii=False) + "\n", tmp=path.with_name(path.name + ".tmp"))
     for fn in list(_after_save):
         try:
             fn(cfg)

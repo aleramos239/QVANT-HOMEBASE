@@ -39,6 +39,7 @@ from typing import Callable
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import qos
+from ..core.clock import utc_iso as _now
 from ..paths import repo_root, state_dir
 from .export import read_json, write_json
 from .tester_api import host_ok
@@ -47,10 +48,6 @@ FINAL = ("done", "error", "cancelled")
 NO_LOGIN = ("Tradovate's live login is not connected on the Desk (no valid market-data token), so nothing can be "
             "fetched: reconnect it on the Desk, then refresh")
 NO_TOKEN_EXIT = 3       # ticks.NO_TOKEN_EXIT: the job waited for the desk's token and gave up
-
-
-def _now() -> str:
-    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
 
 def plan(python: str) -> list[dict]:

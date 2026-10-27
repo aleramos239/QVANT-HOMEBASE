@@ -395,8 +395,8 @@ def test_a_torn_line_does_not_lose_the_rest_of_the_book(tmp_path):
 
 
 # ---- it never reaches a broker ---------------------------------------------------------------------------------
-FORBIDDEN = ("homebase.broker", "homebase.trading", "homebase.desk_api", "homebase.charts.desk", "homebase.engine",
-             "homebase.timer", "homebase.secrets_store", "homebase.ticks", "homebase.marketdata", "httpx", "websockets")
+FORBIDDEN = ("homebase.broker", "homebase.desk.trading", "homebase.desk.desk_api", "homebase.charts.desk", "homebase.desk.engine",
+             "homebase.desk.timer", "homebase.store.secrets_store", "homebase.data.ticks", "homebase.data.marketdata", "httpx", "websockets")
 
 
 def test_paperbook_imports_nothing_that_can_reach_a_broker():
@@ -406,7 +406,7 @@ def test_paperbook_imports_nothing_that_can_reach_a_broker():
     for node in ast.walk(ast.parse(src)):
         if isinstance(node, ast.ImportFrom):
             base = ".".join(x for x in (pkg[node.level], node.module or "") if x)
-            direct += [f"{base}.{a.name}" if node.module is None else base for a in node.names]
+            direct += [base] + [f"{base}.{a.name}" for a in node.names]       # `from ..desk import trading` is homebase.desk.trading
         elif isinstance(node, ast.Import):
             direct += [a.name for a in node.names]
     assert [m for m in direct if any(m == f or m.startswith(f + ".") for f in FORBIDDEN)] == [], direct

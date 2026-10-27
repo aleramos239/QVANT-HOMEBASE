@@ -80,7 +80,7 @@ fi
 # 2. a clean copy, and the server's programs must import from it
 git archive "$REV" | tar -x -C "$WORK" || { say "${REV:0:8}: could not make a clean copy"; exit 0; }
 if ! ERR=$(cd "$WORK" && "$PY" -c \
-    "import homebase.server, homebase.charts.server, homebase.labrun.host, homebase.labrun.__main__, homebase.charts.__main__, homebase.tickjob" 2>&1); then
+    "import homebase.server, homebase.charts.server, homebase.labrun.host, homebase.labrun.__main__, homebase.charts.__main__, homebase.data.tickjob" 2>&1); then
   say "${REV:0:8}: NOT SHIPPED -- it does not import: $(echo "$ERR" | tail -1)"
   [ $DRY = 1 ] || { echo "$REV" > "$NOIMP"; tell "main ${REV:0:8} does not import: not sent to the server"; }
   exit 0

@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import homebase.config as config_mod
-from homebase import equity
+from homebase.desk import equity
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
 from homebase.server import create_app
 from tests.test_engine import FakeAdapter
@@ -39,9 +39,9 @@ class SeededFakeAdapter(FakeAdapter):
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.engine.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.desk.engine.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.secrets_store.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.store.secrets_store.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     cfg = AppCfg(armed=False,
                  accounts={"main": AccountCfg(keyring_key="k",
@@ -112,7 +112,7 @@ def test_test_alert_dry_run_places_nothing(client):
 
 
 def test_logins_list_and_delete(client):
-    import homebase.secrets_store as ss
+    import homebase.store.secrets_store as ss
     ss.set_credentials("tv:demo:abc", username="abc", password="x")
     d = client.get("/api/logins").json()
     assert "tv:demo:abc" in [l["key"] for l in d["logins"]]
@@ -122,7 +122,7 @@ def test_logins_list_and_delete(client):
 
 
 def test_connect_probes_and_returns_key(client):
-    import homebase.secrets_store as ss
+    import homebase.store.secrets_store as ss
     r = client.post("/api/connect", json={"username": "NewGuy",
                                           "password": "x"}).json()
     assert r["ok"] is True and r["key"] == "tv:demo:newguy"
@@ -132,7 +132,7 @@ def test_connect_probes_and_returns_key(client):
 
 
 def test_accounts_add_creates_and_connects(client):
-    import homebase.secrets_store as ss
+    import homebase.store.secrets_store as ss
     ss.set_credentials("tv:demo:z", username="z", password="x")
     r = client.post("/api/accounts/add",
                     json={"key": "tv:demo:z", "account_name": "EVAL77",
@@ -145,7 +145,7 @@ def test_accounts_add_creates_and_connects(client):
 
 
 def test_book_endpoint_sets_assignments(client):
-    import homebase.secrets_store as ss
+    import homebase.store.secrets_store as ss
     ss.set_credentials("tv:demo:z", username="z", password="x")
     client.post("/api/accounts/add", json={"key": "tv:demo:z",
                                            "account_name": "EVAL77"})
@@ -653,7 +653,7 @@ def _readiness(now_et_hhmm, *, armed=True, timer_stage=None, feed=None, power=No
                shadow=False):
     import datetime as dt
     from zoneinfo import ZoneInfo
-    from homebase.engine import Engine
+    from homebase.desk.engine import Engine
     from homebase.server import compute_readiness
     h, m = now_et_hhmm
     now = dt.datetime(2026, 9, 23, h, m, tzinfo=ZoneInfo("America/New_York"))  # Wed
@@ -702,7 +702,7 @@ def _readiness_day(tmp_path, hms, tst, *, armed=True, status=None, gated=False):
     (and its day status) -> (nq930's checks, ready)."""
     import datetime as dt
     from zoneinfo import ZoneInfo
-    from homebase.engine import Engine
+    from homebase.desk.engine import Engine
     from homebase.server import compute_readiness
     now = dt.datetime(2026, 9, 23, *hms, tzinfo=ZoneInfo("America/New_York"))
     cfg = AppCfg(armed=armed,
@@ -790,7 +790,7 @@ def test_readiness_feed_freshness():
     fresh = (dt.datetime(2026, 9, 23, 14, 58, tzinfo=dt.timezone.utc)).isoformat()
     old = (dt.datetime(2026, 9, 23, 13, 0, tzinfo=dt.timezone.utc)).isoformat()
     from zoneinfo import ZoneInfo
-    from homebase.engine import Engine
+    from homebase.desk.engine import Engine
     from homebase.server import compute_readiness
     now = dt.datetime(2026, 9, 23, 11, 0, tzinfo=ZoneInfo("America/New_York"))
     cfg = AppCfg(armed=True,
@@ -894,7 +894,7 @@ def _write_journal(tmp_path, n):
 def _status_the_old_way(tmp_path):
     """What /api/status answered before the cache: the whole file read and parsed on every call."""
     import json
-    from homebase.metrics import live_metrics
+    from homebase.desk.metrics import live_metrics
     from homebase.server import JOURNAL_TAIL
     lines = (tmp_path / "journal.jsonl").read_text().splitlines()
     return live_metrics([json.loads(l) for l in lines]), [json.loads(l) for l in lines[-JOURNAL_TAIL:]][::-1]
@@ -919,7 +919,7 @@ def test_status_answers_the_same_from_the_cached_journal(client, tmp_path):
 
 def test_status_reads_an_unchanged_journal_not_at_all_and_a_grown_one_from_where_it_stopped(
         client, tmp_path, monkeypatch):
-    from homebase import bothistory
+    from homebase.desk import bothistory
     _write_journal(tmp_path, 200)
     reads, orig = [], bothistory.JournalCache._read_from
 

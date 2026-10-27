@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import ast
 
-from .. import draftstore
+from ..store import draftstore
 
 BLANK = '''"""<One line: what this strategy does.>"""
 from __future__ import annotations

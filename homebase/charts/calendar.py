@@ -15,12 +15,13 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-import os
 import ssl
 import time
 import urllib.request
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+from ..core import atomic
 
 FF_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
 EVERY_S = 3600          # a good fetch is refreshed an hour later
@@ -84,9 +85,7 @@ def week_start(t_ms: int) -> dt.date:
 
 def _write_json(path: Path, data) -> None:
     """Via a temp file + atomic rename: a torn file would read back empty."""
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(data, indent=1))
-    os.replace(tmp, path)
+    atomic.write_text(path, json.dumps(data, indent=1), tmp=path.with_name(path.name + ".tmp"))
 
 
 class Calendar:

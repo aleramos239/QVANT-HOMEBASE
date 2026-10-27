@@ -7,7 +7,6 @@ A group's ACCOUNT CYCLE (its strategies taking turns across chosen accounts, 202
 deleted or a strategy moved (tester_api deskgroups_write). Ids are never reused: a deleted group's id is never given again,
 so an old cycle can never attach to a new group. The combined results are read off the members' 3:1 walk-forwards.
 """
-import datetime as dt
 import json
 import os
 import re
@@ -15,6 +14,8 @@ import tempfile
 import threading
 from pathlib import Path
 
+from ..core.clock import utc_iso as stamp
+from ..core.num import float_or_none as _num
 from ..labrun import store
 
 KINDS = ("eval", "funded", "together")        # what the group's page leads with: pass odds, payout odds, or both
@@ -172,10 +173,6 @@ def apply(action: str, body: dict, at=None) -> list[dict]:
 
 # ---- combined results -------------------------------------------------------------------------------------------------
 
-def _num(v):
-    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
-
-
 def merged(named: list[tuple[str, list[dict]]]) -> tuple[list[dict], list[str]]:
     """Several members' trades as one ledger, in the order they closed, and each trade's owner in that same order. (The sim
     reads the ledger as one account's trades; trades open at once are counted together by its own open-loss rule.)"""
@@ -213,7 +210,3 @@ def summarize(trades: list[dict], owners: list[str] | None = None) -> dict | Non
             "days": len(days), "worst_day": round(min(by_day.values()), 2), "best_day": round(max(by_day.values()), 2),
             "together_days": sum(1 for d in days if len(who.get(d, ())) >= 2) if owners is not None else None,
             "curve": {"days": days, "vals": vals}}
-
-
-def stamp() -> str:
-    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")

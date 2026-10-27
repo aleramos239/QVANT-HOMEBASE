@@ -53,8 +53,7 @@ def _now_et() -> dt.datetime:
 
 
 def _q(s: str) -> str:
-    """Same one-liner tools.py's own _q uses for a path segment -- duplicated, not imported: tools.py
-    imports DeskMixin from this module, so the reverse import would be circular."""
+    """A path segment, quoted whole. tools.py imports this one (tools imports desk_tools, never the reverse)."""
     return urllib.parse.quote(str(s), safe="")
 
 
@@ -253,7 +252,7 @@ class DeskMixin:
 
     _desk: DeskClient | None = None
     _charts_export: Client | None = None
-    _tick_archive: Path = Path.home() / "futures_ticks"
+    _tick_archive: Path = paths.ticks_archive()
     _now_et = staticmethod(_now_et)
     _launchctl = staticmethod(lambda args: subprocess.run(args, capture_output=True, text=True, timeout=5))
 

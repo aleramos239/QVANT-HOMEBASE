@@ -9,8 +9,8 @@ import re
 import pytest
 
 from homebase.broker.base import OrderResult
-from homebase.engine import ET
-from homebase.trading import parse_order
+from homebase.desk.engine import ET
+from homebase.desk.trading import parse_order
 from tests.trading_util import ESC, MNQC, NQC, journal, mkdesk, quote, run
 
 UTC = dt.timezone.utc

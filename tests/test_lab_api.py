@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 import pytest
 
-from homebase import draftstore
+from homebase.store import draftstore
 from homebase.backtest import sandbox
 from homebase.charts import lab_forms, lab_templates, reviewpack
 from homebase.charts.server import create_app

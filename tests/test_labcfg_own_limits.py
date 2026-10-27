@@ -4,8 +4,8 @@ the size is the tested size, the trades a day the most it took in one day, any e
 window ends. What was typed is never overwritten; an older record without `auto_limits` behaves exactly as before."""
 from __future__ import annotations
 
-from homebase import labcfg
-from homebase.labcfg import LabLimits
+from homebase.desk import labcfg
+from homebase.desk.labcfg import LabLimits
 from homebase.labrun import store
 from tests.test_labcfg import LIMITS, MARK, desk_cfg, rec, side
 
@@ -156,7 +156,7 @@ def test_a_strategy_may_say_its_own_most_trades_a_day():
     """2026-10-18 (the owner: "on the desk it trades until its in profit"): a rule that can take more trades in a day than its
     backtest ever did declares `max_trades_day`; the record carries that, not the backtest's most."""
     import pytest
-    from homebase import draftstore
+    from homebase.store import draftstore
     from tests.test_micro_exec import draft
     meta = draftstore.static_meta(draft("max_trades_day = 5"))
     assert meta["max_trades_day"] == 5 and "max_trades_day" not in draftstore.static_meta(draft())
