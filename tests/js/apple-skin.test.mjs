@@ -231,7 +231,7 @@ test('desk skin: the stop menu no longer saves on change -- a Set button names t
   assert.equal(R.sl.value, '5'); assert.equal(R.slBtn.hidden, true, 'nothing to set');
   R.sl.value = '10'; await R.sl.fire('change');
   assert.deepEqual(calls, [], 'a pick alone sends nothing');
-  assert.equal(R.slBtn.hidden, false); assert.equal(R.slBtn.textContent, 'Set 5 pt → 10 pt');
+  assert.equal(R.slBtn.hidden, false); assert.equal(R.slBtn.textContent, 'Set 5 pts → 10 pts', 'the menu\'s own unit word');
   R.follow('5');      // a repaint while the pick waits keeps it
   assert.equal(R.sl.value, '10'); assert.equal(R.slBtn.hidden, false);
   await R.slBtn.fire('click');

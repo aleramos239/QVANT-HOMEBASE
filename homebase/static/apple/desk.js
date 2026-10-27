@@ -195,7 +195,7 @@
     rrCtl.slCur = null;      // the Desk's stop as setup() last saw it (null: not seen yet for this strategy)
     const slShow = () => {      // the Set button, only while the pick differs from the Desk's stop
       const pick = rrCtl.sl.value, on = rrCtl.slCur != null && pick !== rrCtl.slCur;
-      if (on) rrCtl.slBtn.textContent = 'Set ' + rrCtl.slCur + ' pt → ' + pick + ' pt';
+      if (on) rrCtl.slBtn.textContent = 'Set ' + rrCtl.slCur + ' pts → ' + pick + ' pts';      // the menu's own unit word
       rrCtl.slBtn.hidden = !on;
     };
     // each repaint: a pick waiting for its Set stays; otherwise the menu follows the Desk
