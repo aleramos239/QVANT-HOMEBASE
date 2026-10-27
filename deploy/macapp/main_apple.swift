@@ -89,24 +89,35 @@ func env(_ k: String) -> String? {
     return (v == nil || v!.isEmpty) ? nil : v
 }
 
-/// A small synchronous GET (launch and ⌘R only): the body of a 200, else nil.
-func fetch(_ url: URL, timeout: TimeInterval = 3) -> Data? {
-    var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: timeout)
-    req.httpMethod = "GET"
-    let sem = DispatchSemaphore(value: 0)
-    var out: Data?
+/// Small synchronous GETs (launch and ⌘R only), all at once: each distinct URL's body when it answered 200 within the
+/// timeout (+1 s), keyed by its absolute URL. The caller waits for the slowest one, not for the sum of them.
+func fetchAll(_ urls: [URL], timeout: TimeInterval = 3) -> [URL: Data] {
     let conf = URLSessionConfiguration.ephemeral
+    conf.httpMaximumConnectionsPerHost = 16     // the skin is ~7 files a host: none queues behind the others
     #if VPS
     conf.proxyConfigurations = [vpsProxy]
     #endif
-    let task = URLSession(configuration: conf).dataTask(with: req) { data, resp, _ in
-        if let http = resp as? HTTPURLResponse, http.statusCode == 200 { out = data }
-        sem.signal()
+    let session = URLSession(configuration: conf)
+    let group = DispatchGroup()
+    let lock = NSLock()
+    var out: [URL: Data] = [:]
+    for url in Set(urls.map { $0.absoluteURL }) {
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: timeout)
+        req.httpMethod = "GET"
+        group.enter()
+        session.dataTask(with: req) { data, resp, _ in
+            if let http = resp as? HTTPURLResponse, http.statusCode == 200, let d = data { lock.lock(); out[url] = d; lock.unlock() }
+            group.leave()
+        }.resume()
     }
-    task.resume()
-    _ = sem.wait(timeout: .now() + timeout + 1)
+    _ = group.wait(timeout: .now() + timeout + 1)
+    session.invalidateAndCancel()
+    lock.lock(); defer { lock.unlock() }
     return out
 }
+
+/// A small synchronous GET (launch and ⌘R only): the body of a 200, else nil.
+func fetch(_ url: URL, timeout: TimeInterval = 3) -> Data? { fetchAll([url], timeout: timeout)[url.absoluteURL] }
 
 func jsString(_ s: String) -> String {
     guard let d = try? JSONSerialization.data(withJSONObject: [s]), let t = String(data: d, encoding: .utf8) else { return "\"\"" }
@@ -277,10 +288,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let tabs = root["tabs"] as? [String: Any] else { return nil }
         let shared = root["shared"] as? [String: Any] ?? [:]
+        // every file of every tab fetched at once (launch waits for the slowest, not the sum), then read below in order
+        var urls: [URL] = []
+        for tab in Tab.allCases {
+            guard let t = tabs[tab.key] as? [String: Any] else { return nil }
+            let base = origin(of: tab.baseURL)
+            var paths: [String] = (shared["css"] as? [String] ?? []) + (t["css"] as? [String] ?? [])
+            paths += (shared["js"] as? [String] ?? []) + (t["js"] as? [String] ?? [])
+            if let s = t["url"] as? String { paths.append(s) }
+            urls += paths.compactMap { URL(string: $0, relativeTo: base) }
+        }
+        let bodies = fetchAll(urls)
+        func got(_ u: URL) -> Data? { bodies[u.absoluteURL] }
         func text(_ paths: [String], _ base: URL) -> String? {
             var out: [String] = []
             for p in paths {
-                guard let u = URL(string: p, relativeTo: base), let d = fetch(u), let t = String(data: d, encoding: .utf8) else { return nil }
+                guard let u = URL(string: p, relativeTo: base), let d = got(u), let t = String(data: d, encoding: .utf8) else { return nil }
                 out.append("/* \(p) */\n" + t)
             }
             return out.joined(separator: "\n")
@@ -293,7 +316,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             let jsPaths = (shared["js"] as? [String] ?? []) + (t["js"] as? [String] ?? [])
             guard let css = text(cssPaths, base), let js = text(jsPaths, base) else { return nil }
             var start = t["url"] as? String
-            if let s = start, let u = URL(string: s, relativeTo: base), fetch(u) == nil { start = nil; return nil }
+            if let s = start, let u = URL(string: s, relativeTo: base), got(u) == nil { start = nil; return nil }
             result[tab] = TabSkin(startPath: start, css: css, js: js)
         }
         var samples: [(String, String)] = []
