@@ -280,7 +280,7 @@ test('words (plan 4.10): a 3:1 run\'s All metrics says In-sample or Test months;
   assert.match(LAB, /scopeName = wf \? \{ all: kind === 'wf_oos' \? 'Test months' : 'In-sample' \} : Object\.fromEntries\(AM\.SCOPES\)/);
   assert.equal((LAB.match(/More numbers · Prop sim[^<]*· not one of the six lines/g) || []).length, 2);
   const MIX = readFileSync(new URL('../../homebase/static/charts/labmix.js', import.meta.url), 'utf8');
-  assert.match(MIX, /latest run that ends by 2025-06-30, as one account · old runs: they may include test months/);
+  assert.match(MIX, /latest run to 2025-06-30, as one account · old runs that may hold test months/);
   assert.ok(!/build-days run/.test(MIX), 'the retired split\'s words are gone from the subtitle');
   assert.ok(!/nothing here can put one on the desk/.test(LAB.slice(0, 900)), 'the header no longer says the page cannot put one on the Desk');
   assert.match(LAB.slice(0, 900), /Put it on the Desk/);
