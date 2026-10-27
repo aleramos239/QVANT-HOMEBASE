@@ -78,6 +78,7 @@ def _ag_row(g: list, tick_size: float) -> list:
     return [g[0], round(g[6] / g[4], 6), round(g[2] * tick_size, 6), round(g[3] * tick_size, 6), g[4], g[1], g[5]]
 
 
+# Not the same Bar as feed.py or backtest/engine.py: epoch-ms start plus order flow, and pickled by charts/history -- never merge or rename it.
 @dataclass
 class Bar:
     t: int                  # start, epoch ms (time: bucket start; others: first trade)

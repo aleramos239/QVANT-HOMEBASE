@@ -137,6 +137,7 @@ class Position:
     trail: Order | None = None      # run controls: the trailing stop's next ratchet (a touch)
 
 
+# Not the same Bar as feed.py or charts/bars.py: mutable, start/end in ns; the three are kept apart on purpose.
 @dataclass
 class Bar:
     start_ns: int

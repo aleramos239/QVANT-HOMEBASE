@@ -22,6 +22,7 @@ from .marketdata import TradovateMD
 CLOSE_GRACE_S = 3.0        # a bar with no successor closes this long after its end
 
 
+# Not the same Bar as backtest/engine.py or charts/bars.py: frozen, aware-UTC start; the three are kept apart on purpose.
 @dataclass(frozen=True)
 class Bar:
     ts: dt.datetime          # bar START, aware UTC
