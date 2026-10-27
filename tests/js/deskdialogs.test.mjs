@@ -473,3 +473,14 @@ test('while a dialog is open the red alert steps under its scrim -- it can never
   assert.match(css, /body\.dialog-open #alertBar\{ z-index:49; \}/, 'under every scrim (50+)');
   assert.match(css, /#toast\.show\{[^}]*pointer-events:none;/, 'a toast never takes a click either');
 });
+
+// ---- WP1.12: the connect wizard offers only what works, and says what Add does ------------------------------------------
+test('1.12: no dead broker tiles; step 3 says one click adds every ticked account, booked later on each strategy\'s page', () => {
+  const wiz = HTML.slice(HTML.indexOf('<div class="overlay" id="connectOverlay">'), HTML.indexOf('<div id="wstep4"'));
+  assert.doesNotMatch(wiz, /TopstepX|NinjaTrader|Not wired|opt disabled/);
+  assert.match(wiz, /id="optTv"/);
+  assert.match(wiz, /id="optPaper" onclick="wizPaper\(\)"/);
+  assert.match(wiz, /One click adds them all\./);
+  assert.doesNotMatch(wiz, /portfolio/);
+  assert.match(wiz, /id="cUse" onclick="addSelected\(\)" disabled>Add accounts</, 'the Add button and its route are as they were');
+});
