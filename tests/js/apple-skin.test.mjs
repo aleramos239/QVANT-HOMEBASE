@@ -201,18 +201,18 @@ test('desk skin: words() writes the machine chip, the readiness words and the ch
 });
 
 // the straddle's RR field and stop menu (desk.js rrCtl), run on small fake nodes: what a pick and a Set send
-function rrControls(setStratRr) {
+function rrControls(setStratRr, D = { activeElement: null }) {
   const i = DESK_SKIN.indexOf('    const rrCtl = {'), j = DESK_SKIN.indexOf("rrCtl.btn.addEventListener('click', setRr);");
   assert.ok(i >= 0 && j > i, 'the RR controls block');
   const el = (tag, attrs = {}, ...kids) => {
     const on = {};
     const n = { tag, hidden: !!attrs.hidden, disabled: false, textContent: attrs.text || '', value: attrs.value || '', options: [], children: kids,
-      addEventListener: (t, f) => { (on[t] = on[t] || []).push(f); }, fire: async (t, e = {}) => { for (const f of on[t] || []) await f(e); },
+      isConnected: true, focus: () => { D.activeElement = n; }, addEventListener: (t, f) => { (on[t] = on[t] || []).push(f); }, fire: async (t, e = {}) => { for (const f of on[t] || []) await f(e); },
       append: (...k) => { n.children.push(...k); if (tag === 'select') n.options.push(...k); } };
     if (tag === 'select') { n.options = [...kids]; n.value = kids[0].value; }
     return n;
   };
-  const c = vm.createContext({ el, window: { setStratRr } });
+  const c = vm.createContext({ el, D, window: { setStratRr } });
   vm.runInContext(DESK_SKIN.slice(i, j + "rrCtl.btn.addEventListener('click', setRr);".length) + '\nglobalThis.R = rrCtl;', c);
   return c.R;
 }
@@ -371,6 +371,28 @@ test('desk skin: the stop menu no longer saves on change -- a Set button names t
   R.follow('7.5'); assert.equal(R.sl.value, '7.5');
   R.input.value = '2'; await R.btn.fire('click');
   assert.deepEqual([...calls[2]], ['nq930', 2]);
+});
+
+test('desk skin: a stop pick waiting for its Set never carries over to another strategy, and a keyboard Set keeps the focus', async () => {
+  const calls = [], D = { activeElement: null };
+  const R = rrControls(async (...a) => { calls.push(a); return ''; }, D);
+  R.name = 'nq930'; R.follow('5');
+  R.sl.value = '10'; await R.sl.fire('change');
+  assert.equal(R.slBtn.hidden, false, 'nq930: a pick waits');
+  // another strategy opens: setup() forgets the Desk's stop it last saw, then follows the new one's
+  assert.match(DESK_SKIN, /if \(rrCtl\.name !== name\) \{ rrCtl\.name = name; rrCtl\.dirty = false; rrCtl\.err\.hidden = true; rrCtl\.slCur = null; \}/);
+  R.name = 'es930'; R.slCur = null; R.follow('5');
+  assert.equal(R.sl.value, '5', 'es930 shows its own stop, not nq930\'s pick'); assert.equal(R.slBtn.hidden, true, 'nothing to set');
+  assert.deepEqual(calls, []);
+  // a Set reached by keyboard: once saved the button hides, and the focus goes back to the menu (never lost to the page)
+  R.sl.value = '10'; await R.sl.fire('change');
+  R.slBtn.focus(); await R.slBtn.fire('click');
+  assert.deepEqual([...calls[0]], ['es930', null, 10]);
+  assert.equal(R.slBtn.hidden, true); assert.equal(D.activeElement, R.sl);
+  // a mouse Set (the focus elsewhere) leaves the focus where it is
+  R.follow('10'); R.sl.value = '5'; await R.sl.fire('change');
+  D.activeElement = null; await R.slBtn.fire('click');
+  assert.equal(D.activeElement, null);
 });
 
 test('desk skin: the research heading names the route from the record itself -- 3:1 test months or the old record, never "OOS"', () => {

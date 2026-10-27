@@ -213,6 +213,7 @@
     rrCtl.slBtn.addEventListener('click', async () => {
       const name = rrCtl.name, v = parseFloat(rrCtl.sl.value);
       if (!(v > 0) || typeof window.setStratRr !== 'function') return;
+      const kb = D.activeElement === rrCtl.slBtn;      // reached by keyboard: the focus goes back to the menu once the button hides
       rrCtl.sl.disabled = rrCtl.slBtn.disabled = true;
       try {
         const why = await window.setStratRr(name, null, v);
@@ -220,7 +221,10 @@
         rrCtl.err.textContent = why || ''; rrCtl.err.hidden = !why;
         if (why) rrCtl.sl.value = rrCtl.slCur;      // a refused pick goes back to the Desk's stop
         else rrCtl.slCur = rrCtl.sl.value;      // saved: the Desk's stop now (the page's refresh confirms it)
-      } finally { rrCtl.sl.disabled = rrCtl.slBtn.disabled = false; slShow(); }
+      } finally {
+        rrCtl.sl.disabled = rrCtl.slBtn.disabled = false; slShow();
+        if (kb && rrCtl.slBtn.hidden && rrCtl.sl.isConnected) rrCtl.sl.focus();
+      }
     });
     rrCtl.input.addEventListener('input', () => { rrCtl.dirty = true; rrCtl.err.hidden = true; });
     rrCtl.input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.repeat) setRr(); });
