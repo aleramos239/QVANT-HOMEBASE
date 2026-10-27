@@ -352,6 +352,21 @@ test('G: an account the Desk does not list counts as LIVE: changing a setting of
   assert.equal(demo.confirms.length, 0, 'a listed demo account does not ask');
 });
 
+test('L: an account with no demo or paper mark is LIVE in the Setup and the sidebar, as the Desk\'s LIVE check counts it', () => {
+  const accounts = { ...ACCOUNTS, a3: { label: 'Funded 3', connected: true, balance: 1000 }, a4: { label: 'Paper 4', env: 'paper', connected: true, balance: 1 } };
+  const t = load({ accounts, book: { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a3', qty: 1 }, { account: 'a4', qty: 1 }, { account: 'gone', qty: 1 }] } });
+  const html = t.view();
+  assert.equal(setupRow(html, 'Accounts'), 'Lucid Eval #1 demo ×1 · Funded 3 LIVE ×1 · Paper 4 paper ×1 · gone LIVE ×1');
+  assert.equal(setupRow(html, 'LIVE / paper'), 'LIVE on 2 · demo on 1 · paper on 1');
+  const side = t.side(), rows = [...side.matchAll(/onclick="openAccts\(([^)]*)\)"/g)].map((m) => m[1].replace(/&quot;|"/g, ''));
+  assert.deepEqual(rows, ['a2', 'a3', 'a1', 'a4'], 'LIVE first, then demo, then paper');
+  assert.match(side, /Funded 3<span class="tag-live">LIVE<\/span>/);
+  assert.match(side, /title="Funded 3 · Live"/);
+  assert.match(side, /Lucid Eval #1<span class="tag"[^>]*>DEMO</);
+  assert.match(side, /Paper 4<span class="tag-paper"[^>]*>PAPER</);
+  assert.equal((side.match(/tag-live/g) || []).length, 2, 'demo and paper never say LIVE');
+});
+
 test('WP1.14 the built-in page has the Setup too: its contracts, when it fires, flat time and days, shown only', () => {
   const t = load({ book: { nq930: [{ account: 'a2', qty: 3 }] } });
   t.ctx.ST.strategies.nq930.cfg.fire_et = '09:30:00';

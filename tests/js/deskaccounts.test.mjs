@@ -116,3 +116,13 @@ test('P: a row whose account the Desk removed leaves the open popup on the next 
   assert.deepEqual(removed, ['a2']);
   assert.equal(rows[0].cells.bal.textContent, '$50000', 'the others still tick');
 });
+
+test('L: a row with no demo or paper mark says LIVE, as the Desk\'s LIVE check counts it; demo and paper never do', () => {
+  const t = load({ ...ACCTS(), a4: { label: 'Funded 4', connected: true, balance: 1, realized_pnl: 0, open_positions: [], working_orders: 0, day: {} } });
+  t.ctx.api.openAccts();
+  const row = (id) => t.els.acctList2.innerHTML.split('<div class="acct').find((r) => r.includes(`data-acct="${id}"`));
+  assert.match(row('a4'), /class="tag-live"[^>]*>LIVE</);
+  assert.match(row('a1'), /class="tag-live"[^>]*>LIVE</);
+  assert.doesNotMatch(row('a2'), /LIVE/);
+  assert.doesNotMatch(row('a3'), /LIVE/);
+});

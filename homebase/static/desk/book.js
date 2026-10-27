@@ -6,14 +6,14 @@ function tradeWords(a) {
 }
 const DEMO_TAG = '<span class="tag" title="A demo account — the broker\'s practice money">DEMO</span>';
 function acctRow(id, extra) {
-  const a = (ST.accounts || {})[id] || {label: id};
+  const a = (ST.accounts || {})[id] || {label: id};   // LIVE unless demo or paper, as isDemoAcct (an unknown env is LIVE)
   const pnl = a.realized_pnl;
   const err = (!a.connected && a.error)
     ? `<span class="kvi neg" style="font-size:11px;text-align:left;min-width:0">${esc(String(a.error).slice(0, 46))}…</span>` : "";
   return `<div class="acct">
     <span class="dot ${a.connected ? "on" : "off"}" data-ro="dot"></span>
     <span class="nm">${esc(a.label)}</span>
-    ${a.env === "live" ? '<span class="tag-live" title="A live account — real money">LIVE</span>' : ""}
+    ${a.env !== "demo" && a.env !== "paper" ? '<span class="tag-live" title="A live account — real money">LIVE</span>' : ""}
     ${a.env === "paper" ? '<span class="tag-paper" title="A paper account — simulated fills on the live prints, no money">PAPER</span>' : ""}
     ${a.env === "demo" ? DEMO_TAG : ""}
     ${extra.qty ? (extra.strategy && !extra.locked

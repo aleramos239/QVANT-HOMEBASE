@@ -31,15 +31,16 @@ function renderSide(names, hiddenCount, issues) {
     const cyc = ((ST.groups || {})[g.id] || {}).on ? '<span class="tag" title="Its account cycle is on">cycle</span>' : "";
     return head(k, esc(g.name), rows.length, cyc + open).replace('class="sh', 'class="sh sub') + (SIDE_FOLD[k] ? "" : rows.join("") || `<button class="side-more" onclick="openGroupMgr()">Empty · add strategies</button>`);
   }).join("");
-  const rank = (a) => a.env === "live" ? 0 : a.env === "paper" ? 2 : 1;
-  const accts = Object.entries(ST.accounts || {}).sort((a, b) => rank(a[1]) - rank(b[1]));
+  // LIVE as isDemoAcct says: an account the desk does not mark demo or paper is LIVE
+  const rank = ([id, a]) => !isDemoAcct(id) ? 0 : a.env === "paper" ? 2 : 1;
+  const accts = Object.entries(ST.accounts || {}).sort((a, b) => rank(a) - rank(b));
   const inTrade = (a) => Array.isArray(a.open_positions) && a.open_positions.length > 0;
   const shown = SIDE_ALL ? accts : accts.filter(([, a], i) => i < 12 || inTrade(a));     // one in a trade is never under the cut
-  const envTag = (a) => a.env === "live" ? '<span class="tag-live">LIVE</span>' : a.env === "paper" ? '<span class="tag-paper" style="margin-left:6px">PAPER</span>'
+  const envTag = (id, a) => !isDemoAcct(id) ? '<span class="tag-live">LIVE</span>' : a.env === "paper" ? '<span class="tag-paper" style="margin-left:6px">PAPER</span>'
     : '<span class="tag" style="margin-left:6px">DEMO</span>';
   const shortId = (t) => { t = String(t); return /^[A-Za-z0-9]{12,}$/.test(t) ? t.slice(0, 4) + " ··" + t.slice(-4) : t; };
-  const acctRows = shown.map(([id, a]) => `<button class="item one" onclick="openAccts(${jsArg(id)})" title="${esc((a.label || id) + " · " + (a.env === "live" ? "Live" : a.env === "paper" ? "Paper" : "Demo") + (a.connected ? "" : " · offline"))}">
-      <i class="sd ${a.connected ? "ok" : "warn"}"></i><span class="it"><b>${esc(shortId(a.label || id))}${envTag(a)}${a.connected ? "" : '<span class="tag">offline</span>'}</b>${tradeWords(a) ? `<small>${esc(tradeWords(a))}</small>` : ""}</span>
+  const acctRows = shown.map(([id, a]) => `<button class="item one" onclick="openAccts(${jsArg(id)})" title="${esc((a.label || id) + " · " + (!isDemoAcct(id) ? "Live" : a.env === "paper" ? "Paper" : "Demo") + (a.connected ? "" : " · offline"))}">
+      <i class="sd ${a.connected ? "ok" : "warn"}"></i><span class="it"><b>${esc(shortId(a.label || id))}${envTag(id, a)}${a.connected ? "" : '<span class="tag">offline</span>'}</b>${tradeWords(a) ? `<small>${esc(tradeWords(a))}</small>` : ""}</span>
       <span class="ir mono${a.connected ? "" : " dim"}">${a.connected && a.balance != null ? "$" + fmt(a.balance, 0) : ""}</span></button>`).join("");
   const more = (SIDE_ALL ? accts.length > 12 : shown.length < accts.length)
     ? `<button class="side-more" onclick="SIDE_ALL=!SIDE_ALL;render()">${SIDE_ALL ? "Show fewer" : `Show ${accts.length - shown.length} more`}</button>` : "";
@@ -316,15 +317,15 @@ function stratView(name) {
    shown, never edited here (editing them would change what it trades). Red lines first: what still stops it trading. */
 function setupHtml(name, s) {
   const c = s.cfg || {}, lab = c.kind === "lab" ? (s.lab || {}) : null, book = (ST.book && ST.book[name]) || [], accts = ST.accounts || {};
-  const envOf = (id) => (accts[id] || {}).env, word = (e) => e === "live" ? "LIVE" : e === "demo" || e === "paper" ? e : "";
+  const kind = (id) => isDemoAcct(id) ? accts[id].env : "live", word = (id) => kind(id) === "live" ? "LIVE" : kind(id);   // as isDemoAcct
   const red = [...(lab && DeskLab.accountsLock(s).caption === DeskLab.LIMITS_CAPTION ? ["Limits needed first"] : []),
     ...(ST.armed ? [] : ["Desk not armed"])];
   const cyc = Object.values(ST.groups || {}).find(g => (g.members || []).includes(name));
   const dg = cyc ? null : DESKGROUPS.groups.find(g => g.members.includes(name));
   const qs = [...new Set(book.map(a => +a.qty || 1))], whole = (v) => usd(v).replace(/\.00$/, "");
-  const n = (e) => book.filter(a => envOf(a.account) === e).length;
+  const n = (e) => book.filter(a => kind(a.account) === e).length;
   const rows = [
-    ["Accounts", book.map(a => `${acctShort(a.account)} ${word(envOf(a.account))} ×${+a.qty || 1}`.replace("  ", " ")).join(" · ") || "none yet"],
+    ["Accounts", book.map(a => `${acctShort(a.account)} ${word(a.account)} ×${+a.qty || 1}`.replace("  ", " ")).join(" · ") || "none yet"],
     ["LIVE / paper", book.length ? [["LIVE", n("live")], ["demo", n("demo")], ["paper", n("paper")]].filter(x => x[1]).map(x => `${x[0]} on ${x[1]}`).join(" · ") || "—"
       : lab ? "no account: it runs in shadow" : "no account"],
     ["Size", lab && cyc && cyc.on && cyc.risk_usd > 0 ? `${whole(cyc.risk_usd)} at risk a trade (the ${cyc.name} group sizes it)`
