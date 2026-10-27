@@ -216,7 +216,9 @@ const LAB_LIM_WORDS = {trades: "Trades a day", qty: "Contracts", risk: "At risk"
 function labLimSaveText() {
   const s = ST && ST.strategies && ST.strategies[LAB_LIM.name], old = s && s.lab && s.lab.limits;
   const was = DeskLab.limitsFields(old), show = (k, v) => v === "" ? "none" : k === "risk" ? "$" + v.replace(/^\$/, "") : v;
-  const ch = old ? LAB_LIM_FIELDS.map(([k, id]) => [k, String($("#" + id).value).trim()]).filter(([k, v]) => v !== was[k])
+  // a number field is the same number however it is written (300.00, $300); a time or a blank compares as text
+  const num = (v) => v === "" ? NaN : Number(v.replace(/^\$/, "")), same = (k, v) => v === was[k] || (k !== "last" && k !== "flat" && num(v) === num(was[k]));
+  const ch = old ? LAB_LIM_FIELDS.map(([k, id]) => [k, String($("#" + id).value).trim()]).filter(([k, v]) => !same(k, v))
     .map(([k, v]) => `${LAB_LIM_WORDS[k]} ${show(k, was[k])} → ${show(k, v)}`) : [];
   $("#llSave").textContent = ch.length ? "Save: " + ch.join(" · ") : DeskLab.SAVE_LIMITS;
   return ch;

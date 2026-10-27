@@ -861,6 +861,23 @@ test('WP1.5 the Save button lists old → new as the fields read', () => {
   assert.equal(none.els.llSave.textContent, 'Save limits', 'first limits: nothing to compare');
 });
 
+test('K: the Save button reads the numbers as numbers: 300.00, $300 or 02 is no change; a time and a blank still count', () => {
+  const t = load();
+  t.api.openLabLimits('lab_nq_orb');
+  fill(t, { llRisk: '300.00', llTrades: '02' });
+  t.els.llRisk.oninput();
+  assert.equal(t.els.llSave.textContent, 'Save limits', 'the same numbers: nothing changes');
+  fill(t, { llRisk: '$300', llTrades: '2' });
+  t.els.llRisk.oninput();
+  assert.equal(t.els.llSave.textContent, 'Save limits');
+  fill(t, { llRisk: '', llLast: '11:30' });
+  t.els.llRisk.oninput();
+  assert.equal(t.els.llSave.textContent, 'Save: At risk $300 → none · No new trade after 11:00 → 11:30');
+  fill(t, { llRisk: '300', llLast: '11:00', llQty: '0' });
+  t.els.llQty.oninput();
+  assert.equal(t.els.llSave.textContent, 'Save: Contracts 1 → 0', 'a different number still shows');
+});
+
 test('WP1.5 setLabSetting asks while ON with a LIVE account, naming old → new; the body is the same; no ask otherwise', async () => {
   const t = load({ book: LIVE_BOOK, answer: { ok: true, changed: true } });
   assert.equal(await t.api.setLabSetting('lab_nq_orb', 'open_min', 15, { from: 5 }), '');
