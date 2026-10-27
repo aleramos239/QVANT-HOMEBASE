@@ -2596,6 +2596,18 @@ function renderNextEvent() {
 }
 
 /* ---- bottom bar ---- */
+/* 5.8 (2026-10-27): "md 12/180" and "rec 1,234" take room on the bar only near their limit (md 150 of 180, the
+   recorder's amber line); the Live text's tooltip always says both. */
+function limitTexts(s, busyAt) {
+  const live = s.mode === 'live', md = s.budget_hour ?? 0, rec = s.recorder;
+  const buffered = rec ? rec.buffered.toLocaleString('en-US') : '';
+  return {
+    md: live && md >= 150 ? `md ${md}/180` : '',
+    rec: live && rec && rec.buffered >= busyAt ? `rec ${buffered}` : '',
+    title: live ? [`Market data ${s.md || ''} · ${md}/180 chart requests this hour`, rec ? `recorder ${buffered} ticks not written yet` : '']
+      .filter(Boolean).join(' · ') : '',
+  };
+}
 function showStatus(s) {
   if (s.mode === 'replay') replayClock = { etMs: (s.clock_s || 0) * 1000, at: Date.now(), speed: s.speed || 1, done: !!s.done };
   else if (s.mode === 'live') replayClock = null;
@@ -2609,12 +2621,12 @@ function showStatus(s) {
   feed.textContent = f.text;
   feed.title = [f.text, f.title].filter(Boolean).join(' — ');   // W1: the whole text too, should a narrow bar cut it
   feed.className = 'sb-feed' + (f.textClass ? ' ' + f.textClass : '');
-  const budget = $('#sbBudget');
-  budget.textContent = s.mode === 'live' ? `md ${s.budget_hour ?? 0}/180` : '';
-  $('#sbMode').title = s.mode === 'live' ? `Market data ${s.md || ''} · ${s.budget_hour ?? 0}/180 chart requests this hour` : '';
+  const budget = $('#sbBudget'), lim = limitTexts(s, C.REC_BUSY);
+  budget.textContent = lim.md;
+  $('#sbMode').title = lim.title;
   budget.title = s.mode === 'live' ? `Chart requests this hour on the md login (limit 180) · ${s.clients ?? 0} page(s)` : '';
   const recEl = $('#sbRec'), buffered = rec ? rec.buffered.toLocaleString('en-US') : '';
-  recEl.textContent = s.mode === 'live' && rec ? `rec ${buffered}` : '';   // W1: shortened; the tooltip says it in full
+  recEl.textContent = lim.rec;   // W1: shortened; the tooltip says it in full
   recEl.title = s.mode === 'live' && rec ? `Recorder: ${buffered} ticks buffered, not written yet` : '';
   recEl.classList.toggle('warn', !!(rec && rec.buffered >= C.REC_BUSY));
   statusLine = feed.textContent;
@@ -2622,8 +2634,8 @@ function showStatus(s) {
 }
 
 /* W1 (2026-09-28): a status bar too narrow for everything never cuts the connection or the desk state. Its lower-
-   priority segments step out WHOLE, lowest `data-drop` first (charts.html: the recorder, the md budget, the desk's
-   limits, the next event, the clock, this chart's reason; HBCatalog.statusDrops decides), each keeping its full text
+   priority segments step out WHOLE, lowest `data-drop` first (charts.html: the recorder, the md budget, the next
+   event, the clock, this chart's reason; HBCatalog.statusDrops decides), each keeping its full text
    in its tooltip, and the spacer's tooltip lists what stepped out. Re-fitted on any change of the bar's text or
    visibility -- a MutationObserver, since tradeui.js paints the desk's line -- and on resize; the clock's own tick
    never triggers it (tabular figures: its width does not change). */

@@ -1047,21 +1047,17 @@ function deskStatusText(desk, chartWhyText = '') {
   const gate = deskGate(desk);
   if (gate && gate.mode === 'down') return { dot: 'bad', text: `Desk unreachable — ${gate.reason}`, link: false };
   if (gate) return { dot: 'warn', text: 'Chart trading is off on the desk', link: true };
-  const lim = (desk.state && desk.state.limits) || {};
-  return { dot: 'ok', link: false,
-    text: `Desk: connected · chart trading on · max ${lim.max_order_qty ?? '—'}/order, ${lim.max_position_qty ?? '—'}/position`
-      + (chartWhyText ? ` · this chart: ${chartWhyText}` : '') };
+  // 5.8 (2026-10-27): no "max …/order, …/position" -- the size limits went, so it only ever showed dashes
+  return { dot: 'ok', link: false, text: 'Desk: connected · chart trading on' + (chartWhyText ? ` · this chart: ${chartWhyText}` : '') };
 }
 /* W1 (2026-09-28): the same line in parts, for a status bar too narrow for all of it: `state` -- the desk's own
-   connection and switch -- is never cut; `why` (the selected chart's reason, or why the desk is unreachable) and
-   `limits` may step out (the page's fit decides); `text`, the whole line, is their tooltip. */
+   connection and switch -- is never cut; `why` (the selected chart's reason, or why the desk is unreachable) may
+   step out (the page's fit decides); `text`, the whole line, is its tooltip. */
 function deskStatusParts(desk, chartWhyText = '') {
   const s = deskStatusText(desk, chartWhyText), gate = deskGate(desk);
-  if (gate && gate.mode === 'down') return { ...s, state: 'Desk unreachable', why: `— ${gate.reason}`, limits: '' };
-  if (gate) return { ...s, state: s.text, why: '', limits: '' };
-  const lim = (desk.state && desk.state.limits) || {};
-  return { ...s, state: 'Desk: connected · chart trading on', why: chartWhyText ? `· this chart: ${chartWhyText}` : '',
-    limits: `· max ${lim.max_order_qty ?? '—'}/order, ${lim.max_position_qty ?? '—'}/position` };
+  if (gate && gate.mode === 'down') return { ...s, state: 'Desk unreachable', why: `— ${gate.reason}` };
+  if (gate) return { ...s, state: s.text, why: '' };
+  return { ...s, state: 'Desk: connected · chart trading on', why: chartWhyText ? `· this chart: ${chartWhyText}` : '' };
 }
 /* Minor 6: the SELECTED chart's own short reason for the status bar ('' when it can trade). `mode` is its
    effective mode; the rest say why, most specific first. */

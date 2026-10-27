@@ -166,7 +166,8 @@ const TABS = [
     ['REFRESH', [
       { refresh: true },
     ]],
-    ['EXPORT', [
+    // 5.8 (2026-10-27): Export folds under "More" (no caption of its own: the fold carries it)
+    ['', [
       { data: true },
     ]],
   ] },
@@ -203,7 +204,7 @@ function mount(box, host) {
 
   /* ---- the Data tab's live parts (2026-09-28 data-export plan) ---- */
   // every element more than one function below touches; all null while the tab is not open (renderPane)
-  let dataJobBox = null, dataCovBox = null, dataPreview = null, dataErr = null,
+  let dataJobBox = null, dataCovBox = null, dataPreview = null, dataErr = null, dataMore = null,
     dataContractSel = null, dataRangeCap = null, dataStartBtn = null;
   let dataPollId = 0;                     // setInterval id for the active job's poll, 0 while none is running
   // survive a tab switch within the same dialog session (a market/date pick, or a running job, must not
@@ -337,6 +338,7 @@ function mount(box, host) {
     if (!dataJobBox) return;
     const st = dataState.status;
     dataJobBox.hidden = !st;
+    if (st && dataMore) dataMore.open = true;   // a job (this session's, or one reattached) is never hidden under More
     if (dataStartBtn) dataStartBtn.disabled = !!(st && !DX.progress(st).final);
     if (!st) { dataJobBox.replaceChildren(); return; }
     const p = DX.progress(st);
@@ -449,11 +451,11 @@ function mount(box, host) {
     acctBox = acctWhy = algoSel = null;
     algoKey = acctKey = '';
     acctCells.clear();
-    dataJobBox = dataCovBox = dataPreview = dataErr = null;   // this tab's live parts: null while it is not open
+    dataJobBox = dataCovBox = dataPreview = dataErr = dataMore = null;   // this tab's live parts: null while it is not open
     // tab indexes tabList (the Trading tab is filtered out when host.accountRows is absent, e.g. Backtest),
     // so every lookup by `tab` must go through tabList, never the unfiltered TABS -- indexing TABS directly
     // would point at the wrong tab whenever 'trading' is missing and 'data' (after it) shifts down.
-    pane.replaceChildren(...tabList[tab].sections.flatMap(([cap, rows]) => [mk('div', 'set-cap', cap), ...rows.map(row)]));
+    pane.replaceChildren(...tabList[tab].sections.flatMap(([cap, rows]) => [...(cap ? [mk('div', 'set-cap', cap)] : []), ...rows.map(row)]));
     pane.scrollTop = 0;
     paint();
     // a template is chart-appearance/indicators/interval/trade -- none of it applies to an export;
@@ -568,6 +570,7 @@ function mount(box, host) {
     const key = JSON.stringify([choices, cur]);
     if (algoKey === key) return;
     algoKey = key;
+    algoSel.classList.toggle('none', choices.length <= 1);   // 5.8: only "None" -- charts.css hides the row and its caption
     algoSel.replaceChildren(...choices.map((c) => { const o = mk('option', '', c.text); o.value = c.value; return o; }));
     algoSel.value = cur;
   }
@@ -794,7 +797,11 @@ function mount(box, host) {
       paintAccounts();
       return el;
     }
-    if (r.data) return dataTab();
+    if (r.data) {   // 5.8: under a closed "More"; it opens by itself while an export is running or done
+      dataMore = mk('details', 'set-more');
+      dataMore.append(mk('summary', 'set-cap', 'More'), mk('div', 'set-cap', 'EXPORT'), dataTab());
+      return dataMore;
+    }
     if (r.refresh) return refreshRow();
     if (r.caption) return mk('div', 'set-note', r.caption);
     const el = mk('div', 'set-row'), name = mk('label', 'set-name'), ctl = mk('div', 'set-ctl');

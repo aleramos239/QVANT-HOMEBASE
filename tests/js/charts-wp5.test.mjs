@@ -97,3 +97,23 @@ test('5.5 Fill quality: its tab shows only while the desk runs one of its bots; 
   assert.deepEqual(run({ bot: { strategies: { gc_nfpcpi: {} } } }, 'positions'), { hidden: true, active: 'positions', renders: 0 });
   assert.deepEqual(run({ bot: { strategies: { nq930: {} } } }), { hidden: false, active: 'fillq', renders: 0 }, 'its bot runs: shown');
 });
+
+test('5.8 the status bar shows "md" and "rec" only near their limit; the Live tooltip always says both', () => {
+  const limitTexts = vm.runInNewContext(`(${lift(APP, 'limitTexts')})`);
+  const live = (md, buffered) => ({ mode: 'live', md: 'live', budget_hour: md, recorder: buffered == null ? null : { buffered } });
+  const calm = limitTexts(live(12, 1234), 5000);
+  assert.deepEqual([calm.md, calm.rec], ['', ''], 'far from both limits: nothing on the bar');
+  assert.match(calm.title, /12\/180 chart requests this hour/);
+  assert.match(calm.title, /recorder 1,234 ticks not written yet/);
+  assert.equal(limitTexts(live(149, 0), 5000).md, '');
+  assert.equal(limitTexts(live(150, 0), 5000).md, 'md 150/180', 'near the md limit it shows');
+  assert.equal(limitTexts(live(12, 5000), 5000).rec, 'rec 5,000', 'at the recorder\'s amber line it shows');
+  assert.deepEqual({ ...limitTexts({ mode: 'replay', budget_hour: 170, recorder: { buffered: 9000 } }, 5000) }, { md: '', rec: '', title: '' });
+  assert.equal(limitTexts(live(undefined, null), 5000).title, 'Market data live · 0/180 chart requests this hour');
+});
+
+test('5.8 the desk\'s "max …/order, …/position" part is gone from both status bars and from the code that filled it', () => {
+  for (const page of ['charts.html', 'backtest.html']) assert.doesNotMatch(rd(page), /sbDeskLim/, page);
+  assert.doesNotMatch(rd('charts/tradeui.js'), /sbDeskLim|s\.limits/);
+  assert.doesNotMatch(rd('charts/trade.js'), /max_order_qty/);
+});
