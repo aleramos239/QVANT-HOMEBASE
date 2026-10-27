@@ -187,7 +187,7 @@ test('Put it on the Desk: the confirm shows the verdict and the six lines of the
   assert.match(h, /The six lines of this run's own settings/);
   assert.match(h, /<b>LUCK<\/b>: 1 of 2 boxes made money in-sample/);
   for (const ln of ['boxes', 'trades', 'luck', 'years', 'worse fills', 'test months']) assert.match(h, new RegExp(`<span>${ln}: `), ln);
-  assert.match(h, /<b>not checked<\/b><span>luck: not checked in the Lab/);           // no t-statistic saved: never PASS
+  assert.match(h, /<b>FAIL<\/b><span>luck: t not saved in-sample/);                   // no t-statistic saved: it fails, as in real.py
   assert.match(h, /Lands OFF, no account\./);
   assert.match(h, /Trade rules are not applied on the Desk\./);
   press('cancel');

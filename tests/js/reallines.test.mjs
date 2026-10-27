@@ -38,7 +38,7 @@ test('a cut tries count never lets the luck line pass, and a low t still fails',
   const pass = FX.cases.find((c) => c.name === 'all six pass but the tries count is cut');
   assert.deepEqual(R.verdict(R.lines(pass.s, 500), pass.s, true), { word: 'NOT YET', why: 'next, a full count of tries' });
   assert.equal(R.verdict(R.lines(pass.s, 500), pass.s, false).word, 'REAL');
-  assert.match(R.barText(500, true), /^Luck test: needs 126\.75 or more \(2\.0, plus 0\.25 for each of the 499 tries after the first\) · tries 500\+, count incomplete$/);
+  assert.match(R.barText(500, true), /^Luck test: needs 126\.75 or more \(2\.0, plus 0\.25 for each of the 499 tries after the first\) · tries 500\+, count incomplete: the bar may be higher$/);
   assert.equal(R.barText(4, false), 'Luck test: needs 2.75 or more (2.0, plus 0.25 for each of the 3 tries after the first)');
   assert.equal(R.barText(1, false), 'Luck test: needs 2 or more (the first try)');
 });
@@ -64,15 +64,15 @@ test('fromLab: boxes, the picked box, the years from the in-sample blocks, and t
   assert.deepEqual(R.fromLab({ ...RES, lock: null }).lock, null);
 });
 
-test('labRead: worse fills is not run in the Lab, an unsaved t is not read, so the Lab alone never says REAL', () => {
+test('labRead: worse fills is not run in the Lab, an unsaved t fails the luck line as in real.py, so the Lab alone never says REAL', () => {
   const r = R.labRead({ ...RES, oos: { state: 'done', record: { trades: 70, net: 800 } } }, 1, false);
   assert.equal(r.up, 2); assert.equal(r.n, 3);
   const by = Object.fromEntries(r.lines.map((x) => [x.line, x]));
   assert.deepEqual(by['worse fills'], { line: 'worse fills', ok: null, said: 'not run in the Lab' });
-  assert.equal(by.luck.ok, null);
-  assert.match(by.luck.said, /^not checked in the Lab: the t-statistic is not saved with a 3:1 result$/);
+  assert.equal(by.luck.ok, false);
+  assert.equal(by.luck.said, 't not saved in-sample (need 2+ after 1 try), net 3,000 (a 3:1 result does not save its t-statistic, so this line fails)');
   assert.equal(by.years.ok, true);                      // 3 of 3 green (a block with no trades is no year), best year 44% of the net
-  assert.deepEqual(r.verdict, { word: 'NOT YET', why: 'the luck line is not checked in the Lab (no saved t-statistic), so the Lab cannot say REAL' });
+  assert.deepEqual(r.verdict, { word: 'LUCK', why: by.luck.said });
   // a saved t that passes: still NOT YET (worse fills)
   const t = { ...RES, cells: RES.cells.map((c) => (c.i === 0 ? { ...c, is: { ...c.is, t_stat: 3.2 }, blocks: [BL('2021-10', 20, 500), BL('2022-02', 30, 900), BL('2023-02', 30, 800), BL('2024-02', 30, 700)] } : c)),
     oos: { state: 'done', record: { trades: 70, net: 800 } } };
@@ -101,7 +101,7 @@ const SAVED = { scheme: 'fixed', months: [], blocks: [],
   { i: 1, params: {}, is: IS17(200, 240), blocks: [] }, { i: 2, params: {}, is: IS17(100, 230), blocks: [] }, { i: 3, params: {}, is: IS17(-50, 210), blocks: [] }],
   lock: { cell: 0, params: {}, code: 'x', at: 't', who: 'owner' }, oos: { state: 'done', cell: 0, record: { trades: 70, net: 800 } } };
 
-test('a saved 3:1 result carries no t-statistic: real.py fails that luck line; the Lab says it is not checked and never says REAL', () => {
+test('a saved 3:1 result carries no t-statistic: real.py fails that luck line, and so does the Lab -- LUCK, as real.py says', () => {
   assert.equal(Object.keys(SAVED.cells[0].is).length, 17);
   assert.ok(!('t_stat' in SAVED.cells[0].is));
   // real.py's own read of it: a t of None fails the luck line (pinned by the fixture case "t not on file, all else passes, test months won")
@@ -109,11 +109,11 @@ test('a saved 3:1 result carries no t-statistic: real.py fails that luck line; t
   assert.deepEqual([py.lines.find((x) => x.line === 'luck').ok, py.verdict.word], [false, 'LUCK']);
   const s = R.fromLab(SAVED), raw = R.lines(s, 1);
   assert.equal(raw.find((x) => x.line === 'luck').ok, false);                           // the copy of real.py says the same
-  // the Lab: every other line read as real.py reads it; luck and worse fills not checked; so NOT YET, never REAL
+  // the Lab: every line read as real.py reads it (worse fills not run in the Lab); so LUCK, real.py's own word, with the reason
   const r = R.labRead(SAVED, 1, false), ok = Object.fromEntries(r.lines.map((x) => [x.line, x.ok]));
-  assert.deepEqual(ok, { boxes: true, trades: true, luck: null, years: true, 'worse fills': null, 'test months': true });
-  assert.equal(r.lines.find((x) => x.line === 'luck').gap, 'the luck line is not checked in the Lab (no saved t-statistic), so the Lab cannot say REAL');
-  assert.deepEqual(r.verdict, { word: 'NOT YET', why: 'the luck line is not checked in the Lab (no saved t-statistic), so the Lab cannot say REAL' });
+  assert.deepEqual(ok, { boxes: true, trades: true, luck: false, years: true, 'worse fills': null, 'test months': true });
+  assert.deepEqual(r.verdict, { word: 'LUCK', why: 't not saved in-sample (need 2+ after 1 try), net 1,700 (a 3:1 result does not save its t-statistic, so this line fails)' });
+  assert.equal(R.verdict(raw, s).word, 'LUCK');
   // any line that fails still says LUCK, and test months that lose say FAKE, as real.py does
   const thin = { ...SAVED, cells: SAVED.cells.map((c) => (c.i === 0 ? { ...c, is: IS17(1700, 150) } : c)) };
   assert.equal(R.labRead(thin, 1, false).verdict.word, 'LUCK');
@@ -121,13 +121,20 @@ test('a saved 3:1 result carries no t-statistic: real.py fails that luck line; t
   for (const tries of [1, 4, 500]) for (const cut of [false, true]) assert.notEqual(R.labRead(SAVED, tries, cut).verdict.word, 'REAL');
 });
 
-test('a 3:1 block across New Year (6E\'s start in Nov): its year is "2022-23", and the Lab does not read the years line', () => {
+test('a 3:1 block across New Year (6E\'s start in Nov): its year is "2022-23", and the Lab never passes the years line', () => {
   const E6 = { ...SAVED, cells: SAVED.cells.map((c) => (c.i === 0 ? { ...c, blocks: [B3(['2022-11', '2022-12', '2023-01'], 60, 900), B3(['2023-03', '2023-04', '2023-05'], 60, 400),
     B3(['2023-07', '2023-08', '2023-09'], 60, 300), B3(['2024-03', '2024-04', '2024-05'], 70, 100)] } : c)) };
   assert.deepEqual(R.perYear([E6.cells[0]]), [['2022-23', 900], ['2023', 700], ['2024', 100]]);
   assert.equal(R.fromLab(E6).is[0].split, true);
+  // a years line that fails on these blocks still fails (never looser than real.py), and says the New Year block counts as one year
   const y = R.labRead(E6, 1, false).lines.find((x) => x.line === 'years');
-  assert.deepEqual([y.ok, y.said], [null, 'not checked in the Lab: a 3:1 block runs across New Year']);
+  assert.deepEqual([y.ok, y.said], [false, '3 of 3 years green, best year 53% of the net (need 67% green, no year over 50%) (a 3:1 block across New Year counts as one year here)']);
+  // one that would pass is not checked: the Lab cannot split that block's net by year
+  const ok = { ...E6, cells: E6.cells.map((c) => (c.i === 0 ? { ...c, blocks: [B3(['2022-11', '2022-12', '2023-01'], 60, 300), B3(['2023-03', '2023-04', '2023-05'], 60, 400),
+    B3(['2024-03', '2024-04', '2024-05'], 70, 350), B3(['2025-03', '2025-04', '2025-05'], 70, 300)] } : c)) };
+  assert.equal(R.lines(R.fromLab(ok), 1).find((x) => x.line === 'years').ok, true);
+  const y2 = R.labRead(ok, 1, false).lines.find((x) => x.line === 'years');
+  assert.deepEqual([y2.ok, y2.said], [null, 'not checked in the Lab: a 3:1 block runs across New Year']);
   assert.equal(R.fromLab(SAVED).is[0].split, false);
 });
 
@@ -135,4 +142,28 @@ test('perYear: one box, or the average box of the whole table, from the in-sampl
   assert.deepEqual(R.perYear([RES.cells[0]]), [['2021', 500], ['2022', 700], ['2023', 400]]);
   assert.deepEqual(R.perYear(RES.cells.slice(0, 2)), [['2021', 250], ['2022', 350], ['2023', 200]]);
   assert.deepEqual(R.perYear([]), []);
+});
+
+/* The Lab's read is never looser than real.check() of the same input: a line real.py fails, the Lab fails; a line real.py has not
+   run, the Lab has not passed; LUCK and FAKE are the Lab's word whenever they are real.py's; REAL never. The input is fromLab(res),
+   and lines() is real.check() (the parity test above). */
+test('labRead is never looser than real.py: per line, and the verdict word -- t missing, saved, low; few trades; New Year blocks; cut counts', () => {
+  const rank = (ok) => (ok === true ? 2 : ok == null ? 1 : 0);
+  const at0 = (res, is, blocks) => ({ ...res, cells: res.cells.map((c) => (c.i === 0 ? { ...c, ...(is ? { is } : {}), ...(blocks ? { blocks } : {}) } : c)) });
+  const E6 = [B3(['2022-11', '2022-12', '2023-01'], 60, 900), B3(['2023-03', '2023-04', '2023-05'], 60, 400), B3(['2024-03', '2024-04', '2024-05'], 70, 100)];
+  const E6BAD = [B3(['2022-11', '2022-12', '2023-01'], 60, 900), B3(['2023-03', '2023-04', '2023-05'], 60, -400), B3(['2024-03', '2024-04', '2024-05'], 70, -100)];
+  const OOS = [undefined, { state: 'running', cell: 0 }, { state: 'done', cell: 0, record: { trades: 70, net: 800 } }, { state: 'done', cell: 0, record: { trades: 70, net: -5 } }];
+  const bases = [SAVED, at0(SAVED, { ...IS17(1700, 250), t_stat: 3.2 }), at0(SAVED, { ...IS17(1700, 250), t_stat: 2.1 }), at0(SAVED, IS17(1700, 150)),
+    at0(SAVED, IS17(-300, 250)), at0(SAVED, null, E6), at0(SAVED, { ...IS17(1700, 250), t_stat: 9 }, E6), at0(SAVED, { ...IS17(1700, 250), t_stat: 9 }, E6BAD),
+    { ...SAVED, lock: null }, RES];
+  let n = 0;
+  for (const base of bases) for (const oos of OOS) for (const [tries, cut] of [[1, false], [4, false], [1, true], [500, true]]) {
+    const res = { ...base, oos }, s = R.fromLab(res), py = R.lines(s, tries), pv = R.verdict(py, s, cut), lab = R.labRead(res, tries, cut);
+    assert.deepEqual(lab.lines.map((x) => x.line), py.map((x) => x.line));
+    lab.lines.forEach((x, i) => assert.ok(rank(x.ok) <= rank(py[i].ok), `${x.line}: ${x.ok} vs real.py ${py[i].ok} (${JSON.stringify(oos)}, ${tries}, ${cut})`));
+    if (pv.word === 'LUCK' || pv.word === 'FAKE') assert.equal(lab.verdict.word, pv.word, JSON.stringify(res.cells[0]));
+    assert.notEqual(lab.verdict.word, 'REAL');
+    n++;
+  }
+  assert.equal(n, bases.length * 16);
 });

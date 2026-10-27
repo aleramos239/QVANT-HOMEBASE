@@ -4,8 +4,8 @@
    tests/js/fixtures/real_parity.json, which tools/real_parity_fixture.py writes from real.check() itself -- run it again when
    real.py changes. verdict() is the Lab's REAL / LUCK / FAKE / NOT YET rule (the same one the fixture script holds).
    fromLab(res) maps a saved 3:1 walk-forward result (walkforward.fixed_result) to that input: t is the result's own saved t_stat,
-   never worked out here; the years come from the in-sample block rows (each block sits inside one year); worse fills is not run
-   in the Lab, so the Lab alone never says REAL.
+   never worked out here (a 3:1 result saves none yet, so its luck line fails, as in real.py); the years come from the in-sample
+   block rows; worse fills is not run in the Lab, so the Lab alone never says REAL.
    No DOM, no fetch: tests/js/reallines.test.mjs runs it headless. lab.js prints it. */
 (function () {
 'use strict';
@@ -80,7 +80,7 @@ function blockYear(b) {
   return a === z ? a : `${a}-${z.slice(2)}`;
 }
 /* A saved fixed walk-forward result -> real.py's input. Years: the box's in-sample blocks that traded, summed by year. A block that
-   runs across New Year cannot be split by year here (its net is one number): `split`, and the Lab does not read the years line. */
+   runs across New Year cannot be split by year here (its net is one number): `split`, and the Lab never passes the years line. */
 function years(blocks) {
   const by = new Map();
   for (const b of blocks || []) if (b && b.trades > 0 && b.is && b.is[0]) { const y = blockYear(b); by.set(y, (by.get(y) || 0) + (b.net || 0)); }
@@ -108,21 +108,24 @@ function fromLab(res) {
 function barText(tries, cut) {
   const n = Math.max(tries, 1), bar = T_BAR + T_PER_TRY * (n - 1);
   return `Luck test: needs ${g(bar)} or more (${n === 1 ? 'the first try' : `${T_BAR.toFixed(1)}, plus ${T_PER_TRY} for each of the ${n - 1} ${n === 2 ? 'try' : 'tries'} after the first`})`
-    + (cut ? ` · tries ${n}+, count incomplete` : '');
+    + (cut ? ` · tries ${n}+, count incomplete: the bar may be higher` : '');
 }
-/* The Lab's read of a saved result: the lines, with what the Lab cannot know said plainly. Worse fills is not run here. The
-   t-statistic is not saved in a 3:1 result (walkforward.is_numbers has none), so the luck line is not checked, unless the box lost
-   (then it fails, as in real.py). A block across New Year leaves the years line not checked. A line that is not checked is never a
-   PASS: the Lab never says REAL, and any line that fails still says LUCK or FAKE, as real.py does. */
+/* The Lab's read of a saved result: the lines, with what the Lab cannot know said plainly. It may turn a PASS into "not checked",
+   never a FAIL into one: never looser than real.py. Worse fills is not run here. The t-statistic is not saved in a 3:1 result
+   (walkforward.is_numbers has none): real.py fails that luck line, and so does the Lab, saying why. A block across New Year leaves
+   the years line not checked when it would pass. A line that is not checked is never a PASS: the Lab never says REAL, and any line
+   that fails says LUCK or FAKE, as real.py does. The words are for the owner's own screen ("you pick", "you say so"). */
 function labRead(res, tries, cut) {
   const s = fromLab(res), ls = lines(s, tries), box = s.is.find((r) => s.lock && r.box === s.lock.box);
   for (const x of ls) {
     if (x.line === 'worse fills' && x.ok == null) x.said = 'not run in the Lab';
-    if (x.line === 'luck' && box && box.t_stat == null && box.net > 0) {
-      x.ok = null; x.said = 'not checked in the Lab: the t-statistic is not saved with a 3:1 result';
-      x.gap = 'the luck line is not checked in the Lab (no saved t-statistic), so the Lab cannot say REAL';
+    if (x.line === 'luck' && box && box.t_stat == null) x.said = `${x.said.replace(/^t None/, 't not saved')} (a 3:1 result does not save its t-statistic, so this line fails)`;
+    if (x.line === 'years' && box && box.split) {
+      if (x.ok) { x.ok = null; x.said = 'not checked in the Lab: a 3:1 block runs across New Year'; x.gap = 'the years line is not checked in the Lab (a block runs across New Year)'; }
+      else x.said += ' (a 3:1 block across New Year counts as one year here)';
     }
-    if (x.line === 'years' && box && box.split) { x.ok = null; x.said = 'not checked in the Lab: a 3:1 block runs across New Year'; x.gap = 'the years line is not checked in the Lab (a block runs across New Year)'; }
+    if (x.line === 'picked box') x.said = 'not picked yet: you pick a box, then the other lines are read';
+    if (x.line === 'test months' && x.ok == null) x.said = 'not run: only when you say so';
   }
   const v = verdict(ls, s, cut), lk = ls.find((x) => x.line === 'luck');
   if (cut && lk && lk.ok) { lk.ok = null; lk.said += ' (not read: the tries count is incomplete)'; }   // a short count never shows PASS
@@ -130,7 +133,7 @@ function labRead(res, tries, cut) {
 }
 
 const api = { MIN_TRADES_IS, MIN_TRADES_OOS, MIN_YEARS_GREEN, MAX_BEST_YEAR, MIN_BOXES_PROFIT, T_BAR, T_PER_TRY,
-  lines, verdict, fromLab, years, perYear, barText, labRead, pyFmt: { f0, pct0, g, round2 } };
+  lines, verdict, fromLab, perYear, barText, labRead };
 if (typeof window !== 'undefined') window.HBReal = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
