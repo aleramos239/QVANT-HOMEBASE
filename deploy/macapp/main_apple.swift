@@ -293,6 +293,47 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
 
     func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { true }
 
+    // ---------------------------------------------------------------- unsaved Lab code: ⌘R, ⌘W, ⌘Q ask first
+    // A web view shows no beforeunload prompt, so the Lab's own guard never fires in the app: the app asks the Lab page
+    // (its window.hbHasUnsaved) and, when a script is edited and not saved, asks the owner natively.
+    private var leaving = false     // yes was said once: the quit that follows ⌘W does not ask again
+
+    private func askIfLabUnsaved(_ verb: String, _ go: @escaping (Bool) -> Void) {
+        guard !leaving, let lab = webViews[.lab] else { go(true); return }
+        var answered = false
+        let answer: (Bool?) -> Void = { dirty in      // nil: the page did not answer in time
+            if answered { return }
+            answered = true
+            if dirty == false { go(true); return }
+            let a = NSAlert()
+            a.messageText = dirty == true ? "A Lab script is not saved" : "The Lab did not answer"
+            a.informativeText = dirty == true ? "\(verb) anyway and lose the changes?" : "A Lab script may not be saved. \(verb) anyway?"
+            a.addButton(withTitle: "Cancel")
+            a.addButton(withTitle: verb).hasDestructiveAction = true
+            go(a.runModal() == .alertSecondButtonReturn)
+        }
+        lab.evaluateJavaScript("window.hbHasUnsaved?.() === true") { r, _ in answer((r as? Bool) == true) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { answer(nil) }    // a busy page never holds the app
+    }
+
+    func applicationShouldTerminate(_ s: NSApplication) -> NSApplication.TerminateReply {
+        if leaving || webViews[.lab] == nil { return .terminateNow }
+        askIfLabUnsaved("Quit") { [weak self] ok in
+            self?.leaving = ok
+            NSApp.reply(toApplicationShouldTerminate: ok)
+        }
+        return .terminateLater
+    }
+
+    // ⌘W and the close button: closing the window quits the app
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if leaving || webViews[.lab] == nil { return true }
+        askIfLabUnsaved("Close") { [weak self] ok in
+            if ok { self?.leaving = true; sender.close() }
+        }
+        return false
+    }
+
     #if VPS
     func applicationWillTerminate(_ n: Notification) { vpsTunnel?.terminate() }
     #endif
@@ -584,6 +625,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         return nil
     }
 
+    // the page's alert() and confirm(): native panels (without them a web view drops alert and answers confirm "no")
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping () -> Void) {
+        let a = NSAlert()
+        a.messageText = message
+        a.runModal()
+        completionHandler()
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping (Bool) -> Void) {
+        let a = NSAlert()
+        a.messageText = message
+        a.addButton(withTitle: "OK")
+        a.addButton(withTitle: "Cancel")
+        completionHandler(a.runModal() == .alertFirstButtonReturn)
+    }
+
     /// http/https only: a page this viewer merely navigated to must never launch a local file or another app.
     private func openExternal(_ url: URL) {
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return }
@@ -624,6 +683,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
 
     // ⌘R: the skin's files and the CURRENT tab's page, both from the server, never from the cache
     @objc func reloadPage() {
+        if currentTab != .lab { reloadNow(); return }    // only the current tab's page is reloaded
+        askIfLabUnsaved("Reload") { [weak self] ok in if ok { self?.reloadNow() } }
+    }
+
+    private func reloadNow() {
         let was = skinned
         skin = loadSkin()
         if skinned != was {
