@@ -47,7 +47,10 @@ def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapter
                              "cooldown_s": round(cooldown_s, 1) if cooldown_s else 0, **m,
                              "day": engine.day_view(aid)}      # the day take in force, the day's closed P&L, the lock
         # the journal is parsed once, then only the lines appended since the last poll
-        recs = journal_cache.records(state_dir() / "journal.jsonl")
+        jp = state_dir() / "journal.jsonl"
+        if live_box["recs"] is None:          # the first poll parses the whole file: in a thread, off the loop
+            await asyncio.to_thread(journal_cache.records, jp)
+        recs = journal_cache.records(jp)
         if recs is not live_box["recs"]:      # a new list: the journal changed
             live_box.update(recs=recs, live=live_metrics(recs))
         live = live_box["live"]
