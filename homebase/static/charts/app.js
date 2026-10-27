@@ -2824,7 +2824,7 @@ async function init() {
   $('#tbIntervals').onclick = () => toggleMenu($('#tbIntervals'), intervalMenu);
   $('#tbIndicators').onclick = indicatorsDialog;
   $('#tbGrid').onclick = () => toggleMenu($('#tbGrid'), gridMenu);
-  $('#tbSettings').onclick = () => chartSettings();
+  { const g = $('#tbSettings'); if (g) g.onclick = () => chartSettings(); }   // the Lab keeps this gear; Charts has none (2026-10-26)
   $('#tbTheme').onclick = toggleTheme;
   initRail();
   {   // the rail's own button for the colours by timeframe, beside the objects list (both pages share this file)
