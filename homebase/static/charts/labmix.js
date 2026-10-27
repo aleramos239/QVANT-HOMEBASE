@@ -68,7 +68,7 @@ function paint() {
   };
   const n = picked().length;
   el.innerHTML = `<div class="mix-in">
-    <div class="mix-head"><h2>Group builder</h2><span class="mix-sub">Each strategy's latest build-days run, as one account</span>
+    <div class="mix-head"><h2>Group builder</h2><span class="mix-sub">Each strategy's latest build-days run, as one account · uses old runs that include test months</span>
       <button class="hb-ib mix-x" data-act="close" aria-label="Close" title="Close (Esc)">✕</button></div>
     <div class="mix-body">
       <aside class="mix-side">

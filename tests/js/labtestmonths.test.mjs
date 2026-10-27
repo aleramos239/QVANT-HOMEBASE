@@ -127,3 +127,13 @@ test('Put it on the Desk: the confirm shows the verdict, the six lines, lands OF
   await new Promise((r) => setImmediate(r));
   assert.deepEqual(JSON.parse(JSON.stringify(sent)), [['POST', '/api/tester/desklab/promote', { name: 'x', run_id: 'r1' }]]);   // the same request as before
 });
+
+test('words (plan 4.10): a 3:1 run\'s All metrics says In-sample or Test months; the prop sim is not one of the six lines', () => {
+  assert.match(LAB, /scopeName = wf \? \{ all: kind === 'wf_oos' \? 'Test months' : 'In-sample' \} : Object\.fromEntries\(AM\.SCOPES\)/);
+  assert.equal((LAB.match(/More numbers · Prop sim[^<]*· not one of the six lines/g) || []).length, 2);
+  const MIX = readFileSync(new URL('../../homebase/static/charts/labmix.js', import.meta.url), 'utf8');
+  assert.match(MIX, /uses old runs that include test months/);
+  assert.ok(!/nothing here can put one on the desk/.test(LAB.slice(0, 900)), 'the header no longer says the page cannot put one on the Desk');
+  assert.match(LAB.slice(0, 900), /Put it on the Desk/);
+  assert.match(readFileSync(new URL('../../homebase/static/charts/labcode.js', import.meta.url), 'utf8'), /Dead/);    // O4: the word stays
+});

@@ -2,8 +2,9 @@
    chart, a backtest result -- each shown or hidden from the top bar.
    A strategy here is TEXT. Saving writes ~/.homebase/strategies/<name>.py through the chart service; Run sends the
    saved text to the tester, where it runs only inside the sandboxed backtest child. Nothing on this page
-   executes a draft, and nothing here can put one on the desk: "Request review" writes a package for a person
-   (and Claude) to read first. The pure half (highlighting, keystrokes, names) is labcode.js. */
+   executes a draft. "Put it on the Desk" (promoteToDesk) adds one to the Desk switched OFF, with no account, after a
+   confirm that shows its six real-or-luck lines; "Request review" writes a package for a person (and Claude) to read
+   first. The pure half (highlighting, keystrokes, names) is labcode.js; the six lines are reallines.js. */
 (function () {
 'use strict';
 const root = document.getElementById('lab');
@@ -1005,8 +1006,8 @@ function allMetricsDialog() {
   const r = S.run && S.run.bundle ? S.run : null;
   if (!r || !AM) return;
   const trades = (r.bundle.trades || []).filter((t) => t && t.date), cap = r.bundle.run.capital || 0, st = amLoad();
-  const yrs = AM.years(trades), scopeName = Object.fromEntries(AM.SCOPES);
-  const wf = /^wf_/.test((r.bundle.run.range || {}).kind || '');     // a 3:1 run's months are all one kind: the old Build | Unseen cut of 2025-07 does not apply
+  const kind = (r.bundle.run.range || {}).kind || '', wf = /^wf_/.test(kind);     // a 3:1 run's months are all one kind: the old Build | Unseen cut of 2025-07 does not apply
+  const yrs = AM.years(trades), scopeName = wf ? { all: kind === 'wf_oos' ? 'Test months' : 'In-sample' } : Object.fromEntries(AM.SCOPES);
   const d = dialog('');
   d.classList.add('am-dlg');
   const cell = (unit, v, tone) => `<td class="${tone || ''}">${esc(AM.format(unit, v))}</td>`;
@@ -2496,11 +2497,11 @@ function propHtml(r) {
   const p = r.prop || (r.bundle.propsim && r.bundle.propsim.headline ? r.bundle.propsim : null);
   if (p) {
     const h = p.headline || {}, pc = (v) => (v == null ? '—' : `${Math.round(v * 100)}%`);
-    return `<div class="rs-gh">Prop sim${p.rules && p.rules.label ? ` · ${esc(p.rules.label)}` : ''}</div><div class="rs-group">${wfKv('Passes the eval', pc(h.eval_pass_p))}${wfKv('Busts the eval', pc(h.bust_p))}
+    return `<div class="rs-gh">More numbers · Prop sim${p.rules && p.rules.label ? ` · ${esc(p.rules.label)}` : ''} · not one of the six lines</div><div class="rs-group">${wfKv('Passes the eval', pc(h.eval_pass_p))}${wfKv('Busts the eval', pc(h.bust_p))}
       ${wfKv('Days to pass', h.median_days_to_pass == null ? '—' : String(Math.round(h.median_days_to_pass)))}${wfKv('Gets a payout', pc(h.funded_payout_p))}
       ${wfKv('Expected cheque', h.funded_expected_cheque == null ? '—' : money0(h.funded_expected_cheque))}</div>`;
   }
-  return `<div class="rs-gh">Prop sim</div><div class="rs-group"><button class="rs-row" data-act="propsim"${r.propBusy ? ' disabled' : ''}><span>${r.propBusy ? 'Running the prop sim…' : 'Run the prop sim'}</span><span>›</span></button>
+  return `<div class="rs-gh">More numbers · Prop sim · not one of the six lines</div><div class="rs-group"><button class="rs-row" data-act="propsim"${r.propBusy ? ' disabled' : ''}><span>${r.propBusy ? 'Running the prop sim…' : 'Run the prop sim'}</span><span>›</span></button>
     ${r.propErr ? `<div class="heat-err">${esc(r.propErr)}</div>` : ''}</div>`;
 }
 async function propRun() {
