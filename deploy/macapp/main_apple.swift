@@ -1,24 +1,20 @@
-// Homebase.app (built by build_app_apple.sh --as-homebase; "Homebase Next.app" when built beside it) — the same VIEWER
-// as the classic one (the trading process is the launchd service; closing this
-// window changes nothing about execution), with an Apple-style window and the new design delivered as a SKIN.
+// Homebase.app (built by build_app_apple.sh --mac) — a VIEWER: the trading process is the launchd service; closing this
+// window changes nothing about execution. An Apple-style window, with the new design delivered as a SKIN.
 //
-// What differs from main.swift (the classic viewer, which is left exactly as it is):
 //  * The window has no title bar of its own: the page's toolbar IS the window's toolbar, and the traffic lights
 //    sit inside it (full-size content view). The window carries an EMPTY unified NSToolbar, which is what gives
 //    it macOS 26's toolbar-window shape (26 pt corners) and makes the system place the traffic lights itself.
 //    The toolbar's height and the lights' position are READ FROM THE SYSTEM at launch, never hard-coded.
-//    (Proven with real mouse events on 2026-10-02: a click on a page button inside the strip arrives as one
-//    mousedown/mouseup/click, and a press-drag on the empty strip moves the window by the pointer's travel.)
 //  * The page follows the window's appearance (View > Appearance: Match System / Light / Dark).
 //  * The new design is a skin: /static/apple/manifest.json on the desk names, per tab, an optional start page
-//    and the stylesheets / scripts to inject at document start. The classic pages are served unchanged, so the
-//    classic app shows them exactly as before. No manifest, a broken one, or a file that does not load = this
-//    app behaves like the classic one (its own title bar, no injection): all of the skin or none of it.
+//    and the stylesheets / scripts to inject at document start. The plain pages are served unchanged. No
+//    manifest, a broken one, or a file that does not load = this app shows the plain pages (its own title bar,
+//    no injection): all of the skin or none of it.
 //  * A mousedown on the page's toolbar asks for a window drag through a message handler (a web view swallows
 //    the mouse, so the page has to ask); a double-click there does what the system setting says.
 //  * View menu: Desk / Charts / Lab (⌘1/⌘2/⌘3).
 //
-// Link handling is the classic viewer's (opus review, three-tabs): a navigation to one of the three tabs' own
+// Link handling (opus review, three-tabs): a navigation to one of the three tabs' own
 // origins switches to that tab; anything else opens in the default browser. A tab never leaves its own origin.
 //
 // Debug (never set in the installed app): HB_DEBUG_DIR=<dir> makes the app load the tabs named in
@@ -631,7 +627,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         wv.evaluateJavaScript("window.HBApple&&HBApple.command&&HBApple.command(\(jsString(name)))", completionHandler: nil)
     }
 
-    // ---------------------------------------------------------------- link interception (the classic viewer's rule)
+    // ---------------------------------------------------------------- link interception
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard navigationAction.targetFrame?.isMainFrame == true,
