@@ -25,21 +25,26 @@ case "${1:-}" in
          case "${1:-}" in -*|"") ;; *) VPS_HOST="$1"; shift ;; esac ;;     # a host never starts with "-"
   *)     echo "usage: build_app_apple.sh --mac | --vps [root@host]  [--out <path.app>]" >&2; exit 2 ;;
 esac
+# a path's real full form, so the same folder written another way (./, //, relative, a link) is the same app
+real() { local d; d="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" && echo "$d/$(basename "$1")" || echo "$1"; }
 if [ "${1:-}" = --out ]; then
   [ $# -eq 2 ] || { echo "--out takes one .app path" >&2; exit 2; }
   case "$2" in *.app) ;; *) echo "the output must be a .app path" >&2; exit 2 ;; esac
-  if [ "$2" != "$APP" ]; then APP="$2"; BUNDLE_ID="$BUNDLE_ID.test"; fi
+  if [ "$(real "$2")" != "$(real "$APP")" ]; then APP="$(real "$2")"; BUNDLE_ID="$BUNDLE_ID.test"; fi
 elif [ $# -gt 0 ]; then
   echo "unknown argument: $1" >&2; exit 2
 fi
-case "$APP" in   # an installed app is never replaced while it runs (a test build elsewhere with --out may go ahead)
-  "$APPS/Homebase.app") RUN=Homebase ;;
-  "$APPS/HOMEBASE VPS.app") RUN=HomebaseVPS ;;
+case "$(real "$APP")" in   # an installed app is never replaced while it runs (a test build elsewhere with --out may go ahead)
+  "$(real "$APPS/Homebase.app")") RUN=Homebase ;;
+  "$(real "$APPS/HOMEBASE VPS.app")") RUN=HomebaseVPS ;;
   *) RUN="" ;;
 esac
-if [ -n "$RUN" ] && pgrep -x "$RUN" >/dev/null; then
-  echo "$(basename "$APP" .app) is running: quit it first (nothing was changed)." >&2; exit 1
-fi
+guard() {
+  if [ -n "$RUN" ] && pgrep -x "$RUN" >/dev/null; then
+    echo "$(basename "$APP" .app) is running: quit it first (nothing was changed)." >&2; exit 1
+  fi
+}
+guard
 
 BUILD="$(mktemp -d)/$(basename "$APP")"
 mkdir -p "$BUILD/Contents/MacOS" "$BUILD/Contents/Resources"
@@ -67,6 +72,7 @@ cp "$HERE/$ICON.icns" "$BUILD/Contents/Resources/$ICON.icns"     # HomebaseVPS.i
 swiftc -O ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"} "$HERE/main_apple.swift" -o "$BUILD/Contents/MacOS/$EXE" -framework Cocoa -framework WebKit
 codesign --force --sign - "$BUILD" 2>/dev/null || true
 
+guard     # again: it may have been started during the build
 mkdir -p "$(dirname "$APP")"
 OLD=""
 if [ -e "$APP" ]; then OLD="$(mktemp -d)/previous.app"; mv "$APP" "$OLD"; fi
