@@ -37,21 +37,21 @@ test('a new strategy: only the idea card is open; every later step is locked and
     ['Code check', 'step through 3 trades on the chart (0 of 3)'],
     ['In-sample table', 'locked: save it first'],
     ['Your pick', 'locked: run the in-sample table first'],
-    ['Test months', 'locked: pick a box first'],
+    ['Test months', 'locked: save it first'],
     ['Verdict', 'locked: test months not run (only when you say so)'],
   ]);
   const h = c.stepsHtml({ kind: 'new', name: 'x', code: 'a', saved: '', valid: null }, F);
   assert.match(h, /<li class="next"[^>]*>.*?Idea card/);
-  assert.match(h, /<p>Idea card: save it · In-sample table: save it first · Your pick: run the in-sample table first · Test months: pick a box first · Verdict: test months not run \(only when you say so\)<\/p>/);
+  assert.match(h, /<p>Idea card: save it · In-sample table: save it first · Your pick: run the in-sample table first · Test months: save it first · Verdict: test months not run \(only when you say so\)<\/p>/);
   // words on screen: never IS, OOS or cell
   assert.doesNotMatch(h.replace(/<[^>]+>/g, ' '), /\b(IS|OOS|cell)\b/);
 });
 
-test('saved, the table done, no pick: Your pick is next; the test months and the verdict stay locked', () => {
+test('saved, the table done, no pick: Your pick is next; the test months say their Run locks box #1; the verdict stays locked', () => {
   const c = lab();
   c.S.wf.draft_x = { result: { scheme: 'fixed', lock: null, cells: [cell(0, 100), cell(1, -50)] } };
   assert.deepEqual(states(c).map((x) => x[1]), ['done', 'step through 3 trades on the chart (0 of 3)', 'done',
-    'pick a box in the in-sample table', 'locked: pick a box first', 'locked: test months not run (only when you say so)']);
+    'pick a box in the in-sample table', 'not run: Run test months locks the strategy as set as box #1', 'locked: test months not run (only when you say so)']);
   // the in-sample table also counts from the tries' list (a finished fixed table of this strategy)
   const d = lab();
   d.S.tries.draft_x = { n: 2, cut: false, tabled: true, locked: false };
@@ -67,6 +67,10 @@ test('picked and the test months read: the verdict shows its word, from the six 
   const st = c.steps(DRAFT, F);
   assert.deepEqual(plain(st.slice(2).map((x) => x.ok)), [true, true, true, true]);
   assert.equal(st[5].name, 'Verdict: FAKE');           // the test months lost
+  const h = c.stepsHtml(DRAFT, F);
+  assert.match(h, /<li class="ok word"[^>]*><i aria-hidden="true">·<\/i>Verdict: FAKE/);     // read, but not REAL: no green tick
+  assert.match(h, /<li class="ok"[^>]*><i aria-hidden="true">✓<\/i>Test months/);
+  assert.equal((h.match(/✓/g) || []).length, 4);       // idea card, table, pick, test months; the code check is not done
   // a pick, no read yet: test months are next, not run, and say so
   const d = lab();
   d.S.tries.draft_x = { n: 1, cut: false, tabled: true, locked: true };

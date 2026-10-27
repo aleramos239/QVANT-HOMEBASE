@@ -810,6 +810,7 @@ html.hb-apple .lab-dlg.am-dlg { width: min(1040px, calc(100vw - 32px)); max-heig
 .lab-steps li i { font-style: normal; display: inline-flex; }
 .lab-steps li svg { width: 11px; height: 11px; }
 .lab-steps li.ok { color: var(--hb-fg); } .lab-steps li.ok i { color: var(--hb-gain, #2e6b4f); }
+.lab-steps li.ok.word i { color: var(--hb-fg2); }        /* Verdict: LUCK, FAKE or NOT YET -- read, but no green tick */
 .lab-steps li.next { color: var(--hb-fg); font-weight: 600; } .lab-steps li.next i { color: var(--hb-accent); }
 .lab-steps li.lock { opacity: .7; }
 .lab-steps p { margin: 4px 0 0; color: var(--hb-fg2); }

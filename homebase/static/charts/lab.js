@@ -2623,16 +2623,17 @@ function steps(b, f) {
     ['Code check', seen >= STEP_TRADES, '', `step through ${STEP_TRADES} trades on the chart (${seen} of ${STEP_TRADES})`],
     ['In-sample table', table, saved ? '' : 'save it first', 'not run (only when you say so)'],
     ['Your pick', picked, table ? '' : 'run the in-sample table first', 'pick a box in the in-sample table'],
-    ['Test months', !!read, picked ? '' : 'pick a box first', 'not run (only when you say so)'],
-    [v ? `Verdict: ${v.verdict.word}` : 'Verdict', !!v, read ? '' : 'test months not run (only when you say so)', ''],
-  ].map(([name, ok, lock, todo]) => ({ name, ok, lock: ok ? '' : lock, why: ok ? '' : lock || todo }));
+    ['Test months', !!read, saved ? '' : 'save it first', picked ? 'not run (only when you say so)' : 'not run: Run test months locks the strategy as set as box #1'],
+    [v ? `Verdict: ${v.verdict.word}` : 'Verdict', !!v, read ? '' : 'test months not run (only when you say so)', '', v ? v.verdict.word : ''],
+  ].map(([name, ok, lock, todo, word = '']) => ({ name, ok, lock: ok ? '' : lock, why: ok ? '' : lock || todo, word }));
 }
 function stepsHtml(b, f) {
   const st = steps(b, f), next = st.findIndex((x) => !x.ok && !x.lock);
   const said = st.filter((x, i) => !x.ok && (x.lock || i === next)).map((x) => `${x.name}: ${x.why}`);
   return `<div class="lab-steps"><ol>${st.map((x, i) => {
-    const k = x.ok ? 'ok' : x.lock ? 'lock' : i === next ? 'next' : '';
-    return `<li class="${k}" title="${esc(x.ok ? `${x.name}: done` : `${x.name}: ${x.why}`)}"><i aria-hidden="true">${x.ok ? '✓' : x.lock ? ICON_LOCK : i === next ? '●' : '○'}</i>${esc(x.name)}<span class="vh">${x.ok ? ', done' : x.lock ? ', locked' : ''}</span></li>`;
+    const not = x.ok && x.word && x.word !== 'REAL';          // a verdict read, but not REAL: no tick
+    const k = not ? 'ok word' : x.ok ? 'ok' : x.lock ? 'lock' : i === next ? 'next' : '';
+    return `<li class="${k}" title="${esc(x.ok ? `${x.name}: done` : `${x.name}: ${x.why}`)}"><i aria-hidden="true">${not ? '·' : x.ok ? '✓' : x.lock ? ICON_LOCK : i === next ? '●' : '○'}</i>${esc(x.name)}<span class="vh">${x.ok ? ', done' : x.lock ? ', locked' : ''}</span></li>`;
   }).join('')}</ol>${said.length ? `<p>${esc(said.join(' · '))}</p>` : ''}</div>`;
 }
 function perYearHtml(cells, what) {
