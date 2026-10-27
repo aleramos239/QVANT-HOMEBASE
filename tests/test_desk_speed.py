@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 
@@ -173,3 +174,14 @@ def test_a_line_that_raised_before_still_raises_and_the_reader_keeps_nothing_hal
     p.write_text(_line("A", "2026-10-01", 100.0) + _line("A", "2026-10-02", 101.0))
     assert _same_as_a_full_parse(p)["A"] == {"2026-10-01": 100.0, "2026-10-02": 101.0}
 
+
+def test_the_desk_loads_the_prop_rules_module_at_start_not_at_the_first_fire():
+    """prepare_account (in the fire) imports homebase.backtest.propsim: ~0.1-0.8 s the first time. The desk's
+    create_app loads it (homebase.server builds its app on import, as uvicorn's homebase.server:app)."""
+    import subprocess
+    import sys
+    out = subprocess.run([sys.executable, "-c", "import sys, homebase.server; "
+                          "print('homebase.backtest.propsim' in sys.modules)"],
+                         capture_output=True, text=True, timeout=300, cwd=Path(__file__).resolve().parents[1])
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.split() == ["True"]

@@ -107,6 +107,10 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     # day_take price watcher; target_take reads the desk's daily balance record
     level_timer = LevelTimer(cfg, engine, md_factory=_md_factory)
     engine.balance_history = lambda account: equity.equity_by_day(_equity_path(), account)
+    try:    # the prop rules the engine's first prepare of the day imports (load_rules): loaded now, not in a fire
+        from .backtest import propsim  # noqa: F401
+    except Exception:  # noqa: BLE001  -- as before: that import then fails in the fire, and the engine journals why
+        pass
     # trading from the chart (spec 2026-09-26): views, guards, journaling
     desk = ChartDesk(cfg, engine, adapters, acct_status, timer_status=timer.status)
     # promoted Lab strategies (kind "lab"): limits, book checks, the switch, Remove, the status block (labdesk.py)
