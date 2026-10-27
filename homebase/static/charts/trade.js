@@ -687,7 +687,10 @@ function canDrag(g) { return g.kind !== 'position' && g.type !== 'StopLimit'; }
 /* A position's chip is just side, size and P&L ("LONG 1 · −$20", 2026-09-27: the user's call), plus "· 2 accts" when it
    merges several accounts (review of d6bdb2e: its × / exit drag acts on every one of them, so that must show); the
    account names go in the chip's tooltip (lineTitle). Order / SL / TP lines still name theirs. `named` (2026-10-26): the
-   chart shows 2+ accounts, so a one-account position names its account too ("LONG 1 · +$20 · …047"). */
+   chart shows 2+ accounts, so a one-account position names its account too ("LONG 1 · +$20 · …047").
+   shortcut: no "strategy (server)" tag (plan 5.3's second half) -- the desk marks only ITS OWN bots' orders (`owner`),
+   so a server strategy's order on an account both machines hold arrives as owner null, just like a hand order; build
+   it once the desk snapshot says which orders the server placed. */
 function lineText(g, last, tick, named = false) {
   if (g.kind === 'order') return [lineLabel(g), whoText(g)].join(' · ');
   if (g.kind === 'position') {
