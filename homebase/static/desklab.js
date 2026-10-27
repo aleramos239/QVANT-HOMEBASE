@@ -204,11 +204,11 @@
   // A promoted strategy's build and unseen days are the 3:1 walk-forward of the strategy as set: its in-sample months (Build) and
   // its out-of-sample months (Unseen), in blocks (owner, 2026-10-18). On screen (owner 2026-10-25: in- and out-of-sample are ONLY
   // the 3:1 blocks): the 3:1's "In-sample" and "Test months"; a record from before the 3:1 (a Desk straddle's twin) is the
-  // "Old record", its build and test days. The numbers are the same either way.
+  // "Old record", its build and test days ("in-sample" is only ever the 3:1). The numbers are the same either way.
   var WF_TITLE = "3:1 in-sample / 3:1 test months";
   var OLD_RECORD = "Old record (before 3:1)";
   function heads(wf, both) {
-    return (wf ? ["In-sample", "Test months"] : ["In-sample", "Test days"]).concat(both ? ["Both"] : []);
+    return (wf ? ["In-sample", "Test months"] : ["Build days", "Test days"]).concat(both ? ["Both"] : []);
   }
   var WF_NOTES = {
     none: "The 3:1 walk-forward has not run yet. It starts by itself.",
@@ -333,10 +333,12 @@
     var pu = prop.unseen && typeof prop.unseen === "object" ? prop.unseen : null;
     var po = prop.both && typeof prop.both === "object" ? prop.both : null;     // Build + Unseen as one run (owner 2026-10-24)
     var account = text((b || pu || {}).account), cb = propCells(b), cu = propCells(pu), co = propCells(po);
-    // a Desk straddle also sends its build-days run at the Desk's setting: the block then reads Build | Unseen
+    // a Desk straddle also sends its build-days run at the Desk's setting: the block then reads Build days | Test days
     var bu = !wait && res.build && typeof res.build === "object" ? res.build : null;
     var wf = !wait && res.walkforward === true;
     var bo = wf && bu && res.both && typeof res.both === "object" ? res.both : null;
+    // the words while waiting are the 3:1's: only a Lab strategy (always 3:1) is shown before its answer; a straddle needs its twin
+    var w31 = wait || wf;
     var runRows = function (run) {
       var r = run.range || {}, f = monthOf(r.start), t = monthOf(r.end);
       var days = wf ? [] : [{ k: "Days", v: f && t ? f + " – " + t : DASH }];      // the 3:1's months interleave: no one span
@@ -364,7 +366,7 @@
     }
     return {
       unseen: {
-        title: wf ? WF_TITLE : OLD_RECORD,
+        title: w31 ? WF_TITLE : OLD_RECORD,
         head: bu ? heads(wf, !!bo) : null,
         rows: rows,
         note: wait ? RES_WAIT : wf ? (u ? "" : WF_NOTES[res.unseen_state] || WF_NOTES.none)
@@ -372,7 +374,7 @@
       },
       prop: {
         title: "Prop sim" + (account ? " · " + account : ""),
-        head: heads(wf, !!po),
+        head: heads(w31, !!po),
         rows: b || pu ? PROP_ROWS.map(function (k, i) {
           var row = { k: k, build: cb[i], unseen: cu[i] };
           if (po) row.both = co[i];
@@ -426,6 +428,7 @@
     var wait = !isObj(res);
     var b = !wait && isObj(res.build) ? res.build : null, u = !wait && isObj(res.unseen) ? res.unseen : null;
     var bo = !wait && isObj(res.both) ? res.both : null, wf = !wait && res.walkforward === true;   // the 3:1: build, unseen, both
+    var w31 = wait || wf;      // the words while waiting: the server sends every group as the 3:1
     var prop = !wait && isObj(res.prop) ? res.prop : {};
     var pb = isObj(prop.build) ? prop.build : null, pu = isObj(prop.unseen) ? prop.unseen : null, pbo = isObj(prop.both) ? prop.both : null;
     var members = !wait && Array.isArray(res.members) ? res.members : [];
@@ -443,12 +446,12 @@
       title: text(g.name), kind: kindLabel(kind), kindNote: kindOf(kind).note, note: GROUP_NOTE,
       lead: count + (count === 1 ? " strategy" : " strategies") + " · " + kindLabel(kind),
       empty: count === 0,
-      figs: { head: heads(wf, wf),
+      figs: { head: heads(w31, wf),
         rows: b || u ? GROUP_FIG_ROWS.map(function (k, i) { var r = { k: k, build: cb[i], unseen: cu[i] }; if (wf) r.both = cbo[i]; return r; }) : [], note: note },
-      days: { title: wf ? "3:1 test months: days traded" : OLD_RECORD + ": days traded", rows: days },
+      days: { title: w31 ? "3:1 test months: days traded" : OLD_RECORD + ": days traded", rows: days },
       prop: {
         title: "Prop sim" + (account ? " · " + account : ""),
-        head: heads(wf, wf),
+        head: heads(w31, wf),
         rows: pb || pu ? want.map(function (i) { var r = { k: PROP_ROWS[i], build: pcb[i], unseen: pcu[i] }; if (wf) r.both = pcbo[i]; return r; }) : [],
         note: wait ? RES_WAIT : NO_PROP_GROUP,
       },

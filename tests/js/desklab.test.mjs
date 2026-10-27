@@ -275,7 +275,7 @@ test('the research blocks: the unseen days and the prop sim, every word escaped,
   assert.match(ctx.html, /<div class="k">Net<\/div><div class="v mono">\+\$16,342<\/div>/);
   assert.match(ctx.html, /<div class="k">Realized RR<\/div><div class="v mono">1:2\.81<\/div>/);
   assert.match(ctx.html, /<div class="k">Sharpe<\/div><div class="v mono">0\.43<\/div>/);
-  assert.match(ctx.html, /<div class="f fh"><div class="k"><\/div><div class="v mono">In-sample<\/div><div class="v mono">Test days<\/div><\/div>/);
+  assert.match(ctx.html, /<div class="f fh"><div class="k"><\/div><div class="v mono">Build days<\/div><div class="v mono">Test days<\/div><\/div>/);
   assert.match(ctx.html, /<div class="k">Passes the eval<\/div><div class="v mono">41%<\/div><div class="v mono">—<\/div>/);
   assert.doesNotMatch(ctx.html + ctx.none, /<img/);
   assert.match(ctx.html, /Prop sim · &lt;img/);
@@ -1160,11 +1160,11 @@ test('final wave I1: windowNote is the Desk\'s note as it sends it, or nothing',
   assert.equal(D.windowNote(null), '');
 });
 
-test('results: a Desk straddle sends its build run too, so its old record reads In-sample | Test days at the Desk\'s setting', () => {
+test('results: a Desk straddle sends its build run too, so its old record reads Build days | Test days at the Desk\'s setting', () => {
   const run = (net) => ({ id: 'r', range: { start: '2021-09-22', end: '2025-06-30' }, net, trades: 945, win_rate: 26.6, profit_factor: 0.97, max_drawdown: -17337, rr: 2.7, sharpe: -0.1 });
   const both = D.results({ build: run(-5850), unseen: { ...run(26322), range: { start: '2025-07-01', end: '2026-10-11' } }, manual: true, prop: {} });
   assert.equal(both.unseen.title, 'Old record (before 3:1)');
-  assert.deepEqual(both.unseen.head, ['In-sample', 'Test days']);
+  assert.deepEqual(both.unseen.head, ['Build days', 'Test days']);
   assert.deepEqual(both.unseen.rows.slice(0, 2).map((r) => [r.k, r.b, r.v]), [['Days', 'Sep 2021 – Jun 2025', 'Jul 2025 – Oct 2026'], ['Net', '−$5,850', '+$26,322']]);
   assert.equal(both.unseen.note, '');
   // no unseen run at this setting: the Build column stays, the Unseen one is dashes, and the note says why
@@ -1185,7 +1185,7 @@ test('results: the saved run on the unseen days and the prop sim of both runs, i
   // an older saved run has no label: the ratio is written the same way; no figures at all -> dashes
   assert.deepEqual(D.results({ unseen: { range: {}, rr: 0.5 }, prop: {} }).unseen.rows.slice(3, 4).concat(D.results({ unseen: { range: {}, rr: 0.5 }, prop: {} }).unseen.rows.slice(-1)).map((r) => r.v), ['1:0.50', '—']);
   assert.equal(full.prop.title, 'Prop sim · LucidFlex 50K');
-  assert.deepEqual(full.prop.head, ['In-sample', 'Test days']);
+  assert.deepEqual(full.prop.head, ['Build days', 'Test days']);
   assert.deepEqual(full.prop.rows.map((r) => [r.k, r.build, r.unseen]), [['Passes the eval', '41%', '37%'], ['Busts the eval', '63%', '63%'],
     ['Days to pass', '13', '13'], ['Gets a payout', '33%', '33%'], ['Expected cheque', '$602', '$602']]);
   // no run saved on the unseen days: it says so, and that column is dashes
@@ -1264,7 +1264,7 @@ test('a 3:1 group page (owner 2026-10-25): In-sample, Test months and Both colum
   assert.equal(p.curve.title, '3:1 in-sample / 3:1 test months, after costs');
   assert.equal(p.curve.label, 'Test months (dark) · In-sample (light) · Both (dashed)');
   assert.ok(Array.isArray(p.curve.build) && Array.isArray(p.curve.both) && p.curve.vals.length > 0);
-  assert.deepEqual(D.groupPage({ id: 'g1', name: 'old', kind: 'together', members: [] }, { ...res, walkforward: false }).figs.head, ['In-sample', 'Test days']);
+  assert.deepEqual(D.groupPage({ id: 'g1', name: 'old', kind: 'together', members: [] }, { ...res, walkforward: false }).figs.head, ['Build days', 'Test days']);
 });
 
 test('a group page before its first answer says so, and a hostile name or sentence is escaped', () => {
@@ -1328,7 +1328,7 @@ test('the 3:1 curve: each line on its own traded days, never flat on a day it di
   assert.equal(D.curve({ walkforward: true, curve: { days: ['2022-01-04', '2022-01-06'], vals: [100, 150] } }).build, undefined);
 });
 
-test('3.1 the card says 3:1 in-sample / 3:1 test months, or Old record (before 3:1); never Build, Unseen or OOS, and the numbers stay', () => {
+test('3.1 the card says 3:1 in-sample / 3:1 test months, or Old record (before 3:1) with its build and test days; the 3:1 never says Build, Unseen or OOS, the old record never says in-sample, and the numbers stay', () => {
   const run = (net) => ({ range: { start: '2021-10-01', end: '2026-08-31' }, months: 45, net, trades: 41, win_rate: 48.8, profit_factor: 1.31, max_drawdown: -2100, rr: 3, sharpe: 0.5 });
   const head = { account: 'LucidPro 50K', eval_pass_p: 0.48, bust_p: 0.52, median_days_to_pass: 3, funded_payout_p: 0.2, funded_expected_cheque: 300 };
   const curve = { days: ['2022-01-03', '2022-01-04'], vals: [100, 250] };
@@ -1338,14 +1338,29 @@ test('3.1 the card says 3:1 in-sample / 3:1 test months, or Old record (before 3
   const shown = (v) => JSON.stringify([v.unseen.title, v.unseen.head, v.unseen.note, v.prop.head]);
   const said = (c) => JSON.stringify([c.title, c.label, c.notes, c.aria]);      // the words of a curve, not its data keys
   const g = D.groupPage({ id: 'g', name: 'G', kind: 'together', members: [] }, wf);
-  const words = [shown(D.results(wf)), shown(D.results(old)), shown(D.results({ unseen: null, prop: {} })),
-    said(D.curve(wf)), said(D.curve(old)), JSON.stringify([g.figs.head, g.days.title, g.prop.head]), said(g.curve)];
+  const words = [shown(D.results(wf)), said(D.curve(wf)), JSON.stringify([g.figs.head, g.days.title, g.prop.head]), said(g.curve)];
   for (const w of words) assert.doesNotMatch(w, /Build|Unseen|unseen|OOS|\bIS\b|\bcell/, w);
+  // the old record is never called in-sample (owner 2026-10-25: in-sample is ONLY the 3:1): its own build days and test days
+  for (const w of [shown(D.results(old)), shown(D.results({ unseen: null, prop: {} })), said(D.curve(old))]) {
+    assert.doesNotMatch(w, /In-sample|in-sample|Unseen|unseen|OOS|\bIS\b|\bcell/, w);
+  }
+  assert.deepEqual(D.results(old).unseen.head, ['Build days', 'Test days']);
   assert.equal(D.results(wf).unseen.title, '3:1 in-sample / 3:1 test months');
   assert.equal(D.results(old).unseen.title, 'Old record (before 3:1)');
   // the numbers under the new words are the same ones
   const net = (v) => v.unseen.rows.find((x) => x.k === 'Net');
   assert.deepEqual([net(D.results(wf)).full, net(D.results(old)).b, net(D.results(old)).v], [['+$4,000', '+$1,235', '+$5,235'], '−$5,850', '+$26,322']);
+});
+
+test('3.1 before the first answer (or with no chart service): the 3:1 words, never the old record', () => {
+  // only a Lab strategy (always the 3:1) or a group (always the 3:1) is shown before its answer; a straddle needs its twin's answer
+  const r = D.results(undefined);
+  assert.deepEqual([r.unseen.title, r.unseen.head, r.unseen.note, r.prop.head, r.prop.note],
+    ['3:1 in-sample / 3:1 test months', null, 'Reading…', ['In-sample', 'Test months'], 'Reading…']);
+  const g = D.groupPage({ id: 'g', name: 'G', kind: 'together', members: ['lab_a'] }, undefined);
+  assert.deepEqual([g.figs.head, g.days.title, g.prop.head, g.figs.note, g.prop.note],
+    [['In-sample', 'Test months'], '3:1 test months: days traded', ['In-sample', 'Test months'], 'Reading…', 'Reading…']);
+  assert.doesNotMatch(JSON.stringify([r, g]), /Old record/);
 });
 
 test('Trades / week: trades over the weeks of its months (3:1) or of its start..end days; dashes without either', () => {
