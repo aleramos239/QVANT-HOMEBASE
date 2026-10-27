@@ -191,3 +191,34 @@ def test_the_desk_serves_the_page_uncached_and_every_desk_script_it_names(tmp_pa
             r = c.get(f"/static/{f}?v=1")
             assert r.status_code == 200 and r.content == (STATIC / f).read_bytes(), f
             assert r.headers["content-type"].startswith(("text/javascript", "application/javascript")), f
+
+
+# Each desk/*.js is cached by the browser under its ?v= (no cache-control on /static), so a changed file must get a new ?v=
+# or a fresh page can run with yesterday's code. Edited a desk file? Bump its ?v= in index.html, then its pin here (both).
+DESK_PINS = {
+    "desk/core.js": (1, "a30cddaf40be9288"),
+    "desk/topbar.js": (1, "e5e2bdd22c0b1724"),
+    "desk/activity.js": (1, "3e658602440279d7"),
+    "desk/views.js": (1, "528026221c807278"),
+    "desk/groups.js": (1, "67632f20ce311dc5"),
+    "desk/strategy.js": (1, "ed733055c36fa617"),
+    "desk/labdesk.js": (1, "09ca74d99f09711a"),
+    "desk/demo.js": (1, "80281fdd8c66654c"),
+    "desk/book.js": (1, "fbeb323fd3fc4e00"),
+    "desk/settings.js": (1, "428b206bb8e6f8ec"),
+    "desk/popups.js": (1, "8a0b647ac269ac85"),
+    "desk/start.js": (1, "5b20467b07f10f65"),
+}
+
+
+def test_every_changed_desk_script_gets_a_new_v():
+    import hashlib
+    import re
+
+    page = (STATIC / "index.html").read_text(encoding="utf-8")
+    tags = dict(re.findall(r'<script src="/static/(desk/[\w-]+\.js)\?v=(\d+)"></script>', page))
+    assert sorted(tags) == sorted(DESK_PINS), "a desk/*.js added or removed: pin it here"
+    for f, (v, sha) in DESK_PINS.items():
+        now = hashlib.sha256((STATIC / f).read_bytes()).hexdigest()[:16]
+        assert (int(tags[f]), now) == (v, sha), (f"{f}: index.html has ?v={tags[f]}, file sha {now}; pinned ({v}, {sha!r}). "
+                                                     "A changed file needs a higher ?v= in index.html, then that pin here")
