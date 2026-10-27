@@ -99,6 +99,7 @@
     /* ---- after each repaint of the page: which view, the title, the inspector's borrowed nodes ---- */
     const vToday = $('#viewToday'), vStrat = $('#viewStrat'), vAct = $('#viewActivity');
     const status_ = () => { try { return ST; } catch (_) { return null; } };          // the page's own state (read only)
+    const stale_ = () => { try { return DESK_STALE === true; } catch (_) { return false; } };      // the page's: ST is the last-known state
     const archived = () => { try { return VIEW && VIEW.k === 'archive'; } catch (_) { return false; } };      // the Archive list: no strategy in the inspector
     const viewOf = () => (vStrat && !vStrat.hidden && !archived()) ? 'strat' : (vAct && !vAct.hidden) ? 'activity' : 'today';
     const fmtN = (v) => (v == null || v === '' ? '—' : String(+v === Math.round(+v) ? Math.round(+v) : +v));
@@ -227,8 +228,9 @@
     // never a guess from the address (the server's Desk can show as localhost through a tunnel).
     const machineWord = (st) => { const m = window.HB_MACHINE ?? (st && st.machine); return m === 'mac' ? 'This Mac' : m === 'server' ? 'Server · Chicago' : ''; };
     // readiness as the page shows it: its own readinessShown(), the list openChecks() opens (bad or warn = needs a look). [level, words]
-    const readyWord = (st) => {
-      const r = st && typeof window.readinessShown === 'function' ? window.readinessShown(st.readiness, st) : null;
+    // While the desk is not answering (`stale`: the page's DESK_STALE) the last answer is old: "Checking…", never a stale "Ready".
+    const readyWord = (st, stale) => {
+      const r = !stale && st && typeof window.readinessShown === 'function' ? window.readinessShown(st.readiness, st) : null;
       if (!r || !Array.isArray(r.checks)) return ['', 'Checking…'];
       const probs = r.checks.filter((c) => c && (c.level === 'bad' || c.level === 'warn')), n = probs.length;
       if (!n) return ['ok', 'Ready'];
@@ -301,9 +303,17 @@
         }
         const mw = machineWord(st);
         if (machine.textContent !== mw) { machine.textContent = mw; machine.dataset.m = mw === 'This Mac' ? 'mac' : 'server'; machine.hidden = !mw; }
-        // readiness, in words: the toolbar word and the inspector row say the same (both open the page's own System checks)
-        const [lvl, txt] = readyWord(st);
-        for (const n of [sum, readyBtn]) if (n.dataset.lvl !== lvl) n.dataset.lvl = lvl;
+        // readiness, in words (the bulb is the page's own verdict; the row opens the page's own System checks)
+        if (bulb) {
+          const lvl = bulb.classList.contains('bad') ? 'bad' : bulb.classList.contains('warn') ? 'warn' : bulb.classList.contains('ok') ? 'ok' : '';
+          const txt = lvl === 'ok' ? 'Ready to trade' : lvl === 'warn' ? 'Needs attention' : lvl === 'bad' ? 'Not ready' : 'Checking…';
+          if (sum.dataset.lvl !== lvl) sum.dataset.lvl = lvl;
+          const t = $('#hbReadyTxt');
+          if (t && t.textContent !== txt) t.textContent = txt;
+        }
+        // and beside the shield: how many checks need a look
+        const [lvl, txt] = readyWord(st, stale_());
+        if (readyBtn.dataset.lvl !== lvl) readyBtn.dataset.lvl = lvl;
         if (readyBtn.textContent !== txt) { readyBtn.textContent = txt; readyBtn.setAttribute('aria-label', 'Readiness: ' + txt); }
         const cw = chartWords(st), cs = chartWords(st, true);
         if (ctLong.textContent !== cw) ctLong.textContent = cw;
@@ -317,6 +327,8 @@
     if (vStrat) mo.observe(vStrat, { childList: true });
     if (side) mo.observe(side, { childList: true });                  // the page repaints the sidebar on every refresh
     if (bulb) mo.observe(bulb, { attributes: true, attributeFilter: ['class'] });
+    const pill = $('#statusPill');      // its class gains "stale" when the desk stops answering (the page's renderMaster)
+    if (pill) mo.observe(pill, { attributes: true, attributeFilter: ['class'] });
     sync();
 
     /* ---- appearance: follow the window; the page's own toggle does the switch ---- */

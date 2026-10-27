@@ -77,10 +77,12 @@ test('apple skin: the scripts never talk to a server and never swallow an event'
 test('apple skin: the Desk skin leans only on things the Desk page still has', () => {
   const page = read('index.html'), skin = read('apple/desk.js');
   for (const id of ['pgSw', 'bulb', 'clock', 'armBtn', 'killBtn', 'settingsBtn', 'side', 'readyStrip', 'todayFoot', 'noticeStrip', 'stratList', 'dayTl',
-                    'viewToday', 'viewStrat', 'viewActivity', 'themeToggle'])
+                    'viewToday', 'viewStrat', 'viewActivity', 'themeToggle', 'statusPill'])
     assert.ok(page.includes(`id="${id}"`) && skin.includes(`#${id}`), `#${id} is expected by the skin and present in the page`);
   for (const cls of ['pill-slot', 'app-main', 'frame', 'inset-topbar']) assert.ok(page.includes(cls), `.${cls} is in the page`);
-  for (const fn of ['openChecks', 'setStratRr']) assert.match(page, new RegExp(`function ${fn}\\(`), `${fn}() is the page's own`);
+  for (const fn of ['openChecks', 'setStratRr', 'readinessShown']) assert.match(page, new RegExp(`function ${fn}\\(`), `${fn}() is the page's own`);
+  // the page's own state the skin reads by name (a rename would leave the toolbar words stuck, with no error)
+  for (const v of ['ST', 'DESK_STALE', 'DESKRES', 'DESKGRES']) assert.match(page, new RegExp(`\\blet ${v}\\b`), `${v} is the page's own`);
   // the nodes the inspector borrows from a strategy's render
   for (const cls of ['figs', 'qlinks', 'sd-actions']) assert.ok(page.includes(`class="${cls}"`), `.${cls} is rendered by the page`);
 });
@@ -121,6 +123,14 @@ test('desk skin: readiness in words comes from the page\'s own readinessShown --
   assert.equal(seen.at(-1)[0], st.readiness); assert.equal(seen.at(-1)[1], st);
   assert.deepEqual(word({ readiness: { checks: [{ label: 'feed', level: 'warn' }] } }), ['warn', '1 thing needs a look']);
   assert.deepEqual(word({ readiness: { checks: [{ label: 'a', level: 'warn' }, { label: 'b', level: 'bad' }, { label: 'c', level: 'info' }] } }), ['bad', '2 things need a look']);
+  // while the desk is not answering (the page's DESK_STALE) the last answer is old: never a stale "Ready"
+  const stale = (s) => [...toolbarWords({ window: { readinessShown: shown } }).readyWord(s, true)];
+  assert.deepEqual(stale({ readiness: { checks: [{ label: 'feed', level: 'ok' }] } }), ['', 'Checking…']);
+  assert.match(DESK_SKIN, /readyWord\(st, stale_\(\)\)/, 'the toolbar word passes the page\'s stale flag');
+  assert.match(DESK_SKIN, /const stale_ = \(\) => \{ try \{ return DESK_STALE === true; \}/);
+  assert.match(DESK_SKIN, /mo\.observe\(pill, \{ attributes: true, attributeFilter: \['class'\] \}\)/, 'the word follows the pill going stale');
+  // the inspector's row keeps its own words, from the bulb the page paints (not the toolbar's count)
+  assert.match(DESK_SKIN, /const txt = lvl === 'ok' \? 'Ready to trade' : lvl === 'warn' \? 'Needs attention' : lvl === 'bad' \? 'Not ready' : 'Checking…';/);
   assert.match(DESK_SKIN, /class: 'hb-ready-word'[^\n]*window\.openChecks\(\)/, 'the word opens the page\'s own System checks');
 });
 
