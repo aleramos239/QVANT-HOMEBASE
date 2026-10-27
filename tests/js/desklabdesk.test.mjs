@@ -225,7 +225,7 @@ test('WP1.15 putting back a lower qty or taking an account off never asks, even 
   assert.equal(t.confirms.length, 0);
 });
 
-test('WP1.15 a change no longer in force, or a group row off its group page, has no Put back', () => {
+test('WP1.15 a change no longer in force, or any group row (even on its own page), has no Put back', () => {
   const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 2 }] } });
   t.ctx.ST.strategies.lab_nq_orb.lab.limits = LIM_OLD;
   changes(t, [chg('lab_limits_set', { strategy: 'lab_nq_orb', limits: LIM_NEW, previous: LIM_OLD }),
@@ -237,6 +237,14 @@ test('WP1.15 a change no longer in force, or a group row off its group page, has
     chg('group_set', { group: 'g3', name: 'apex', members: [], accounts: [], risk_usd: 500, max_minis: 17, on: true })], 'g:g3');
   const g = t.api.deskChangeList('g:g3');
   assert.deepEqual(plain(g.map((x) => [x.text, !!x.back])), [['Size $500 at risk a trade → $750 at risk a trade', false], ['Account cycle ON · $500 at risk a trade', false]]);
+  vm.runInContext('VIEW = {k: "group", name: "g3"}', t.ctx);
+  assert.deepEqual(plain(t.api.deskChangeList('g:g3').map((x) => !!x.back)), [false, false], 'on its own page too: the cycle card is the one place it changes');
+  assert.doesNotMatch(t.api.deskChangesHtml('g:g3'), /Put back/);
+  const urls = [];
+  t.ctx.fetch = async (u) => { urls.push(u); return { ok: false }; };
+  vm.runInContext('delete CHG["g:g3"]', t.ctx);
+  t.api.deskChangesHtml('g:g3');
+  assert.deepEqual(urls, ['/api/journal?days=7&limit=2000&group=g3'], 'a group reads its own lines');
 });
 
 test('WP1.15 an open page re-reads its changes at most once a minute', async () => {

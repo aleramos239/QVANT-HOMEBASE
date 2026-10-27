@@ -374,8 +374,8 @@ $("#feedRawBtn").addEventListener("click", () => {
 /* ---- Changes (7 days) (WP1.15) ----
    What was changed on a strategy (who "s:<id>") or a group (who "g:<id>") in the last 7 days, old → new in words, from the Desk's
    journal (GET /api/journal, days=7). "Put back" calls the same setter the control that made the change calls, so it asks exactly
-   when that control asks. It shows only while the change is still in force and its old value is known. Any page can show it:
-   deskChangesHtml(who) (the group page: deskChangesHtml("g:" + id)).
+   when that control asks. It shows only while the change is still in force and its old value is known, and never on a group's
+   line. Any page can show it: deskChangesHtml(who) (the group page: deskChangesHtml("g:" + id)).
    shortcut: one read of the newest 2000 lines of those 7 days; a strategy that writes more than that shows only their changes. */
 let CHG = {};                                       // who -> {rows (the change lines, newest first) | null, at, busy}
 const CHG_EVENTS = ["lab_limits_set", "lab_settings_set", "strategy_rr_changed", "book_updated", "group_set"];
@@ -443,18 +443,16 @@ const CHG_WORDS = {
     return parts.length ? {text: parts.join(" · "), back: parts.length === 1 && chgSameBook((ST.book || {})[r.strategy], now) ? () => putBackBook(r.strategy, old) : null} : null;
   },
   group_set: (r, prior) => {
-    const g = ((ST && ST.groups) || {})[r.group] || {}, money = (v) => +v > 0 ? usd(v).replace(/\.00$/, "") + " at risk a trade" : "each at its own size";
+    const money = (v) => +v > 0 ? usd(v).replace(/\.00$/, "") + " at risk a trade" : "each at its own size";
     if (!prior) return {text: `Account cycle ${r.on ? "ON" : "OFF"} · ${money(r.risk_usd)}`};
     const list = (k, word) => [...(r[k] || []).filter(x => !(prior[k] || []).includes(x)).map(x => `${word(x)} added`),
       ...(prior[k] || []).filter(x => !(r[k] || []).includes(x)).map(x => `${word(x)} taken out`)];
-    const parts = [...(r.on !== prior.on ? [[`Account cycle ${prior.on ? "ON" : "OFF"} → ${r.on ? "ON" : "OFF"}`, "on"]] : []),
-      ...(r.risk_usd !== prior.risk_usd ? [[`Size ${money(prior.risk_usd)} → ${money(r.risk_usd)}`, "risk_usd"]] : []),
-      ...(r.max_minis !== prior.max_minis ? [[`Most minis ${prior.max_minis} → ${r.max_minis}`, "max_minis"]] : []),
-      ...list("accounts", acctShort).map(t => [t, "accounts"]), ...list("members", stratLabel).map(t => [t, ""])];
-    // the cycle's own setters read the group page's fields: Put back only there
-    const k = parts.length === 1 ? parts[0][1] : "", still = k && VIEW.k === "group" && VIEW.name === r.group && JSON.stringify(g[k]) === JSON.stringify(r[k]);
-    return parts.length ? {text: parts.map(x => x[0]).join(" · "), back: !still ? null : k === "on" ? () => setCycle(r.group, prior.on)
-      : async () => { if (await saveCycle(r.group, {[k]: prior[k]})) toast("Put back."); }} : null;
+    const parts = [...(r.on !== prior.on ? [`Account cycle ${prior.on ? "ON" : "OFF"} → ${r.on ? "ON" : "OFF"}`] : []),
+      ...(r.risk_usd !== prior.risk_usd ? [`Size ${money(prior.risk_usd)} → ${money(r.risk_usd)}`] : []),
+      ...(r.max_minis !== prior.max_minis ? [`Most minis ${prior.max_minis} → ${r.max_minis}`] : []),
+      ...list("accounts", acctShort), ...list("members", stratLabel)];
+    // no Put back: the cycle's setters read the card's typed fields, so a draft would ride along unasked; the card is on the same page
+    return parts.length ? {text: parts.join(" · ")} : null;
   },
 };
 function deskChangeList(who) {

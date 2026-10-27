@@ -96,6 +96,7 @@ function groupView(id) {
       <div class="feed-row"><span class="h dim">Strategy</span><span class="t dim">Build</span><span class="t dim">Unseen</span></div>${members.join("")}</div></div>` : ""}
     ${out.length ? `<div class="sec"><h2>Left out of the sum</h2><div class="agroup feed static">${out.join("")}</div></div>` : ""}
     ${labSafe(() => cycleHtml(g), "")}
+    ${labSafe(() => deskChangesHtml("g:" + g.id), "")}
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openGroupMgr()">Manage groups</button>
       <button class="btn btn-outline btn-sm" onclick="deleteGroup(${jsArg(g.id)})" title="The strategies stay on the Desk, in no group.">Delete group</button></div>`;
 }

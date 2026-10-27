@@ -1309,7 +1309,7 @@ test('a group page before its first answer says so, and a hostile name or senten
     DESKGROUPS: { groups: [{ id: 'g1', name: hostile, kind: 'eval', members: [hostile] }], ok: true },
     DESKGRES: { g1: { members: [{ strategy: hostile, label: hostile, state: 'done', build: { net: 1 }, unseen: { net: 1 } }],
       left_out: [{ strategy: hostile, why: hostile }], build: null, unseen: null, prop: { build: null, unseen: null } } },
-    eqPlot: () => '', actBtn: () => '', labSafe: (f, d) => { try { return f(); } catch (_) { return d; } } });
+    eqPlot: () => '', actBtn: () => '', deskChangesHtml: (who) => `<i data-chg="${who}"></i>`, labSafe: (f, d) => { try { return f(); } catch (_) { return d; } } });
   vm.runInContext(`const jsArg = (v) => esc(JSON.stringify(String(v == null ? "" : v)));
     const groupOf = (id) => DESKGROUPS.groups.find(g => g.id === id) || null;
     ${GROUP_PAGE.slice(GROUP_PAGE.indexOf('const GROUP_FAULT'), GROUP_PAGE.indexOf('async function deleteGroup('))}
@@ -1317,6 +1317,7 @@ test('a group page before its first answer says so, and a hostile name or senten
   assert.doesNotMatch(ctx.html, /<img/);
   assert.match(ctx.html, /&lt;img src=x onerror=alert\(1\)&gt;/);
   assert.match(ctx.gone, /That group is not there any more/);
+  assert.match(ctx.html, /<i data-chg="g:g1"><\/i>/, 'the group page lists its Changes (7 days)');
 });
 
 test('the group writes go to the chart service by name (the account cycle to the desk), and a group id is only a JS string literal in a handler', () => {
