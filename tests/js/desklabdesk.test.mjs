@@ -1123,3 +1123,16 @@ test('the server\'s Desk draws no "Open in the Lab" / "Show on chart"; this Mac 
     assert.equal(/>Show on chart</.test(pages.builtin), shown, `builtin with ${hb}/${machine}`);
   }
 });
+
+// ---- WP1.9: the day bar's axis runs from the earliest window to the latest, 9:00-16:00 by default ----
+const openAt = (bar) => Number(/class="tl-open" style="left:([\d.]+)%"/.exec(bar)[1]);
+test('1.9: the day bar is 9:00-16:00 for the 9:30 straddle; a booked London Lab strategy stretches it to 3:00', () => {
+  const plainDay = load({ strategies: { nq930: nq930() } });
+  assert.equal(openAt(plainDay.api.dayTimeline()), 7.14, '9:30 on a 9:00-16:00 bar, as before');
+  const london = load({ rows: [ROW({ session_window: ['03:00', '08:00'] })], book: BOOKED });
+  assert.equal(openAt(london.api.dayTimeline()), 50, '9:30 halfway along 3:00-16:00');
+  const shadowOnly = load({ rows: [ROW({ session_window: ['03:00', '08:00'] })] });
+  assert.equal(openAt(shadowOnly.api.dayTimeline()), 7.14, 'a Lab strategy with no account never sets the bar');
+  const evening = load({ rows: [ROW({ session_window: ['-20:00', '08:00'] })], book: BOOKED });
+  assert.equal(openAt(evening.api.dayTimeline()), 7.14, 'an evening-before window is left out: the bar is one day');
+});

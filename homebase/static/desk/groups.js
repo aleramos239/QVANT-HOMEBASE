@@ -310,6 +310,23 @@ const stratDotCls = (s, state, book) => s.cfg.kind === "lab" ? labSafe(() => Des
   : !s.cfg.enabled ? "off" : s.cfg.shadow ? "shadow"
   : /Needs|Missed/.test(state) ? "warn" : (state === "In position" || state === "Orders working") ? "live" : "";
 
+/* The day so far in money, LIVE apart from the rest: the sums of each account's closed P&L today (day.closed_net, which
+   /api/status already sends). Closed trades only -- an open position's P&L is not in it, so it says so. The Mac's line
+   names the machine (its accounts are not the server's). "" when no account says. */
+function dayMoney() {
+  const sums = {live: null, other: null}, kinds = new Set();
+  for (const [id, a] of Object.entries((ST && ST.accounts) || {})) {
+    const v = Number(a && a.day && a.day.closed_net);
+    if (!a || !a.day || !Number.isFinite(v)) continue;
+    const k = isDemoAcct(id) ? "other" : "live";
+    sums[k] = (sums[k] || 0) + v;
+    if (k === "other") kinds.add(a.env === "paper" ? "paper" : "demo");
+  }
+  const other = kinds.size === 2 ? "Demo + paper" : kinds.has("paper") ? "Paper" : "Demo";
+  const parts = [sums.live != null ? `Live ${usdS(sums.live)}` : "", sums.other != null ? `${other} ${usdS(sums.other)}` : ""].filter(Boolean);
+  if (!parts.length) return "";
+  return `${deskMachine() === "mac" ? "This Mac: " : ""}${parts.join(" · ")} so far (closed trades).`;
+}
 /* the one sentence of the day -- two tones: what happens next, then what is armed */
 function dayHeadline(names) {
   const strategies = Object.values(ST.strategies || {});
@@ -335,15 +352,31 @@ function dayHeadline(names) {
     const working = live.filter(v => v.day_status === "placed" || v.day_status === "placing").length;
     const done = live.filter(v => v.day_status === "done").length;
     const l1 = inPos ? `${plural(inPos, "strategy", "strategies")} in a position.` : working ? "Orders are working." : "In session.";
-    return [l1, `${n} on · ${done} done today.` + stale];
+    const money = dayMoney();
+    return [l1, `${n} on · ${done} done today.` + (money ? " " + money : "") + stale];
   }
   const rows = strategies.map(todayPnl).filter(p => p != null);
   const tot = rows.reduce((a, p) => a + p, 0);
   return ["Session closed.", (rows.length ? `Today ${usdS(tot)}.` : "No trades today.") + stale];
 }
 
+/* The day bar's axis, in minutes ET: from the earliest window start to the latest window end (whole hours), with the
+   9:30 open and the flat mark always on it; 9:00-16:00 when no window reads. A built-in's window is its fire time
+   (9:30 when unsaid) to its flat time; a booked Lab strategy's is its record's session_window (an evening-before one,
+   "-20:00", is left out: the bar is one day). */
+function dayAxis(own, labs, flat) {
+  const ws = own.map(v => [hmin(v.cfg.fire_et) ?? OPEN_MIN, hmin(v.cfg.flat_et) ?? 955]);
+  for (const v of labs) {
+    const w = labSafe(() => (labRowOf(v) || {}).session_window, null);
+    if (Array.isArray(w) && w.length === 2 && !String(w[0]).startsWith("-")) ws.push([hmin(w[0]), hmin(w[1])]);
+  }
+  const ok = ws.filter(([a, b]) => a != null && b != null && b > a);
+  if (!ok.length) return [540, 960];
+  const lo = Math.floor(Math.min(OPEN_MIN, flat, ...ok.map(w => w[0])) / 60) * 60;
+  const hi = Math.ceil(Math.max(OPEN_MIN, flat, ...ok.map(w => w[1])) / 60) * 60;
+  return [lo, Math.max(hi, lo + 60)];
+}
 function dayTimeline(names) {
-  const pct = (m) => Math.max(0, Math.min(100, (m - 540) / 420 * 100));
   const vis = new Set(names || Object.keys(ST.strategies || {}));      // only the strategies the page shows (an archived straddle is not)
   const strategies = Object.entries(ST.strategies || {}).filter(([n]) => vis.has(n)).map(([, v]) => v);
   const own = strategies.filter(v => v.cfg.kind !== "lab");      // a Lab strategy sets its own times: never the day bar's
@@ -356,9 +389,11 @@ function dayTimeline(names) {
   // a booked Lab strategy armed: the bar's Flat mark is the latest armed flat time (with none, the reference's, as always)
   const flatEt = labsOn.length ? [armedOwn, ...own.filter(v => v.cfg.enabled && !v.cfg.shadow), ...labsOn.map(([, v]) => v)].filter(Boolean).reduce(later).cfg.flat_et : ref.flat_et;
   const cancel = hmin(ref.cancel_et) ?? 775, flat = hmin(flatEt) ?? 955;
+  const [lo, hi] = dayAxis(own, labsOn.map(([, v]) => v), flat);
+  const pct = (m) => Math.max(0, Math.min(100, (m - lo) / (hi - lo) * 100));
   const noCancel = !!labRef || !own.length;      // a Lab strategy has no cancel time of its own: only a built-in straddle draws one
   const oneMark = !noCancel && cancel === flat;      // the cancel and the flat time are one moment: one label, one tick
-  const now = etMin(ST.et_now) ?? 540;
+  const now = etMin(ST.et_now) ?? lo;
   const date = new Date(String(ST.et_now).slice(0, 10) + "T12:00:00Z")
     .toLocaleDateString("en-US", {weekday: "long", month: "long", day: "numeric", timeZone: "UTC"});
   const lab = (m, t, cls) => `<span class="${cls}" style="left:${pct(m).toFixed(2)}%">${esc(t)}</span>`;
