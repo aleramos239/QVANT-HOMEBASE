@@ -136,6 +136,13 @@ func jsString(_ s: String) -> String {
     return String(t.dropFirst().dropLast())     // ["..."] -> "..."
 }
 
+/// Which machine's Homebase this app shows: window.HB_MACHINE on every page ('server' = the Chicago VPS, 'mac' = this Mac).
+#if VPS
+let machine = "server"
+#else
+let machine = "mac"
+#endif
+
 func origin(of url: URL) -> URL {
     var c = URLComponents()
     c.scheme = url.scheme; c.host = url.host; c.port = url.port
@@ -439,8 +446,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         """
     }
 
+    /// Every load and every ⌘R (removeAllUserScripts wipes them all): the machine first, skinned or not -- the page's
+    /// machine chip and its words read window.HB_MACHINE -- and the VPS app's Desk-only style.
     private func installScripts(_ controller: WKUserContentController, tab: Tab) {
         controller.removeAllUserScripts()
+        controller.addUserScript(WKUserScript(source: "window.HB_MACHINE='\(machine)';", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        #if VPS
+        controller.addUserScript(WKUserScript(source: vpsBadgeJS, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        #endif
         guard let s = skin?.tabs[tab] else { return }
         controller.addUserScript(WKUserScript(source: startScript(for: tab), injectionTime: .atDocumentStart, forMainFrameOnly: true))
         if !s.js.isEmpty {
@@ -460,9 +473,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         let config = WKWebViewConfiguration()
         config.userContentController.add(self, name: "hb")
         installScripts(config.userContentController, tab: tab)
-        #if VPS
-        config.userContentController.addUserScript(WKUserScript(source: vpsBadgeJS, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        #endif
         let wv = WKWebView(frame: window.contentView!.bounds, configuration: config)
         wv.autoresizingMask = [.width, .height]
         wv.navigationDelegate = self
