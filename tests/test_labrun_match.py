@@ -98,6 +98,14 @@ def test_a_summary_trade_row_reads_as_an_engine_row():
            "reason": "sl", "net": -5.0}
     assert match.from_summary([row], D1) == [{"side": "short", "qty": 2, "entry_ns": T0, "entry_price": 21450.25,
                                               "exit_ns": T0 + 60 * SEC, "exit_price": 21440.0, "exit_reason": "sl"}]
+    assert match.from_summary([{**row, "any_size": True}], D1)[0]["any_size"] is True
+
+
+def test_a_size_the_account_cycle_set_is_not_compared_and_everything_else_still_is():
+    cyc = dict(trade(qty=5), any_size=True)
+    assert compare([cyc], [trade(qty=1)], TICK)["ok"] is True
+    assert compare([trade(qty=5)], [trade(qty=1)], TICK)["text"] == "Did not match at trade 1: size 5 on the Desk, 1 in the backtest."
+    assert compare([dict(cyc, entry_price=21450.25 + 0.75)], [trade(qty=1)], TICK)["ok"] is False
 
 
 # ---------------------------------------------------------------- the tester on one day
