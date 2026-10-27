@@ -62,3 +62,12 @@ test('5.3 the chart lines pass "2+ accounts here" into the chip text', () => {
   assert.match(TL, /this\.named = window\.HBTradeUI\.tradeOf\(this\.cell\)\.accounts\.length > 1 \|\| new Set\(groups\.flatMap/);
   assert.match(TL, /T\.lineText\(it\.g, q \? q\.last : null, this\.cell\.tick, !!this\.named\)/);
 });
+
+test('5.4 the button and the ENTRY tag read their words from the send\'s own qty and accounts; the sends are untouched', () => {
+  const TL = rd('charts/tradelines.js'), OP = rd('charts/orderpanel.js');
+  assert.match(TL, /T\.sendTag\(side, Dc\.prefs\.qty, this\.root, mode\.accounts, Dc\.state\)/);
+  // trade() still sends the same qty, root and type it always did
+  assert.match(TL, /placeOrder\(\{ cell: this\.cell, root: this\.root, side, type: 'Market', qty: window\.HBDeskClient\.prefs\.qty, surface: 'chart' \}\)/);
+  assert.match(OP, /T\.sendTag\(st\.side, Number\.isInteger\(n\) \? n : 0, c\.root, m\.mode === 'on' \? m\.accounts : \[\], D\(\)\.state\)\.full/);
+  assert.match(OP, /title: `ENTRY · \$\{tag\}\$\{rr\}`/);
+});

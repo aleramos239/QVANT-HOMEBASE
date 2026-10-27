@@ -656,6 +656,10 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .tr-flat:disabled { opacity: .5; cursor: default; }
 .tr-px { font-size: 13px; font-weight: 600; } .tr-lbl { font-size: 11px; letter-spacing: .04em; }   /* .tr-px: the Bar Replay practice buttons' */
 .lg-trade .tr-lbl { font-size: 12px; font-weight: 600; }
+/* 2026-10-26: under the side, what the click sends ("1 NQ · …047"), inside the same fixed size */
+.lg-trade .tr-sell, .lg-trade .tr-buy { flex-direction: column; line-height: 13px; }
+.tr-sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; line-height: 11px; opacity: .9; }
+.tr-sub:empty { display: none; }
 /* S1, the LIVE cue (2026-09-28 safety pass): while the NEXT send from the chart's Buy/Sell block or the order panel's
    Send reaches a LIVE account (HBTradeUI.liveCue -- the send path's own account set), a red ring round it and a LIVE
    tag on each send button, one-click on or off. Nothing here takes space: the ring is an absolutely positioned

@@ -587,6 +587,20 @@ const TYPE_WORDS = { Market: 'MARKET', Limit: 'LIMIT', Stop: 'STOP', StopLimit: 
 function sendLabel(side, qty, root, type) {
   return [side, qty >= 1 ? String(qty) : null, root, TYPE_WORDS[type] || String(type || '').toUpperCase()].filter(Boolean).join(' ');
 }
+/* What a click on the chart's BUY / SELL or the ENTRY tag sends, in words (2026-10-26; words only -- the send reads its
+   own gate): `ids` are that gate's accounts (the chart's mode). `full` "BUY 1 NQ · …047 LIVE" (2+: "· 2 accounts
+   (1 LIVE)"), `sub` "1 NQ · …047" for under the button's side. No account: the size alone. */
+function sendTag(side, qty, root, ids, state) {
+  const list = accountsOf(state), rows = idList(ids).map((id) => list.find((x) => x.id === id) || { id });
+  const one = rows.length === 1 ? rows[0] : null, live = rows.filter((a) => a.env === 'live').length;
+  const size = [qty >= 1 ? String(qty) : null, root].filter(Boolean).join(' ');
+  const who = one ? short(one) + (one.env === 'paper' ? '' : ` ${envChip(one.env)}`)
+    : rows.length ? `${rows.length} accounts${live ? ` (${live} LIVE)` : ''}` : '';
+  return {
+    full: [`${String(side || '').toUpperCase()} ${size}`, who].filter(Boolean).join(' · '),
+    sub: [size, one ? short(one) : rows.length ? `${rows.length} accts` : null].filter(Boolean).join(' · '),
+  };
+}
 /* ---- money ---- */
 // sign/usd/money now live in tradepure.js (re-exported above, unchanged) -- the Strategy Tester needs money/usd too.
 /* qty contracts from `from` to `to`, s = 1 long / −1 short; null without a point value or a price. */
@@ -1703,7 +1717,7 @@ const api = { PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, r
   accountsForAlgo, algoTickAccounts, accountPickRows, deskStatusText, deskStatusParts,
   verifyLoaded, verifyCells, nextUnverified, unverifiedMode, CHECKING_ACCOUNTS, REPLAY_ENDED, replayHaltGuard,
   replayEndPatch, sendsWithoutConfirm, chartWhy,
-  PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel,
+  PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel, sendTag,
   parseQty, parseUsd, parseDecimal, roundTickDir, riskTicks,
   paperKey, isPaperAlgo, paperStrategyId, paperStrategiesMap, paperPill, paperToday, paperLabel, paperLines,
   paperMarkers, paperOverlay, paperRunMarkers, paperStatsText, PAPER_ID, isPaperId, withPaper, splitSend, routeSend };

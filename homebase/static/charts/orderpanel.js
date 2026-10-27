@@ -650,11 +650,13 @@ function paintPreview(cell, c) {
   if (!series) return;
   const P = cell.P, want = {};
   if (c.entry != null) {
-    const n = c.order.ok ? c.order.qty : c.qty, size = Number.isInteger(n) && n >= 1 ? ` ${n} contract${n === 1 ? '' : 's'}` : '';
+    // 2026-10-26: the tag says what a click on it sends, "BUY 1 NQ · …047 LIVE" (the chart's accounts: its send gate's)
+    const n = c.order.ok ? c.order.qty : c.qty, m = UI().effectiveMode(cell);
+    const tag = T.sendTag(st.side, Number.isInteger(n) ? n : 0, c.root, m.mode === 'on' ? m.accounts : [], D().state).full;
     // reward to risk; with a partial, the average reward of all the contracts (TP1's and the TP's)
     const reward = !c.tp ? null : c.p1 && c.rest != null ? (c.n1 * c.p1.ticks + c.rest * c.tp.ticks) / (c.n1 + c.rest) : c.tp.ticks;
     const rr = reward != null && c.sl && c.sl.ticks > 0 ? ` · 1:${(reward / c.sl.ticks).toFixed(1)}` : '';
-    want.entry = { price: c.entry, color: st.side === 'Buy' ? P.accent : P.down, title: `ENTRY · ${st.side.toUpperCase()}${size}${rr}` };
+    want.entry = { price: c.entry, color: st.side === 'Buy' ? P.accent : P.down, title: `ENTRY · ${tag}${rr}` };
   }
   for (const k of ['tp', 'sl']) {
     const t = c[k];

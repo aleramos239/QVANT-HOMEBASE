@@ -161,7 +161,9 @@ class Overlay {
     this.sellLive = liveTag();
     this.buyLive = liveTag();
     this.liveKey = null;
-    this.sellBtn.append(sideLabel(this.sellLive, 'SELL'));
+    this.sellSub = mk('span', 'tr-sub');   // 2026-10-26: what the click sends, "1 NQ · …047" (paintBlock)
+    this.buySub = mk('span', 'tr-sub');
+    this.sellBtn.append(sideLabel(this.sellLive, 'SELL'), this.sellSub);
     this.mid = document.createElement('div'); this.mid.className = 'tr-mid';
     this.qty = document.createElement('input');
     this.qty.type = 'number'; this.qty.min = '1'; this.qty.step = '1'; this.qty.setAttribute('aria-label', 'Quantity');
@@ -169,7 +171,7 @@ class Overlay {
     this.mid.append(this.qty);
     this.buyBtn = document.createElement('button');
     this.buyBtn.type = 'button'; this.buyBtn.className = 'tr-buy';
-    this.buyBtn.append(sideLabel(this.buyLive, 'BUY'));
+    this.buyBtn.append(sideLabel(this.buyLive, 'BUY'), this.buySub);
     // Flatten (the owner, 2026-10-23): this chart's accounts out of the symbol -- the position closed at the broker and
     // its orders cancelled -- the right-click menu's Flatten, one click away; its own lock, so a slow order never blocks it
     this.flatBtn = document.createElement('button');
@@ -284,6 +286,13 @@ class Overlay {
     if (liveTitle !== this.liveKey) { this.liveKey = liveTitle; this.sellLive.title = this.buyLive.title = liveTitle; }
     this.block.title = liveTitle ? `Sell / buy at market · ${liveTitle}` : 'Sell / buy at market';
     if (document.activeElement !== this.qty) this.qty.value = String(Dc.prefs.qty);
+    // the size, root and account of what a click sends (H1: one qty box serves every chart): the very qty trade() reads
+    // and this chart's mode's accounts -- the set the send's own gate (cellGate) answers with while it is 'on'
+    for (const [btn, sub, side] of [[this.sellBtn, this.sellSub, 'Sell'], [this.buyBtn, this.buySub, 'Buy']]) {
+      const t = T.sendTag(side, Dc.prefs.qty, this.root, mode.accounts, Dc.state);
+      if (sub.textContent !== t.sub) sub.textContent = t.sub;
+      btn.title = `${t.full} · at market`;
+    }
     const busy = window.HBTradeUI.busy();
     this.buyBtn.disabled = this.sellBtn.disabled = busy;
     this.flatBtn.disabled = window.HBTradeUI.flatBusy();
