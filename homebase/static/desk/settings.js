@@ -213,6 +213,9 @@ function marketDataSection() {
     notes.push(`The last switch to ${esc(labelOfMd(MD_FEED.switch_error.to))} failed: ${esc(MD_FEED.switch_error.error)}`);
   }
   const applyDisabled = MD_BUSY || MD_STAGED === MD.md;
+  const where = machineWords();   // the live login holds ONE seat: taking it here drops the other machine's live charts
+  const seat = MD_STAGED === "live" && MD.md !== "live"
+    ? `<p class="mcap warn">Apply takes the live data seat${where ? " " + esc(where) : ""}: the other machine's charts lose live data.</p>` : "";
   return `
     <div class="slabel">MARKET DATA</div>
     <p class="wnote" style="margin-top:0">Fill charts from</p>
@@ -220,6 +223,7 @@ function marketDataSection() {
     <p class="wnote">Only the live login carries Level 2 (depth, DOM ladder, heatmap).</p>
     ${MD_ERR ? `<p class="mcap warn" role="alert">${esc(MD_ERR)}</p>` : ""}
     ${notes.length ? `<p class="mcap warn">${notes.join(" ")}</p>` : ""}
+    ${seat}
     <p class="wnote">Charts go blank for a few seconds while market data reconnects.</p>
     <div class="row-btns" style="margin-top:10px">
       <button class="btn btn-default btn-sm" id="mdApply" type="button"
@@ -231,7 +235,7 @@ let mdSig = null;
 function renderMarketData() {
   const root = $("#settingsMarketData");
   if (!root) return;
-  const sig = JSON.stringify([MD_REACHABLE, MD, MD_STAGED, MD_BUSY, MD_ERR, MD_FEED]);
+  const sig = JSON.stringify([MD_REACHABLE, MD, MD_STAGED, MD_BUSY, MD_ERR, MD_FEED, machineWords()]);
   if (sig === mdSig) return;   // nothing changed: leave the existing nodes (and any focus) alone
   mdSig = sig;
   root.innerHTML = marketDataSection();

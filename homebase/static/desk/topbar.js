@@ -18,7 +18,8 @@ async function setArmed(want) {
   refresh();
   if (DEMO) return;                        // preview mode: post() already said nothing is sent
   if (!err && r && r.ok === true && r.armed === want) {
-    toast(want ? "Armed — signals now place real orders." : "Disarmed — dry-run journaling only.");
+    const where = machineWords();
+    toast(want ? `Armed${where ? " " + where : ""} — signals now place real orders.` : `Disarmed${where ? " " + where : ""} — dry-run journaling only.`);
     return;
   }
   const why = err ? (err.name === "SyntaxError" ? "the desk's answer was unreadable"
@@ -29,12 +30,21 @@ async function setArmed(want) {
   if (want) toast(`NOT armed — ${why}.`, 8000);
   else alertBar(`Disarm NOT confirmed — ${why}. The desk may still be ARMED: press Kill, or disarm again.`);
 }
+/* "on the SERVER · Chicago, 3 LIVE accounts": which machine a master control acts on, and how many LIVE accounts it reaches
+   (isDemoAcct: an unknown account counts as LIVE). Words only -- when Arm / Kill ask does not change. */
+function masterReach(ids) {
+  try {                                   // never in Kill's way: a words problem leaves the words out, the confirm still runs
+    const where = machineWords(), n = ST ? new Set(ids().filter(a => !isDemoAcct(a))).size : null;
+    return [where, n == null ? "" : `${n} LIVE account${n === 1 ? "" : "s"}`].filter(Boolean).join(", ");
+  } catch (_) { return ""; }
+}
 /* The Arm/Disarm button is a switch too: a double-click is one flip (switchBounced). Without it, a
    double-clicked Disarm re-paints as Arm under the second click and pops "Arm the desk?". */
 async function doArm() {
   if (switchBounced("desk")) return;
+  const reach = masterReach(() => Object.values(ST.book || {}).flat().map(r => r && r.account).filter(Boolean));
   if (!await confirmDlg("Arm the desk?",
-      "Signals will place REAL bracketed orders on every account assigned in the book.",
+      `Signals will place REAL bracketed orders on every account assigned in the book${reach ? ` (${reach})` : ""}.`,
       "Arm", false)) return;
   await setArmed(true);
 }
@@ -117,8 +127,9 @@ const killRunning = () => toast(`Kill already running — sent ${Math.round((Dat
   "waiting for the desk. Nothing more sent.");
 async function doKill() {
   if (killInFlight()) return killRunning();
+  const reach = masterReach(() => Object.entries(ST.accounts || {}).filter(([, a]) => a && a.connected).map(([id]) => id));
   if (!await confirmDlg("Kill everything?",
-      "Cancels every working order and market-flattens every position on EVERY connected account, then disarms.",
+      `Cancels every working order and market-flattens every position on EVERY connected account${reach ? ` (${reach})` : ""}, then disarms.`,
       "Kill", true)) { toast("Kill cancelled — nothing sent."); return; }
   if (killInFlight()) return killRunning();
   if (DEMO) { await post("/api/kill"); refresh(); return; }   // preview mode: post() says nothing is sent

@@ -404,3 +404,21 @@ test('1.1: cancelling the ON confirm posts nothing', async () => {
   assert.deepEqual(posts, []);
   assert.equal(refreshes.length, 1);
 });
+
+test('1.7: staging Live says the other machine\'s charts lose live data; Apply still asks nothing', async () => {
+  const { api, els, listeners, confirms, fetched } = load({
+    machine: 'server',
+    fetchAnswers: { [`${CHART}/api/settings`]: { body: { md: 'demo', accounts: { live: null, demo: null } } } },
+    putAnswers: { [`${CHART}/api/settings`]: { body: { md: 'live', accounts: { live: null, demo: null } } } },
+  });
+  api.openSettings();
+  await tick();
+  assert.doesNotMatch(els.settingsMarketData.innerHTML, /live data seat/, 'nothing staged: no note');
+  listeners.live[listeners.live.length - 1]();
+  assert.match(els.settingsMarketData.innerHTML, /Apply takes the live data seat on the SERVER · Chicago: the other machine's charts lose live data\./);
+  await els.mdApply.onclick();
+  assert.equal(confirms.length, 0, 'when it asks does not change: it never did');
+  const puts = fetched.filter((f) => (f.opts && f.opts.method) === 'PUT');
+  assert.deepEqual(puts.map((p) => JSON.parse(p.opts.body)), [{ md: 'live' }]);
+  assert.doesNotMatch(els.settingsMarketData.innerHTML, /live data seat/, 'live in use: no note');
+});

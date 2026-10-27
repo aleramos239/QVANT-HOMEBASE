@@ -42,7 +42,8 @@ const KILL_OK = { ok: true, armed: false, strategies: {}, results: {
   a1: { cancel_all: { ok: true, error: null }, flatten_all: { ok: true, error: null } },
   a2: { cancel_all: { ok: true, error: null }, flatten_all: { ok: true, error: null } } } };
 
-function load({ st = { armed: false }, stale = false, confirm = true, answer = KILL_OK, demo = false } = {}) {
+const WHERE = { server: 'on the SERVER · Chicago', mac: 'on this Mac' };   // core.js machineWords()
+function load({ st = { armed: false }, stale = false, confirm = true, answer = KILL_OK, demo = false, machine = null, demoAccts = [] } = {}) {
   const els = { statusPill: fakeEl(), armBtn: fakeEl(), killBtn: fakeEl(), alertBar: fakeEl(), alertText: fakeEl() };
   els.alertBar.hidden = false;
   const posts = [], toasts = [], confirms = [], refreshes = [], fetched = [], alerts = [], hides = [];
@@ -80,6 +81,8 @@ function load({ st = { armed: false }, stale = false, confirm = true, answer = K
     DOUBLE_CLICK_MS: 400,
     acctShort: (id) => '…' + String(id).slice(-3),
     DEMO: demo,
+    machineWords: () => WHERE[machine] || '',
+    isDemoAcct: (id) => demoAccts.includes(id),
     confirmDlg: async (title, body, action, destructive) => { confirms.push({ title, body, action, destructive }); return confirm; },
     post: async (url, body) => {
       posts.push(body === undefined ? { url } : { url, body });
@@ -706,4 +709,47 @@ test('a menu or size edit that opens while a status is in flight is never wiped:
 test('when the cards are rebuilt anyway, an + Assign menu that lived in them lets go of the update hold', () => {
   const fn = HTML.slice(HTML.indexOf('function render() {'), HTML.indexOf('async function refresh()'));
   assert.match(fn, /if \(ASG_OPEN && !document\.contains\(ASG_OPEN\.menu\)\) \{\s*ASG_OPEN = null;\s*if \(!document\.getElementById\("qedit"\)\) FREEZE = false;/);
+});
+
+// ---- WP1.7: the confirms name the machine and the LIVE accounts; WHEN they ask is unchanged ------------------------------
+test('1.7: Arm names the machine and the LIVE accounts booked (demo/paper left out, each account once)', async () => {
+  const st = { armed: false, book: { s1: [{ account: 'L1', qty: 1 }, { account: 'D1', qty: 1 }], s2: [{ account: 'L1', qty: 2 }, { account: 'L2', qty: 1 }] } };
+  const { api, confirms, posts, toasts } = load({ st, machine: 'server', demoAccts: ['D1'] });
+  await api.doArm();
+  assert.equal(confirms[0].title, 'Arm the desk?');
+  assert.equal(confirms[0].body, 'Signals will place REAL bracketed orders on every account assigned in the book (on the SERVER · Chicago, 2 LIVE accounts).');
+  assert.deepEqual(plain(posts), [{ url: '/api/arm', body: { armed: true } }]);
+  assert.equal(toasts[0], 'Armed on the SERVER · Chicago — signals now place real orders.');
+});
+
+test('1.7: Kill names the machine and the connected LIVE accounts; it still asks every time', async () => {
+  const st = { armed: true, accounts: { L1: { connected: true }, L2: { connected: false }, D1: { connected: true } } };
+  const { api, confirms, posts } = load({ st, machine: 'mac', demoAccts: ['D1'] });
+  await api.doKill();
+  assert.equal(confirms.length, 1);
+  assert.equal(confirms[0].body, 'Cancels every working order and market-flattens every position on EVERY connected account (on this Mac, 1 LIVE account), then disarms.');
+  assert.equal(confirms[0].destructive, true);
+  assert.deepEqual(plain(posts), [{ url: '/api/kill' }]);
+});
+
+test('1.7: no machine and no desk state: the old words, and Kill still asks and sends', async () => {
+  const { api, confirms, posts } = load({ st: null });
+  await api.doKill();
+  assert.equal(confirms[0].body, 'Cancels every working order and market-flattens every position on EVERY connected account, then disarms.');
+  assert.deepEqual(plain(posts), [{ url: '/api/kill' }]);
+});
+
+test('1.7: a broken account reader never stands in Kill\'s way', async () => {
+  const s = load({ st: { armed: true, accounts: { L1: { connected: true } } }, machine: 'server' });
+  s.api.ST = { armed: true, get accounts() { throw new Error('boom'); } };
+  await s.api.doKill();
+  assert.equal(s.confirms.length, 1);
+  assert.deepEqual(plain(s.posts), [{ url: '/api/kill' }]);
+});
+
+test('1.7: Disarm still never asks; its toast names the machine', async () => {
+  const { api, confirms, toasts } = load({ st: { armed: true }, machine: 'server' });
+  await api.doDisarm();
+  assert.equal(confirms.length, 0);
+  assert.equal(toasts[0], 'Disarmed on the SERVER · Chicago — dry-run journaling only.');
 });
