@@ -4,14 +4,17 @@ macOS, through taskpolicy. Linux (the VPS) starts every child exactly as before.
 from __future__ import annotations
 
 import os
+import plistlib
 import subprocess
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from homebase import qos
 
+REPO = Path(__file__).resolve().parent.parent
 PREFIX = [qos.TASKPOLICY, "-c", "utility"]
 REAL = pytest.mark.skipif(not (sys.platform == "darwin" and os.access(qos.TASKPOLICY, os.X_OK)), reason="macOS only")
 
@@ -103,3 +106,9 @@ def test_a_clamped_child_is_the_same_process_with_its_fds_output_and_exit_code(t
         os.close(w)
     assert subprocess.run(qos.utility([sys.executable, "-c", "raise SystemExit(3)"])).returncode == 3
 
+
+@pytest.mark.parametrize("label", ["com.ramosquant.homebase", "com.ramosquant.homebase-charts",
+                                   "com.ramosquant.homebase-labrun"])
+def test_the_app_services_run_interactive(label):
+    job = plistlib.loads((REPO / "deploy" / f"{label}.plist.template").read_bytes().replace(b"__REPO__", b"/repo"))
+    assert job["Label"] == label and job["ProcessType"] == "Interactive"

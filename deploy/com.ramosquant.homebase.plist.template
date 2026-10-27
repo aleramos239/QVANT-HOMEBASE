@@ -15,6 +15,9 @@
     <string>--timeout-graceful-shutdown</string><string>5</string>
   </array>
   <key>WorkingDirectory</key><string>__REPO__</string>
+  <!-- Interactive: without it launchd clamps the job to the utility QoS, below every shell and agent process
+       (perf 2026-10-26). Its backtests, exports and research runs stay utility: homebase/qos.py -->
+  <key>ProcessType</key><string>Interactive</string>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>StandardOutPath</key><string>__REPO__/homebase/.state/service.log</string>
