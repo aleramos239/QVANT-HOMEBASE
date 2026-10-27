@@ -973,10 +973,60 @@ test('m8 limitsRows: a limit is shown as it is, never rounded up', () => {
 
 test('m1 deskSwitchTitle: the tooltip says where the orders go', () => {
   const one = [{ account: 'a1', qty: 1 }];
-  assert.equal(D.deskSwitchTitle(deskStrat(), one), 'ON: its orders go to its accounts');
+  assert.equal(D.deskSwitchTitle(deskStrat(), one), 'ON: its orders go to 1 LIVE account, 1 contract');
   assert.equal(D.deskSwitchTitle(deskStrat(), []), 'ON: it runs in shadow');
-  assert.equal(D.deskSwitchTitle(deskStrat({}, { enabled: false }), one), 'OFF: it does nothing');
+  assert.equal(D.deskSwitchTitle(deskStrat({}, { enabled: false }), one), 'OFF: it does nothing. Switched ON, its orders would go to 1 LIVE account, 1 contract.');
   assert.equal(D.deskSwitchTitle(deskStrat({}, { enabled: false }), []), 'OFF: it does nothing');
+});
+
+/* 3.4: the switch's title (and so the ON confirm's words) names the machine, the LIVE accounts and the size. Loaded as the page
+   loads it -- a plain script beside the page's own `let ST` -- so the page's two-argument call is what is tested. */
+function pageDeskLab({ machine, accounts } = {}) {
+  const ctx = vm.createContext(machine === undefined ? {} : { window: { HB_MACHINE: machine } });
+  ctx.self = ctx;
+  vm.runInContext(`let ST = ${JSON.stringify({ accounts: accounts || {} })};`, ctx);
+  vm.runInContext(readFileSync(new URL('../../homebase/static/desklab.js', import.meta.url), 'utf8'), ctx);
+  return ctx.DeskLab;
+}
+test('3.4 deskSwitchTitle names the machine, how many LIVE accounts, and the contracts or the $ at risk', () => {
+  const on = deskStrat(), off = deskStrat({}, { enabled: false });
+  const book = [{ account: 'live047', qty: 2 }, { account: 'sim041', qty: 1 }, { account: 'gone', qty: 1 }];
+  const accounts = { live047: { env: 'live' }, sim041: { env: 'demo' }, pap1: { env: 'paper' } };
+  // the machine: from window.HB_MACHINE, and nothing when it is not set or not known (a wrong machine is worse than none)
+  assert.equal(pageDeskLab({ machine: 'server', accounts }).deskSwitchTitle(on, book),
+    'ON on the SERVER · Chicago: its orders go to 2 LIVE accounts and 1 demo account, 1 to 2 contracts');
+  assert.equal(pageDeskLab({ machine: 'mac', accounts }).deskSwitchTitle(off, book.slice(0, 1)),
+    'OFF: it does nothing. Switched ON on this Mac, its orders would go to 1 LIVE account, 2 contracts.');
+  for (const machine of [undefined, null, '', 'hostname.local']) {
+    assert.doesNotMatch(pageDeskLab({ machine, accounts }).deskSwitchTitle(on, book), /SERVER|Mac|Chicago/, String(machine));
+  }
+  // demo and paper are not LIVE; an account the Desk does not list counts as LIVE (the page's own rule)
+  const L = pageDeskLab({ accounts });
+  assert.equal(L.deskSwitchTitle(on, [{ account: 'sim041', qty: 1 }, { account: 'pap1', qty: 1 }]),
+    'ON: its orders go to 1 demo account and 1 paper account, 1 contract each');
+  assert.equal(L.deskSwitchTitle(on, [{ account: 'gone', qty: 3 }]), 'ON: its orders go to 1 LIVE account, 3 contracts');
+  // a strategy that sizes each trade itself: the $ at risk a trade, in force (lab.params), not a contract count
+  const own = deskStrat({ own_size: true, params: { rr: '1', risk: 650 } });
+  assert.equal(L.deskSwitchTitle(own, [{ account: 'live047', qty: 3 }]), 'ON: its orders go to 1 LIVE account, $650 at risk a trade');
+  assert.equal(L.deskSwitchTitle(deskStrat({ own_size: true, params: { risk: '1000' } }), [{ account: 'live047', qty: 3 }]),
+    'ON: its orders go to 1 LIVE account, $1,000 at risk a trade');
+  assert.equal(L.deskSwitchTitle(deskStrat({ own_size: true, params: {} }), [{ account: 'live047', qty: 3 }]),
+    'ON: its orders go to 1 LIVE account, it sizes each trade itself');
+  // the accounts can be handed in too (the module under node has no page)
+  assert.equal(D.deskSwitchTitle(on, [{ account: 'sim041', qty: 1 }], accounts), 'ON: its orders go to 1 demo account, 1 contract');
+  // no account: shadow, as before -- never a machine or a size
+  assert.equal(pageDeskLab({ machine: 'server', accounts }).deskSwitchTitle(on, []), 'ON: it runs in shadow');
+  assert.equal(pageDeskLab({ machine: 'server', accounts }).deskSwitchTitle(off, []), 'OFF: it does nothing');
+});
+
+test('3.4 when the switch asks is unchanged: switchNeedsConfirm decides, and the page still asks before turning a booked Lab strategy ON', () => {
+  const AV = require('../../homebase/static/algo-visibility.js');
+  assert.equal(AV.switchNeedsConfirm('strategy', true, { shadow: false }), true);
+  assert.equal(AV.switchNeedsConfirm('strategy', false, { shadow: false }), false);
+  assert.equal(AV.switchNeedsConfirm('strategy', true, { shadow: true }), false);
+  const toggle = HTML.slice(HTML.indexOf('async function toggleStrat('), HTML.indexOf('async function setStratRr('));
+  assert.match(toggle, /needsConfirm\("strategy", enabled, \{shadow: !!c\.shadow \|\| \(lab && !\(\(ST\.book && ST\.book\[name\]\) \|\| \[\]\)\.length\)\}\)/);
+  assert.match(toggle, /post\("\/api\/strategy", \{strategy: name, enabled\}\)/, 'the same request');
 });
 
 test('m2 switchOffToast: with no account the toast is Step A\'s; the long one only when an account is booked', () => {

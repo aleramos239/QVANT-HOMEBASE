@@ -811,9 +811,35 @@
   function switchOnAccounts(n) { return n + " is ON. Its orders go to its accounts."; }
   function switchOnShadow(n) { return n + " is ON: it runs in shadow."; }
   function switchOnNext(n) { return n + " is ON. It starts with the next session."; }
-  function deskSwitchTitle(s, book) {
+  // The switch's title, which is also what its ON confirm says: with an account booked, the machine (window.HB_MACHINE, left
+  // out when not set), how many LIVE / demo / paper accounts, and the size -- contracts, or the $ at risk a trade for a strategy
+  // that sizes itself. `accounts` = the page's ST.accounts (read from the page when not passed); an account it does not list
+  // counts as LIVE, the page's own rule. Words only: when the switch asks is switchNeedsConfirm's (algo-visibility.js).
+  function machineWords() {
+    var m = typeof window !== "undefined" && window ? window.HB_MACHINE : null;
+    return m === "server" ? " on the SERVER · Chicago" : m === "mac" ? " on this Mac" : "";
+  }
+  function ordersGo(s, book, accounts) {
+    var accts = isObj(accounts) ? accounts : typeof ST !== "undefined" && isObj(ST) && isObj(ST.accounts) ? ST.accounts : {};
+    var n = { LIVE: 0, demo: 0, paper: 0 }, q = [];
+    book.forEach(function (b) {
+      var a = isObj(b) ? accts[b.account] : null;
+      n[isObj(a) && (a.env === "demo" || a.env === "paper") ? a.env : "LIVE"]++;
+      if (isObj(b) && num(b.qty) !== null) q.push(b.qty);
+    });
+    var who = ["LIVE", "demo", "paper"].filter(function (k) { return n[k]; })
+      .map(function (k) { return plur(n[k], k + " account", k + " accounts"); }).join(" and ");
+    var lab = blockOf(s) || {}, risk = isObj(lab.params) ? Number(lab.params.risk) : NaN;
+    var lo = Math.min.apply(null, q), hi = Math.max.apply(null, q);
+    var size = lab.own_size === true ? (risk > 0 ? money(risk) + " at risk a trade" : "it sizes each trade itself")
+      : !q.length ? "" : lo === hi ? plur(lo, "contract", "contracts") + (book.length > 1 ? " each" : "") : lo + " to " + hi + " contracts";
+    return who + (size ? ", " + size : "");
+  }
+  function deskSwitchTitle(s, book, accounts) {
     var on = !!s && !!s.cfg && s.cfg.enabled === true;
-    return on ? (Array.isArray(book) && book.length > 0 ? "ON: its orders go to its accounts" : "ON: it runs in shadow") : switchTitle(false);
+    if (!Array.isArray(book) || !book.length) return switchTitle(on);
+    var where = machineWords(), go = ordersGo(s, book, accounts);
+    return on ? "ON" + where + ": its orders go to " + go : "OFF: it does nothing. Switched ON" + where + ", its orders would go to " + go + ".";
   }
   // With no account booked there are no orders and no position: Step A's short sentence.
   function switchOffToast(n, book) {
