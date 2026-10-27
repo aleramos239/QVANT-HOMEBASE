@@ -616,9 +616,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         for item in sender.menu?.items ?? [] { item.state = item === sender ? .on : .off }
     }
 
-    /// Charts has no sidebar: its Toggle Sidebar is greyed out there.
+    /// Charts has no sidebar: its Toggle Sidebar is greyed out there. Before the window opens (VPS: "Connecting…")
+    /// every item of ours is greyed out (Reload, Desk): they need the window. Quit and Hide are the app's own.
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
-        !(item.action == #selector(pageCommand(_:)) && item.representedObject as? String == "sidebar" && currentTab == .charts)
+        window != nil
+            && !(item.action == #selector(pageCommand(_:)) && item.representedObject as? String == "sidebar" && currentTab == .charts)
     }
 
     /// A View-menu command the page carries out (toggle the sidebar / the inspector): the page owns its layout.
