@@ -216,7 +216,7 @@ def test_the_chart_service_never_subscribes_quotes():
     """Ruling 2026-09-26: bid/ask come from the ticks. An md quote
     subscription could spend the budget of the login the 9:30 anchor uses."""
     pkg = Path(homebase.charts.__file__).parent
-    assert not any("md/subscribeQuote" in p.read_text() for p in pkg.glob("*.py"))
+    assert not any("md/subscribeQuote" in p.read_text() for p in pkg.rglob("*.py"))
 
 
 # ---- fan-out: a slow page never blocks the reader or another page ----------
