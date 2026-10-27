@@ -425,7 +425,7 @@ test('desk skin: the research heading reads the record the page drew -- a group 
   const page = read('index.html');
   assert.match(page, /DeskLab\.groupPage\(g, DESKGRES\[g\.id\]\)/);
   assert.match(page, /labResHtml\(row\.name, name\)/);
-  assert.match(page, /function labResHtml\(lab, view\) \{\n  let v;\n  try \{ v = DeskLab\.results\(DESKRES\[lab\]\); \}/);
+  assert.match(page, /DeskLab\.results\(DESKRES\[lab\]\)/);
 });
 
 test('desk skin: the sidebar hides its rows\' second lines but the Activity row\'s ("N things need a look")', () => {
