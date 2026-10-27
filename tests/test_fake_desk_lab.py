@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from homebase import desk_api, engine as engine_mod, labdesk as labdesk_mod
 from homebase.labrun import host, match, store
 from homebase.labrun.deskside import desk_id
+from tests.desk_page_util import desk_page
 from tests.labdesk_util import DATE, LAB, LIMITS, MARK, Stepper, entry, pair, rec
 from tests.test_broker_paper import run
 from tests.test_engine_lab import quick
@@ -690,7 +691,7 @@ def desk(tmp_path):
 
 def test_the_page_is_the_one_on_disk_with_every_address_pointed_back_at_the_practice_desk(desk):
     r = desk.get("/")
-    disk = (STATIC / "index.html").read_text(encoding="utf-8")
+    disk = desk_page()
     assert r.status_code == 200 and "8852" not in r.text and "8850" not in r.text
     assert fake_desk.PAGE_CHART_SWAP in r.text and disk.count(fake_desk.PAGE_CHART_LINE) == 1
     a, b = disk.splitlines(), r.text.splitlines()
@@ -699,7 +700,7 @@ def test_the_page_is_the_one_on_disk_with_every_address_pointed_back_at_the_prac
     assert changed and all(":8852" in x or ":8850" in x for x, _ in changed)
     assert "http://localhost:8859/" in r.text and ":8853/backtest" in r.text
     assert desk.get("/static/desklab.js").content == (STATIC / "desklab.js").read_bytes()
-    assert (STATIC / "index.html").read_text(encoding="utf-8") == disk
+    assert desk_page() == disk
 
 
 def test_a_page_whose_chart_line_changed_is_not_served(tmp_path):

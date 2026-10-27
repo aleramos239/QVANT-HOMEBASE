@@ -10,7 +10,7 @@ import vm from 'node:vm';
      LIVE account .tag-live   -- a red outline tag, never filled
      in position  .pill.inpos -- solid black/white, labelled "in position" (the desk's "live")
      ON           .pill.on    -- an outline with a dot */
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const STYLE = HTML.slice(HTML.indexOf('<style>'), HTML.indexOf('</style>'));
 const rule = (sel) => {
   const i = STYLE.indexOf(sel + '{');

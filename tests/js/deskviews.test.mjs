@@ -7,7 +7,7 @@ import vm from 'node:vm';
    The headline of the day and a strategy's state are sentences a trader reads before arming and at
    the open, so they must stay true: Armed vs Disarmed, what happens next, who is in a position, and
    a loss with a real minus sign. These helpers only READ the status the desk sends. */
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const BLOCK = HTML.slice(HTML.indexOf('/* ===== Desk views'), HTML.indexOf('/* ---- sidebar ---- */'));
 const FMT = HTML.slice(HTML.indexOf('const fmt = '), HTML.indexOf('const usd = '));
 

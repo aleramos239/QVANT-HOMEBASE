@@ -8,7 +8,7 @@ import vm from 'node:vm';
    escaped, and every inline handler that carries a broker account id passes it as a JS string
    literal (jsArg) -- esc() alone is not enough inside onclick="...", because the browser decodes
    &#39; back to a quote before the JavaScript runs. */
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
 const ESC = between('const esc = (v) =>', 'async function chartPost(');
 const HOSTILE_ID = "x');alert(1);('";

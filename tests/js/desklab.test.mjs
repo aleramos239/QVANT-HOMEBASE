@@ -9,7 +9,7 @@ import vm from 'node:vm';
    network value reaches a template raw. */
 const require = createRequire(import.meta.url);
 const D = require('../../homebase/static/desklab.js');
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const SKIN = readFileSync(new URL('../../homebase/static/apple/desk.js', import.meta.url), 'utf8');
 
 const ALIVE = { alive: true, seen_utc: '2026-10-09T14:00:00+00:00', prices: {} };

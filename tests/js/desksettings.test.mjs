@@ -21,7 +21,7 @@ const AV = require('../../homebase/static/algo-visibility.js');   // the desk's 
        post() uses.
      I4 -- covered in the Python/HTML grep, not here (no JS surface).
    Plus the original MARKET DATA coverage (escaping, Apply stage/apply/failure-snapback). */
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const BLOCK = HTML.slice(
   HTML.indexOf('/* ---- Settings (2026-09-27 desk-settings plan'),
   HTML.indexOf('/* ---- research details popup'));

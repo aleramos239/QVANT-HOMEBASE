@@ -6,7 +6,7 @@ import vm from 'node:vm';
 /* The desk page's (homebase/static/index.html, :8850) paper-account block (2026-09-27 Task 2b), run for real in a
    sandbox: the rows, the Remove confirm, the create call -- every request goes to the CHART service (:8852), never
    the desk's own API, and a user-given name is always escaped. Nothing is sent anywhere: fetch is recorded. */
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const BLOCK = HTML.slice(HTML.indexOf('/* ---- paper accounts (2026-09-27 Task 2b)'),
   HTML.indexOf('/* ---- Settings (2026-09-27 desk-settings plan'));
 

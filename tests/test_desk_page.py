@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-HTML = (Path(__file__).resolve().parent.parent / "homebase" / "static" / "index.html").read_text()
+from tests.desk_page_util import desk_page
+
+HTML = desk_page()
 
 
 def test_the_desk_page_has_the_chart_trading_switch_and_limits():

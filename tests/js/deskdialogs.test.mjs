@@ -9,7 +9,7 @@ import vm from 'node:vm';
    default); closing gives it back to the trigger (or its re-rendered twin); Esc closes the topmost
    one exactly like Cancel, one layer per press; Tab stays inside; and a held Enter/Space never
    re-activates a control through auto-repeat. The menu gets Esc, focus in/out and arrow keys. */
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
 const OVERLAYS = between('/* ---- overlays: one open/close path', '/* ---- confirmation popup');
 const CONFIRM = between('/* ---- confirmation popup', '/* ---- master controls (top bar)');

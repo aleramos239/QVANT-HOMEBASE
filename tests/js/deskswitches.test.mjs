@@ -13,7 +13,7 @@ import vm from 'node:vm';
    switchNeedsConfirm; the page's needsConfirm() falls back to "ask when turning on". */
 const require = createRequire(import.meta.url);
 const AV = require('../../homebase/static/algo-visibility.js');
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const LABEL = HTML.slice(HTML.indexOf('const stratLabel = '), HTML.indexOf('const actStrat = '));   // the page's name helper
 const STRAT = HTML.slice(HTML.indexOf('/* ---- strategy on/off + flatten ----'),
   HTML.indexOf('/* ---- accounts popup ---- */'));

@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 /* Account cycle (the owner, 2026-10-25): a Desk group's page carries the cycle -- a switch, the accounts to tick, the risk
    per trade and the most per trade -- and, while on, "Next account: X". Turning it ON asks first, naming LIVE accounts. */
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
 const ESC = between('const esc = (v) =>', 'async function chartPost(');
 const CODE = between('/* Account cycle (the owner, 2026-10-25)', 'async function deleteGroup(');

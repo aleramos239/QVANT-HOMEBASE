@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { HTML } from './deskpage.mjs';
 
 /* The "Homebase Next" skin (homebase/static/apple/) is PRESENTATION ONLY and must never reach the classic pages:
      - the manifest names all three tabs and only files that exist (the app loads all of the skin or none of it);
@@ -74,7 +75,7 @@ test('apple skin: the scripts never talk to a server and never swallow an event'
 });
 
 test('apple skin: the Desk skin leans only on things the Desk page still has', () => {
-  const page = read('index.html'), skin = read('apple/desk.js');
+  const page = HTML, skin = read('apple/desk.js');
   for (const id of ['pgSw', 'bulb', 'clock', 'armBtn', 'killBtn', 'settingsBtn', 'side', 'readyStrip', 'todayFoot', 'noticeStrip', 'stratList', 'dayTl',
                     'viewToday', 'viewStrat', 'viewActivity', 'themeToggle'])
     assert.ok(page.includes(`id="${id}"`) && skin.includes(`#${id}`), `#${id} is expected by the skin and present in the page`);

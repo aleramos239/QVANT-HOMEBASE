@@ -8,7 +8,7 @@ import vm from 'node:vm';
    added and can't be ticked; one "Add N accounts" button posts the ticked ones to /api/accounts/add-many;
    the answer is shown per account in plain words; a refusal is shown, not lost; every broker-supplied
    string is escaped and reaches its handler through jsArg. Nothing is sent anywhere. */
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
 const STEP = between('/* The accounts step:', '$("#connectOverlay").addEventListener("click"');
 const ESC = between('const esc = (v)', 'async function chartPost');

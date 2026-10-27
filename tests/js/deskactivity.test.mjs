@@ -12,7 +12,7 @@ import vm from 'node:vm';
        no accounts -- is shown as info with the reason, and never turns the page Not ready; when
        the journal can't show that, the alarm stands;
      - the strategy card's labels say what they mean. */
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
 const BLOCK = between('/* ---- readiness, as the page shows it (W4) ----', '/* ---- render ---- */');
 const HELPERS = between('const fmt = (v, d = 2)', '/* ---- theme ---- */') +
