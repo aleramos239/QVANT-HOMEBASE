@@ -537,7 +537,16 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
     r.manager = manager   # so the chart service can stop an in-flight child on shutdown
     r.grids = grids       # likewise every grid cell's child
     r.wfs = wfs           # ... and every walk-forward cell's
-    r.warm = warm_desklab_results   # the chart service runs it once in a thread after startup
+    def warm() -> None:
+        """The Lab's strategy list (a cold read of ~500 drafts is ~5 s; each is kept until its file changes), then the Desk's
+        results. Never raises."""
+        try:
+            drafthost.catalog(builtin_ids={s["id"] for s in strategies.catalog()})
+        except Exception:      # noqa: BLE001 -- the route reads it on ask
+            pass
+        warm_desklab_results()
+
+    r.warm = warm                   # the chart service runs it in a thread after startup, then every WARM_EVERY_S
     return r
 
 

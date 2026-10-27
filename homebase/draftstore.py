@@ -59,12 +59,29 @@ def drafts_dir() -> Path:
     return Path(v).expanduser() if v else Path.home() / ".homebase" / "strategies"
 
 
+_BUILTIN_NAMES: tuple | None = None      # (the strategies dir's mtime_ns, its names): builtin_names
+SETTLED_NS = 2_000_000_000               # kept only once the directory is 2 s old: a change after that always moves its mtime
+
+
 def builtin_names() -> frozenset:
-    """Every module name in homebase/strategies (read from the directory listing, nothing imported)."""
+    """Every module name in homebase/strategies (read from the directory listing, nothing imported). Kept until the
+    directory's mtime moves (an entry added, removed or renamed): every draft listed asks for it, twice."""
+    global _BUILTIN_NAMES
+    now = time.time_ns()                 # before the stat (the 2 s rule)
     try:
-        return frozenset(p.stem for p in _BUILTIN_DIR.glob("*.py"))
+        m = _BUILTIN_DIR.stat().st_mtime_ns
+    except OSError:
+        m = None
+    hit = _BUILTIN_NAMES
+    if m is not None and hit is not None and hit[0] == m:
+        return hit[1]
+    try:
+        names = frozenset(p.stem for p in _BUILTIN_DIR.glob("*.py"))
     except OSError:
         return frozenset()
+    if m is not None and now - m >= SETTLED_NS:
+        _BUILTIN_NAMES = (m, names)
+    return names
 
 
 _SHADOW: tuple[float, frozenset] | None = None
