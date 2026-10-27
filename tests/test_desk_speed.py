@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from homebase import equity
 from homebase.bothistory import JournalCache
 from tests.test_server import _write_journal, client  # noqa: F401  (the desk app over fakes, its state in tmp_path)
 
@@ -97,4 +98,78 @@ def test_a_line_that_is_not_an_object_still_fails_strategy_live_as_before(client
     with pytest.raises(AttributeError):                         # 'int' object has no attribute 'get': a 500
         client.get("/api/strategy-live", params={"strategy": "nq930"})
     assert client.get("/api/journal", params={"date": "2026-09-22"}).json()["count"] == 1
+
+
+# ---- equity.jsonl: only the lines appended since the last read are parsed; the answer is a full parse's
+def _full_parse(p):
+    """equity._days before 2026-10-26: every line, from the start, on every change of the file."""
+    days = {}
+    for line in p.read_text().splitlines():
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if r.get("equity") is not None:
+            days.setdefault(r.get("account"), {})[r["date"]] = float(r["equity"])
+    return days
+
+
+def _same_as_a_full_parse(p):
+    got = equity._days(p)
+    want = _full_parse(p)
+    assert got == want and list(got) == list(want) and all(list(got[a]) == list(want[a]) for a in want)
+    return got
+
+
+def _line(account, date, eq):
+    return json.dumps({"date": date, "account": account, "equity": eq}) + "\n"
+
+
+def test_equity_appends_rotation_truncation_and_a_repeated_date_answer_as_a_full_parse(tmp_path, monkeypatch):
+    p = tmp_path / "equity.jsonl"
+    p.write_text(_line("A", "2026-10-01", 100.0) + _line("B", "2026-10-01", 5.0) + "not json\n")
+    first = _same_as_a_full_parse(p)
+    parsed = []
+    real = equity._fold
+    monkeypatch.setattr(equity, "_fold", lambda days, text: parsed.append(text) or real(days, text))
+    with open(p, "a") as f:
+        f.write(_line("A", "2026-10-01", 101.0) + _line("A", "2026-10-02", 102.0))       # a repeated date: the last wins
+    got = _same_as_a_full_parse(p)
+    assert got["A"] == {"2026-10-01": 101.0, "2026-10-02": 102.0} and first["A"] == {"2026-10-01": 100.0}
+    assert parsed == [_line("A", "2026-10-01", 101.0) + _line("A", "2026-10-02", 102.0)]   # only what was added
+    with open(p, "a") as f:
+        f.write(_line("C", "2026-10-02", 7.0)[:-1])                    # its newline not written yet
+    assert _same_as_a_full_parse(p)["C"] == {"2026-10-02": 7.0}
+    with open(p, "a") as f:
+        f.write('\n{"date": "2026-10-03", "acc')                       # ...now whole, and the next one half written
+    _same_as_a_full_parse(p)
+    with open(p, "a") as f:
+        f.write('ount": "C", "equity": 8.0}\n')
+    assert _same_as_a_full_parse(p)["C"] == {"2026-10-02": 7.0, "2026-10-03": 8.0}
+    p.write_text(_line("A", "2026-10-01", 1.0))                        # truncated
+    assert _same_as_a_full_parse(p) == {"A": {"2026-10-01": 1.0}}
+    q = tmp_path / "new.jsonl"
+    q.write_text(_line("Z", "2026-10-05", 9.0) + _line("A", "2026-10-01", 1.0))
+    q.replace(p)                                                        # rotated: another file at the path
+    assert _same_as_a_full_parse(p) == {"Z": {"2026-10-05": 9.0}, "A": {"2026-10-01": 1.0}}
+    text = p.read_text()
+    p.write_text(text.replace("9.0", "3.0") + _line("Z", "2026-10-06", 4.0))   # rewritten in place, and longer
+    assert _same_as_a_full_parse(p)["Z"] == {"2026-10-05": 3.0, "2026-10-06": 4.0}
+
+
+def test_a_line_that_raised_before_still_raises_and_the_reader_keeps_nothing_half_read(tmp_path):
+    p = tmp_path / "equity.jsonl"
+    p.write_text(_line("A", "2026-10-01", 100.0))
+    before = _same_as_a_full_parse(p)
+    with open(p, "a") as f:
+        f.write(_line("A", "2026-10-02", 101.0) + "5\n")              # JSON, not an object: .get raises
+    with pytest.raises(AttributeError) as now:
+        equity._days(p)
+    with pytest.raises(AttributeError) as then:
+        _full_parse(p)
+    assert str(now.value) == str(then.value) and before == {"A": {"2026-10-01": 100.0}}
+    with pytest.raises(AttributeError):
+        equity._days(p)                                                 # every time, as before
+    p.write_text(_line("A", "2026-10-01", 100.0) + _line("A", "2026-10-02", 101.0))
+    assert _same_as_a_full_parse(p)["A"] == {"2026-10-01": 100.0, "2026-10-02": 101.0}
 
