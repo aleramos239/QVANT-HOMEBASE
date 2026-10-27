@@ -42,7 +42,7 @@ test('O: --vps refuses while HOMEBASE VPS runs, as --mac refuses while Homebase 
 });
 
 test('O: the other app running, or a test build elsewhere (--out), does not stop the build', () => {
-  for (const [args, running] of [[['--vps'], 'Homebase'], [['--mac'], 'HomebaseVPS'], [['--vps', '--out', '/tmp/hb-o-test/HB.app'], 'HomebaseVPS']]) {
+  for (const [args, running] of [[['--vps'], 'Homebase'], [['--mac'], 'HomebaseVPS'], [['--vps', '--out', '$HOME/HB.app'], 'HomebaseVPS']]) {
     const r = run(args, running);
     assert.equal(r.compiled, true, `${args.join(' ')} with ${running} running: it reaches the build`);
     assert.equal(r.code, 9, 'the fake compiler stops it there');
@@ -72,6 +72,16 @@ test('O: this Mac\'s disk ignores case: the installed app\'s path in other case 
       assert.equal(r.compiled, false, `${mode} --out ${out}: it stops before the build`);
       assert.equal(r.kept, true);
     }
+  }
+});
+
+test('O: an --out through a folder that does not exist yet (new/../) is refused, so it cannot reach the running app', () => {
+  for (const mode of ['--vps', '--mac']) {
+    const r = run([mode, '--out', '$HOME/Applications/nonexist/../HOMEBASE VPS.app'], 'HomebaseVPS', { installed: true });
+    assert.equal(r.code, 2, mode);
+    assert.equal(r.err.trim(), 'the --out folder does not exist: make it first (nothing was changed).');
+    assert.equal(r.compiled, false, `${mode}: it stops before the build`);
+    assert.equal(r.kept, true);
   }
 });
 

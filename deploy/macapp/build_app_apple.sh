@@ -32,6 +32,8 @@ same() { [ "$1" -ef "$2" ] || [ "$(real "$1")" = "$(real "$2")" ]; }
 if [ "${1:-}" = --out ]; then
   [ $# -eq 2 ] || { echo "--out takes one .app path" >&2; exit 2; }
   case "$2" in *.app) ;; *) echo "the output must be a .app path" >&2; exit 2 ;; esac
+  # a folder that does not exist yet cannot be resolved, so "new/../HOMEBASE VPS.app" would slip past the running check
+  [ -d "$(dirname "$2")" ] || { echo "the --out folder does not exist: make it first (nothing was changed)." >&2; exit 2; }
   if ! same "$2" "$APP"; then APP="$(real "$2")"; BUNDLE_ID="$BUNDLE_ID.test"; fi
 elif [ $# -gt 0 ]; then
   echo "unknown argument: $1" >&2; exit 2
