@@ -1521,7 +1521,8 @@ test('1.19: each member\'s state, last signal, position and today; the group tod
   const t = groupDesk({ events: TURN_DAY });
   t.page();
   await tick();
-  assert.deepEqual(t.urls, ['/api/journal?group=g1&strategy=lab_nq_orb%2Cnq930&limit=2000'], 'the group\'s read, the Activity page\'s query');
+  assert.deepEqual(t.urls, ['/api/journal?group=g1&strategy=lab_nq_orb%2Cnq930&limit=2000', '/api/journal?days=7&limit=2000&group=g1'],
+    'the group\'s read (the Activity page\'s query), then its Changes (7 days) (WP1.15)');
   const html = t.page(), a1 = vm.runInContext('acctShort("a1")', t.ctx), a2 = vm.runInContext('acctShort("a2")', t.ctx);
   assert.match(html, /<h2>Today<\/h2><div class="sd-state">The group today: <b>\+\$170<\/b><\/div>/);
   assert.match(html, new RegExp(`<span class="t dim">Last signal 10:41 · Long 1 on ${a1}</span><span class="t net pos">\\+\\$50</span>`));
@@ -1530,6 +1531,7 @@ test('1.19: each member\'s state, last signal, position and today; the group tod
   assert.match(html, new RegExp(`<span class="h">Last turn 10:41: NQ ORB on ${a1}</span>`));
   assert.ok(html.indexOf('Next account: ' + a2) < html.indexOf('Last turn'), 'beside the next account, in the cycle card');
   assert.ok(html.indexOf('<h2>Account cycle</h2>') < html.indexOf('<h2>Today</h2>'), 'the members under the cycle card, as drawn');
+  assert.ok(html.indexOf('<h2>Today</h2>') < html.indexOf('<h2>Changes (7 days)</h2>'), 'the group\'s Changes (7 days) under Today (WP1.15)');
   assert.match(html, /onclick="openGroupMember\(&quot;lab_nq_orb&quot;\)"/);
 });
 
