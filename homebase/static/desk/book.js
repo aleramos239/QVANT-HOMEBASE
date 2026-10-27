@@ -236,7 +236,7 @@ function setEnv(env) {
 }
 async function wizNext1() {
   if (WIZ.env === "live" && !(await confirmDlg("Connect a LIVE account?",
-      "This account trades real money. Adding it does not start trading — it " +
+      `This account trades real money${machineWords() ? " " + machineWords() : ""}. Adding it does not start trading — it ` +
       "only trades after you assign it to a strategy.", "Yes, connect live", true)))
     return;
   wizGoto(2);

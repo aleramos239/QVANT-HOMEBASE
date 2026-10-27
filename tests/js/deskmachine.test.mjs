@@ -40,3 +40,24 @@ test('the shell\'s value wins over the status; the status is read at call time (
 test('no guess from the address: the reader never looks at location or the hostname', () => {
   assert.doesNotMatch(BLOCK.replace(/\/\*[\s\S]*?\*\//g, ''), /location|hostname|127\.0\.0\.1|localhost/);
 });
+
+test('D: Connect a LIVE account names the machine with machineWords(); unknown says nothing; demo asks nothing', async () => {
+  const FN = HTML.slice(HTML.indexOf('async function wizNext1() {'), HTML.indexOf('function closeConnect() {'));
+  const run = async (hb, env = 'live') => {
+    const asked = [], steps = [];
+    const ctx = vm.createContext({ window: hb === undefined ? {} : { HB_MACHINE: hb }, ST: null, WIZ: { env },
+      confirmDlg: async (title, body) => { asked.push([title, body]); return true; }, wizGoto: (n) => steps.push(n) });
+    vm.runInContext(BLOCK + FN + '\nglobalThis.api = { wizNext1 };', ctx);
+    await ctx.api.wizNext1();
+    return { asked, steps };
+  };
+  for (const [hb, where] of [['server', 'on the SERVER · Chicago'], ['mac', 'on this Mac']]) {
+    const { asked, steps } = await run(hb);
+    assert.equal(asked[0][0], 'Connect a LIVE account?');
+    assert.match(asked[0][1], new RegExp(`^This account trades real money ${where}\\. Adding it does not start trading`));
+    assert.deepEqual(steps, [2]);
+  }
+  const none = await run(undefined);
+  assert.match(none.asked[0][1], /^This account trades real money\. Adding it/, 'unknown: no machine words, never a guess');
+  assert.deepEqual((await run('server', 'demo')).asked, [], 'a demo login still asks nothing');
+});
