@@ -198,3 +198,10 @@ test('desk skin: the research heading names the route from the record itself -- 
   assert.doesNotMatch(DESK_SKIN, /OOS|Unseen days/, 'the retired route\'s words are gone from the skin');
   assert.match(DESK_SKIN, /researchWord\(rec, !!\$\('\.fh', u\)\)/, 'the heading comes from the record, not the page\'s old title');
 });
+
+test('desk skin: the sidebar hides its rows\' second lines but the Activity row\'s ("N things need a look")', () => {
+  const css = read('apple/desk.css');
+  assert.match(css, /html\.hb-apple \.hb-side \.item \.it small \{ display: none; \}/, 'other rows stay one line');
+  assert.match(css, /html\.hb-apple \.hb-side \.item\[onclick\^="setView\('activity'\)"\] \.it small \{ display: block;/, 'the Activity row shows it');
+  assert.match(read('index.html'), /onclick="setView\('activity'\)"[^`]*<small>\$\{issues \? plural\(issues, "thing needs", "things need"\) \+ " a look"/, 'the page still writes it there');
+});

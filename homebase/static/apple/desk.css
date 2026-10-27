@@ -106,6 +106,10 @@ html.hb-apple .hb-side .item[onclick^="setView('activity')"] .sd { --ico: var(--
 html.hb-apple .hb-side .item .it { flex: 1 1 auto; min-width: 0; display: block; line-height: 16px; }
 html.hb-apple .hb-side .item .it b { display: block; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 html.hb-apple .hb-side .item .it small { display: none; }
+/* but the Activity row keeps its second line: how many things need a look (or "Every alert, order and fill") */
+html.hb-apple .hb-side .item[onclick^="setView('activity')"] { height: auto; min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
+html.hb-apple .hb-side .item[onclick^="setView('activity')"] .it small { display: block; font-size: 11px; line-height: 14px; color: var(--a-label-pane-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 html.hb-apple .hb-side .item .ir { flex: none; margin-left: 8px; font-family: var(--a-font); font-size: 11px; line-height: 14px; font-weight: 510; color: var(--a-label-pane-2); font-variant-numeric: tabular-nums; }
 html.hb-apple .hb-side .item .ir:empty { display: none; }
 /* a strategy with no P&L yet shows its state there instead (the row's own title) */
