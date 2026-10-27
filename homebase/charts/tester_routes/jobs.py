@@ -14,6 +14,7 @@ from ...backtest import propsim
 from ...backtest.grid import LooksCorrupt
 from ...backtest.stats import montecarlo
 from ...backtest import walkforward
+from ...backtest.runner import _settled
 
 
 MC_CACHE = 64            # Monte Carlo results kept per service (review I3)
@@ -23,8 +24,9 @@ WF_RESULT_FILES = ("grid.json", "result.json", "result-1.json", "result-2.json",
                    walkforward.CLAIM, walkforward.OOS, "oos-job.json")
 
 
-def wf_stamp(d) -> tuple:
-    """The stamps of the files a walk-forward's result is read from (write_json replaces a file: a new inode)."""
+def wf_stamp(d) -> tuple | None:
+    """The stamps of the files a walk-forward's result is read from (write_json replaces a file: a new inode); None when one
+    cannot be looked at (nothing is then kept or served from memory)."""
     out = []
     for f in WF_RESULT_FILES:
         try:
@@ -32,6 +34,8 @@ def wf_stamp(d) -> tuple:
             out.append((s.st_mtime_ns, s.st_size, s.st_ino))
         except FileNotFoundError:
             out.append(None)
+        except OSError:
+            return None
     return tuple(out)
 
 
@@ -192,8 +196,10 @@ def register(r: APIRouter, ctx) -> None:
         # FastAPI's own encoding (the same bytes), done here in the threadpool: an old result runs to 10 MB and froze the
         # event loop that carries chart orders and fills while it was encoded there
         out = JSONResponse(jsonable_encoder(res))
-        # kept only when no file changed while it was read, and no test-month read is under way (its progress moves)
-        if wf_stamp(d) == stamp and (stamp[claim_at] is None or stamp[oos_at] is not None):
+        # kept only when no file changed while it was read, none was written in the last 2 s, and no test-month read is under
+        # way (its progress moves)
+        if stamp is not None and wf_stamp(d) == stamp and (stamp[claim_at] is None or stamp[oos_at] is not None) \
+                and _settled(*stamp):
             with wf_bytes_lock:
                 wf_bytes[(wid, n)] = (stamp, out.body)
                 wf_bytes.move_to_end((wid, n))

@@ -2,15 +2,24 @@
 from __future__ import annotations
 
 import json
+import os
 
+import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 
+from homebase.backtest import runner
 from homebase.charts import tester_api
 from homebase.charts.tester_routes import common, jobs
 
 PAYLOAD = {"cells": [{"i": i, "params": {"stop": 1.5, "rr": 0.75}, "net": -12.5 * i, "name": "1:3 · ATR"} for i in range(3)],
            "lock": None, "nested": [[1, 2.0, None, True, "é"]], "big": 10 ** 20}
+
+
+@pytest.fixture(autouse=True)
+def settled(monkeypatch):
+    """Files count as settled at once here (the 2 s rule has its own test)."""
+    monkeypatch.setattr(runner, "SETTLED_NS", 0)
 
 
 class FakeWfs:
@@ -86,3 +95,14 @@ def test_a_test_month_read_under_way_and_a_refusal_are_never_kept(tmp_path):
     assert wfs.calls == 3
     (tmp_path / "result.json").write_text(json.dumps({"not_done": True}))
     assert [c.get("/api/tester/walkforward/w/result").status_code for _ in range(2)] == [409, 409] and wfs.calls == 5
+
+
+def test_a_result_written_in_the_last_2_seconds_is_not_kept(tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "SETTLED_NS", 2_000_000_000)
+    c, wfs = client(tmp_path)
+    c.get("/api/tester/walkforward/w/result"), c.get("/api/tester/walkforward/w/result")
+    assert wfs.calls == 2                       # a write just after could keep its stamp on a coarse clock: read again
+    old = (tmp_path / "result.json").stat().st_mtime_ns - 3_000_000_000
+    os.utime(tmp_path / "result.json", ns=(old, old))
+    c.get("/api/tester/walkforward/w/result"), c.get("/api/tester/walkforward/w/result")
+    assert wfs.calls == 3
