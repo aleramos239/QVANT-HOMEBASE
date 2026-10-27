@@ -32,7 +32,7 @@ from pathlib import Path
 from . import symbols
 from . import tickarchive as A
 from . import ticks as T
-from .charts.session import session_date, session_range_ms
+from .core.session import session_date, session_range_ms
 
 LATE_S = 60                 # written this long after its own time, a market's newest tick is LATE ...
 FRESH_S = 2 * 3600          # ... read only off a recording written this recently: an old write says nothing of now

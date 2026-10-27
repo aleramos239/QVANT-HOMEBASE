@@ -39,7 +39,7 @@ from pathlib import Path
 from . import symbols
 from . import ticks as T
 from . import tickarchive as A
-from .charts.session import split_by_session
+from .core.session import split_by_session
 
 REPORT_SESSIONS = 30
 CLASSES = ("whole", "filling", "lost", "vendor_gap", "not_a_hole")

@@ -71,6 +71,7 @@ from . import config as config_mod
 from . import symbols
 from . import tickarchive
 from .broker.tradovate_ws import TradovateWS
+from .core.session import always_open, session_bounds    # the session clock (callers still read T.always_open / T.session_bounds)
 from .marketdata import MD_DEMO, MD_LIVE
 from .paths import state_dir
 
@@ -106,26 +107,10 @@ def log(msg: str) -> None:
 
 
 # ------------------------------------------------------------------ sessions
-def always_open(root: str | None) -> bool:
-    """CME crypto (BTC, MBT) trades 24/7: a session every day -- the chart
-    service's list (homebase.charts.session.ALWAYS_OPEN), so both file a tick
-    under the same session."""
-    from .charts.session import always_open as open_24_7    # it imports this module
-    return open_24_7(root)
-
-
-def session_bounds(date: dt.date, root: str | None = None) -> tuple[dt.datetime, dt.datetime]:
-    """(start, end) as aware ET datetimes: 18:00 the day before -> 17:00; a
-    24/7 root's session runs 18:00 -> 18:00 (homebase.charts.session)."""
-    start = dt.datetime.combine(date - dt.timedelta(days=1), dt.time(18, 0), ET)
-    end = dt.datetime.combine(date, dt.time(18 if always_open(root) else 17, 0), ET)
-    return start, end
-
-
 def in_session(root: str | None, ts_ms: int, start_ms: int, end_ms: int) -> bool:
     """Does a tick stamped ts_ms belong to the session [start, end]? A classic
     root's close is inclusive (the 17:00 hour trades nothing); a 24/7 root's is
-    not: its 18:00:00.000 tick opens the next session (homebase.charts.session.
+    not: its 18:00:00.000 tick opens the next session (homebase.core.session.
     session_date files it there too)."""
     return start_ms <= ts_ms and (ts_ms < end_ms if always_open(root) else ts_ms <= end_ms)
 
