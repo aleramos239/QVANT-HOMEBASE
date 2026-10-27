@@ -162,13 +162,19 @@ async function reconnectAcct(id) {
    asks -- it only makes things safer, and it never touches an open position (the toast says so;
    Flatten does that). A SHADOW strategy never places an order, so switching it on asks nothing
    either. Same POST /api/strategy either way. */
+/* The ON confirm's words: the machine, how many LIVE / demo / paper accounts, the qty or the $ at risk (desklab.js); "" when it
+   cannot say (no account booked, or desklab.js did not load). */
+function switchAsk(name, book) {
+  try { return DeskLab.switchOnAsk(ST.strategies[name], book, ST.accounts, deskMachine()); } catch (_) { return ""; }
+}
 async function toggleStrat(name, enabled) {
   if (switchBounced("strategy:" + name)) return;    // a double-click is one flip
   const c = ((((ST && ST.strategies) || {})[name]) || {}).cfg || {};
   const lab = c.kind === "lab";       // a promoted Lab strategy: with no account booked it only runs in shadow, which asks nothing
+  const book = (ST.book && ST.book[name]) || [];
   if (needsConfirm("strategy", enabled, {shadow: !!c.shadow || (lab && !((ST.book && ST.book[name]) || []).length)}) && !await confirmDlg(
       "Turn ON " + stratLabel(name) + "?",
-      "It will run and execute on its assigned accounts from the next signal.",
+      switchAsk(name, book) || "It will run and execute on its assigned accounts from the next signal.",
       "Turn on", false)) { refresh(); return; }
   const N = stratLabel(name);
   let r, err = null;

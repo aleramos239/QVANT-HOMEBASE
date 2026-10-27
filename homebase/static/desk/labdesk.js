@@ -130,7 +130,7 @@ function labDeskView(name, s) {
   const accts = ST.accounts || {}, book = (ST.book && ST.book[name]) || [], row = labRowOf(s);
   const ro = DeskLab.readOnly(s), lock = DeskLab.accountsLock(s), shadow = DeskLab.inShadow(s, book);
   const sw = `<button class="switch" role="switch" aria-label="${esc(nm)} on or off" aria-checked="${on}"
-    title="${esc(DeskLab.deskSwitchTitle(s, book))}"
+    title="${esc(DeskLab.deskSwitchTitle(s, book, ST.accounts, deskMachine()))}"
     onclick="toggleStrat(${jsArg(name)}, ${!on})"></button>`;
   const sh = labShadowNet(name, s), stateNote = DeskLab.stateNote(s);
   const fig = (f) => `<div class="f"><div class="k">${esc(f.k)}</div><div class="v mono">${esc(f.v)}</div></div>`;

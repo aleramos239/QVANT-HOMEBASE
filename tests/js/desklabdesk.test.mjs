@@ -370,6 +370,22 @@ test('Flatten & turn off for a Lab strategy: its own confirm words, the existing
   assert.deepEqual(stuck.toasts, ['Flattened. Could not switch it off: try the switch again.']);
 });
 
+test('WP1.7: the ON confirm names the machine, the LIVE / demo accounts and the size; when it asks is unchanged', async () => {
+  const book = { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] };
+  const t = load({ book, strategies: { lab_nq_orb: deskStrat({ state: 'off' }, { enabled: false }) } });
+  t.ctx.ST.machine = 'server';
+  await t.api.toggleStrat('lab_nq_orb', true);
+  assert.equal(t.confirms[0].body, 'It will run on the SERVER · Chicago from the next signal. Its orders go to 1 LIVE account and 1 demo account, 1 contract each.');
+  assert.deepEqual(t.posts, [{ url: '/api/strategy', body: { strategy: 'lab_nq_orb', enabled: true } }]);
+  const b = load({ book: { nq930: [{ account: 'a2', qty: 3 }] }, strategies: { nq930: { ...nq930(), cfg: { ...nq930().cfg, enabled: false } } } });
+  await b.api.toggleStrat('nq930', true);
+  assert.equal(b.confirms[0].body, 'It will run from the next signal. Its orders go to 1 LIVE account, 3 contracts.', 'a built-in too; no machine known: none named');
+  const off = load({ book });
+  await off.api.toggleStrat('lab_nq_orb', false);
+  assert.deepEqual(off.confirms, [], 'OFF still never asks');
+  assert.match(off.view(), /title="ON: its orders go to 1 LIVE account and 1 demo account, 1 contract each"/, "the switch's title reads the page's accounts");
+});
+
 test('a strategy that is not from the Lab flattens and switches with the words it always had', async () => {
   const t = load({ answer: { ok: true, enabled: false, results: { a1: ['market Sell 1: ok'] } } });
   await t.api.flattenStrat('nq930');
