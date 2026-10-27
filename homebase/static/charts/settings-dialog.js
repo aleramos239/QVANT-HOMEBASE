@@ -810,7 +810,7 @@ function mount(box, host) {
       return el;
     }
     if (r.data) {   // 5.8: under a closed "More"; it opens by itself while an export is running or done
-      dataMore = mk('details', 'set-more');
+      dataMore = mk('details', 'set-fold');
       dataMore.append(mk('summary', 'set-cap', 'More'), mk('div', 'set-cap', 'EXPORT'), dataTab());
       return dataMore;
     }

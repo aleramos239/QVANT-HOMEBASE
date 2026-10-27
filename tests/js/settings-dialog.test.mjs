@@ -554,6 +554,8 @@ test('5.8 Data tab: Export folds under a closed "More"; Refresh stays on top', a
   await flush();
   const more = descend(box, (el) => el.tagName === 'details');
   assert.ok(more, 'a More fold');
+  // not 'set-more': charts.css sizes that class as the indicator dialog's 28x28 button
+  assert.equal(more.className, 'set-fold');
   assert.equal(more.children[0].tagName, 'summary');
   assert.equal(more.children[0].textContent, 'More');
   assert.equal(more.open, undefined, 'closed until clicked');

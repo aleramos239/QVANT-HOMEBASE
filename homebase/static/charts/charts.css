@@ -400,7 +400,7 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .set-cap { margin: 16px 0 4px; color: var(--text-2); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
 /* 5.8 (2026-10-27): the Algo row (and its caption) only when there is an algo to pick; Export folds under More */
 .set-row:has(.set-algo.none), .set-cap:has(+ .set-row .set-algo.none) { display: none; }
-.set-more > summary { cursor: pointer; }
+.set-fold > summary { cursor: pointer; }
 .set-row { height: 40px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; }
 .set-name { min-width: 0; display: flex; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden; }
 .set-name span { overflow: hidden; text-overflow: ellipsis; }
