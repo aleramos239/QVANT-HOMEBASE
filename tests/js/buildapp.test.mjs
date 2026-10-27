@@ -62,6 +62,19 @@ test('O: the installed app\'s path written another way (./, //, relative to HOME
   }
 });
 
+test('O: this Mac\'s disk ignores case: the installed app\'s path in other case is the same app, refused the same way', (t) => {
+  if (!existsSync(tmpdir().toUpperCase())) return t.skip('this disk minds case');
+  for (const out of ['$HOME/Applications/homebase vps.app', '$HOME/applications/HOMEBASE VPS.app']) {
+    for (const mode of ['--vps', '--mac']) {
+      const r = run([mode, '--out', out], 'HomebaseVPS', { installed: true });
+      assert.equal(r.code, 1, `${mode} --out ${out}`);
+      assert.equal(r.err.trim(), 'HOMEBASE VPS is running: quit it first (nothing was changed).');
+      assert.equal(r.compiled, false, `${mode} --out ${out}: it stops before the build`);
+      assert.equal(r.kept, true);
+    }
+  }
+});
+
 test('O: an app started while the build runs is not replaced: the script checks again before it moves the app aside', () => {
   const r = run(['--vps'], 'HomebaseVPS', { installed: true, late: true });
   assert.equal(r.compiled, true, 'it got past the first check and built');

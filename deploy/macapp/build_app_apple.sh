@@ -27,18 +27,19 @@ case "${1:-}" in
 esac
 # a path's real full form, so the same folder written another way (./, //, relative, a link) is the same app
 real() { local d; d="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" && echo "$d/$(basename "$1")" || echo "$1"; }
+# the same app: the same folder on disk (-ef also catches other case, as this Mac's disk ignores case), else the same real path
+same() { [ "$1" -ef "$2" ] || [ "$(real "$1")" = "$(real "$2")" ]; }
 if [ "${1:-}" = --out ]; then
   [ $# -eq 2 ] || { echo "--out takes one .app path" >&2; exit 2; }
   case "$2" in *.app) ;; *) echo "the output must be a .app path" >&2; exit 2 ;; esac
-  if [ "$(real "$2")" != "$(real "$APP")" ]; then APP="$(real "$2")"; BUNDLE_ID="$BUNDLE_ID.test"; fi
+  if ! same "$2" "$APP"; then APP="$(real "$2")"; BUNDLE_ID="$BUNDLE_ID.test"; fi
 elif [ $# -gt 0 ]; then
   echo "unknown argument: $1" >&2; exit 2
 fi
-case "$(real "$APP")" in   # an installed app is never replaced while it runs (a test build elsewhere with --out may go ahead)
-  "$(real "$APPS/Homebase.app")") RUN=Homebase ;;
-  "$(real "$APPS/HOMEBASE VPS.app")") RUN=HomebaseVPS ;;
-  *) RUN="" ;;
-esac
+# an installed app is never replaced while it runs (a test build elsewhere with --out may go ahead)
+if same "$APP" "$APPS/Homebase.app"; then RUN=Homebase; APP="$APPS/Homebase.app"     # its own name, in its own case
+elif same "$APP" "$APPS/HOMEBASE VPS.app"; then RUN=HomebaseVPS; APP="$APPS/HOMEBASE VPS.app"
+else RUN=""; fi
 guard() {
   if [ -n "$RUN" ] && pgrep -x "$RUN" >/dev/null; then
     echo "$(basename "$APP" .app) is running: quit it first (nothing was changed)." >&2; exit 1
