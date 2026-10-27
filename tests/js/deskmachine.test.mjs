@@ -83,6 +83,9 @@ test('N: the plain top bar has a machine chip: Server · Chicago or This Mac, hi
   const head = HTML.slice(HTML.indexOf('<header class="inset-topbar hb-bar">'), HTML.indexOf('</header>'));
   assert.match(head, /<span class="pill idle" id="machineChip" hidden><\/span>/);
   assert.match(HTML, /#machineChip\[hidden\]\{ display:none; \}/, '.pill is inline-flex: hidden needs its own rule');
+  assert.match(HTML, /\.pill\.machine-server\{ background:color-mix\(in srgb,#007aff 15%,transparent\); border-color:transparent; color:#0062cc;/,
+    'the server chip is blue, as the skin\'s');
+  assert.match(HTML, /:root\[data-theme="dark"\] \.pill\.machine-server\{ background:color-mix\(in srgb,#0a84ff 22%,transparent\); color:#64b0ff; \}/);
   assert.match(HTML, /renderMaster\(\);\n  renderMachineChip\(\);/, 'drawn on every render');
   const skin = readFileSync(new URL('../../homebase/static/apple/desk.js', import.meta.url), 'utf8');
   assert.doesNotMatch(skin, /machineChip/);

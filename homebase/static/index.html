@@ -113,7 +113,8 @@
   .pill.on{ background:transparent; border-color:var(--foreground); color:var(--foreground); }
   .pill.on::before{ content:""; width:6px; height:6px; border-radius:9999px; background:currentColor; }
   .pill.idle{ background:transparent; border-color:var(--border); color:var(--muted-foreground); }
-  .pill.machine-server{ background:transparent; border-color:var(--foreground); color:var(--foreground); font-weight:600; }   /* the SERVER's Desk stands out */
+  .pill.machine-server{ background:color-mix(in srgb,#007aff 15%,transparent); border-color:transparent; color:#0062cc; font-weight:600; }   /* the SERVER's Desk stands out: blue, as the skin's chip */
+  :root[data-theme="dark"] .pill.machine-server{ background:color-mix(in srgb,#0a84ff 22%,transparent); color:#64b0ff; }
   #machineChip[hidden]{ display:none; }
   .pill.won{ background:color-mix(in oklch, var(--pos) 15%, transparent); color:var(--pos); border-color:color-mix(in oklch, var(--pos) 30%, transparent); }
   .pill.lost{ background:color-mix(in oklch, var(--neg) 15%, transparent); color:var(--neg); border-color:color-mix(in oklch, var(--neg) 30%, transparent); }
