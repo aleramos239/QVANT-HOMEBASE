@@ -256,6 +256,35 @@
     const researchWord = (rec, withInSample) => !isObj(rec) ? 'Results'
       : rec.walkforward === true ? (withInSample ? '3:1 in-sample · test months' : '3:1 test months')
       : isObj(rec.unseen) || isObj(rec.build) ? 'Old record (before 3:1)' : 'Results';
+    // the words written: the machine chip, readiness (the toolbar's word and the inspector's row), chart trading. Their own try,
+    // first in every sync(), so a view that throws never freezes them; the pill's own repaint runs only this (the page's renderMaster
+    // runs even while an open menu holds the cards under FREEZE: the content and the inspector's views are left as they are)
+    function words() {
+      try {
+        const st = status_();
+        const mw = machineWord(st);
+        if (mLong.textContent !== mw) {
+          mLong.textContent = machine.title = mw; mShort.textContent = machineWord(st, true);
+          machine.dataset.m = mw === 'This Mac' ? 'mac' : 'server'; machine.hidden = !mw;
+        }
+        // readiness, in words (the bulb is the page's own verdict; the row opens the page's own System checks)
+        if (bulb) {
+          const lvl = bulb.classList.contains('bad') ? 'bad' : bulb.classList.contains('warn') ? 'warn' : bulb.classList.contains('ok') ? 'ok' : '';
+          const txt = lvl === 'ok' ? 'Ready to trade' : lvl === 'warn' ? 'Needs attention' : lvl === 'bad' ? 'Not ready' : 'Checking…';
+          if (sum.dataset.lvl !== lvl) sum.dataset.lvl = lvl;
+          const t = $('#hbReadyTxt');
+          if (t && t.textContent !== txt) t.textContent = txt;
+        }
+        // and beside the shield: how many checks need a look
+        const [lvl, txt] = readyWord(st, stale_());
+        if (readyBtn.dataset.lvl !== lvl) readyBtn.dataset.lvl = lvl;
+        if (readyBtn.textContent !== txt) { readyBtn.textContent = txt; readyBtn.setAttribute('aria-label', 'Readiness: ' + txt); }
+        const cw = chartWords(st), cs = chartWords(st, true);
+        if (ctLong.textContent !== cw) ctLong.textContent = cw;
+        if (ctShort.textContent !== cs) ctShort.textContent = cs;
+        if (ctChip.hidden !== !cw) ctChip.hidden = !cw;
+      } catch (_) { /* a repaint must never be broken by the skin */ }
+    }
     /* ---- end toolbar words ---- */
 
     let syncing = false;
@@ -263,6 +292,7 @@
       if (syncing) return;
       syncing = true;
       try {
+        words();
         const v = viewOf();
         if (H.getAttribute('data-hb-view') !== v) H.setAttribute('data-hb-view', v);
         const st = status_();
@@ -306,27 +336,6 @@
           }
           tb.title('Today', date);
         }
-        const mw = machineWord(st);
-        if (mLong.textContent !== mw) {
-          mLong.textContent = machine.title = mw; mShort.textContent = machineWord(st, true);
-          machine.dataset.m = mw === 'This Mac' ? 'mac' : 'server'; machine.hidden = !mw;
-        }
-        // readiness, in words (the bulb is the page's own verdict; the row opens the page's own System checks)
-        if (bulb) {
-          const lvl = bulb.classList.contains('bad') ? 'bad' : bulb.classList.contains('warn') ? 'warn' : bulb.classList.contains('ok') ? 'ok' : '';
-          const txt = lvl === 'ok' ? 'Ready to trade' : lvl === 'warn' ? 'Needs attention' : lvl === 'bad' ? 'Not ready' : 'Checking…';
-          if (sum.dataset.lvl !== lvl) sum.dataset.lvl = lvl;
-          const t = $('#hbReadyTxt');
-          if (t && t.textContent !== txt) t.textContent = txt;
-        }
-        // and beside the shield: how many checks need a look
-        const [lvl, txt] = readyWord(st, stale_());
-        if (readyBtn.dataset.lvl !== lvl) readyBtn.dataset.lvl = lvl;
-        if (readyBtn.textContent !== txt) { readyBtn.textContent = txt; readyBtn.setAttribute('aria-label', 'Readiness: ' + txt); }
-        const cw = chartWords(st), cs = chartWords(st, true);
-        if (ctLong.textContent !== cw) ctLong.textContent = cw;
-        if (ctShort.textContent !== cs) ctShort.textContent = cs;
-        if (ctChip.hidden !== !cw) ctChip.hidden = !cw;
       } catch (_) { /* a repaint must never be broken by the skin */ }
       finally { syncing = false; }
     }
@@ -336,7 +345,7 @@
     if (side) mo.observe(side, { childList: true });                  // the page repaints the sidebar on every refresh
     if (bulb) mo.observe(bulb, { attributes: true, attributeFilter: ['class'] });
     const pill = $('#statusPill');      // its class gains "stale" when the desk stops answering (the page's renderMaster)
-    if (pill) mo.observe(pill, { attributes: true, attributeFilter: ['class'] });
+    if (pill) new MutationObserver(words).observe(pill, { attributes: true, attributeFilter: ['class'] });
     sync();
 
     /* ---- appearance: follow the window; the page's own toggle does the switch ---- */

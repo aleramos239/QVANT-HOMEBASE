@@ -94,7 +94,7 @@ function toolbarWords(ctx = {}) {
   const i = DESK_SKIN.indexOf('/* ---- toolbar words'), j = DESK_SKIN.indexOf('/* ---- end toolbar words ---- */');
   assert.ok(i >= 0 && j > i, 'the toolbar words block');
   const c = vm.createContext({ window: {}, ...ctx });
-  vm.runInContext(DESK_SKIN.slice(i, j) + '\nglobalThis.W = { machineWord, readyWord, chartWords, recordOf, researchWord };', c);
+  vm.runInContext(DESK_SKIN.slice(i, j) + '\nglobalThis.W = { machineWord, readyWord, chartWords, recordOf, researchWord, words };', c);
   return c.W;
 }
 
@@ -132,7 +132,7 @@ test('desk skin: readiness in words comes from the page\'s own readinessShown --
   assert.deepEqual(stale({ readiness: { checks: [{ label: 'feed', level: 'ok' }] } }), ['', 'Checking…']);
   assert.match(DESK_SKIN, /readyWord\(st, stale_\(\)\)/, 'the toolbar word passes the page\'s stale flag');
   assert.match(DESK_SKIN, /const stale_ = \(\) => \{ try \{ return DESK_STALE === true; \}/);
-  assert.match(DESK_SKIN, /mo\.observe\(pill, \{ attributes: true, attributeFilter: \['class'\] \}\)/, 'the word follows the pill going stale');
+  assert.match(DESK_SKIN, /new MutationObserver\(words\)\.observe\(pill, \{ attributes: true, attributeFilter: \['class'\] \}\)/, 'the word follows the pill going stale');
   // the inspector's row keeps its own words, from the bulb the page paints (not the toolbar's count)
   assert.match(DESK_SKIN, /const txt = lvl === 'ok' \? 'Ready to trade' : lvl === 'warn' \? 'Needs attention' : lvl === 'bad' \? 'Not ready' : 'Checking…';/);
   assert.match(DESK_SKIN, /class: 'hb-ready-word'[^\n]*window\.openChecks\(\)/, 'the word opens the page\'s own System checks');
@@ -156,6 +156,36 @@ test('desk skin: the chart-trading chip shows whenever the switch is ON, armed o
   assert.equal(short({ chart_trading: on }), 'Chart ON');
   assert.equal(short({ chart_trading: { enabled: false }, accounts: acc }), '');
   assert.match(DESK_SKIN, /el\('span', \{ class: 'hb-ct-chip', hidden: true/, 'the chip starts hidden');
+});
+
+// what words() writes into the toolbar and the inspector's readiness row, run on small fake nodes
+function wordsOn({ st = null, stale = false, why = '', win = {}, bulbLvl = '' } = {}) {
+  const node = () => ({ textContent: '', hidden: false, title: '', dataset: {}, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } });
+  const n = { machine: node(), mLong: node(), mShort: node(), readyBtn: node(), ctLong: node(), ctShort: node(), ctChip: node(), sum: node(), row: node() };
+  n.machine.hidden = n.ctChip.hidden = true;      // as the skin builds them
+  const bulb = { classList: { contains: (c) => c === bulbLvl } };
+  const W = toolbarWords({ window: { readinessShown: (r) => r, ...win }, ...n, bulb, $: (q) => (q === '#hbReadyTxt' ? n.row : null),
+    status_: () => st, stale_: () => stale, staleWhy_: () => why });
+  W.words();
+  return n;
+}
+
+test('desk skin: words() writes the machine chip, the readiness words and the chart-trading chip', () => {
+  const acc = { a: { env: 'live' }, b: { env: 'live' }, c: { env: 'demo' } };
+  const warn = { readiness: { checks: [{ label: 'feed', level: 'warn' }] } };
+  let n = wordsOn({ st: { machine: 'server', chart_trading: { enabled: true }, accounts: acc, ...warn }, bulbLvl: 'warn' });
+  assert.equal(n.machine.hidden, false); assert.equal(n.machine.dataset.m, 'server', 'the blue one');
+  assert.equal(n.mLong.textContent, 'Server · Chicago'); assert.equal(n.mShort.textContent, 'Server'); assert.equal(n.machine.title, 'Server · Chicago');
+  assert.equal(n.ctChip.hidden, false);
+  assert.equal(n.ctLong.textContent, 'Chart trading ON · 2 live accounts'); assert.equal(n.ctShort.textContent, 'Chart ON · 2 live');
+  assert.equal(n.readyBtn.textContent, '1 thing needs a look'); assert.equal(n.readyBtn.dataset.lvl, 'warn');
+  assert.equal(n.readyBtn.attrs['aria-label'], 'Readiness: 1 thing needs a look');
+  assert.equal(n.row.textContent, 'Needs attention', 'the inspector row: the bulb the page painted'); assert.equal(n.sum.dataset.lvl, 'warn');
+  n = wordsOn({ st: { machine: 'server' }, win: { HB_MACHINE: 'mac' } });
+  assert.equal(n.machine.hidden, false); assert.equal(n.machine.dataset.m, 'mac', 'the grey one'); assert.equal(n.mLong.textContent, 'This Mac');
+  n = wordsOn({ st: { chart_trading: { enabled: false }, accounts: acc } });
+  assert.equal(n.machine.hidden, true, 'no machine value: no chip'); assert.equal(n.ctChip.hidden, true, 'chart trading off: no chip');
+  assert.match(DESK_SKIN, /syncing = true;\n      try \{\n        words\(\);/, 'every sync() writes the words first, before any view can throw');
 });
 
 // the straddle's RR field and stop menu (desk.js rrCtl), run on small fake nodes: what a pick and a Set send
