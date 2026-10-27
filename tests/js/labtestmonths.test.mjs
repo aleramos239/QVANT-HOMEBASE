@@ -28,7 +28,7 @@ function lab({ picked = false, runs = [], wfs = [] } = {}) {
     send: async (m, url) => {
       sent.push(`${m} ${url}`);
       if (url.startsWith('/api/tester/runs?')) return { ok: true, json: runs };
-      if (url === '/api/tester/walkforwards') return { ok: true, json: wfs };
+      if (url.startsWith('/api/tester/walkforwards?')) return { ok: true, json: wfs };
       if (/\/walkforward\/w\d\/result$/.test(url)) return { ok: true, json: { lock: picked ? { cell: 0 } : null, oos: null } };
       return { ok: false, error: 'no' };
     },

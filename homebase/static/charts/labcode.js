@@ -874,7 +874,9 @@ function rangeReadsTestMonths(r, extra) {
   if (r.kind === 'research' || r.kind === 'is_months' || r.kind === 'custom') return touchesTestMonths(r.start, r.end, extra);
   return true;
 }
-const RUNS_PAGE = 500, WFS_PAGE = 20;       // GET /api/tester/runs?limit=500, GET /api/tester/walkforwards (its fixed 20)
+/* GET /api/tester/runs?limit=500; GET /api/tester/walkforwards: the newest 20 of every strategy (the route has no strategy
+   filter yet: the page sends strategy= for when it has one), so 20 back = the count may be short. */
+const RUNS_PAGE = 500, WFS_PAGE = 20;
 /* The tries of one strategy (O5): every in-sample run of a setting (wf_is runs) + one per heat-map table (a walk-forward with
    boxes) + every test-months read after the first. Reads: saved runs whose range touches a test month, the old 1:N walk-forwards
    (they ran out-of-sample months), and every 3:1 walk-forward whose test months were started. `results`: the GET .../result of

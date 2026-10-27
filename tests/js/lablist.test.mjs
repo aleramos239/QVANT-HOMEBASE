@@ -267,7 +267,7 @@ function page({ drafts, groups, refuse = {}, gone = [] }) {
     if (method === 'GET' && url === '/api/tester/groups') return [200, groups];
     if (method === 'GET' && (m = /^\/api\/tester\/strategies\/draft_(\w+)\/source$/.exec(url))) return [200, { files: [{ path: `${m[1]}.py`, text: `# ${m[1]}\n` }] }];
     if (method === 'GET' && (url === '/api/tester/runs' || url.startsWith('/api/tester/runs?'))) return [200, []];
-    if (method === 'GET' && url === '/api/tester/walkforwards') return [200, []];
+    if (method === 'GET' && (url === '/api/tester/walkforwards' || url.startsWith('/api/tester/walkforwards?'))) return [200, []];
     if (method === 'DELETE' && (m = /^\/api\/tester\/drafts\/(\w+)$/.exec(url))) {
       if (refuse[m[1]]) return [409, { detail: refuse[m[1]] }];
       if (gone.includes(m[1])) { list = list.filter((d) => d.name !== m[1]); return [200, { deleted: false }]; }
@@ -568,7 +568,7 @@ test('page: opening a strategy asks for its own last run and its tries, read-onl
   assert.ok(p.requests.includes('GET /api/tester/runs?strategy=draft_a'), p.requests.join(', '));      // not the newest 50 of every strategy
   assert.ok(!p.requests.includes('GET /api/tester/runs'));
   assert.ok(p.requests.includes('GET /api/tester/runs?limit=500&strategy=draft_a'));
-  assert.ok(p.requests.includes('GET /api/tester/walkforwards'));
+  assert.ok(p.requests.includes('GET /api/tester/walkforwards?strategy=draft_a'));   // the route ignores it today (newest 20 of all)
   assert.ok(p.requests.every((r) => r.startsWith('GET ')), 'opening sends nothing but GETs');
 });
 

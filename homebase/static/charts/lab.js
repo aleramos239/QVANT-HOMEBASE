@@ -293,7 +293,7 @@ async function poll(run) {
       if (run.dead) return;
       run.bundle = bd.ok ? bd.json : null;
       settle(); run.dead = true; threeKeep(run);
-      if (run.strategy) loadTries(run.strategy);
+      if (run.strategy) loadTries(run.strategy, true);
       const who = viewing() ? '' : ` <b>${esc(run.name || '')}</b>`;
       if (run.bundle) {
         const a = run.bundle.run.report.summary.all;
@@ -2389,13 +2389,16 @@ function oosRun() {
     lock: T.oos.result && T.oos.result.lock ? '' : 'This locks the strategy as set as box #1.' }, () => oosGo(b, f, T));
 }
 /* ---- the tries count and the pick (plan 4.3, 4.5): read-only GETs, per strategy ---- */
-async function loadTries(sid) {
+async function loadTries(sid, fresh = false) {
   if (!sid) return null;
-  const [r, w] = await Promise.all([send('GET', `/api/tester/runs?limit=${C.RUNS_PAGE}&strategy=${encodeURIComponent(sid)}`), send('GET', '/api/tester/walkforwards')]);
+  const old = triesOf(sid);
+  if (!fresh && old && Date.now() - old.at < 15000) return old;      // one count serves the open, the ask and the poll; a finished run refreshes it
+  const q = encodeURIComponent(sid);
+  const [r, w] = await Promise.all([send('GET', `/api/tester/runs?limit=${C.RUNS_PAGE}&strategy=${q}`), send('GET', `/api/tester/walkforwards?strategy=${q}`)]);
   if (!r.ok || !w.ok) return triesOf(sid);
   const wfs = Array.isArray(w.json) ? w.json : [], fixed = wfs.filter((x) => x && x.strategy === sid && x.scheme === 'fixed');
   const res = await Promise.all(fixed.map((x) => send('GET', `/api/tester/walkforward/${encodeURIComponent(x.id)}/result`).then((g) => (g.ok ? g.json : null))));
-  S.tries[sid] = C.triesCount(Array.isArray(r.json) ? r.json : [], wfs, sid, res);
+  S.tries[sid] = { ...C.triesCount(Array.isArray(r.json) ? r.json : [], wfs, sid, res), at: Date.now() };
   S.tries[sid].read = res.find((g) => g && g.lock && g.oos && g.oos.state === 'done') || null;     // for the tracker's verdict
   if (curSid() === sid) paintRes();
   return S.tries[sid];
@@ -2474,7 +2477,7 @@ async function oosGo(b, f, T) {
     }
   } catch (e) { if (token === o.token) o.err = e.message || String(e); }
   if (token !== o.token) return;
-  o.busy = false; o.step = ''; paintRes(); loadTries(f.strategy);
+  o.busy = false; o.step = ''; paintRes(); loadTries(f.strategy, true);
 }
 function oosHtml(T) {
   const o = T.oos, res = o.result, oo = res && res.oos, head = '<div class="rs-h"><b>Test months</b><span>Your strategy as set</span></div>';
