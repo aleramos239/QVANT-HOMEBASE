@@ -48,59 +48,66 @@ def live_metrics(records: list[dict]) -> dict[str, dict]:
 FEE_PER_CONTRACT_RT = 3.10
 
 
-def strategy_live_detail(journal_path: Path, strategy: str, cfg) -> dict:
-    """Everything the strategy's LIVE popup shows: per-day P&L for the
-    calendar, the full metric table, and the trade log. Summed across every
-    account running the strategy. Real fills only — dry runs and self-tests
-    never produce exit_fill events."""
-    from .contracts import tick_size
-
-    scfg = cfg.strategies.get(strategy)
-    sym = getattr(scfg, "symbol", "NQ")
-    ts = tick_size(sym)
-    placed, entries, levels, trades, unknown = {}, {}, {}, [], 0
+def _journal_lines(journal_path: Path):
+    """The journal read and parsed line by line (a line that is not JSON skipped), as strategy_live_detail always did."""
     if journal_path.exists():
         for line in journal_path.read_text().splitlines():
             try:
                 r = json.loads(line)
             except ValueError:
                 continue
-            if r.get("strategy") != strategy:
-                continue
-            key = (str(r.get("et", ""))[:10], r.get("account"))
-            ev = r.get("event")
-            if ev == "placed":
-                placed[key] = r
-            elif ev == "entry_fill":
-                entries[key] = r
-            elif ev == "exit_recovered_on_reconnect":
-                unknown += 1
-            elif ev == "brackets_moved" and r.get("sl") is not None:
-                levels[key] = (r["sl"], r["tp"])     # SL/TP re-priced to the fill
-            elif ev == "exit_fill" and r.get("pnl") is not None:
-                ent = entries.get(key, {})
-                qty = int((placed.get(key) or {}).get("qty") or 1)
-                sgn = 1 if ent.get("side") == "Buy" else -1
-                anchor, efill = ent.get("anchor"), ent.get("fill")
-                entry_slip = (None if anchor is None or efill is None or not ts
-                              else round((efill - anchor) * sgn / ts, 1) + 0.0)
-                reason = str(r.get("reason"))
-                exit_slip = None
-                if anchor is not None and scfg is not None and ts \
-                        and r.get("fill") is not None and reason in ("sl", "tp"):
-                    lv = levels.get(key)
-                    level = ((lv[0] if reason == "sl" else lv[1]) if lv else
-                             anchor - sgn * scfg.sl_pts if reason == "sl"
-                             else anchor + sgn * scfg.tp_pts)
-                    exit_slip = round((level - r["fill"]) * sgn / ts, 1) + 0.0
-                gross = float(r["pnl"])
-                trades.append({
-                    "date": key[0], "account": key[1], "qty": qty,
-                    "side": ent.get("side"), "entry": efill, "trigger": anchor,
-                    "exit": r.get("fill"), "reason": reason, "gross": gross,
-                    "net": round(gross - FEE_PER_CONTRACT_RT * qty, 2),
-                    "entry_slip_ticks": entry_slip, "exit_slip_ticks": exit_slip,
-                })
+            yield r
+
+
+def strategy_live_detail(journal_path: Path, strategy: str, cfg, records=None) -> dict:
+    """Everything the strategy's LIVE popup shows: per-day P&L for the
+    calendar, the full metric table, and the trade log. Summed across every
+    account running the strategy. Real fills only — dry runs and self-tests
+    never produce exit_fill events. `records`: the journal already parsed, every
+    line an object (bothistory.JournalCache.whole); None reads the file."""
+    from .contracts import tick_size
+
+    scfg = cfg.strategies.get(strategy)
+    sym = getattr(scfg, "symbol", "NQ")
+    ts = tick_size(sym)
+    placed, entries, levels, trades, unknown = {}, {}, {}, [], 0
+    for r in (_journal_lines(journal_path) if records is None else records):
+        if r.get("strategy") != strategy:
+            continue
+        key = (str(r.get("et", ""))[:10], r.get("account"))
+        ev = r.get("event")
+        if ev == "placed":
+            placed[key] = r
+        elif ev == "entry_fill":
+            entries[key] = r
+        elif ev == "exit_recovered_on_reconnect":
+            unknown += 1
+        elif ev == "brackets_moved" and r.get("sl") is not None:
+            levels[key] = (r["sl"], r["tp"])     # SL/TP re-priced to the fill
+        elif ev == "exit_fill" and r.get("pnl") is not None:
+            ent = entries.get(key, {})
+            qty = int((placed.get(key) or {}).get("qty") or 1)
+            sgn = 1 if ent.get("side") == "Buy" else -1
+            anchor, efill = ent.get("anchor"), ent.get("fill")
+            entry_slip = (None if anchor is None or efill is None or not ts
+                          else round((efill - anchor) * sgn / ts, 1) + 0.0)
+            reason = str(r.get("reason"))
+            exit_slip = None
+            if anchor is not None and scfg is not None and ts \
+                    and r.get("fill") is not None and reason in ("sl", "tp"):
+                lv = levels.get(key)
+                level = ((lv[0] if reason == "sl" else lv[1]) if lv else
+                         anchor - sgn * scfg.sl_pts if reason == "sl"
+                         else anchor + sgn * scfg.tp_pts)
+                exit_slip = round((level - r["fill"]) * sgn / ts, 1) + 0.0
+            gross = float(r["pnl"])
+            trades.append({
+                "date": key[0], "account": key[1], "qty": qty,
+                "side": ent.get("side"), "entry": efill, "trigger": anchor,
+                "exit": r.get("fill"), "reason": reason, "gross": gross,
+                "net": round(gross - FEE_PER_CONTRACT_RT * qty, 2),
+                "entry_slip_ticks": entry_slip, "exit_slip_ticks": exit_slip,
+            })
 
     days: dict[str, dict] = {}
     for t in trades:

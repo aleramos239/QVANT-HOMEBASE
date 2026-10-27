@@ -11,20 +11,17 @@ from pathlib import Path
 
 from fastapi.responses import FileResponse
 
-from .. import bothistory
 from .. import labdesk as labdesk_mod
 from ..metrics import live_metrics
 
 
 def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapters, cfg, compute_readiness, engine,
-                     feed_status, labdesk, level_timer, notices, power_status, state_dir, timer) -> None:
+                     feed_status, journal_cache, labdesk, level_timer, notices, power_status, state_dir, timer) -> None:
 
     # ------------------------------------------------------------ dashboard
     @app.get("/")
     async def index():
         return FileResponse(STATIC / "index.html")
-
-    journal_cache = bothistory.JournalCache()          # /api/status's read of the journal
 
     live_box: dict = {"recs": None, "live": {}}        # live_metrics of the records it last saw
 
@@ -102,7 +99,11 @@ def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapter
     def _read_journal_records(jp: Path) -> list[dict]:
         """The blocking half of /api/journal: read the file and parse each line, off the
         event loop (asyncio.to_thread). A line that isn't valid JSON, or parses to
-        something other than an object (a bare number/string/array), is skipped."""
+        something other than an object (a bare number/string/array), is skipped. The lines come from the
+        journal cache when it can stand for this read (it parses only what was appended)."""
+        snap = journal_cache.whole(jp)
+        if snap is not None:
+            return snap[0]
         if not jp.exists():
             return []
         out = []

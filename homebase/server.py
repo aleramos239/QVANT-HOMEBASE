@@ -111,6 +111,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     desk = ChartDesk(cfg, engine, adapters, acct_status, timer_status=timer.status)
     # promoted Lab strategies (kind "lab"): limits, book checks, the switch, Remove, the status block (labdesk.py)
     labdesk = labdesk_mod.LabDesk(cfg, engine, adapters, paused=desk.views_paused, on=lab_on)
+    journal_cache = bothistory.JournalCache()    # the journal parsed once: /api/status, /api/journal, /api/strategy-live
     feed = barsfeed.make(cfg=cfg, engine=engine, adapters=adapters, feed_factory=feed_factory)
     kill_lock_box: dict = {}
 
@@ -166,8 +167,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     routes.status.register(app, JOURNAL_TAIL=JOURNAL_TAIL, STATIC=STATIC, _login_cooldown=acc.login_cooldown,
                                 acct_status=acct_status, adapters=adapters, cfg=cfg,
                                 compute_readiness=compute_readiness, engine=engine, feed_status=feed.status,
-                                labdesk=labdesk, level_timer=level_timer, notices=acc.notices, power_status=power_status,
-                                state_dir=lambda: state_dir(), timer=timer)
+                                journal_cache=journal_cache, labdesk=labdesk, level_timer=level_timer,
+                                notices=acc.notices, power_status=power_status, state_dir=lambda: state_dir(), timer=timer)
     routes.control.register(app, _kill_lock=_kill_lock, adapters=adapters, cfg=cfg, desk=desk, engine=engine)
     routes.accounts.register(app, ADD_MANY_MAX=ADD_MANY_MAX, _add_lock=acc.add_lock, _connect_account=acc.connect_account,
                                   _connect_failed=acc.connect_failed, _drop_account=acc.drop_account, _key_env=_key_env,
@@ -179,7 +180,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     routes.groups.register(app, engine=engine)
     routes.lab.register(app, labdesk=labdesk)
     routes.records.register(app, STATIC=STATIC, _equity_path=_equity_path, adapters=adapters, cfg=cfg,
-                                 state_dir=lambda: state_dir())
+                                 journal_cache=journal_cache, state_dir=lambda: state_dir())
 
     return app
 

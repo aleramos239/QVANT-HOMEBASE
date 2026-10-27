@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import threading
 from pathlib import Path
 from typing import Iterable, Optional
@@ -64,8 +65,9 @@ def parse_days(v) -> int:
     return v
 
 
-def parse_lines(lines: Iterable[str]) -> list[dict]:
-    out = []
+def _parse(lines: Iterable[str]) -> tuple[list[dict], bool]:
+    """parse_lines, and whether a line was JSON but not an object."""
+    out, odd = [], False
     for line in lines:
         try:
             rec = json.loads(line)
@@ -73,7 +75,13 @@ def parse_lines(lines: Iterable[str]) -> list[dict]:
             continue
         if isinstance(rec, dict):
             out.append(rec)
-    return out
+        else:
+            odd = True
+    return out, odd
+
+
+def parse_lines(lines: Iterable[str]) -> list[dict]:
+    return _parse(lines)[0]
 
 
 class JournalCache:
@@ -87,7 +95,9 @@ class JournalCache:
         self._off = 0                         # bytes parsed so far (always a line end)
         self._stamp: Optional[tuple] = None   # (size, mtime_ns) at the last call
         self._recs: list[dict] = []
-        self._lock = threading.Lock()        # called from worker threads (asyncio.to_thread)
+        self._bad = False                     # a byte parsed so far was not UTF-8 (read_text() would raise)
+        self._odd = False                     # a line parsed so far was JSON but not an object
+        self._lock = threading.RLock()       # called from worker threads (asyncio.to_thread); whole() nests
 
     @staticmethod
     def _read_from(path: Path, offset: int, size: int) -> bytes:
@@ -107,6 +117,7 @@ class JournalCache:
             if self._ident != (str(path), st.st_ino) or st.st_size < self._off \
                     or (self._stamp is not None and st.st_size == self._stamp[0]):
                 self._ident, self._off, self._recs = (str(path), st.st_ino), 0, []
+                self._bad = self._odd = False
             if st.st_size > self._off:
                 try:
                     chunk = self._read_from(path, self._off, st.st_size)
@@ -114,11 +125,37 @@ class JournalCache:
                     return []
                 end = chunk.rfind(b"\n")
                 if end >= 0:                  # only whole lines; a partial tail waits
-                    new = parse_lines(chunk[:end].decode("utf-8", errors="replace").splitlines())
+                    try:
+                        text = chunk[:end].decode("utf-8")
+                    except UnicodeDecodeError:
+                        text, self._bad = chunk[:end].decode("utf-8", errors="replace"), True
+                    new, odd = _parse(text.splitlines())
+                    self._odd = self._odd or odd
                     self._recs = self._recs + new     # a new list: a reader's copy never changes
                     self._off += end + 1
             self._stamp = stamp
             return self._recs
+
+    def whole(self, path: Path) -> Optional[tuple]:
+        """(records, odd) as reading and parsing the whole file now, line by line, would give them: the cached
+        lines plus a last line not ended yet. odd: a line is JSON but not an object (left out). None when this
+        cannot stand for that read (no file, a failed read, a byte that is not UTF-8, the file replaced while it
+        read): the caller then reads the file itself, as it always did. The list is shared: never change it."""
+        with self._lock:
+            recs = self.records(path)
+            if recs is not self._recs or self._bad:
+                return None
+            try:
+                with open(path, "rb") as f:
+                    st = os.fstat(f.fileno())
+                    if (str(path), st.st_ino) != self._ident or st.st_size < self._off:
+                        return None
+                    f.seek(self._off)
+                    tail = f.read().decode("utf-8")
+            except (OSError, UnicodeDecodeError):
+                return None
+            more, odd = _parse(tail.splitlines())
+            return (recs + more if more else recs), self._odd or odd
 
 
 def _ms(rec: dict) -> Optional[int]:
