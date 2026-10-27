@@ -28,7 +28,7 @@ function lab({ picked = false, runs = [], wfs = [], real = false } = {}) {
     X, C, S: { tries: {}, three: {}, wf: {}, busy: false }, OOS_SAID: 'x',
     esc: (t) => String(t == null ? '' : t), log: (h) => logs.push(h), paintRes() {}, curSid: () => 'draft_x', triesOf: (sid) => c.S.tries[sid] || null,
     buf: () => c.cur || NQ_DRAFT, formOf: (b) => (c.forms && b ? c.forms[b.key] : c.form), is31: (f) => f.range.wf === X.WF_ROLL,
-    threeState: () => ({ oos: { busy: false, result: null } }), oosGo: () => did.push('oosGo'), run: (o) => did.push(['run', o]),
+    threeState: () => ({ oos: { busy: false, result: null } }), threeResume: () => undefined, wfResume: () => undefined, oosGo: () => did.push('oosGo'), run: (o) => did.push(['run', o]),
     closeDialog() {}, dialog: (html) => { const d = { html, on: null, addEventListener(t, f) { d.on = f; } }; dialogs.push(d); return d; },
     send: async (m, url) => {
       sent.push(`${m} ${url}`);
@@ -150,6 +150,42 @@ test('after a pick: one ask says the reads and the try; Not yet sends nothing, a
   assert.deepEqual(again, [1]);
   assert.match(LAB, /await datedRunOk\(wf0, \(\) => run\(\{ \.\.\.opts, asked: ask \}\), b\)/);
   assert.ok(p.sent.every((x) => x.startsWith('GET ')));
+});
+
+test('a pick the list misses (it holds the newest 20 walk-forwards of ALL strategies) is found by the resume, waited for and counted', async () => {
+  const p = lab({ wfs: Array.from({ length: 20 }, (_, i) => ({ id: `z${i}`, strategy: 'other', scheme: 'fixed', axes: [] })) });
+  p.c.form = F(R31);
+  let ends;
+  p.c.wfResume = () => new Promise((res) => { ends = () => {
+    p.c.S.wf.draft_x = { id: 'w9', job: { axes: [{ key: 'ctl.stop' }, { key: 'ctl.target_rr' }] }, result: { scheme: 'fixed', lock: { cell: 3 }, oos: null } };
+    res();
+  }; });
+  const go = p.c.runAll(); await flush();
+  assert.equal(p.dialogs.length, 0);                    // still waiting for the read-only match: no refusal, no ask yet
+  assert.equal(p.logs.length, 0);
+  ends(); await go; await flush();
+  assert.equal(p.dialogs.length, 1);
+  assert.match(p.dialogs[0].html, /Run all years\?/);
+  const t = await p.c.loadTries('draft_x', true);
+  assert.equal(t.locked, true);
+  assert.equal(t.tables, 1);                            // the found heat map counts as a try
+  assert.equal(t.cut, true);                            // the list is full: the count still says it may be short
+  assert.ok(p.sent.every((x) => x.startsWith('GET ')), p.sent.join(', '));
+  // nothing found: still refused
+  const q = lab({ wfs: Array.from({ length: 20 }, (_, i) => ({ id: `z${i}`, strategy: 'other', scheme: 'fixed', axes: [] })) });
+  q.c.form = F(R31);
+  q.c.wfResume = async () => {};
+  await q.c.runAll(); await flush();
+  assert.equal(q.dialogs.length, 0);
+  assert.match(q.logs.join(' '), /Pick a box first/);
+  // a dated Run waits for an in-sample look already started, and starts none of its own
+  const r = lab({ runs: [LAYOUT()] }), seen = [];
+  r.c.threeResume = () => { seen.push('three'); };
+  r.c.S.three.draft_x = { found: Promise.resolve().then(() => { r.c.S.three.draft_x.oos = { result: { lock: { cell: 0 } } }; }), oos: { result: null } };
+  assert.equal(await r.c.datedRunOk(F({ id: 'custom', start: '2023-05-01', end: '2023-05-31', wf: null }), () => {}), false);
+  await flush();
+  assert.deepEqual(seen, []);
+  assert.match(r.dialogs.at(-1).html, /Run these dates\?/);
 });
 
 test('the test months of the strategy as set: the same ask, which says it locks box #1; a full list says the count is short', async () => {

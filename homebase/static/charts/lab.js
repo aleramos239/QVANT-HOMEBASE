@@ -2345,11 +2345,14 @@ function threeTab(t) {
   paintRes(); syncChart();
 }
 /* Opening a strategy: its last finished in-sample run, test months and all-years run that Run would only repeat (the same request
-   and code) are shown, never run again. Once a strategy a page; never for unsaved code. */
-async function threeResume(b, f) {
+   and code) are shown, never run again. Once a strategy a page; never for unsaved code. The promise ends when the look is done
+   (hasPick waits for it). */
+function threeResume(b, f) {
   const T = threeState(f);
-  if (T.resumed || (b.kind !== 'builtin' && (b.kind === 'new' || isDirty(b)))) return;
-  T.resumed = true;
+  if (!T.resumed && (b.kind === 'builtin' || (b.kind !== 'new' && !isDirty(b)))) { T.resumed = true; T.found = threeFind(b, f, T); }
+  return T.found;
+}
+async function threeFind(b, f, T) {
   const look = async (tag) => {
     const m = await send('POST', '/api/tester/run-match', threeRunBody(f, tag));
     if (!m.ok || !m.json || !m.json.id || T[tag]) return;
@@ -2366,6 +2369,7 @@ async function threeResume(b, f) {
   const g = await send('GET', `/api/tester/walkforward/${encodeURIComponent(m.json.id)}/result`);
   if (!g.ok || !g.json || T.oos.id) return;
   T.oos.id = m.json.id; T.oos.result = g.json; T.oos.set = set;
+  loadTries(f.strategy, true);                                         // the list may not hold it (the newest 20 of all): count it
   if (g.json.oos && !X.wfFixedOos(g.json, '').final) oosGo(b, f, T);    // a read still running: follow it (it starts nothing new)
   else if (buf() === b) paintRes();
 }
@@ -2399,16 +2403,26 @@ async function loadTries(sid, fresh = false) {
   const [r, w] = await Promise.all([send('GET', `/api/tester/runs?limit=${C.RUNS_PAGE}&strategy=${q}`), send('GET', `/api/tester/walkforwards?strategy=${q}`)]);
   if (!r.ok || !w.ok) return triesOf(sid);
   const wfs = Array.isArray(w.json) ? w.json : [], fixed = wfs.filter((x) => x && x.strategy === sid && x.scheme === 'fixed');
-  const res = await Promise.all(fixed.map((x) => send('GET', `/api/tester/walkforward/${encodeURIComponent(x.id)}/result`).then((g) => (g.ok ? g.json : null))));
-  S.tries[sid] = { ...C.triesCount(Array.isArray(r.json) ? r.json : [], wfs, sid, res), at: Date.now() };
+  const got = await Promise.all(fixed.map((x) => send('GET', `/api/tester/walkforward/${encodeURIComponent(x.id)}/result`).then((g) => (g.ok ? g.json : null))));
+  // the list is the newest 20 walk-forwards of ALL strategies: this strategy's jobs the match route found (resumes) count too
+  const found = [S.wf[sid], S.three[sid] && S.three[sid].oos].filter((o) => o && o.id && o.result && !wfs.some((x) => x && x.id === o.id));
+  const res = [...got, ...found.filter((o) => o.result.scheme === 'fixed').map((o) => o.result)];
+  const more = found.map((o) => ({ id: o.id, strategy: sid, scheme: o.result.scheme, status: 'done', axes: ((o.job && o.job.axes) || []).map((a) => a.key) }));
+  S.tries[sid] = { ...C.triesCount(Array.isArray(r.json) ? r.json : [], [...wfs, ...more], sid, res), at: Date.now() };
   S.tries[sid].read = res.find((g) => g && g.lock && g.oos && g.oos.state === 'done') || null;     // for the tracker's verdict
   if (curSid() === sid) paintRes();
   return S.tries[sid];
 }
-/* A box of this strategy is picked: in what is open, or in its saved walk-forwards (O15: no test month before a pick). */
+/* A box of this strategy is picked: in what is open, in its saved walk-forwards, or in the 3:1 jobs the read-only match route finds
+   for it -- waited for, since the list holds only the newest 20 of all strategies (O15: no test month before a pick). */
 const pickedNow = (f) => { const T = S.three[f.strategy], w = S.wf[f.strategy], t = triesOf(f.strategy);
   return !!((T && T.oos.result && T.oos.result.lock) || (w && w.result && w.result.lock) || (t && t.locked)); };
-async function hasPick(f) { return pickedNow(f) || !!((await loadTries(f.strategy)) || {}).locked; }
+async function hasPick(f, b = buf()) {
+  const f3 = is31(f) ? f : { ...f, range: { ...X.LAB_RANGE } }, T = S.three[f.strategy];
+  // a dated form starts no in-sample look of its own (it would put the 3:1 run on its screen): it waits for one already started
+  if (b) await Promise.all([is31(f) ? threeResume(b, f) : T && T.found, wfResume(b, f3)]).catch(() => {});   // a failed look: not found
+  return pickedNow(f) || !!((await loadTries(f.strategy)) || {}).locked;
+}
 /* The one ask before a read of test months (runAll, a dated Run, oosRun): what it reads, that it counts, and which try it is.
    `go` sends what it sent before this ask existed. */
 async function testMonthsAsk(f, what, go) {
@@ -2431,7 +2445,7 @@ async function datedRunOk(f, again, b = buf()) {
   const ins = lay && root && lay.root === root ? lay.months : null;          // that market's own months, or none known (fail closed)
   if (!C.touchesTestMonths(d.start, d.end, ins)) return true;
   const span = `${d.start || '?'} → ${d.end || 'today'}`, holds = ins ? 'holds test months' : 'may hold test months (run In-sample once and the Lab knows this market\'s months)';
-  if (!(await hasPick(f))) { log(`<span class="err">Pick a box first: ${esc(span)} ${esc(holds)}, and they open only after a pick.</span>`); return false; }
+  if (!(await hasPick(f, b))) { log(`<span class="err">Pick a box first: ${esc(span)} ${esc(holds)}, and they open only after a pick.</span>`); return false; }
   testMonthsAsk(f, { title: 'Run these dates?', text: `${span} ${holds}.`, go: 'Run them' }, again);
   return false;
 }
@@ -2735,17 +2749,21 @@ function wfRunBody(b, f) {
   return { body: f.range.wf === X.WF_ROLL ? X.wfFixedBody(f, axes) : X.wfBody(f, axes, 'net_profit', 5) };
 }
 /* Opening a strategy shows its newest FINISHED 3:1 that Run would only repeat -- the same settings, months and code -- instead of
-   asking for it again (owner 2026-10-24). Once a strategy a page; never over a job of its own, never for unsaved code. */
-async function wfResume(b, f) {
+   asking for it again (owner 2026-10-24). Once a strategy a page; never over a job of its own, never for unsaved code. The promise
+   ends when the job and its result are read (hasPick waits for it). */
+function wfResume(b, f) {
   const w = wfLabState(f);
-  if (w.resumed || w.id || w.starting || w.job || (b.kind !== 'builtin' && (b.kind === 'new' || isDirty(b)))) return;
-  w.resumed = true;
+  if (!(w.resumed || w.id || w.starting || w.job || (b.kind !== 'builtin' && (b.kind === 'new' || isDirty(b))))) { w.resumed = true; w.found = wfFind(b, f, w); }
+  return w.found;
+}
+async function wfFind(b, f, w) {
   const q = wfRunBody(b, f);
   if (q.err) return;
   const r = await send('POST', '/api/tester/walkforward-match', q.body);
   if (!r.ok || !r.json || !r.json.id || w.id || w.starting) return;
   w.id = r.json.id;
-  wfPoll(w, ++w.token);
+  await wfPoll(w, ++w.token);
+  if (w.result) loadTries(f.strategy, true);                           // the list may not hold it (the newest 20 of all): count it
 }
 async function wfRun() {
   const b = buf();
@@ -3070,12 +3088,12 @@ function paintRes() {
   paintNav();
   if (!b) { el.innerHTML = '<div class="rs-empty rs-none"><h3>Backtest</h3><p>Pick a strategy, or paste one, to see how it would have done.</p></div>'; return; }
   const wfF = b.kind === 'pipe' ? null : formOf(b), T = is31(wfF) ? threeState(wfF) : null;
-  if (T) threeResume(b, wfF);
+  if (T) { threeResume(b, wfF); wfResume(b, wfF); }                  // its in-sample run, test months, and heat map + pick, if saved
   const r = T ? threeRun(b, T) : S.run && S.run.key === b.key ? S.run : null, settings = b.kind === 'pipe' ? '' : settingsHtml(b);
   let main = '', settingsDone = false;
   WFEQ = null; WFEQ2 = null;
   if (T && T.tab === 'oos') main = oosHtml(T);
-  else if (T && T.tab === 'heat') { main = heatTabHtml(wfF); wfResume(b, wfF); }
+  else if (T && T.tab === 'heat') main = heatTabHtml(wfF);
   else if (wfF && wfF.range.wf && !T) {
     const wr = wfLabState(wfF).result, sd = wfSide(wfF);
     const fx = !!(wr && wr.scheme === 'fixed') || (!wr && wfF.range.wf === X.WF_ROLL);
