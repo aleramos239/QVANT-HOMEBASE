@@ -38,7 +38,8 @@
                                           inputs: its JSON schema}], ideas: [each idea's idea.json]} -- THE SAME tool
                                           definitions every chat has (claude_mcp.blueprint_tools.SPECS)
     POST /api/tester/blueprint/run       {tool, args} -> {ok, text}: that tool run as a chat runs it (the research
-                                          toolkit bp.py as a child process; it saves in the app itself)
+                                          toolkit bp.py as a child process; it saves in the app itself). Only the
+                                          tools that read (BP_PAGE_TOOLS); any other is a 403
     GET  /api/tester/pipeline            the strategy pipeline as the Lab shows it (its Queue, Book and Guide):
                                           {runner: {running, paused}, counts: {label: n}, ideas: [the toolkit's state
                                           rows, each with the page's `label`], book: [the book cards], stages: [{n,
@@ -260,6 +261,10 @@ class _Blueprint(pipeline_tools.PipelineMixin, blueprint_tools.BlueprintMixin):
     pipeline's, for the Lab's own panels: the same code path, so the page and a chat can never disagree about a tool."""
 
 
+# what POST /blueprint/run may run: the tools that only read what is saved and start nothing (S1)
+BP_PAGE_TOOLS = ("blueprint_blocks", "blueprint_status", "blueprint_heatmap", "blueprint_mc")
+
+
 _HOST_RE = re.compile(r"^(127\.0\.0\.1|localhost)(:\d+)?$", re.IGNORECASE)
 
 
@@ -342,6 +347,9 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         tool, args = body.get("tool"), body.get("args", {})
         if set(body) - {"tool", "args"} or not isinstance(tool, str) or tool not in bp_specs or not isinstance(args, dict):
             raise HTTPException(400, "{tool: one of " + ", ".join(bp_specs) + ", args: {...}}")
+        if tool not in BP_PAGE_TOOLS:     # a page may only look: a heat map, the test months or a pick start from a chat (S1)
+            raise HTTPException(403, f"{tool} cannot be run from a page: here you can only look ("
+                                     + ", ".join(BP_PAGE_TOOLS) + "). Ask for it in a chat, in your own words.")
         if Slots().quiet():       # a quiet window of the tester: nothing is started from the page then
             raise HTTPException(409, "paused for a quiet window of the tester (tester_slots.json): run it later")
         fn = getattr(box, f"t_{tool}")
