@@ -187,8 +187,8 @@ async function toggleStrat(name, enabled) {
   else if (enabled) toast(lab ? DeskLab.refusalText(r, err) : `${N} NOT switched on — ${why}.`, 8000);          // the safe side
   else alertBar(`${N} NOT switched off — ${why}. It may still trade: switch it off again, or Kill.`);
 }
-/* A straddle's target as 1:rr of its stop (nq930). The desk refuses 09:20-09:35 ET and while the strategy has
-   orders or a position today. Returns "" when it landed, else the reason in words (the Desk skin shows it
+/* A straddle's target as 1:rr of its stop (nq930). The desk refuses it while the strategy has orders or a
+   position today. Returns "" when it landed, else the reason in words (the Desk skin shows it
    under the field). */
 async function setStratRr(name, rr, slPts) {      // rr null + slPts: change the stop only, the RR stays
   const N = stratLabel(name);

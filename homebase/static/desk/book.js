@@ -366,7 +366,7 @@ function wizResult(r) {
     : nAdd ? "Added " + nAdd + (nAdd === 1 ? " account" : " accounts")
     : rows.every(x => x.status === "exists") ? "Already on the desk" : "Nothing was added";
   const sub = !rows.length ? (r && (r.detail || r.error)) || "The desk didn't answer — check it and try again."
-    : "None of them is booked to a strategy yet — book them from the portfolio when you're ready." +
+    : "None of them is booked to a strategy yet — book them on a strategy's page when you're ready." +
       (WIZ.env === "live" ? " These are LIVE accounts." : "");
   return {title, sub, html: rows.map(x => {
     const [text, cls] = (said[x.status] || said.failed)(x);

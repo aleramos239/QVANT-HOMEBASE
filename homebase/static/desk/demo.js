@@ -130,7 +130,13 @@ function demoStatus() {
 
 async function testFire(name) {
   const r = await post("/api/test-alert", {strategy: name});
-  toast((r.result && r.result.ok ? "Dry run ok — " : "Refused — ") +
-        JSON.stringify(r.result || r)); refresh();
+  toast(testFireWords(r), 8000); refresh();
+}
+/* {sent:{upper, lower}, result:{ok, accounts}} or a refusal ({ok:false, reason} / a 404's {detail}) -> one sentence */
+function testFireWords(r) {
+  const res = (r && r.result) || r || {}, s = (r && r.sent) || {}, n = res.accounts;
+  if (!res.ok) return `Dry run refused: ${res.reason || res.detail || "no answer"}.`;
+  return `Dry run: it would have sent a buy stop at ${fmtPx(s.upper)} and a sell stop at ${fmtPx(s.lower)}` +
+    `${typeof n === "number" ? ` on ${n} account${n === 1 ? "" : "s"}` : ""}. Nothing was sent.`;
 }
 

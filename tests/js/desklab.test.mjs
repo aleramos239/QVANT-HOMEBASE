@@ -453,13 +453,14 @@ test('the #lab=<name> link is used once, and a link opened while the Desk is ope
   }
 });
 
-test('the Lab lists only read: no pointer cursor, an amount never wraps, and Accounts keeps its locked button with its caption', () => {
+test('the Lab lists only read: no pointer cursor, an amount never wraps, and Accounts says in one line how it gets accounts', () => {
   assert.match(HTML, /\.feed\.static \.feed-row\{ cursor:default; \}/);
   assert.match(HTML, /\.feed\.static \.t\{ white-space:nowrap; \}/);
   assert.match(HTML, /\.feed\.static \.t\.net\{ flex:0 0 auto; margin-left:auto; \}/);
   assert.equal((LABVIEW.match(/agroup feed static/g) || []).length, 3, 'today, days, notes: all static');
   assert.doesNotMatch(LABVIEW, /agroup feed"/);
-  assert.match(LABVIEW, /<button class="btn btn-quiet noarrow btn-sm" disabled title="\$\{esc\(DeskLab\.ACCOUNTS_CAPTION\)\}">\+ Assign an account<\/button>\s*<div class="mcap">\$\{esc\(DeskLab\.ACCOUNTS_CAPTION\)\}<\/div>/);
+  assert.match(LABVIEW, /<h2>Accounts<\/h2><div class="mcap">\$\{esc\(DeskLab\.ACCOUNTS_CAPTION\)\}<\/div>/);
+  assert.doesNotMatch(LABVIEW, /\+ Assign an account/, 'no dead button');
 });
 
 test('the Lab\'s Promote row ties its hint to a line under the group (aria-describedby), and the hint is read from the same state', () => {

@@ -235,10 +235,11 @@ test('with accounts: the other note, the account rows and the Desk\'s own + Assi
   assert.doesNotMatch(html, /Set the limits first/);
 });
 
-test('the picker is disabled with its caption until limits exist', () => {
+test('until limits exist the picker is one line that says so, not a dead button', () => {
   const t = load({ strategies: { lab_nq_orb: deskStrat({ limits: null }) } });
   const html = t.view();
-  assert.match(html, /<button class="btn btn-quiet noarrow btn-sm" disabled title="Set the limits first\. Then assign an account\.">\+ Assign an account<\/button><div class="mcap">Set the limits first\. Then assign an account\.<\/div>/);
+  assert.match(html, /<div class="mcap">Set the limits first\. Then assign an account\.<\/div>/);
+  assert.doesNotMatch(html, /\+ Assign an account/);
   assert.doesNotMatch(html, /toggleAsgMenu|pickAsg|amenu/);
   assert.match(html, /<span class="t net">—<\/span>/, 'the limits rows show a dash');
   assert.match(html, /Edit limits/);
@@ -250,7 +251,8 @@ test('read_only: "Another copy of the Desk is using the Lab strategies." and Lim
   assert.match(html, /<div class="sd-note">Another copy of the Desk is using the Lab strategies\.<\/div>/);
   assert.match(html, /openLabLimits\([^)]*\)" disabled>Edit limits/);
   assert.match(html, /removeLabStrat\([^)]*\)" disabled title/);
-  assert.match(html, /disabled title="Another copy of the Desk is using the Lab strategies\.">\+ Assign an account/);
+  assert.match(html, /<div class="mcap">Another copy of the Desk is using the Lab strategies\.<\/div>/);
+  assert.doesNotMatch(html, /\+ Assign an account/);
   assert.doesNotMatch(html, /toggleAsgMenu|pickAsg/);
   assert.match(html, /toggleStrat\(&quot;lab_nq_orb&quot;, false\)/, 'switching off is never refused');
   assert.doesNotMatch(html, /flattenStrat\([^)]*\)"[^>]*disabled/);

@@ -158,9 +158,8 @@ function labDeskView(name, s) {
     `<div class="feed-row"><span class="t">${esc(isDay(m.date) ? shortDay(m.date) : m.date)}</span><span class="h${m.ok === false ? " warn" : ""}">${esc(m.text)}</span>${m.rebuilt ? '<span class="t dim">rebuilt</span>' : ""}<span class="t net">${esc(usdS(m.net))}</span></div>`);
   const rows = book.map(a => acctRow(a.account, {qty: a.qty, strategy: name, locked: ro})).join("");
   const free = Object.keys(accts).filter(id => !book.some(a => a.account === id));
-  const cap = ro ? "" : lock.caption;
   const addForm = !Object.keys(accts).length ? `<div class="mcap">Add an account to run this strategy.</div>`
-    : lock.locked ? `<button class="btn btn-quiet noarrow btn-sm" disabled title="${esc(lock.caption)}">+ Assign an account</button>${cap ? `<div class="mcap">${esc(cap)}</div>` : ""}`
+    : lock.locked ? `<div class="mcap">${esc(lock.caption)}</div>`                // one line says how it gets accounts, no dead button
     : free.length ? `<div style="position:relative;display:inline-block;margin-top:10px">
         <button class="btn btn-quiet noarrow btn-sm" onclick="toggleAsgMenu(${jsArg(name)})" aria-haspopup="menu">+ Assign an account</button>
         <div class="amenu" id="amenu-${esc(name)}" role="menu" hidden>` +

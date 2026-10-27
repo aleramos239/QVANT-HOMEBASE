@@ -1,6 +1,6 @@
 /* ---- activity log (W4): what happened, in plain words ----
-   One sentence per journal row -- "Connected APEX…048 (login)", "Chart-trading limits set to
-   50 / 100", "NQ930 bought 3 @ 30,726.50 on …049" -- instead of `event key=value`. The raw line
+   One sentence per journal row -- "Connected APEX…048 (login)", "Chart trading turned ON",
+   "NQ930 bought 3 @ 30,726.50 on …049" -- instead of `event key=value`. The raw line
    stays one step away: the row's tooltip, a click on the row, or Raw in the section head for
    every row. An event this table doesn't know still reads as words, and a row it can't read
    falls back to them too -- never blank, never a crash. Text is escaped (it is the broker's own
@@ -69,13 +69,12 @@ const ACTIVITY = {
   },
   chart_trading_set: (r, prev) => {
     if (r.cause) return [`Chart trading switched OFF by ${r.cause === "kill" ? "Kill everything" : r.cause}`, "warn"];
-    const lim = `${r.max_order_qty} / ${r.max_position_qty}`;
     const flip = !!prev && prev.enabled !== undefined && !!prev.enabled !== !!r.enabled;
     const limits = !!prev && prev.max_order_qty != null &&
       (prev.max_order_qty !== r.max_order_qty || prev.max_position_qty !== r.max_position_qty);
     if (flip && !limits) return [`Chart trading turned ${r.enabled ? "ON" : "OFF"}`];
-    if (limits && !flip) return [`Chart-trading limits set to ${lim}`];
-    return [`Chart trading ${r.enabled ? "ON" : "OFF"} · limits ${lim}`];
+    if (limits && !flip) return [`Chart trading size limits set to ${r.max_order_qty} an order, ${r.max_position_qty} held (no longer used)`];  // old lines only
+    return [`Chart trading ${r.enabled ? "ON" : "OFF"}`];
   },
   broker_connected: (r) => [`Connected ${acctShort(r.account)}${r.mode ? ` (${r.mode})` : ""}`],
   reconnect_fell_back_to_login: (r) => [`${acctShort(r.account)}: reconnect failed, logging in again — ${actErr(r.error)}`, "warn"],

@@ -251,8 +251,7 @@ function labView(name) {
     ${labCurveHtml(w.name)}
     ${labResHtml(w.name, w.name)}
     ${notes.length ? `<div class="sec"><h2>On an account the Desk would refuse:</h2><div class="agroup feed static">${notes.join("")}</div></div>` : ""}
-    <div class="sec"><h2>Accounts</h2><button class="btn btn-quiet noarrow btn-sm" disabled title="${esc(DeskLab.ACCOUNTS_CAPTION)}">+ Assign an account</button>
-      <div class="mcap">${esc(DeskLab.ACCOUNTS_CAPTION)}</div></div>
+    <div class="sec"><h2>Accounts</h2><div class="mcap">${esc(DeskLab.ACCOUNTS_CAPTION)}</div></div>
     <div class="sd-actions">${deskMachine() === "server" ? "" : `<button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(w.name)})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>`}
       <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Off the Desk and kept. Restore it from Archive any time.">Archive</button>
       <button class="btn btn-outline btn-sm" onclick="removeDeskLab(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Takes it off the Desk. Its history is kept.">Remove from Desk</button></div>`;
@@ -277,7 +276,7 @@ function stratView(name) {
   const figs = lv && lv.trades
     ? `<div class="figs">${money}${fig("Win rate", lv.win_rate + "%")}${fig("Trades", lv.trades)}${fig("Avg per trade", usd(lv.avg_trade), "Before fees, per trade")}${fig("Avg slip", (lv.avg_slip_pts ?? "—") + " pts")}</div>`
     : `<div class="eq-empty">No live trades yet.</div>`;
-  const links = `<div class="qlinks">${s.research && s.research.rows ? `<button class="btn btn-quiet btn-sm" onclick="openRes('${name}')">Backtest metrics</button>` : ""}
+  const links = `<div class="qlinks">${s.research && s.research.rows ? `<button class="btn btn-quiet btn-sm" onclick="openRes('${name}')">Old backtest (before 3:1)</button>` : ""}
     <button class="btn btn-quiet btn-sm" onclick="openLive('${name}')">Live calendar</button>${actBtn("s:" + name)}</div>`;
   const accts = ST.accounts || {}, asg = (ST.book && ST.book[name]) || [];
   const rows = asg.map(a => acctRow(a.account, {qty: a.qty, strategy: name})).join("");

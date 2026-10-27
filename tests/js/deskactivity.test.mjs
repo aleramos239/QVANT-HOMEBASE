@@ -61,7 +61,7 @@ test('the brief\'s three examples read as sentences', () => {
     'Connected APEX…048 (login)');
   const prev = { event: 'chart_trading_set', enabled: true, max_order_qty: 10, max_position_qty: 20 };
   assert.equal(line({ event: 'chart_trading_set', enabled: true, max_order_qty: 50, max_position_qty: 100 }, prev).text,
-    'Chart-trading limits set to 50 / 100');
+    'Chart trading size limits set to 50 an order, 100 held (no longer used)');
   assert.equal(line({ event: 'entry_fill', strategy: 'nq930', account: '1234567049', side: 'Buy', fill: 30726,
     anchor: 30726, fill_vs_anchor: 0, qty_filled: 3, sibling_cancelled: true, sibling_error: null }).text,
     'NQ930 bought 3 @ 30,726 on …049');
@@ -74,7 +74,7 @@ test('chart trading: a flip, a kill and an unknown previous state each say what 
   assert.deepEqual({ ...line({ event: 'chart_trading_set', enabled: false, cause: 'kill' }) },
     { text: 'Chart trading switched OFF by Kill everything', tone: 'warn' });
   assert.equal(line({ event: 'chart_trading_set', enabled: true, max_order_qty: 5, max_position_qty: 9 }, null).text,
-    'Chart trading ON · limits 5 / 9');
+    'Chart trading ON', 'a new line has no limits half: size limits are not used');
 });
 
 test('money rows carry their prices, sizes, accounts and P&L; failures are marked', () => {
