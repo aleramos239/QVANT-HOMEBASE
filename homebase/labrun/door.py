@@ -162,7 +162,15 @@ def check_event(intents: list, state: dict, limits: dict) -> list[str | None]:
         else:
             out[n] = NOT_A_PAIR
     pairs: dict = {}                                     # a pair's ids -> its one verdict, judged at its first leg
+    gone: set = set()                                    # entry ids this event cancelled
     for n, i in enumerate(intents):
+        if i.get("op") == "cancel" and _int(i.get("id")) and i["id"] not in gone:
+            # a moved limit is a cancel then a new entry: the cancel frees the slot first (owner 2026-10-27).
+            # shortcut: the state has only a count of working entries, so any cancelled id frees one; the engine
+            # still checks each account's real round before an order leaves
+            gone.add(i["id"])
+            st["working_entries"] = max(0, st.get("working_entries", 0) - 1)
+            continue
         if i.get("op") != "entry":
             continue
         key = pair_of.get(i["id"]) if _int(i.get("id")) else None

@@ -167,13 +167,13 @@ def test_a_day_through_the_real_desk_the_child_sees_the_fills_the_engine_booked(
         assert last(day, "flat") == 1.0                                      # flat again, as the engine booked it
         (trade,) = day.summary()["trades"]
         assert (trade["side"], trade["qty"], trade["entry_px"], trade["exit_px"], trade["reason"], trade["net"]) == \
-            ("long", 1, st.entry_fill, st.exit_fill, "tp", st.pnl)
+            ("long", 1, st.entry_fill, st.exit_fill, "tp", round(st.pnl - eng.cfg.strategies[lab].fee_rt, 2))   # net, as booked
         assert len(line.bodies) == 1 and [b["seq"] for b in line.bodies] == [2]      # one request the whole day
 
         k.r.beat()                                                           # the Desk's page reads the runner's beat
         view = ld.status_view(lab)
         assert view["mode_today"] == "desk" and view["trades_today"] == 1
-        assert k.today(NAME, d=DAY)["mode"] == "desk" and k.today(NAME, d=DAY)["net"] == 200.0
+        assert k.today(NAME, d=DAY)["mode"] == "desk" and k.today(NAME, d=DAY)["net"] == trade["net"] < 200.0
     finally:
         k.r.close()                                                          # a clean stop: the Desk's day is over
         ld.close()

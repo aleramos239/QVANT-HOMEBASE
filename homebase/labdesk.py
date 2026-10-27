@@ -59,6 +59,7 @@ from . import config as config_mod
 from . import labcfg
 from .config import AppCfg, assignments
 from .contracts import point_value, tick_size
+from . import engine_lab
 from .engine_lab import GROUP_HEDGE
 from .labcfg import LAB
 from .labrun import door, fanout, intents, store
@@ -922,6 +923,25 @@ class LabDesk:
             held = self._locks[name] = (loop, asyncio.Lock())
         return held[1]
 
+    @staticmethod
+    def _filled_entries(d: dict, rows: list, cap: int) -> int:
+        """The day's trades the daily limit counts: every entry sent, less those whose rounds all ended with no fill
+        on any account (a limit cancelled unfilled is not a trade: the cap comes from the backtest's filled trades,
+        owner 2026-10-27). An entry with an unknown outcome has no round and stays counted."""
+        units: dict = {}
+        for r in rows:
+            if r.get("carried"):
+                continue
+            iid = r.get("iid") if isinstance(r.get("iid"), dict) else {}
+            key = frozenset(v for v in iid.values() if v is not None)
+            if key:
+                units.setdefault(key, []).append(r)
+        unfilled = sum(1 for rs in units.values()
+                       if all(r.get("status") == "done" and not r.get("entry_side") and not r.get("entry_qty") for r in rs))
+        if d["entries"] >= engine_lab.LAB_PLACED_CAP:
+            return max(cap, d["entries"])              # a runaway re-placer stops here, filled or not
+        return max(0, d["entries"] - unfilled)
+
     def _rows(self, name: str) -> list:
         """engine.lab_rounds: today's rounds, oldest first (a block carried from an earlier day is a row too)."""
         ask = getattr(self.engine, "lab_rounds", None)
@@ -1080,7 +1100,8 @@ class LabDesk:
         # the refusal says why in the engine's own words (the door only knows "not flat")
         unread = b["flat"] and not b["working"] and not clean
         state = {"flat": b["flat"] and clean,
-                 "working_entries": b["working"], "entries_today": d["entries"], "last_price": last,
+                 "working_entries": b["working"], "entries_today": self._filled_entries(d, rows, limits.max_trades_day),
+                 "last_price": last,
                  "now_hhmm": self.engine.now_et().strftime("%H:%M"), "prices_late": bool(ev.prices_late) or last is None}
         lim = {"max_trades_day": limits.max_trades_day, "max_qty": limits.max_qty, "max_risk_usd": limits.max_risk_usd,
                "last_entry_et": limits.last_entry_et, "session_from_et": labcfg.window(rec)[0],
@@ -1631,7 +1652,7 @@ class LabDesk:
         rows = self._rows(name)
         d = self._rec(name)
         keep = ("account", "round", "status", "date", "carried", "iid", "qty", "entry_side", "entry_qty", "entry_fill",
-                "exit_qty", "exit_fill", "exit_reason", "sl", "tp", "pnl", "clean", "entry_ms", "exit_ms", "why")
+                "exit_qty", "exit_fill", "exit_reason", "sl", "tp", "pnl", "net", "clean", "entry_ms", "exit_ms", "why")
         grp = self.engine.group_of(name)
         return {"strategy": name, "mark": labcfg.mark_of(self.cfg, name), "date": d["date"],
                 # its trades take turns over the accounts (one strategy, one trade at a time, any account), and the

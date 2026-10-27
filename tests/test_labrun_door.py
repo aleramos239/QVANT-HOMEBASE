@@ -427,3 +427,15 @@ def test_the_same_oco_sent_twice_is_not_a_pair_either():
 def test_a_separate_valid_pair_is_unaffected_by_a_bad_neighbour():
     a, b, o = straddle()
     assert check_event([a, b, o, {"op": "oco", "ids": [7, 8]}], STATE, LIMITS) == [None, None, None, NOT_A_PAIR]
+
+
+def test_a_moved_limit_cancel_then_entry_is_not_one_at_a_time():
+    # owner 2026-10-27: FVG r075's shadow refused every moved limit "One position at a time."
+    a = {**entry(), "id": 2}
+    moved = [{"op": "cancel", "id": 1}, a]
+    assert check_event(moved, {**STATE, "working_entries": 1}, {**LIMITS, "max_trades_day": 5}) == [None, None]
+    assert check_event([a], {**STATE, "working_entries": 1}, {**LIMITS, "max_trades_day": 5}) == ["One position at a time."]
+    twice = [{"op": "cancel", "id": 1}, {"op": "cancel", "id": 1}, a, {**a, "id": 3}]
+    assert check_event(twice, {**STATE, "working_entries": 2}, {**LIMITS, "max_trades_day": 5})[2:] == \
+        ["One position at a time.", "One position at a time."]
+

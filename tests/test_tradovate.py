@@ -473,3 +473,77 @@ def test_the_dead_helpers_removed_2026_10_04_are_named_nowhere_in_the_code():
     from homebase import risk, symbols
     assert risk.take_points and risk.DayBook                    # the daily rules are still re-exported
     assert symbols.resolve_contract("NQZ6") == "NQZ6" and symbols.front_month("NQ").startswith("NQ")
+
+
+# --- an OSO whose answer never came (2026-10-27: it sat at the broker 88 minutes, then filled) --------------
+BUY_MKT = OrderRequest(symbol="NQ", side="Buy", qty=5, order_type="Market",
+                       stop_price=29541.25, tp_price=29756.75, text="homebase:entry")
+
+
+def _lost_oso(tmp_path, entry_status, after_cancel, net=0, extra=()):
+    import datetime as dt
+    now = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+    orders = [{"id": 78, "accountId": 66121477, "contractId": 3267315, "timestamp": now, "action": "Buy",
+               "ordStatus": entry_status, "linkedId": 79},
+              {"id": 79, "accountId": 66121477, "contractId": 3267315, "timestamp": now, "action": "Sell",
+               "ordStatus": "Suspended", "parentId": 78, "ocoId": 80},
+              {"id": 80, "accountId": 66121477, "contractId": 3267315, "timestamp": now, "action": "Sell",
+               "ordStatus": "Suspended", "ocoId": 79}, *extra]
+
+    def answer(endpoint, query, body):
+        if endpoint == "order/list":
+            return orders
+        if endpoint == "order/item":
+            return {"id": 78, "ordStatus": after_cancel}
+        if endpoint == "position/list":
+            return [{"accountId": 66121477, "contractId": 3267315, "netPos": net}]
+        return tradovate_like(endpoint, query, body)
+    ad = mkadapter(tmp_path, answer)
+
+    async def no_answer(**kw):
+        raise asyncio.TimeoutError()
+    ad._ws.place_oso = no_answer
+    return ad, run(ad.place_bracket(BUY_MKT))
+
+
+def _cancelled(ad):
+    return [json.loads(f.split("\n", 3)[3])["orderId"] for f in ad._ws.ws.sent
+            if f.startswith("order/cancelorder")]
+
+
+def test_a_lost_unfilled_market_oso_is_found_and_cancelled(tmp_path):
+    from homebase.broker.tradovate import LOST_OSO_CANCELLED
+    from homebase.engine_lab import LabMixin
+    ad, r = _lost_oso(tmp_path, "Working", "Canceled")
+    assert not r.ok and r.error == LOST_OSO_CANCELLED
+    assert _cancelled(ad)[0] == 78
+    assert LabMixin._lab_clear_reject(r.error)          # the Desk reads it as nothing left at the broker
+
+
+def test_a_lost_oso_that_filled_is_handed_back_with_its_brackets(tmp_path):
+    ad, r = _lost_oso(tmp_path, "Filled", "Filled", net=5)
+    assert r.ok and r.order_id == "78"
+    assert (r.raw["sl_order_id"], r.raw["tp_order_id"]) == (79, 80)
+    assert _cancelled(ad) == []
+
+
+def test_a_lost_market_oso_part_filled_before_its_cancel_stays_unknown(tmp_path):
+    ad, r = _lost_oso(tmp_path, "Working", "Canceled", net=2)
+    assert not r.ok and r.error.startswith("OSO failed")
+
+
+def test_two_candidates_or_none_leave_the_outcome_unknown(tmp_path):
+    other = {"id": 90, "accountId": 66121477, "contractId": 3267315, "action": "Buy", "ordStatus": "Working",
+             "timestamp": "2099-01-01T00:00:00Z"}
+    ad, r = _lost_oso(tmp_path, "Working", "Canceled", extra=[other])
+    assert not r.ok and r.error.startswith("OSO failed: TimeoutError") and _cancelled(ad) == []
+
+    def nothing(endpoint, query, body):
+        return [] if endpoint == "order/list" else tradovate_like(endpoint, query, body)
+    ad = mkadapter(tmp_path, nothing)
+
+    async def no_answer(**kw):
+        raise asyncio.TimeoutError()
+    ad._ws.place_oso = no_answer
+    r = run(ad.place_bracket(BUY_MKT))
+    assert not r.ok and r.error.startswith("OSO failed")

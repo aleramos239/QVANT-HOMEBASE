@@ -17,6 +17,7 @@ from homebase import engine as engine_mod
 from homebase import labcfg, labdesk, trading
 from homebase.config import StrategyCfg
 from homebase.engine import DayState, Engine
+from homebase import engine_lab
 from homebase.labdesk import LabDesk, Refused, parse_event
 from homebase.labrun import door, host, store
 from homebase.server import compute_readiness
@@ -421,14 +422,30 @@ def test_prices_are_judged_by_the_desks_own_clock(tmp_path):
     assert send(d, entry(), seq=5, age_ms=29_000)["results"][0]["status"] == "working"
 
 
-def test_the_daily_limit_counts_the_desks_own_trades(tmp_path):
+def test_the_daily_limit_counts_filled_trades_not_limits_cancelled_unfilled(tmp_path):
+    # owner 2026-10-27: FVG 1R's five re-placed limits, none filled, used up its 5-trade day by 12:15
     d = mkdesk(tmp_path, limits={**LIMITS, "max_trades_day": 2})
-    for n in (1, 2):
+    for n in (1, 2, 3):                                  # three limits cancelled unfilled: no trade yet
         working(d, seq=10 * n, iid=n)
         send(d, {"op": "cancel", "id": n}, seq=10 * n + 1)
         tick(d)
-    assert d.ld._rec(LAB)["entries"] == 2
-    assert refusal(send(d, entry(3), seq=30)) == "Daily limit reached (2 trades)." and len(placed(d)) == 2
+    assert d.ld._rec(LAB)["entries"] == 3
+    for n in (4, 5):                                     # two trades that filled
+        working(d, seq=10 * n, iid=n)
+        fill_entry(d.eng, d.ads["a1"], st(d), 110.25)
+        fill_exit(d.eng, d.ads["a1"], st(d), 120.0, "tp")
+        tick(d)
+    assert refusal(send(d, entry(6), seq=60)) == "Daily limit reached (2 trades)." and len(placed(d)) == 5
+
+
+def test_a_runaway_re_placer_still_meets_a_daily_limit(tmp_path, monkeypatch):
+    monkeypatch.setattr(engine_lab, "LAB_PLACED_CAP", 3)
+    d = mkdesk(tmp_path, limits={**LIMITS, "max_trades_day": 2})
+    for n in (1, 2, 3):
+        working(d, seq=10 * n, iid=n)
+        send(d, {"op": "cancel", "id": n}, seq=10 * n + 1)
+        tick(d)
+    assert refusal(send(d, entry(4), seq=40)) == "Daily limit reached (2 trades)." and len(placed(d)) == 3
 
 
 # ---------------------------------------------------------------- C3 row 8: the size cap, the price already past
@@ -1019,7 +1036,7 @@ def test_every_change_is_published_as_that_strategys_whole_snapshot(tmp_path):
     del d.eng.groups["g1"]
     assert set(snap["rounds"][0]) == {"account", "round", "status", "date", "carried", "iid", "qty", "entry_side",
                                       "entry_qty", "entry_fill", "exit_qty", "exit_fill", "exit_reason", "sl", "tp",
-                                      "pnl", "clean", "entry_ms", "exit_ms", "why"}
+                                      "pnl", "net", "clean", "entry_ms", "exit_ms", "why"}
     fill_entry(d.eng, d.ads["a1"], st(d), 110.25)                                  # a fill: found by the 0.25 s pass
     run(d.ld._intake_tick())
     (_, snap), = drain(q)
