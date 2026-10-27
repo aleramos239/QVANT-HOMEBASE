@@ -325,9 +325,11 @@ test('desk skin: the toolbar fits at every window width from 980 px, either pane
       // the gear corner's own items: the machine chip (long or short words), the gear, the inspector button
       const short = g(/\.hb-m-long$/, 'display') === 'none';
       assert.notEqual(short, g(/\.hb-m-short$/, 'display') === 'none', `${w} px: exactly one of the machine chip's words shows`);
-      const word = chip ? W.machineWord({ machine: chip }, short) : '';
       const [il, ir] = pad(/\.hb-tb-insp$/, w, on), igap = px(g(/\.hb-tb-insp$/, 'gap'));
-      const items = il + ir + (word ? pad(/\.hb-machine$/, w, on).reduce((a, b) => a + b) + TXT[word] + igap : 0) + px(g(/#settingsBtn$/, 'width')) + igap + (ICON + pad(/\.hb-tbtn$/, w, on).reduce((a, b) => a + b));
+      // the chip keeps one fixed room whatever it shows (none, This Mac, Server): Arm and Kill never move when it appears
+      const chipW = px(g(/\.hb-machine$/, 'width'));
+      assert.ok(chipW >= pad(/\.hb-machine$/, w, on).reduce((a, b) => a + b) + Math.max(...['mac', 'server'].map((m) => TXT[W.machineWord({ machine: m }, short)])), `${w} px: the chip's room holds its widest words`);
+      const items = il + ir + chipW + igap + px(g(/#settingsBtn$/, 'width')) + igap + (ICON + pad(/\.hb-tbtn$/, w, on).reduce((a, b) => a + b));
       const zone = inspOff ? items : px(g(/\.hb-tb-insp$/, 'width'));
       const lead = px(g(/\.hb-tb-lead$/, 'width'));
       assert.ok(items <= zone, `${w} px, ${state}: the gear corner holds its own items`);

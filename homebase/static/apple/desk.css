@@ -75,6 +75,10 @@ html.hb-apple .hb-machine { flex: none; display: inline-flex; align-items: cente
 html.hb-apple .hb-machine[data-m="server"] { background: color-mix(in srgb, #007aff 15%, transparent); color: #0062cc; }
 html.hb-apple[data-theme="dark"] .hb-machine[data-m="server"] { background: color-mix(in srgb, #0a84ff 22%, transparent); color: #64b0ff; }
 html.hb-apple .hb-m-short { display: none; }
+/* the chip always holds the room of its widest words, shown or not: with the inspector shut the gear corner sizes to its items, so a
+   chip that appeared (or changed words) would slide Arm and Kill left under a Kill hold */
+html.hb-apple .hb-machine { width: 116px; box-sizing: border-box; justify-content: center; overflow: hidden; text-overflow: ellipsis; }
+html.hb-apple .hb-machine[hidden] { display: inline-flex !important; visibility: hidden; }
 html.hb-apple #themeToggle { display: none; }
 /* the page's preview-mode banner: a quiet capsule at the foot, never over the toolbar */
 html.hb-apple #demoBanner { position: fixed !important; top: auto !important; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 46 !important; padding: 4px 12px !important; border-radius: 11px;
@@ -506,5 +510,6 @@ html.hb-apple .eq-tip small { display: block; margin-top: 2px; font-size: 11px; 
   html.hb-apple .hb-rd-col { width: 104px; }
   html.hb-apple .hb-ready-word, html.hb-apple .hb-ct-long, html.hb-apple .hb-m-long { display: none; }
   html.hb-apple .hb-ct-short, html.hb-apple .hb-m-short { display: inline; }
+  html.hb-apple .hb-machine { width: 72px; }
   html.hb-apple #pgSw.hb-seg > a { min-width: 0; padding: 0 8px; }
 }
