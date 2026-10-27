@@ -28,8 +28,12 @@ html.hb-apple .bulb { width: 18px; height: 18px; border-radius: 0; opacity: 1; b
 html.hb-apple .bulb.ok { background: var(--a-label-2); }
 html.hb-apple .bulb.warn { background: var(--a-orange); -webkit-mask-image: var(--sf-shield-warn); mask-image: var(--sf-shield-warn); }
 html.hb-apple .bulb.bad { background: var(--a-red-text); -webkit-mask-image: var(--sf-shield-warn); mask-image: var(--sf-shield-warn); }
-/* readiness in words beside the shield (desk.js readyWord): "Ready", or how many checks need a look, in the shield's colour */
-html.hb-apple .hb-rd-col { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 1px; height: 36px; flex: none; }
+/* readiness in words beside the shield (desk.js readyWord): "Ready", or how many checks need a look, in the shield's colour; under
+   them, chart trading. ONE column of fixed width, right-aligned (its spare room merges with the bar's): a word or the chip coming
+   or going never moves Arm or Kill, even in a bar too narrow to hold everything. 192 holds "12 things need a look" beside the shield
+   and "Chart trading ON · 12 live accounts" (anything longer spills left, into the bar's free room); narrower, see this file's foot */
+html.hb-apple .hb-rd-col { display: flex; flex-direction: column; justify-content: center; align-items: flex-end; gap: 1px; width: 192px; height: 36px; flex: none; }
+html.hb-apple .hb-rd-top { display: flex; align-items: center; gap: 6px; height: 18px; }
 html.hb-apple .hb-ready-word { -webkit-appearance: none; appearance: none; border: 0; margin: 0; padding: 0; background: transparent; font: inherit; font-size: 13px; line-height: 16px;
   font-weight: 510; color: var(--a-label); white-space: nowrap; cursor: default; }
 html.hb-apple .hb-ready-word[data-lvl=""] { color: var(--a-label-2); font-weight: 400; }
@@ -38,6 +42,7 @@ html.hb-apple .hb-ready-word[data-lvl="bad"] { color: var(--a-red-text); }
 /* chart trading ON (desk.js chartWords), under the readiness word, armed or not: orange, never red (red is ARMED) */
 html.hb-apple .hb-ct-chip { display: inline-flex; align-items: center; height: 17px; padding: 0 7px; border-radius: var(--hb-bubble-r); white-space: nowrap; box-sizing: border-box;
   font-size: 10px; line-height: 13px; font-weight: 590; background: color-mix(in srgb, var(--a-orange) 16%, transparent); color: var(--a-orange); }
+html.hb-apple .hb-ct-short { display: none; }
 /* the pill keeps its fixed slot (nothing in the bar may move under a Kill hold); DISARMED is plain text, ARMED is solid red */
 html.hb-apple .pill-slot { display: flex; justify-content: flex-start; align-items: center; width: 84px; height: 18px; flex: none; }
 html.hb-apple #statusPill.pill { display: inline-block; border: 0; border-radius: 0; padding: 0; background: transparent; color: var(--a-label);
@@ -78,7 +83,7 @@ html.hb-apple #demoBanner { position: fixed !important; top: auto !important; bo
    cannot shrink). In order: the page title, the clock under the ARMED pill, the page switch's padding, the spare gaps. */
 @media (max-width: 1000px) { html.hb-apple .hb-tb .hb-tb-l { display: none; } html.hb-apple .hb-tb-main { padding-left: 8px; gap: 8px; } }
 @media (max-width: 940px) { html.hb-apple .hb-st-col .clock { display: none; } html.hb-apple .hb-st-col, html.hb-apple .pill-slot { width: auto; } }
-@media (max-width: 880px) { html.hb-apple #pgSw.hb-seg > a { min-width: 0; padding: 0 8px; } html.hb-apple .hb-tb-insp { gap: 4px; padding: 0 6px; } }
+@media (max-width: 880px) { html.hb-apple .hb-tb-insp { gap: 4px; padding: 0 6px; } }
 
 /* ---- sidebar: the page's own rows as a source list --------------------------------------------------------- */
 html.hb-apple .hb-side .nav, html.hb-apple .hb-side .item { -webkit-appearance: none; appearance: none; border: 0; background: transparent; display: flex; align-items: center; gap: 0;
@@ -487,10 +492,16 @@ html.hb-apple .eq-tip i { font-style: normal; color: var(--a-label-2); }
 html.hb-apple .eq-tip em { font-style: normal; font-variant-numeric: tabular-nums; }
 html.hb-apple .eq-tip em.pos { color: var(--a-green, var(--a-label)); }
 html.hb-apple .eq-tip small { display: block; margin-top: 2px; font-size: 11px; color: var(--a-label-2); }
-/* the Desk's right-hand group (status, readiness words, chart trading, Disarm, Kill) is wide: below 1800 px the centred page switcher
-   would sit under it, so it flows. Narrower, the words give way so Kill never slides under the gear: the live-account count (1360),
-   the readiness word (1270; the shield stays and opens the same checks), then the whole column (1160), leaving the bar as it was */
-@media (max-width: 1800px) { html.hb-apple .hb-tb-c { position: static; transform: none; flex: none; } }
-@media (max-width: 1360px) { html.hb-apple .hb-ct-tail { display: none; } }
-@media (max-width: 1270px) { html.hb-apple .hb-ready-word { display: none; } }
-@media (max-width: 1160px) { html.hb-apple .hb-rd-col { display: none; } }
+/* the Desk's right-hand group (the readiness column, the armed state, Disarm, Kill; 466 px) is wide: where the centred page switcher
+   would sit under it, it flows -- below 1740 px with the inspector open, below 1540 px with it closed (the gear corner is narrower).
+   At 1140 px and under, the column gives way so Kill never slides under the gear, down to the window's 980 px minimum: the readiness
+   word goes (the shield stays and opens the same checks), the chip shortens to "Chart ON · 5 live" (never without its count, never
+   hidden while chart trading is ON), and the page switch loses its padding */
+@media (max-width: 1740px) { html.hb-apple:not(.hb-insp-off) .hb-tb-c { position: static; transform: none; flex: none; } }
+@media (max-width: 1540px) { html.hb-apple .hb-tb-c { position: static; transform: none; flex: none; } }
+@media (max-width: 1140px) {
+  html.hb-apple .hb-rd-col { width: 104px; }
+  html.hb-apple .hb-ready-word, html.hb-apple .hb-ct-long { display: none; }
+  html.hb-apple .hb-ct-short { display: inline; }
+  html.hb-apple #pgSw.hb-seg > a { min-width: 0; padding: 0 8px; }
+}

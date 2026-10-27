@@ -135,6 +135,12 @@ test('desk skin: the chart-trading chip shows whenever the switch is ON, armed o
   assert.equal(words({ chart_trading: on, accounts: acc }), 'Chart trading ON · 2 live accounts', 'an offline live account still counts');
   // the Arm state plays no part (Disarm does not stop the chart page)
   for (const armed of [true, false]) assert.equal(words({ armed, status: armed ? 'armed' : 'disarmed', chart_trading: on, accounts: acc }), 'Chart trading ON · 2 live accounts');
+  // the short words a narrow window keeps: the count stays
+  const short = (st) => toolbarWords().chartWords(st, true);
+  assert.equal(short({ chart_trading: on, accounts: acc }), 'Chart ON · 2 live');
+  assert.equal(short({ chart_trading: on, accounts: { a: { env: 'live' } } }), 'Chart ON · 1 live');
+  assert.equal(short({ chart_trading: on }), 'Chart ON');
+  assert.equal(short({ chart_trading: { enabled: false }, accounts: acc }), '');
   assert.match(DESK_SKIN, /el\('span', \{ class: 'hb-ct-chip', hidden: true/, 'the chip starts hidden');
 });
 
@@ -154,6 +160,57 @@ function rrControls(setStratRr) {
   vm.runInContext(DESK_SKIN.slice(i, j + "rrCtl.btn.addEventListener('click', setRr);".length) + '\nglobalThis.R = rrCtl;', c);
   return c.R;
 }
+
+/* every rule of the Desk tab's stylesheets, in load order, with the window widths it applies at
+   (a width-free @media such as prefers-* is taken to apply at every width: the strict reading) */
+function deskRules() {
+  const out = [];
+  for (const f of [...manifest.shared.css, ...manifest.tabs.desk.css]) {
+    const css = read(f).replace(/\/\*[\s\S]*?\*\//g, '');
+    (function walk(s, lo, hi) {
+      let i = 0;
+      while (i < s.length) {
+        const open = s.indexOf('{', i);
+        if (open < 0) break;
+        let depth = 1, j = open + 1;
+        while (j < s.length && depth) { if (s[j] === '{') depth++; else if (s[j] === '}') depth--; j++; }
+        const head = s.slice(i, open).trim(), body = s.slice(open + 1, j - 1);
+        if (/^@media\b/.test(head)) {
+          const mx = head.match(/max-width:\s*(\d+)px/), mn = head.match(/min-width:\s*(\d+)px/);
+          walk(body, mn ? Math.max(lo, +mn[1]) : lo, mx ? Math.min(hi, +mx[1]) : hi);
+        } else if (!head.startsWith('@')) for (const sel of head.split(',')) out.push({ sel: sel.trim(), body, lo, hi });
+        i = j;
+      }
+    })(css, 0, Infinity);
+  }
+  return out;
+}
+
+test('desk skin: the chart-trading chip and its count never hide at any window width the app allows (980 px up), and the column never changes width with its words', () => {
+  const MIN_W = 980;   // the Mac app's window minimum (deploy/macapp main_apple.swift)
+  const rules = deskRules();
+  const on = (re, w) => rules.filter((r) => re.test(r.sel) && w >= r.lo && w <= r.hi);
+  const last = (re, w, prop) => {
+    let v = null;
+    for (const r of on(re, w)) { const m = r.body.match(new RegExp(`(?:^|;|\\s)${prop}\\s*:\\s*([^;]+)`)); if (m) v = m[1].trim(); }
+    return v;
+  };
+  // the chip, its column and every box around it: no display:none at any width the window can have
+  for (const cls of ['hb-ct-chip', 'hb-rd-col', 'hb-rd-top', 'hb-desk-status', 'hb-status', 'hb-tb-r']) {
+    const hid = rules.filter((r) => new RegExp(`\\.${cls}(?![\\w-])[^\\s]*$`).test(r.sel) && r.hi >= MIN_W && /display\s*:\s*none/.test(r.body));
+    assert.deepEqual(hid.map((r) => `${r.sel} (to ${r.hi}px)`), [], `.${cls} is never hidden from ${MIN_W} px up`);
+  }
+  for (let w = MIN_W; w <= 2400; w += 1) {
+    const long = last(/\.hb-ct-long$/, w, 'display'), short = last(/\.hb-ct-short$/, w, 'display');
+    assert.equal([long !== 'none', short !== 'none'].filter(Boolean).length, 1, `${w} px: exactly one of the chip's long / short words shows`);
+    assert.match(last(/\.hb-rd-col$/, w, 'width') || '', /^\d+px$/, `${w} px: the readiness column has a fixed width, so Arm and Kill never move`);
+  }
+  // the short words still carry the live-account count (the chip's whole point)
+  assert.match(DESK_SKIN, /if \(short\) return 'Chart ON' \+ \(n \? ' · ' \+ n \+ ' live' : ''\)/);
+  // the readiness word is what goes first in a narrow window, never the chip
+  assert.equal(last(/\.hb-ready-word$/, MIN_W, 'display'), 'none');
+  assert.notEqual(last(/\.hb-ready-word$/, 1440, 'display'), 'none');
+});
 
 test('desk skin: the stop menu no longer saves on change -- a Set button names the change and sends the same call', async () => {
   const calls = [];

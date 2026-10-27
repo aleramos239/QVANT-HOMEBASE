@@ -35,12 +35,13 @@
     if (clock) stCol.append(clock);
     // readiness in words beside the shield ("Ready" / "2 things need a look"), filled by sync(); a click opens the same System checks
     const readyBtn = el('button', { class: 'hb-ready-word', type: 'button', text: 'Checking…', onclick: () => { if (typeof window.openChecks === 'function') window.openChecks(); } });
-    // under it, chart trading when it is ON, armed or not (Disarm does not stop the chart page's orders); filled by sync()
-    const ctHead = el('span'), ctTail = el('span', { class: 'hb-ct-tail' });
-    const ctChip = el('span', { class: 'hb-ct-chip', hidden: true, title: 'The chart page can place orders, even when Disarmed. Its switch is in Settings.' }, ctHead, ctTail);
-    const rdCol = el('div', { class: 'hb-rd-col' }, readyBtn, ctChip);
+    // under it, chart trading when it is ON, armed or not (Disarm does not stop the chart page's orders); filled by sync(). Two
+    // lengths: a narrow window shows the short one ("Chart ON · 5 live"), never without the count
+    const ctLong = el('span', { class: 'hb-ct-long' }), ctShort = el('span', { class: 'hb-ct-short' });
+    const ctChip = el('span', { class: 'hb-ct-chip', hidden: true, title: 'The chart page can place orders, even when Disarmed. Its switch is in Settings.' }, ctLong, ctShort);
+    // one fixed-width column (desk.css), so a word or the chip coming or going never moves Arm or Kill
+    const rdCol = el('div', { class: 'hb-rd-col' }, el('div', { class: 'hb-rd-top' }, bulb, readyBtn), ctChip);
     const status = el('div', { class: 'hb-status hb-desk-status' });
-    if (bulb) status.append(bulb);
     status.append(rdCol, stCol);
     tb.right.append(status);
     if (arm) { arm.classList.add('hb-tbtn', 'hb-text', 'hb-arm'); tb.right.append(arm); }
@@ -233,11 +234,13 @@
       if (!n) return ['ok', 'Ready'];
       return [probs.some((c) => c.level === 'bad') ? 'bad' : 'warn', n === 1 ? '1 thing needs a look' : n + ' things need a look'];
     };
-    // chart trading as the desk has it (its chart_trading switch), whatever the Arm state; live = the accounts the page tags LIVE (env "live")
-    const chartWords = (st) => {
+    // chart trading as the desk has it (its chart_trading switch), whatever the Arm state; live = the accounts the page tags LIVE (env
+    // "live"). `short`: the words a narrow window keeps -- the count stays
+    const chartWords = (st, short) => {
       const ct = st && st.chart_trading;
       if (!ct || !ct.enabled) return '';
       const n = Object.values(st.accounts || {}).filter((a) => a && a.env === 'live').length;
+      if (short) return 'Chart ON' + (n ? ' · ' + n + ' live' : '');
       return 'Chart trading ON' + (n ? ' · ' + n + ' live account' + (n === 1 ? '' : 's') : '');
     };
     // the research block's heading, by the record's own route flag (walkforward: the 3:1 blocks), never the retired route's words
@@ -302,12 +305,9 @@
         const [lvl, txt] = readyWord(st);
         for (const n of [sum, readyBtn]) if (n.dataset.lvl !== lvl) n.dataset.lvl = lvl;
         if (readyBtn.textContent !== txt) { readyBtn.textContent = txt; readyBtn.setAttribute('aria-label', 'Readiness: ' + txt); }
-        const t = $('#hbReadyTxt');
-        if (t && t.textContent !== txt) t.textContent = txt;
-        const cw = chartWords(st), cut = cw.indexOf(' · ');      // the tail (how many live accounts) gives way first in a narrow window
-        const ch = cut < 0 ? cw : cw.slice(0, cut), ct = cut < 0 ? '' : cw.slice(cut);
-        if (ctHead.textContent !== ch) ctHead.textContent = ch;
-        if (ctTail.textContent !== ct) ctTail.textContent = ct;
+        const cw = chartWords(st), cs = chartWords(st, true);
+        if (ctLong.textContent !== cw) ctLong.textContent = cw;
+        if (ctShort.textContent !== cs) ctShort.textContent = cs;
         if (ctChip.hidden !== !cw) ctChip.hidden = !cw;
       } catch (_) { /* a repaint must never be broken by the skin */ }
       finally { syncing = false; }
