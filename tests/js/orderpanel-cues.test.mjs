@@ -148,3 +148,49 @@ test('the side tiles are just Sell / Buy -- no bid / ask, no spread -- and the s
   assert.equal(byClass(box, 'op-reason').textContent, '');
   assert.equal(send().disabled, false);
 });
+
+/* WP5 5.7 (2026-10-27): the partial take profit folds under the TP, plain words for where the stop keeps moving,
+   and the preview's look moved to Settings › Trading -- none of it changes what is sent. */
+const swOf = (label) => find(box, (e) => e.attrs.role === 'switch' && e.attrs['aria-label'] === label);
+const exitBox = (label) => { let n = swOf(label); while (n && !n.cls.has('op-exit')) n = n.parentNode; return n; };
+
+test('5.7 the partial take profit sits inside the TP box and shows while the TP (or the split itself) is on', () => {
+  OP.setRoot();
+  const tp = exitBox('Take profit'), split = exitBox('Split: part at TP1');
+  assert.ok(split.cls.has('op-split'));
+  assert.equal(split.parentNode, tp, 'folded under the take profit');
+  assert.equal(split.hidden, true, 'TP off: folded away');
+  swOf('Take profit').onclick();
+  assert.equal(split.hidden, false, 'TP on: the split can be switched on');
+  swOf('Split: part at TP1').onclick();
+  swOf('Take profit').onclick();                              // TP off with the split on: it stays, so its refusal shows
+  assert.equal(split.hidden, false);
+  assert.equal(byClass(box, 'op-reason').textContent, 'The partial take profit needs the take profit on');
+  assert.equal(send().disabled, true);
+  swOf('Split: part at TP1').onclick();
+  assert.equal(split.hidden, true);
+  assert.equal(send().disabled, false);
+});
+
+test('5.7 "Keep moving the stop when this page is closed": No / Yes over the same chart / server values', () => {
+  OP.setRoot();
+  const lab = find(box, (e) => e.cls.has('op-lab') && e.textContent === 'Keep moving the stop when this page is closed');
+  assert.ok(lab);
+  const sel = lab.parentNode.children.find((c) => c.tagName === 'SELECT');
+  assert.deepEqual(sel.options.map((o) => [o.value, o.textContent]), [['chart', 'No'], ['server', 'Yes']]);
+  assert.equal(lab.parentNode.hidden, true, 'no breakeven or trail: nothing to keep moving');
+  swOf('Breakeven').onclick();
+  assert.equal(lab.parentNode.hidden, false);
+  swOf('Breakeven').onclick();
+});
+
+test('5.7 the panel keeps only "Show the order on the chart"; its line, thickness, labels and shading are gone from it', () => {
+  OP.setRoot();
+  const show = swOf('Show the order on the chart');
+  assert.ok(show.parentNode.cls.has('op-look'), 'never greyed with Trading off');
+  for (const gone of ['Chart preview', 'Line', 'Thickness', 'Labels', 'Shading']) {
+    assert.equal(find(box, (e) => e.textContent === gone && (e.cls.has('op-lab') || e.tagName === 'SPAN')), null, `${gone} left the panel`);
+  }
+  assert.equal(typeof OP.setLook, 'function', 'Settings › Trading sets the look through the panel');
+  assert.deepEqual(Object.keys(OP.look()).sort(), ['labels', 'on', 'shade', 'style', 'width']);
+});

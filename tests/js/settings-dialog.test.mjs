@@ -335,6 +335,24 @@ test('5.8 Trading tab: the Algo row hides (with its caption) while "None" is all
     /\.set-row:has\(\.set-algo\.none\), \.set-cap:has\(\+ \.set-row \.set-algo\.none\) \{ display: none; \}/);
 });
 
+test('5.7 Trading tab: ORDER PREVIEW sets the preview look at once -- numbers stay numbers', () => {
+  const cell = makeCell('time:60');
+  cell.cfg.root = 'NQ';
+  cell.cfg.trade = { accounts: [] };
+  cell.cfg.algo = null;
+  const look = { on: true, style: 2, width: 1, shade: 12, labels: 'line' }, sets = [];
+  const { box } = openTrading(cell, { look: () => look, setLook: (k, v) => { sets.push([k, v]); look[k] = v; } });
+  assert.equal(findText(box, 'ORDER PREVIEW') != null, true);
+  const ctl = (label) => descend(box, (el) => el.attrs && el.attrs['aria-label'] === label);
+  assert.equal(ctl('Line').value, '2', 'shows the current look');
+  ctl('Line').value = '1'; ctl('Line').onchange();
+  ctl('Thickness').value = '3'; ctl('Thickness').onchange();
+  ctl('Labels').value = 'scale'; ctl('Labels').onchange();
+  assert.equal(ctl('Shading').type, 'range');
+  ctl('Shading').value = '20'; ctl('Shading').oninput();
+  assert.deepEqual(sets, [['style', 1], ['width', 3], ['labels', 'scale'], ['shade', 20]]);
+});
+
 test('Trading tab: a LIVE account needs the second click, and an unlisted one can never be ticked', () => {
   const cell = makeCell('time:60');
   cell.cfg.root = 'NQ';

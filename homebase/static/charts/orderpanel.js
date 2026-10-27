@@ -42,7 +42,7 @@ const st = {                            // the form, as typed (strings for field
   be: { on: false, unit: 'ticks', value: '' },   // auto-breakeven: the level that moves the stop to entry + 1 tick
   tr: { on: false, unit: 'ticks', value: '', after: 'fill' },
   p1: { on: false, unit: 'ticks', value: '', qty: '1' },   // partial take profit: `qty` contracts at TP1, the rest at the TP   // trailing stop: its distance; starts at the fill or after BE
-  exitsOpen: true, extraOpen: false, lookOpen: false,
+  exitsOpen: true, extraOpen: false,
 };
 /* How the order's preview looks on the chart (the user, 2026-10-18: "let me play with it"); kept in this browser. */
 const LOOK_KEY = 'hb.orderPreviewLook';
@@ -238,7 +238,8 @@ function build() {
   const exits = coll('Exits', 'exitsOpen');
   ui.exits = exits;
   ui.ex = {};
-  for (const [k, label] of [['tp', 'Take profit'], ['p1', 'Partial take profit'], ['sl', 'Stop loss'], ['be', 'Breakeven'], ['tr', 'Trailing stop']]) {
+  // 5.7 (2026-10-27): the partial take profit is folded under the take profit ("Split", shown while the TP is on)
+  for (const [k, label] of [['tp', 'Take profit'], ['p1', 'Split: part at TP1'], ['sl', 'Stop loss'], ['be', 'Breakeven'], ['tr', 'Trailing stop']]) {
     const box = mk('div', 'op-exit'), top = mk('div', 'op-swrow');
     const s = sw(label);
     s.onclick = () => { st[k].on = !st[k].on; paint(); };
@@ -288,17 +289,18 @@ function build() {
       ui.armed[k] = mk('div', 'op-armed');
       box.append(ui.armed[k]);
     }
-    exits.body.appendChild(box);
+    if (k === 'p1') { box.classList.add('op-split'); ui.ex.tp.box.append(box); } else exits.body.appendChild(box);
     ui.ex[k] = { box, sw: s, inp, sel, sub, row };
   }
 
   // where the breakeven / trailing stop run
   ui.runRow = mk('label', 'op-field');
   ui.runOn = mk('select', 'op-sel');
-  for (const [v, text] of [['chart', 'This chart'], ['server', 'The server']]) { const o = mk('option', '', text); o.value = v; ui.runOn.appendChild(o); }
+  // 5.7 (2026-10-27): plain words; the values (and so where the runner runs) are the same: no = 'chart', yes = 'server'
+  for (const [v, text] of [['chart', 'No'], ['server', 'Yes']]) { const o = mk('option', '', text); o.value = v; ui.runOn.appendChild(o); }
   ui.runOn.onchange = () => setRunOn(ui.runOn.value);
-  ui.runOn.title = 'This chart: while this page is open. The server: keeps working with the page or browser closed.';
-  ui.runRow.append(mk('span', 'op-lab', 'BE + trail run on'), ui.runOn);
+  ui.runOn.title = 'No: the breakeven and the trailing stop move while this page is open. Yes: the server keeps moving them with the page or browser closed.';
+  ui.runRow.append(mk('span', 'op-lab', 'Keep moving the stop when this page is closed'), ui.runOn);
   exits.body.appendChild(ui.runRow);
 
   // Extra settings: time in force for a resting order
@@ -313,34 +315,13 @@ function build() {
   ui.tifNote = mk('div', 'op-note');
   extra.body.append(tifRow, ui.tifNote);
 
-  // Chart preview: how the entry / TP / SL preview looks (.op-look: never greyed, it works with Trading off too)
-  const lk = coll('Chart preview', 'lookOpen');
-  lk.box.classList.add('op-look');
-  ui.look = lk;
-  const lrow = mk('div', 'op-swrow');
-  ui.lookSw = sw('Show on chart');
+  // the order's preview on the chart (.op-look: never greyed, it works with Trading off too). 5.7 (2026-10-27): its
+  // line, thickness, labels and shading moved to the chart's Settings › Trading (settings-dialog.js, host.setLook)
+  const lrow = mk('div', 'op-swrow op-look');
+  ui.lookSw = sw('Show the order on the chart');
   ui.lookSw.onclick = () => setLook('on', !look.on);
-  lrow.append(mk('span', 'op-sub', 'Show on chart'), ui.lookSw);
-  const pick = (label, key, opts, num) => {
-    const row = mk('label', 'op-field'), sel = mk('select', 'op-sel');
-    for (const [v, text] of opts) { const o = mk('option', '', text); o.value = String(v); sel.appendChild(o); }
-    sel.onchange = () => setLook(key, num ? Number(sel.value) : sel.value);
-    row.append(mk('span', 'op-lab', label), sel);
-    return { row, sel, key };
-  };
-  ui.lookSel = [
-    pick('Line', 'style', [[0, 'Solid'], [2, 'Dashed'], [1, 'Dotted']], true),
-    pick('Thickness', 'width', [[1, '1'], [2, '2'], [3, '3'], [4, '4']], true),
-    pick('Labels', 'labels', [['line', 'On the line'], ['scale', 'On the price scale']], false),
-  ];
-  const srow = mk('label', 'op-field');
-  ui.shade = mk('input');
-  ui.shade.type = 'range'; ui.shade.min = '0'; ui.shade.max = '40'; ui.shade.step = '2';
-  ui.shade.setAttribute('aria-label', 'Shading');
-  ui.shade.oninput = () => setLook('shade', Number(ui.shade.value));
-  srow.append(mk('span', 'op-lab', 'Shading'), ui.shade);
-  lk.body.append(lrow, ...ui.lookSel.map((p) => p.row), srow);
-  ui.form.append(tiles, types, fields, units, exits.box, extra.box, lk.box);
+  lrow.append(mk('span', 'op-sub', 'Show the order on the chart'), ui.lookSw);
+  ui.form.append(tiles, types, fields, units, exits.box, extra.box, lrow);
 
   // the chart's accounts (outside the greyed form: "Change" works on a chart with Trading off)
   const accts = mk('div', 'op-accts');
@@ -578,6 +559,7 @@ function paint() {
       if (!focused(ui.rrIn) && ui.rrIn.value !== now) ui.rrIn.value = now;
     }
     if (k === 'p1') {
+      e.box.hidden = !st.tp.on && !x.on;   // folded away with the TP off -- never while it is on (its error must show)
       ui.p1Row.hidden = !x.on;
       if (!focused(ui.p1Qty) && ui.p1Qty.value !== x.qty) ui.p1Qty.value = x.qty;
     }
@@ -595,10 +577,7 @@ function paint() {
 
   paintPreview(cell, c);
   paintArmed(root);
-  paintColl(ui.look);
   paintSwitch(ui.lookSw, look.on);
-  for (const p of ui.lookSel) if (p.sel.value !== String(look[p.key])) p.sel.value = String(look[p.key]);
-  if (ui.shade.value !== String(look.shade)) ui.shade.value = String(look.shade);
 
   ui.runRow.hidden = !st.be.on && !st.tr.on;
   if (ui.runOn.value !== runOn) ui.runOn.value = runOn;
@@ -624,7 +603,7 @@ function paint() {
 }
 /* The order's preview (the user, 2026-10-18): on the selected chart, an ENTRY line and the TP / SL lines where each
    would sit if the order went now (a Market's follow the last trade), labelled "TP +$500 · 100t", with a green band
-   from the entry to the TP and a red one to the SL. Its look (line, thickness, shading, where the labels go) is the panel's "Chart preview".
+   from the entry to the TP and a red one to the SL. Its look (line, thickness, shading, where the labels go): Settings › Trading.
    It stays when the panel is closed; its "Show on chart" switch hides it. */
 let pre = { series: null, lines: {}, zones: null, cell: null, hover: null };
 function paintPreview(cell, c) {
@@ -985,5 +964,5 @@ function mount(pg, container) {
   paint();
 }
 
-window.HBOrderPanel = { mount, setRoot, pickPrice, wantsPick, setVisible, startPreviewDrag, look: () => look };
+window.HBOrderPanel = { mount, setRoot, pickPrice, wantsPick, setVisible, startPreviewDrag, look: () => look, setLook };
 })();

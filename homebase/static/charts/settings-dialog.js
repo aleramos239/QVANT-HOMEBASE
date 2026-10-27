@@ -34,6 +34,8 @@ const asPrecision = (v) => (v === '' ? null : Number(v));
    dot?: colour (a colour dot before the label, no swatch), chips?: key (a multi-select of host.countries()),
    algo?: true (the chart's desk algo: host.algoChoices / host.setAlgo, not a setting),
    accounts?: true (the Trading tab's ACCOUNTS list: the chart's own accounts, not a setting),
+   look?: {key, choices?: [[value, text]], range?: [min, max, step]} (the order preview's look: host.look / host.setLook,
+     this browser's, changed at once -- Cancel does not undo it),
    pref?: {key, kind?: 'switch', min, max, note} (a viewer-wide trade preference: host.prefs / host.setPrefs),
    sound?: {kind: 'switch' | 'volume' | 'event', key?} (HBSounds, this browser's: on / volume / an event's sound),
    caption?: text (a plain note line, no control)}. */
@@ -151,6 +153,14 @@ const TABS = [
       // what "Don't ask again" turns on (2026-10-23: it had no way back): line drags, the ×, BE+1, the chart menu, the bottom panel
       { label: 'Lines, menu and bottom panel', pref: { key: 'oneClick', kind: 'switch' } },
       { caption: 'Every chart. Off: that surface asks to confirm first. "Don\'t ask again" in a confirm turns its switch on.' },
+    ]],
+    // 5.7 (2026-10-27): moved here from the order panel's "Chart preview" (HBOrderPanel's look, this browser's)
+    ['ORDER PREVIEW', [
+      { label: 'Line', look: { key: 'style', choices: [[0, 'Solid'], [2, 'Dashed'], [1, 'Dotted']] } },
+      { label: 'Thickness', look: { key: 'width', choices: [[1, '1'], [2, '2'], [3, '3'], [4, '4']] } },
+      { label: 'Labels', look: { key: 'labels', choices: [['line', 'On the line'], ['scale', 'On the price scale']] } },
+      { label: 'Shading', look: { key: 'shade', range: [0, 40, 2] } },
+      { caption: "The order panel's lines on the chart. Every chart, this browser; changed at once." },
     ]],
   ] },
   // trade sounds (the owner, 2026-10-18): this browser's, every chart, off until switched on; changed at once
@@ -847,6 +857,17 @@ function mount(box, host) {
       if (unit) ctl.append(mk('span', 'set-unit', unit));
     }
     if (r.sound) soundCtl(r, ctl);
+    if (r.look) {   // the order preview's look (HBOrderPanel): a number-valued pick keeps its number
+      const { key, choices, range } = r.look, cur = host.look ? host.look() : {}, num = !!range || typeof choices[0][0] === 'number';
+      const c = mk(range ? 'input' : 'select', range ? 'set-range' : 'set-select');
+      c.setAttribute('aria-label', r.label);
+      if (range) { c.type = 'range'; [c.min, c.max, c.step] = range.map(String); }
+      else for (const [v, text] of choices) { const o = mk('option', '', text); o.value = String(v); c.append(o); }
+      c.value = String(cur[key] ?? '');
+      const put = () => { if (host.setLook) host.setLook(key, num ? Number(c.value) : c.value); };
+      if (range) c.oninput = put; else c.onchange = put;
+      ctl.append(c);
+    }
     if (r.pref) {   // a viewer-wide trade preference (the one-click switches): every chart's, not this one's
       const { key, kind, min, max, note } = r.pref, cur = host.prefs ? host.prefs() : {};
       if (kind === 'switch') {
