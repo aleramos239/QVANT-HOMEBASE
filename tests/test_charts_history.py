@@ -261,6 +261,45 @@ def test_tick_volume_and_range_bars_are_kept_per_session_and_read_back_equal(tmp
         assert [b.wire(0.25) for b in back] == [b.wire(0.25) for b in first[name]]
 
 
+def test_tick_volume_and_range_files_rebuild_when_a_repair_lands_with_an_older_mtime(tmp_path):
+    """Before they were kept on disk these were rebuilt from the ticks on every read. A repaired day copied in with
+    its writer's OLDER mtime (shutil.copy2 / rsync -a), in the archive or in the incomplete archive beside a live
+    file, must still give the repaired bars."""
+    base = tmp_path / "ticks"
+    t1 = time.time()
+
+    def put(path, n, px):
+        write_gz(path, rows(session_ms(D, 9, 30), [px + 0.25 * (i % 9) for i in range(n)], step_ms=7_000, first_id=1 + px))
+        os.utime(path, (t1, t1))
+
+    def want(spec):
+        closed, cur = build(store.load("NQ", D).ticks, spec, 0.25)
+        return [_k(b) for b in closed + ([cur] if cur else [])]
+
+    store = TickStore(base)
+    live = base / "NQ" / "2026" / f"{D}_NQZ6.live.csv.gz"
+    put(live, 300, 1000)
+    arch = write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 9, 0), [500.0] * 50), complete=False)
+    os.utime(arch, (t1 - 10, t1 - 10))
+    specs = (BarSpec("tick", 50), BarSpec("volume", 40), BarSpec("range", 4))
+    for spec in specs:
+        assert [_k(b) for b in History(store, cache_dir=tmp_path / "cache").bars("NQ", spec, D)] == want(spec)
+    write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 8, 0), [700.0] * 120), complete=False)
+    os.utime(arch, (t1 - 3600, t1 - 3600))                 # older than both the live file and the old archive
+    for spec in specs:
+        assert [_k(b) for b in History(store, cache_dir=tmp_path / "cache").bars("NQ", spec, D)] == want(spec), spec.key
+    live.unlink()
+    arch.unlink()
+    write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 9, 30), [200.0 + i % 5 for i in range(400)]))
+    for spec in specs:                                     # the complete archive: built, then repaired with an older mtime
+        assert [_k(b) for b in History(store, cache_dir=tmp_path / "cache").bars("NQ", spec, D)] == want(spec)
+    write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 9, 30), [300.0 + i % 7 for i in range(500)]))
+    os.utime(arch, (t1 - 7200, t1 - 7200))
+    for spec in specs:
+        got = History(store, cache_dir=tmp_path / "cache").bars("NQ", spec, D)
+        assert [_k(b) for b in got] == want(spec) and got[0].o == 300.0, spec.key
+
+
 def test_the_memo_is_weighed_by_what_its_bars_hold_not_by_sessions_or_bars(tmp_path):
     """A daily bar holds a whole day's footprint: weighed as one bar, 1D / 1W charts of a few roots pinned gigabytes.
     The budget is in cells, so a session is evicted for its weight, not its count."""
