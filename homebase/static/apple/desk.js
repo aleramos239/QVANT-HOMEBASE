@@ -74,8 +74,8 @@
     const figsBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbFigs' });
     let figsSec = null;      // hidden when it has nothing: a Lab strategy's backtest is its 3:1 block below (owner 2026-10-18)
     const figsH = el('div', { class: 'hb-isec-h', text: 'Live results' });      // "Backtest" for a Lab one
-    // a Lab strategy's research (the page's own .labres blocks): its saved run on the unseen days, and the prop sim
-    const unseenH = el('div', { class: 'hb-isec-h', text: 'Unseen days (OOS)' }), unseenBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbUnseen' });
+    // a Lab strategy's research (the page's own .labres blocks): its saved run (3:1 test months, or the old record), and the prop sim
+    const unseenH = el('div', { class: 'hb-isec-h' }), unseenBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbUnseen' });
     const propH = el('div', { class: 'hb-isec-h', text: 'Prop sim' }), propBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbProp' });
     const unseenSec = el('section', { class: 'hb-isec' }, unseenH, unseenBox), propSec = el('section', { class: 'hb-isec' }, propH, propBox);
     unseenSec.hidden = propSec.hidden = true;
@@ -240,6 +240,9 @@
       const n = Object.values(st.accounts || {}).filter((a) => a && a.env === 'live').length;
       return 'Chart trading ON' + (n ? ' · ' + n + ' live account' + (n === 1 ? '' : 's') : '');
     };
+    // the research block's heading, by the record's own route flag (walkforward: the 3:1 blocks), never the retired route's words
+    const researchWord = (rec, withInSample) => !rec || typeof rec !== 'object' ? 'Results'
+      : rec.walkforward !== true ? 'Old record (before 3:1)' : withInSample ? '3:1 in-sample · test months' : '3:1 test months';
     /* ---- end toolbar words ---- */
 
     let syncing = false;
@@ -265,17 +268,20 @@
           const t = $('.sd-title', vStrat), sd = $('.sd-state b', vStrat);
           let name = '';
           try { name = (VIEW && VIEW.name) || ''; } catch (_) {}
+          const l = labbed(), dl = deskLabbed(name);
+          const grp = groupped();
           const res = $(':scope > .labres', vStrat);
           if (res) {
             const u = $('.labres-unseen', res), p = $('.labres-prop', res);
-            if (u) { unseenH.textContent = u.dataset.h || ''; unseenBox.replaceChildren(u); }
+            // its record, read only: a group's by id, a Desk Lab strategy's by its Lab name, the rest by the view's name
+            let rec = null;
+            try { rec = grp ? DESKGRES[grp.id] : DESKRES[dl ? dl.lab.name : name]; } catch (_) {}
+            if (u) { unseenH.textContent = researchWord(rec, !!$('.fh', u)); unseenBox.replaceChildren(u); }
             if (p) { propH.textContent = p.dataset.h || ''; propBox.replaceChildren(p); }
             unseenSec.dataset.for = res.dataset.for || '';
             res.remove();
           }
           unseenSec.hidden = propSec.hidden = !name || unseenSec.dataset.for !== name;      // never one strategy's research under another
-          const l = labbed(), dl = deskLabbed(name);
-          const grp = groupped();
           figsH.textContent = grp ? (figs && figs.dataset.h) || 'Combined' : l || dl ? 'Backtest' : 'Live results';
           if (grp) setupGroup(grp); else if (l) setupLab(l); else if (dl) setupDeskLab(name, dl); else setup(name);
           tb.title(t ? t.textContent : 'Strategy', sd ? sd.textContent : '');

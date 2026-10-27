@@ -92,7 +92,7 @@ function toolbarWords(ctx = {}) {
   const i = DESK_SKIN.indexOf('/* ---- toolbar words'), j = DESK_SKIN.indexOf('/* ---- end toolbar words ---- */');
   assert.ok(i >= 0 && j > i, 'the toolbar words block');
   const c = vm.createContext({ window: {}, ...ctx });
-  vm.runInContext(DESK_SKIN.slice(i, j) + '\nglobalThis.W = { machineWord, readyWord, chartWords };', c);
+  vm.runInContext(DESK_SKIN.slice(i, j) + '\nglobalThis.W = { machineWord, readyWord, chartWords, researchWord };', c);
   return c.W;
 }
 
@@ -184,4 +184,17 @@ test('desk skin: the stop menu no longer saves on change -- a Set button names t
   R.follow('7.5'); assert.equal(R.sl.value, '7.5');
   R.input.value = '2'; await R.btn.fire('click');
   assert.deepEqual([...calls[2]], ['nq930', 2]);
+});
+
+test('desk skin: the research heading names the route from the record itself -- 3:1 test months or the old record, never "OOS"', () => {
+  const { researchWord } = toolbarWords();
+  assert.equal(researchWord({ walkforward: true, unseen: {} }, false), '3:1 test months');
+  assert.equal(researchWord({ walkforward: true, unseen_state: 'pending' }, false), '3:1 test months', 'a 3:1 record still running is still the 3:1');
+  assert.equal(researchWord({ walkforward: true, build: {}, both: {} }, true), '3:1 in-sample · test months', 'with its in-sample column');
+  for (const rec of [{ unseen: {} }, { walkforward: false }, { walkforward: 'true' }, { build: {} }]) {
+    for (const cols of [false, true]) assert.equal(researchWord(rec, cols), 'Old record (before 3:1)');
+  }
+  for (const rec of [undefined, null, 'x']) assert.equal(researchWord(rec, false), 'Results', 'not read yet: no route claimed');
+  assert.doesNotMatch(DESK_SKIN, /OOS|Unseen days/, 'the retired route\'s words are gone from the skin');
+  assert.match(DESK_SKIN, /researchWord\(rec, !!\$\('\.fh', u\)\)/, 'the heading comes from the record, not the page\'s old title');
 });
