@@ -198,16 +198,16 @@ def test_the_desk_serves_the_page_uncached_and_every_desk_script_it_names(tmp_pa
 # or a fresh page can run with yesterday's code. Edited a desk file? Bump its ?v= in index.html, then its pin here (both).
 DESK_PINS = {
     "desk/core.js": (2, "c9e776b37ff75980"),
-    "desk/topbar.js": (1, "e5e2bdd22c0b1724"),
-    "desk/activity.js": (1, "3e658602440279d7"),
+    "desk/topbar.js": (2, "c145e30016ed1fed"),
+    "desk/activity.js": (2, "ff48aa90960a3c75"),
     "desk/views.js": (1, "528026221c807278"),
-    "desk/groups.js": (1, "67632f20ce311dc5"),
-    "desk/strategy.js": (2, "48e303566eb466af"),
-    "desk/labdesk.js": (2, "f2df8adef513f954"),
-    "desk/demo.js": (1, "80281fdd8c66654c"),
-    "desk/book.js": (1, "fbeb323fd3fc4e00"),
-    "desk/settings.js": (1, "428b206bb8e6f8ec"),
-    "desk/popups.js": (1, "8a0b647ac269ac85"),
+    "desk/groups.js": (2, "7dbb54c3b3103adc"),
+    "desk/strategy.js": (3, "117a4e727a803b0c"),
+    "desk/labdesk.js": (3, "772158bd52b9ac93"),
+    "desk/demo.js": (2, "ced116ced23a333f"),
+    "desk/book.js": (2, "9f92082a047d2333"),
+    "desk/settings.js": (2, "79d5b55eff206656"),
+    "desk/popups.js": (2, "a2a79ed80d5dce10"),
     "desk/start.js": (1, "5b20467b07f10f65"),
 }
 
