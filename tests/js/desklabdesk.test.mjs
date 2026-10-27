@@ -239,6 +239,20 @@ test('WP1.15 a change no longer in force, or a group row off its group page, has
   assert.deepEqual(plain(g.map((x) => [x.text, !!x.back])), [['Size $500 at risk a trade → $750 at risk a trade', false], ['Account cycle ON · $500 at risk a trade', false]]);
 });
 
+test('WP1.15 an open page re-reads its changes at most once a minute', async () => {
+  const t = load(), urls = [];
+  t.ctx.fetch = async (u) => { urls.push(u); return { ok: true, json: async () => ({ events: [] }) }; };
+  t.api.deskChangesHtml('s:nq930');
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(urls, ['/api/journal?days=7&limit=2000&strategy=nq930']);
+  vm.runInContext('CHG["s:nq930"].at = Date.now() - 59000', t.ctx);
+  t.api.deskChangesHtml('s:nq930');
+  assert.equal(urls.length, 1, '59 s later: not yet');
+  vm.runInContext('CHG["s:nq930"].at = Date.now() - 61000', t.ctx);
+  t.api.deskChangesHtml('s:nq930');
+  assert.equal(urls.length, 2, 'a minute later: once more');
+});
+
 // ---- WP1.14 the Setup summary --------------------------------------------------------------------------------------------
 const setupOf = (html) => { const i = html.indexOf('<div class="sec setup">'); assert.ok(i >= 0, 'a Setup block'); return html.slice(i, html.indexOf('</div></div>', i) + 12); };
 const setupRow = (html, k) => (new RegExp(`<span class="t">${k}</span><span class="h">([^<]*)</span>`).exec(setupOf(html)) || [])[1];

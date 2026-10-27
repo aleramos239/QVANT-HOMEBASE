@@ -381,7 +381,7 @@ let CHG = {};                                       // who -> {rows (the change 
 const CHG_EVENTS = ["lab_limits_set", "lab_settings_set", "strategy_rr_changed", "book_updated", "group_set"];
 async function loadDeskChanges(who, force) {
   const c = CHG[who] || (CHG[who] = {rows: null, at: 0, busy: false});
-  if (DEMO || c.busy || (!force && Date.now() - c.at < 30000)) return;
+  if (DEMO || c.busy || (!force && Date.now() - c.at < 60000)) return;      // at most once a minute
   c.busy = true;
   try {
     const r = await fetch(`/api/journal?days=7&limit=2000&${who.startsWith("g:") ? "group" : "strategy"}=${encodeURIComponent(who.slice(2))}`);
