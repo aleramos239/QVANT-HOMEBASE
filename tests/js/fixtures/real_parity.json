@@ -1,0 +1,3639 @@
+{
+ "made_by": "tools/real_parity_fixture.py",
+ "real_sha256": "0e9de6b8c9c98f46f6cb0b7ef985e2440650526e0fe140f1e930a9f5d612f971",
+ "constants": {
+  "MIN_TRADES_IS": 200,
+  "MIN_TRADES_OOS": 60,
+  "MIN_YEARS_GREEN": 0.6666666666666666,
+  "MAX_BEST_YEAR": 0.5,
+  "MIN_BOXES_PROFIT": 0.6,
+  "T_BAR": 2.0,
+  "T_PER_TRY": 0.25
+ },
+ "cases": [
+  {
+   "name": "no table yet",
+   "s": {
+    "is": [],
+    "lock": null,
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": null,
+     "said": "0 of 0 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "picked box",
+     "ok": null,
+     "said": "not picked yet: the owner picks a box, then the other lines are read"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, the in-sample table"
+   }
+  },
+  {
+   "name": "table, no pick",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": null,
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "picked box",
+     "ok": null,
+     "said": "not picked yet: the owner picks a box, then the other lines are read"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, your pick"
+   }
+  },
+  {
+   "name": "table, most boxes lose, no pick",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": null,
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": false,
+     "said": "1 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "picked box",
+     "ok": null,
+     "said": "not picked yet: the owner picks a box, then the other lines are read"
+    }
+   ],
+   "verdict": {
+    "word": "LUCK",
+    "why": "1 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+   }
+  },
+  {
+   "name": "a box with no numbers is left out",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 9,
+      "net": null,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": null,
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "picked box",
+     "ok": null,
+     "said": "not picked yet: the owner picks a box, then the other lines are read"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, your pick"
+   }
+  },
+  {
+   "name": "a pick that names no box in the table",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 99
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "picked box",
+     "ok": null,
+     "said": "not picked yet: the owner picks a box, then the other lines are read"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, your pick"
+   }
+  },
+  {
+   "name": "all pass, worse fills not on file, no test months",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": null,
+     "said": "worse-fills run not on file"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, worse fills"
+   }
+  },
+  {
+   "name": "all six pass",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": {
+     "record": {
+      "net": 900.0,
+      "trades": 80
+     }
+    }
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": true,
+     "said": "80 trades (need 60+), net 900 (need above 0, same direction as in-sample 5,000)"
+    }
+   ],
+   "verdict": {
+    "word": "REAL",
+    "why": "all six lines pass"
+   }
+  },
+  {
+   "name": "all six pass but the tries count is cut",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 150.0,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": {
+     "record": {
+      "net": 900.0,
+      "trades": 80
+     }
+    }
+   },
+   "tries": 500,
+   "cut": true,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 150.0 in-sample (need 126.75+ after 500 tries), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": true,
+     "said": "80 trades (need 60+), net 900 (need above 0, same direction as in-sample 5,000)"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, a full count of tries"
+   }
+  },
+  {
+   "name": "a cut count still fails a low t",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": {
+     "record": {
+      "net": 900.0,
+      "trades": 80
+     }
+    }
+   },
+   "tries": 500,
+   "cut": true,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": false,
+     "said": "t 3.1 in-sample (need 126.75+ after 500 tries), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": true,
+     "said": "80 trades (need 60+), net 900 (need above 0, same direction as in-sample 5,000)"
+    }
+   ],
+   "verdict": {
+    "word": "LUCK",
+    "why": "t 3.1 in-sample (need 126.75+ after 500 tries), net 5,000, beats 88% of random entries"
+   }
+  },
+  {
+   "name": "too few in-sample trades",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 199,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": {
+     "record": {
+      "net": 900.0,
+      "trades": 80
+     }
+    }
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": false,
+     "said": "199 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": true,
+     "said": "80 trades (need 60+), net 900 (need above 0, same direction as in-sample 5,000)"
+    }
+   ],
+   "verdict": {
+    "word": "LUCK",
+    "why": "199 in-sample trades (need 200+)"
+   }
+  },
+  {
+   "name": "200 trades is enough",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 200,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": {
+     "record": {
+      "net": 900.0,
+      "trades": 80
+     }
+    }
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "200 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": true,
+     "said": "80 trades (need 60+), net 900 (need above 0, same direction as in-sample 5,000)"
+    }
+   ],
+   "verdict": {
+    "word": "REAL",
+    "why": "all six lines pass"
+   }
+  },
+  {
+   "name": "t not on file",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": null,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": false,
+     "said": "t None in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "LUCK",
+    "why": "t None in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+   }
+  },
+  {
+   "name": "t under the bar after 4 tries",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 2.7,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 4,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": false,
+     "said": "t 2.7 in-sample (need 2.75+ after 4 tries), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "LUCK",
+    "why": "t 2.7 in-sample (need 2.75+ after 4 tries), net 5,000, beats 88% of random entries"
+   }
+  },
+  {
+   "name": "t on the bar after 4 tries",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 2.75,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": {
+     "record": {
+      "net": 900.0,
+      "trades": 80
+     }
+    }
+   },
+   "tries": 4,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 2.75 in-sample (need 2.75+ after 4 tries), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": true,
+     "said": "80 trades (need 60+), net 900 (need above 0, same direction as in-sample 5,000)"
+    }
+   ],
+   "verdict": {
+    "word": "REAL",
+    "why": "all six lines pass"
+   }
+  },
+  {
+   "name": "t rounds half to even (2.125)",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 2.125,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 2.12 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, the test months"
+   }
+  },
+  {
+   "name": "t 2.675 rounds down (binary)",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 2.675,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 2.67 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, the test months"
+   }
+  },
+  {
+   "name": "t 2.0 prints 2.0",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 2.0,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 2,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": false,
+     "said": "t 2.0 in-sample (need 2.25+ after 2 tries), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "LUCK",
+    "why": "t 2.0 in-sample (need 2.25+ after 2 tries), net 5,000, beats 88% of random entries"
+   }
+  },
+  {
+   "name": "a tiny negative t prints -0.0",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": -0.001,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": false,
+     "said": "t -0.0 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "LUCK",
+    "why": "t -0.0 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+   }
+  },
+  {
+   "name": "0 tries counts as 1",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 0,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 0 tries), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, the test months"
+   }
+  },
+  {
+   "name": "good t but a losing box",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": -0.4,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": false,
+     "said": "2 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": false,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net -0, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "LUCK",
+    "why": "2 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+   }
+  },
+  {
+   "name": "losing box, winning test months = the other way",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": -120.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": {
+     "record": {
+      "net": 900.0,
+      "trades": 80
+     }
+    }
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": false,
+     "said": "2 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": false,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net -120, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": false,
+     "said": "80 trades (need 60+), net 900 (need above 0, same direction as in-sample -120)"
+    }
+   ],
+   "verdict": {
+    "word": "FAKE",
+    "why": "80 trades (need 60+), net 900 (need above 0, same direction as in-sample -120)"
+   }
+  },
+  {
+   "name": "no years",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 0,
+      "years_green": 0,
+      "best_year_share": null,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": false,
+     "said": "0 of 0 years green (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "LUCK",
+    "why": "0 of 0 years green (need 67% green, no year over 50%)"
+   }
+  },
+  {
+   "name": "4 of 6 years green is enough",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 6,
+      "years_green": 4,
+      "best_year_share": 0.125,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 6 years green, best year 12% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, the test months"
+   }
+  },
+  {
+   "name": "3 of 5 years green is not",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 3,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": false,
+     "said": "3 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "LUCK",
+    "why": "3 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+   }
+  },
+  {
+   "name": "best year exactly half",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.5,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 50% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, the test months"
+   }
+  },
+  {
+   "name": "best year over half (62.5% prints 62%)",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.625,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": false,
+     "said": "4 of 5 years green, best year 62% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "LUCK",
+    "why": "4 of 5 years green, best year 62% of the net (need 67% green, no year over 50%)"
+   }
+  },
+  {
+   "name": "best year share not known",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": null,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": false,
+     "said": "4 of 5 years green (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "LUCK",
+    "why": "4 of 5 years green (need 67% green, no year over 50%)"
+   }
+  },
+  {
+   "name": "worse fills lose",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": -10.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": {
+     "record": {
+      "net": 900.0,
+      "trades": 80
+     }
+    }
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": false,
+     "said": "net -10 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": true,
+     "said": "80 trades (need 60+), net 900 (need above 0, same direction as in-sample 5,000)"
+    }
+   ],
+   "verdict": {
+    "word": "LUCK",
+    "why": "net -10 with worse fills (need above 0)"
+   }
+  },
+  {
+   "name": "worse fills exactly 0",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 0.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": false,
+     "said": "net 0 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "LUCK",
+    "why": "net 0 with worse fills (need above 0)"
+   }
+  },
+  {
+   "name": "worse fills 1234.5 prints 1,234",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1234.5,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,234 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, the test months"
+   }
+  },
+  {
+   "name": "worse fills 1235.5 prints 1,236",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1235.5,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,236 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, the test months"
+   }
+  },
+  {
+   "name": "beats 84.5% prints 84%",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.845
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 84% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, the test months"
+   }
+  },
+  {
+   "name": "a read that is used, no record",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": {
+     "state": "used",
+     "claim": {}
+    }
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, the test months"
+   }
+  },
+  {
+   "name": "test months thin (59 trades)",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": {
+     "record": {
+      "net": 900.0,
+      "trades": 59
+     }
+    }
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": false,
+     "said": "59 trades (need 60+), net 900 (need above 0, same direction as in-sample 5,000)"
+    }
+   ],
+   "verdict": {
+    "word": "LUCK",
+    "why": "59 trades (need 60+), net 900 (need above 0, same direction as in-sample 5,000)"
+   }
+  },
+  {
+   "name": "test months 60 trades is enough",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": {
+     "record": {
+      "net": 900.0,
+      "trades": 60
+     }
+    }
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": true,
+     "said": "60 trades (need 60+), net 900 (need above 0, same direction as in-sample 5,000)"
+    }
+   ],
+   "verdict": {
+    "word": "REAL",
+    "why": "all six lines pass"
+   }
+  },
+  {
+   "name": "test months lose",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": {
+     "record": {
+      "net": -5.0,
+      "trades": 80
+     }
+    }
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": false,
+     "said": "80 trades (need 60+), net -5 (need above 0, same direction as in-sample 5,000)"
+    }
+   ],
+   "verdict": {
+    "word": "FAKE",
+    "why": "80 trades (need 60+), net -5 (need above 0, same direction as in-sample 5,000)"
+   }
+  },
+  {
+   "name": "test months flat",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": {
+     "record": {
+      "net": 0.0,
+      "trades": 80
+     }
+    }
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": false,
+     "said": "80 trades (need 60+), net 0 (need above 0, same direction as in-sample 5,000)"
+    }
+   ],
+   "verdict": {
+    "word": "FAKE",
+    "why": "80 trades (need 60+), net 0 (need above 0, same direction as in-sample 5,000)"
+   }
+  },
+  {
+   "name": "big nets print with commas, half to even",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 1234567.5,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": {
+     "record": {
+      "net": 2.5,
+      "trades": 80
+     }
+    }
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 4 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 1,234,568, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": true,
+     "said": "80 trades (need 60+), net 2 (need above 0, same direction as in-sample 1,234,568)"
+    }
+   ],
+   "verdict": {
+    "word": "REAL",
+    "why": "all six lines pass"
+   }
+  },
+  {
+   "name": "60% of the boxes exactly",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": 200.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 3,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 4,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": {
+     "box": 0
+    },
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "3 of 5 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "trades",
+     "ok": true,
+     "said": "250 in-sample trades (need 200+)"
+    },
+    {
+     "line": "luck",
+     "ok": true,
+     "said": "t 3.1 in-sample (need 2+ after 1 try), net 5,000, beats 88% of random entries"
+    },
+    {
+     "line": "years",
+     "ok": true,
+     "said": "4 of 5 years green, best year 30% of the net (need 67% green, no year over 50%)"
+    },
+    {
+     "line": "worse fills",
+     "ok": true,
+     "said": "net 1,200 with worse fills (need above 0)"
+    },
+    {
+     "line": "test months",
+     "ok": null,
+     "said": "not run: only when the owner says so"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, the test months"
+   }
+  },
+  {
+   "name": "2 of 3 boxes made money",
+   "s": {
+    "is": [
+     {
+      "box": 0,
+      "net": 5000.0,
+      "trades": 250,
+      "t_stat": 3.1,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": 1200.0,
+      "beats_random": 0.875
+     },
+     {
+      "box": 1,
+      "net": 100.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     },
+     {
+      "box": 2,
+      "net": -50.0,
+      "trades": 250,
+      "t_stat": 2.5,
+      "years_n": 5,
+      "years_green": 4,
+      "best_year_share": 0.3,
+      "worse_fills_net": null,
+      "beats_random": null
+     }
+    ],
+    "lock": null,
+    "oos": null
+   },
+   "tries": 1,
+   "cut": false,
+   "lines": [
+    {
+     "line": "boxes",
+     "ok": true,
+     "said": "2 of 3 boxes made money in-sample (need 60%): the average of the boxes, not the best"
+    },
+    {
+     "line": "picked box",
+     "ok": null,
+     "said": "not picked yet: the owner picks a box, then the other lines are read"
+    }
+   ],
+   "verdict": {
+    "word": "NOT YET",
+    "why": "next, your pick"
+   }
+  }
+ ]
+}
