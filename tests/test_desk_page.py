@@ -197,17 +197,17 @@ def test_the_desk_serves_the_page_uncached_and_every_desk_script_it_names(tmp_pa
 # Each desk/*.js is cached by the browser under its ?v= (no cache-control on /static), so a changed file must get a new ?v=
 # or a fresh page can run with yesterday's code. Edited a desk file? Bump its ?v= in index.html, then its pin here (both).
 DESK_PINS = {
-    "desk/core.js": (2, "c9e776b37ff75980"),
+    "desk/core.js": (3, "be75212d4e9da719"),
     "desk/topbar.js": (2, "c145e30016ed1fed"),
-    "desk/activity.js": (2, "ff48aa90960a3c75"),
+    "desk/activity.js": (3, "dd6c3b9a787c947f"),
     "desk/views.js": (1, "528026221c807278"),
-    "desk/groups.js": (2, "7dbb54c3b3103adc"),
-    "desk/strategy.js": (3, "117a4e727a803b0c"),
-    "desk/labdesk.js": (3, "772158bd52b9ac93"),
+    "desk/groups.js": (3, "c8842f33fb357033"),
+    "desk/strategy.js": (4, "da5858245bd5a0fb"),
+    "desk/labdesk.js": (4, "5769197e4a4dd26c"),
     "desk/demo.js": (2, "ced116ced23a333f"),
-    "desk/book.js": (2, "9f92082a047d2333"),
-    "desk/settings.js": (2, "79d5b55eff206656"),
-    "desk/popups.js": (2, "a2a79ed80d5dce10"),
+    "desk/book.js": (3, "f33faef1db142362"),
+    "desk/settings.js": (3, "6e55321cbe9503ce"),
+    "desk/popups.js": (3, "d7d287520e1471a9"),
     "desk/start.js": (1, "5b20467b07f10f65"),
 }
 
