@@ -108,28 +108,66 @@ function groupView(id) {
 function cycleMembers(g) {
   return (g.members || []).filter(m => ST.strategies[m] && ST.strategies[m].cfg.kind === "lab");
 }
+/* Risk, Most and the ticks save only on the card's one Save button, which reads old → new ("Save: Risk $1,000 → $1,500 ·
+   +…026"). What is typed or ticked but not saved is kept here, per group, so a repaint never wipes it. */
+let CYC_DRAFT = {};
+const cycNum = (s) => Number(String(s).replace(/[$,\s]/g, ""));   // "$1,500" -> 1500; the one parse for the body and the Save button
+const cycUsd = (v) => Number.isFinite(v) ? "$" + v.toLocaleString("en-US") : "?";
+const cycleEnvWord = (a) => !isDemoAcct(a) ? "LIVE" : ((((ST && ST.accounts) || {})[a] || {}).env === "paper" ? "PAPER" : "DEMO");
+/* What a save would change, against what the desk has now (no cycle yet: the card's defaults, $1,000 and 17, no account).
+   up: risk or Most goes up -- or risk goes to 0 ("each strategy's own size"), which may be bigger, so it counts as up. */
+function cycleDiff(cyc, nw) {
+  const old = cyc ? {risk: cyc.risk_usd, minis: cyc.max_minis, accounts: cyc.accounts || []} : {risk: 1000, minis: 17, accounts: []};
+  const added = nw.accounts.filter(a => !old.accounts.includes(a)), gone = old.accounts.filter(a => !nw.accounts.includes(a));
+  const parts = [];
+  if (nw.risk_usd !== old.risk) parts.push(`Risk ${cycUsd(old.risk)} → ${cycUsd(nw.risk_usd)}`);
+  if (nw.max_minis !== old.minis) parts.push(`Most ${old.minis} → ${Number.isFinite(nw.max_minis) ? nw.max_minis : "?"}`);
+  for (const a of added) parts.push("+" + acctShort(a));
+  for (const a of gone) parts.push("−" + acctShort(a));
+  const up = !(nw.risk_usd <= old.risk) || (old.risk > 0 && nw.risk_usd === 0) || !(nw.max_minis <= old.minis);
+  return {parts, up, liveIn: added.filter(a => !isDemoAcct(a))};
+}
+const cycleDraftBody = (dr) => ({risk_usd: cycNum(dr.risk), max_minis: Math.round(cycNum(dr.minis)),
+                                 accounts: dr.accounts.filter(a => a in ((ST && ST.accounts) || {}))});   // as cycleBody reads the ticks
+function cycleSaveHtml(id, cyc, nw) {
+  const d = nw ? cycleDiff(cyc, nw) : {parts: []};
+  return d.parts.length ? `<div class="sd-actions"><button class="btn btn-default btn-sm" onclick="FREEZE=false;saveCycle(${jsArg(id)})">Save: ${esc(d.parts.join(" · "))}</button></div>` : "";
+}
+/* A keystroke or a tick: keep it as the draft and show (or hide) the Save button in place -- the inputs are never redrawn. */
+function cycleEdit(id) {
+  const root = document.querySelector("#viewStrat");
+  if (!root) return;
+  const raw = (sel) => { const el = root.querySelector(sel); return el ? String(el.value) : ""; };
+  const b = cycleBody(id), cyc = ((ST && ST.groups) || {})[id] || null;
+  if (cycleDiff(cyc, b).parts.length) CYC_DRAFT[id] = {risk: raw(".cyc-risk"), minis: raw(".cyc-minis"), accounts: b.accounts};
+  else delete CYC_DRAFT[id];
+  const slot = root.querySelector(".cyc-save");
+  if (slot) slot.innerHTML = cycleSaveHtml(id, cyc, b);
+}
 function cycleHtml(g) {
-  const cyc = ((ST && ST.groups) || {})[g.id] || null, mem = cycleMembers(g);
+  const cyc = ((ST && ST.groups) || {})[g.id] || null, mem = cycleMembers(g), dr = CYC_DRAFT[g.id] || null;
   if (!mem.length && !cyc) return `<div class="sec"><h2>Account cycle</h2><div class="mcap">Put this group's strategies in it first
     (Manage groups): then tick the accounts here and switch the cycle on.</div></div>`;
-  const on = !!(cyc && cyc.on), chosen = new Set(cyc ? cyc.accounts : []);
+  const on = !!(cyc && cyc.on), chosen = new Set(dr ? dr.accounts : cyc ? cyc.accounts : []);
+  const tagCls = {LIVE: "tag-live", PAPER: "tag-paper", DEMO: "tag"};
   const boxes = Object.keys(ST.accounts || {}).map(a => `<label class="feed-row" style="cursor:pointer">
       <span class="h"><input type="checkbox" class="cyc-acct" data-acct="${esc(a)}" ${chosen.has(a) ? "checked" : ""}
-        onchange="saveCycle(${jsArg(g.id)})"> ${esc(acctShort(a))}${isDemoAcct(a) ? ' <span class="dim">· paper/demo</span>' : ""}</span></label>`).join("");
+        onchange="cycleEdit(${jsArg(g.id)})"> ${esc(acctShort(a))} <span class="${tagCls[cycleEnvWord(a)]}">${cycleEnvWord(a)}</span></span></label>`).join("");
   const missing = cyc ? cyc.accounts.map(a => [a, mem.filter(m => !((ST.book || {})[m] || []).some(r => r.account === a)).length])
       .filter(x => x[1]).map(([a, n]) => `${acctShort(a)}: ${n} of ${mem.length} strategies not booked`) : [];
   const out = cyc ? cyc.members.filter(m => !mem.includes(m)) : [], add = cyc ? mem.filter(m => !cyc.members.includes(m)) : [];
   const num = (cls, v, ph) => `<input class="${cls}" type="text" inputmode="decimal" autocomplete="off" value="${esc(String(v))}"
-      placeholder="${ph}" style="width:72px;max-width:100%;text-align:right" onfocus="FREEZE=true" onblur="FREEZE=false" onchange="FREEZE=false;saveCycle(${jsArg(g.id)})">`;
+      placeholder="${ph}" style="width:72px;max-width:100%;text-align:right" onfocus="FREEZE=true" onblur="FREEZE=false" oninput="cycleEdit(${jsArg(g.id)})">`;
   return `<div class="sec"><h2>Account cycle</h2><div class="agroup feed static">
     <div class="feed-row"><span class="h">Take turns across these accounts</span>
       <button class="switch" role="switch" aria-label="Account cycle" aria-checked="${on}"
         title="${on ? "ON — each trade goes to the next account below" : "OFF — each strategy trades its own booked accounts"}"
         onclick="toggleCycle(${jsArg(g.id)})"></button></div>
     ${on && cyc.next ? `<div class="feed-row"><span class="h">Next account: ${esc(acctShort(cyc.next))}</span></div>` : ""}
-    <div class="feed-row"><span class="h">Risk per trade ($)</span><span class="t">${num("cyc-risk", cyc ? cyc.risk_usd : 1000, "1000")}</span></div>
-    <div class="feed-row"><span class="h">Most per trade (full contracts)</span><span class="t">${num("cyc-minis", cyc ? cyc.max_minis : 17, "17")}</span></div>
+    <div class="feed-row"><span class="h">Risk per trade ($)</span><span class="t">${num("cyc-risk", dr ? dr.risk : cyc ? cyc.risk_usd : 1000, "1000")}</span></div>
+    <div class="feed-row"><span class="h">Most per trade (full contracts)</span><span class="t">${num("cyc-minis", dr ? dr.minis : cyc ? cyc.max_minis : 17, "17")}</span></div>
     ${boxes}</div>
+    <div class="cyc-save">${dr ? cycleSaveHtml(g.id, cyc, cycleDraftBody(dr)) : ""}</div>
     <div class="mcap">One trade goes to one account, the next ticked one that is free. A trade the opposite way to one open on
       another of these accounts is skipped. Risk 0 = each strategy's own size.</div>
     ${cyc && cyc.outside && Object.keys(cyc.outside).length ? `<div class="mcap warn">${esc(Object.entries(cyc.outside).map(([m, as]) =>
@@ -182,18 +220,30 @@ async function bookCycle(id) {
 }
 function cycleBody(id) {
   const g = groupOf(id), root = document.querySelector("#viewStrat");
-  const val = (sel, d) => { const el = root && root.querySelector(sel); return el ? Number(String(el.value).replace(/[$,\s]/g, "")) : d; };
+  const val = (sel, d) => { const el = root && root.querySelector(sel); return el ? cycNum(el.value) : d; };
   return {id, name: g ? g.name : id, members: g ? cycleMembers(g) : [],
           accounts: [...(root ? root.querySelectorAll(".cyc-acct") : [])].filter(b => b.checked).map(b => b.dataset.acct),
           risk_usd: val(".cyc-risk", 0), max_minis: Math.round(val(".cyc-minis", 17))};
 }
+/* The card's Save (no `extra`) asks first ONLY while the cycle is ON on a LIVE account and the change sizes up (risk or Most
+   goes up) or ticks a LIVE account in. Lowering, unticking and every demo/paper-only cycle save at once. The switch
+   (setCycle, with `extra`) keeps its own questions. */
 async function saveCycle(id, extra) {
   const body = {...cycleBody(id), ...(extra || {})};
+  const cyc = ((ST && ST.groups) || {})[id] || null;
+  if (!extra && cyc && cyc.on) {
+    const d = cycleDiff(cyc, body), live = body.accounts.filter(a => !isDemoAcct(a)), where = machineWords();
+    if (live.length && (d.up || d.liveIn.length) && !await confirmDlg("Change the LIVE account cycle?",
+        `${d.parts.join(" · ")}.${d.liveIn.length ? ` LIVE account${d.liveIn.length === 1 ? "" : "s"} ticked in: ${d.liveIn.map(acctShort).join(", ")}.` : ""}` +
+        ` The cycle is ON across ${live.length} LIVE account${live.length === 1 ? "" : "s"}${where ? " " + where : ""}: the next trade uses this.`,
+        "Save", false)) { refresh(); return false; }
+  }
   let r, err = null;
   try { r = await post("/api/groups", body); } catch (e) { err = e || new Error("no answer"); }
+  const why = DEMO ? null : answerWhy(r, err);
+  if (why === "") delete CYC_DRAFT[id];             // saved: the card shows the desk's values again
   refresh();
   if (DEMO) return false;
-  const why = answerWhy(r, err);
   if (why) toast(`Account cycle NOT changed — ${why}.`, 8000);
   return !why;
 }
