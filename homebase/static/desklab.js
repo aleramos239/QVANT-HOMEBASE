@@ -814,12 +814,13 @@
   function switchOnAccounts(n) { return n + " is ON. Its orders go to its accounts."; }
   function switchOnShadow(n) { return n + " is ON: it runs in shadow."; }
   function switchOnNext(n) { return n + " is ON. It starts with the next session."; }
-  // The switch's title, which is also what its ON confirm says: with an account booked, the machine (window.HB_MACHINE, left
-  // out when not set), how many LIVE / demo / paper accounts, and the size -- contracts, or the $ at risk a trade for a strategy
-  // that sizes itself. `accounts` = the page's ST.accounts (read from the page when not passed); an account it does not list
-  // counts as LIVE, the page's own rule. Words only: when the switch asks is switchNeedsConfirm's (algo-visibility.js).
-  function machineWords() {
-    var m = typeof window !== "undefined" && window ? window.HB_MACHINE : null;
+  // The switch's hover title, and switchOnAsk = the words for its ON confirm. Today the confirm itself is toggleStrat's own text
+  // (the Desk page script): WP1.7 puts switchOnAsk in it. With an account booked: the machine (`machine`, else window.HB_MACHINE;
+  // left out when not known), how many LIVE / demo / paper accounts, and the size -- contracts, or the $ at risk a trade for a
+  // strategy that sizes itself. `accounts` = the page's ST.accounts (read from the page when not passed); an account it does not
+  // list counts as LIVE, the page's own rule. Words only: when the switch asks is switchNeedsConfirm's (algo-visibility.js).
+  function machineWords(m) {
+    if (m === undefined) m = typeof window !== "undefined" && window ? window.HB_MACHINE : null;
     return m === "server" ? " on the SERVER · Chicago" : m === "mac" ? " on this Mac" : "";
   }
   function ordersGo(s, book, accounts) {
@@ -834,15 +835,21 @@
       .map(function (k) { return plur(n[k], k + " account", k + " accounts"); }).join(" and ");
     var lab = blockOf(s) || {}, risk = isObj(lab.params) ? Number(lab.params.risk) : NaN;
     var lo = Math.min.apply(null, q), hi = Math.max.apply(null, q);
+    // a size only when every booked row says it: a wrong size is worse than none
     var size = lab.own_size === true ? (risk > 0 ? money(risk) + " at risk a trade" : "it sizes each trade itself")
-      : !q.length ? "" : lo === hi ? plur(lo, "contract", "contracts") + (book.length > 1 ? " each" : "") : lo + " to " + hi + " contracts";
+      : q.length !== book.length ? "" : lo === hi ? plur(lo, "contract", "contracts") + (book.length > 1 ? " each" : "") : lo + " to " + hi + " contracts";
     return who + (size ? ", " + size : "");
   }
-  function deskSwitchTitle(s, book, accounts) {
+  function deskSwitchTitle(s, book, accounts, machine) {
     var on = !!s && !!s.cfg && s.cfg.enabled === true;
     if (!Array.isArray(book) || !book.length) return switchTitle(on);
-    var where = machineWords(), go = ordersGo(s, book, accounts);
+    var where = machineWords(machine), go = ordersGo(s, book, accounts);
     return on ? "ON" + where + ": its orders go to " + go : "OFF: it does nothing. Switched ON" + where + ", its orders would go to " + go + ".";
+  }
+  // The ON confirm's sentence, asked while the strategy is still OFF; "" with no account booked (it then runs in shadow: no ask).
+  function switchOnAsk(s, book, accounts, machine) {
+    if (!Array.isArray(book) || !book.length) return "";
+    return "It will run" + machineWords(machine) + " from the next signal. Its orders go to " + ordersGo(s, book, accounts) + ".";
   }
   // With no account booked there are no orders and no position: Step A's short sentence.
   function switchOffToast(n, book) {
@@ -1028,7 +1035,7 @@
     checkLimits: checkLimits, limitsTitle: limitsTitle, refusalText: refusalText, roundLine: roundLine, splitRounds: splitRounds,
     refusedLine: refusedLine, switchOnAccounts: switchOnAccounts, switchOnShadow: switchOnShadow, switchOnNext: switchOnNext,
     switchOff: switchOff, switchOnToast: switchOnToast, bookedNext: bookedNext, bookedJoins: bookedJoins, flattenAsk: flattenAsk, flattenSteps: flattenSteps, deskSpec: deskSpec,
-    deskSetupRows: deskSetupRows, activity: activity, needsLook: needsLook, stateNote: stateNote, deskSwitchTitle: deskSwitchTitle,
+    deskSetupRows: deskSetupRows, activity: activity, needsLook: needsLook, stateNote: stateNote, deskSwitchTitle: deskSwitchTitle, switchOnAsk: switchOnAsk,
     switchOffToast: switchOffToast, removeAskDesk: removeAskDesk, plainSteps: plainSteps, plainRecord: plainRecord, closeOut: closeOut,
     NOT_ON_DESK: NOT_ON_DESK, CLOSE_OUT: CLOSE_OUT, NOT_OFF: NOT_OFF, hiddenEvent: hiddenEvent, HIDDEN_EVENTS: HIDDEN_EVENTS, LAB_UNKNOWN: LAB_UNKNOWN,
     OTHER_DESK: OTHER_DESK, LIMITS_CAPTION: LIMITS_CAPTION, EDIT_LIMITS: EDIT_LIMITS, SAVE_LIMITS: SAVE_LIMITS, CANCEL: CANCEL,

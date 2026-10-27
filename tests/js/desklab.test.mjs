@@ -979,7 +979,8 @@ test('m1 deskSwitchTitle: the tooltip says where the orders go', () => {
   assert.equal(D.deskSwitchTitle(deskStrat({}, { enabled: false }), []), 'OFF: it does nothing');
 });
 
-/* 3.4: the switch's title (and so the ON confirm's words) names the machine, the LIVE accounts and the size. Loaded as the page
+/* 3.4: the switch's hover title names the machine, the LIVE accounts and the size; switchOnAsk is the same words for the ON
+   confirm, which today is still toggleStrat's own text in the Desk page (WP1.7 puts switchOnAsk in it). Loaded as the page
    loads it -- a plain script beside the page's own `let ST` -- so the page's two-argument call is what is tested. */
 function pageDeskLab({ machine, accounts } = {}) {
   const ctx = vm.createContext(machine === undefined ? {} : { window: { HB_MACHINE: machine } });
@@ -1017,6 +1018,34 @@ test('3.4 deskSwitchTitle names the machine, how many LIVE accounts, and the con
   // no account: shadow, as before -- never a machine or a size
   assert.equal(pageDeskLab({ machine: 'server', accounts }).deskSwitchTitle(on, []), 'ON: it runs in shadow');
   assert.equal(pageDeskLab({ machine: 'server', accounts }).deskSwitchTitle(off, []), 'OFF: it does nothing');
+});
+
+test('3.4 a size only when every booked row says it, and the machine can be handed in', () => {
+  const on = deskStrat(), accounts = { live047: { env: 'live' }, sim041: { env: 'demo' } };
+  // a row with no number for its qty: no size at all, never "each" over rows that did not say
+  assert.equal(D.deskSwitchTitle(on, [{ account: 'x' }, { account: 'y', qty: 2 }]), 'ON: its orders go to 2 LIVE accounts');
+  assert.equal(D.deskSwitchTitle(on, [{ account: 'x' }, { account: 'y' }, { account: 'z', qty: 1 }]), 'ON: its orders go to 3 LIVE accounts');
+  assert.equal(D.deskSwitchTitle(on, [{ account: 'a1', qty: '2' }]), 'ON: its orders go to 1 LIVE account');
+  assert.equal(D.deskSwitchTitle(on, [{ account: 'a1', qty: 2 }, { account: 'a2', qty: 2 }]), 'ON: its orders go to 2 LIVE accounts, 2 contracts each');
+  // the machine handed in (WP1.18's one value) wins over window.HB_MACHINE; null says no machine
+  const P = pageDeskLab({ machine: 'mac', accounts });
+  assert.equal(P.deskSwitchTitle(on, [{ account: 'live047', qty: 1 }], undefined, 'server'),
+    'ON on the SERVER · Chicago: its orders go to 1 LIVE account, 1 contract');
+  assert.equal(P.deskSwitchTitle(on, [{ account: 'live047', qty: 1 }], undefined, null), 'ON: its orders go to 1 LIVE account, 1 contract');
+  assert.equal(P.deskSwitchTitle(on, [{ account: 'live047', qty: 1 }]), 'ON on this Mac: its orders go to 1 LIVE account, 1 contract');
+});
+
+test('3.4 switchOnAsk: the ON confirm\'s words, asked while the strategy is still OFF; nothing with no account', () => {
+  const off = deskStrat({}, { enabled: false }), accounts = { live047: { env: 'live' }, sim041: { env: 'demo' } };
+  const book = [{ account: 'live047', qty: 2 }, { account: 'sim041', qty: 2 }];
+  assert.equal(pageDeskLab({ machine: 'server', accounts }).switchOnAsk(off, book),
+    'It will run on the SERVER · Chicago from the next signal. Its orders go to 1 LIVE account and 1 demo account, 2 contracts each.');
+  assert.equal(D.switchOnAsk(off, book, accounts, 'mac'),
+    'It will run on this Mac from the next signal. Its orders go to 1 LIVE account and 1 demo account, 2 contracts each.');
+  assert.equal(D.switchOnAsk(deskStrat({ own_size: true, params: { risk: 650 } }, { enabled: false }), [{ account: 'x', qty: 3 }]),
+    'It will run from the next signal. Its orders go to 1 LIVE account, $650 at risk a trade.');
+  assert.equal(D.switchOnAsk(off, []), '');
+  assert.equal(D.switchOnAsk(off, undefined), '');
 });
 
 test('3.4 when the switch asks is unchanged: switchNeedsConfirm decides, and the page still asks before turning a booked Lab strategy ON', () => {
