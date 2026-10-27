@@ -106,8 +106,8 @@ function setHash(b) {
 /* The most recent finished run of this strategy, so a reload (or coming back to it) shows how it last did. */
 async function restoreLastRun(b) {
   const id = b.kind === 'builtin' ? b.id : `draft_${b.name}`;
-  const l = await send('GET', '/api/tester/runs');
-  const hit = l.ok && (l.json || []).find((r) => r.strategy === id && r.status === 'done');
+  const l = await send('GET', `/api/tester/runs?strategy=${encodeURIComponent(id)}`);     // this strategy's own, however many newer runs of others there are
+  const hit = l.ok && Array.isArray(l.json) && l.json.find((r) => r.strategy === id && r.status === 'done');
   if (!hit || S.cur !== b.key || S.run) return;
   const bd = await send('GET', `/api/tester/run/${encodeURIComponent(hit.id)}/bundle`);
   if (!bd.ok || S.cur !== b.key || S.run) return;

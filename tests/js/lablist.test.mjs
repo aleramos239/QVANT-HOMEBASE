@@ -266,7 +266,8 @@ function page({ drafts, groups, refuse = {}, gone = [] }) {
     if (method === 'GET' && url === '/api/tester/drafts') return [200, list];
     if (method === 'GET' && url === '/api/tester/groups') return [200, groups];
     if (method === 'GET' && (m = /^\/api\/tester\/strategies\/draft_(\w+)\/source$/.exec(url))) return [200, { files: [{ path: `${m[1]}.py`, text: `# ${m[1]}\n` }] }];
-    if (method === 'GET' && url === '/api/tester/runs') return [200, []];
+    if (method === 'GET' && (url === '/api/tester/runs' || url.startsWith('/api/tester/runs?'))) return [200, []];
+    if (method === 'GET' && url === '/api/tester/walkforwards') return [200, []];
     if (method === 'DELETE' && (m = /^\/api\/tester\/drafts\/(\w+)$/.exec(url))) {
       if (refuse[m[1]]) return [409, { detail: refuse[m[1]] }];
       if (gone.includes(m[1])) { list = list.filter((d) => d.name !== m[1]); return [200, { deleted: false }]; }
@@ -557,4 +558,16 @@ test('withDeskGroup: the strategies on the Desk are one group of their own, firs
   assert.deepEqual(keys(L.shownRows(secs, new Set(['On the Desk']))), ['d:b', 'd:d', 'n:1', 'b:nq930']);   // it folds like any group
   // nothing on the Desk: no group, nothing moves
   assert.deepEqual(L.withDeskGroup(L.sections(rows, groups)).map((s) => s.name), ['Fades', 'Empty', '']);
+});
+
+test('page: opening a strategy asks for its own last run and its tries, read-only (plan 4.3, 4.9)', async () => {
+  const p = page({ drafts: ['a', 'b'], groups: G });
+  await p.flush();
+  p.clickRow('d:a');
+  await p.flush();
+  assert.ok(p.requests.includes('GET /api/tester/runs?strategy=draft_a'), p.requests.join(', '));      // not the newest 50 of every strategy
+  assert.ok(!p.requests.includes('GET /api/tester/runs'));
+  assert.ok(p.requests.includes('GET /api/tester/runs?limit=500&strategy=draft_a'));
+  assert.ok(p.requests.includes('GET /api/tester/walkforwards'));
+  assert.ok(p.requests.every((r) => r.startsWith('GET ')), 'opening sends nothing but GETs');
 });
