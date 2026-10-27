@@ -8,7 +8,7 @@
 'use strict';
 const root = document.getElementById('lab');
 if (!root || !window.HBTester || !window.HBLabCode) return;
-const X = window.HBTester, C = window.HBLabCode;
+const X = window.HBTester, C = window.HBLabCode, RL = window.HBReal;      // RL: the six real-or-luck lines (reallines.js)
 const $ = (s, el = root) => el.querySelector(s);
 const esc = (t) => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const MINUS = '−';
@@ -16,7 +16,7 @@ const MINUS = '−';
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
   view: 'lib', libQ: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plFilter: 'all', plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plExec: '', desk: null, deskBuiltins: new Set(), deskBusy: false,
-  picks: [], anchor: '', listFocus: false, delBusy: false, unlocked: new Set(), heat: {}, wf: {}, three: {} };
+  picks: [], anchor: '', listFocus: false, delBusy: false, unlocked: new Set(), heat: {}, wf: {}, three: {}, tries: {} };
 /* picks: the list's rows picked for a delete (keys, shown order); anchor: where a shift-click's range starts; listFocus: the
    list was the last thing touched (a button takes no focus on a click in Safari, so the keyboard is judged by this) */
 /* view: what the sidebar lists -- 'lib' (strategies), 'tk' (the arsenal: every tool, with its code), and the strategy pipeline's three:
@@ -2423,15 +2423,16 @@ function oosHtml(T) {
   if (oo && oo.state === 'done') {
     const rec = oo.record || {}, net = rec.net || 0, cell = (res.cells || [])[0], bt = cell && X.wfFixedBlocks(cell, oo);
     if (oo.equity && (oo.equity.t_ms || []).length > 1) WFEQ = oo.equity;
-    const row = X.wfFixedOos(res, '').row;
-    return `${head}<div class="rs-hero"><div class="rs-net"><i>${net > 0 ? '+' : net < 0 ? MINUS : ''}$</i>${esc(Math.abs(Math.round(net)).toLocaleString('en-US'))}</div></div>
+    const row = X.wfFixedOos(res, '').row, sid = curSid();
+    return `${head}${perYearHtml(cell ? [cell] : [], 'in-sample, as set')}<div class="rs-hero"><div class="rs-net"><i>${net > 0 ? '+' : net < 0 ? MINUS : ''}$</i>${esc(Math.abs(Math.round(net)).toLocaleString('en-US'))}</div></div>
       <div class="rs-take">${esc(`${(oo.months || []).length} test months · ${rec.trades ?? 0} trades · after fees.`)}</div>
       ${WFEQ ? EQ_BOX : ''}
       <div class="rs-trio"><div><b>${esc(X.num(rec.pf, 2, true))}</b><span>Profit factor</span></div><div><b>${esc(X.rate(rec.win_rate))}</b><span>Win rate</span></div><div><b>${esc(X.num(rec.sharpe))}</b><span>Sharpe</span></div></div>
       ${row ? `<div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr>${X.WF_FIXED_COLS.map((c) => `<th>${esc(c[1])}</th>`).join('')}</tr></thead><tbody><tr>${row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr></tbody></table></div>` : ''}
+      ${realHtml(realRead(res, sid), sid)}
       ${bt ? `<div class="rs-gh">Block by block</div><div class="wf-scroll"><table class="heat-tbl wf-steps"><thead><tr>${bt.head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${bt.rows.map((x) => `<tr>${x.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : ''}`;
   }
-  if (oo && oo.state === 'stopped') return `${head}<div class="rs-empty"><h3>The test months stopped</h3><p>${esc(oo.say || 'The read is used: there is no record.')}</p></div>`;
+  if (oo && oo.state === 'stopped') return `${head}<div class="rs-empty"><h3>The test months stopped</h3><p>${esc(oo.say || 'The read is used: there is no record.')}</p></div>${realHtml(realRead(res, curSid()), curSid())}`;
   if (o.busy || oo) return `${head}<div class="rs-prog"><div class="t">${esc(o.step || X.wfFixedOos(res, '').text || 'Starting…')}</div><div class="rs-bar ind"><i style="width:38%"></i></div></div>`;
   return `${head}<div class="rs-empty"><h3>Not run</h3><p>Your strategy as set, on the 3:1 test months (the month after each 3 in-sample months), after fees. They run once, never again.</p>
     <button class="btn btn-sm" data-act="oosrun">Run the test months</button></div>`;
@@ -2520,10 +2521,25 @@ function wfStepsHtml(r, axes) {
 /* The fixed walk-forward (2026-10-20): the in-sample table, win rate first, a header sorts it; a Pick per row (the pick is
    locked); then "Run test months", open only after a pick and once the owner has typed his words, which go out as typed.
    The words and numbers are tester.js (wfFixedTable, wfFixedOos); the server's refusals show as they come. */
+/* ---- real or luck: the six lines of real.py (reallines.js) under a saved 3:1 result, the per-year row first ---- */
+const curSid = () => { const b = buf(), f = b && formOf(b); return f ? f.strategy : ''; };
+const triesOf = (sid) => S.tries[sid] || null;          // {n, cut} once counted; none yet = a count that may be short
+function realRead(res, sid) { const t = triesOf(sid); return RL && res ? RL.labRead(res, t ? t.n : 1, !t || t.cut) : null; }
+function perYearHtml(cells, what) {
+  const ys = RL ? RL.perYear(cells) : [];
+  return ys.length ? `<div class="rs-gh">Per year · ${esc(what)}</div><div class="rl-years">${ys.map(([y, v]) => `<span>${esc(y)} <b class="${X.toneOf(v)}">${esc(X.signed(v))}</b></span>`).join('')}</div>` : '';
+}
+function realHtml(rd, sid) {
+  if (!rd) return '';
+  const t = triesOf(sid), tone = (ok) => (ok === true ? ['pass', 'PASS'] : ok === false ? ['fail', 'FAIL'] : ['wait', 'not run']);
+  return `<div class="rs-gh">Real or luck</div><div class="rs-group rl">${rd.lines.map((x) => { const [c, w] = tone(x.ok); return `<div class="rl-line ${c}"><b>${w}</b><span>${esc(x.line)}: ${esc(x.said)}</span></div>`; }).join('')}
+    <div class="rl-verdict">${esc(rd.verdict.word)}: ${esc(rd.verdict.why)}</div>
+    <div class="heat-note">${esc(t ? RL.barText(t.n, t.cut) : 'Luck test: tries not counted yet')}</div></div>`;
+}
 function wfFixedHtml(w, job) {
   const r = w.result, t = X.wfFixedTable(r, job.axes || [], w.sort), o = X.wfFixedOos(r, OOS_SAID), sk = w.sort && w.sort.key;
   const locked = t.picked != null, pickRow = t.rows.find((x) => x.i === t.picked);
-  const mb = buf(), own = mb ? X.ownStopNote(metaOf(mb), job.axes, t.rows.length) : '';
+  const mb = buf(), own = mb ? X.ownStopNote(metaOf(mb), job.axes, t.rows.length) : '', sid = (job && job.strategy) || curSid(), rd = realRead(r, sid);
   const th = t.head.map((h) => (h.key === 'box' ? `<th>${esc(h.label)}</th>`
     : `<th><button class="wf-sort${sk === h.key ? ' on' : ''}" data-act="wfsort" data-k="${esc(h.key)}" title="Sort by ${esc(h.label)}">${esc(h.label)}${sk === h.key ? (w.sort.dir < 0 ? ' ↓' : ' ↑') : ''}</button></th>`)).join('');
   const tr = t.rows.map((row) => `<tr${row.i === t.picked ? ' class="sel"' : ''}><td>${locked ? (row.i === t.picked ? '<b>Picked</b>' : '')
@@ -2540,9 +2556,13 @@ function wfFixedHtml(w, job) {
       ${o.text ? `<div class="heat-note">${esc(o.text)}</div>` : ''}
       ${o.row ? `<div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr>${t.head.slice(1).map((h) => `<th>${esc(h.label)}</th>`).join('')}</tr></thead>
         <tbody><tr>${o.row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr></tbody></table></div>` : ''}`;
-  return `<div class="rs-gh">In-sample table · ${t.rows.length} box${t.rows.length === 1 ? '' : 'es'}${win.start ? ` · ${esc(wfMon(win.start))} – ${esc(wfMon(win.end))}` : ''}</div>
+  const yc = bc ? [bc] : r.cells || [];
+  return `${perYearHtml(yc, bc ? `${X.boxNo(bi)} ${bRow ? bRow.label : ''}`.trim() : 'the average box')}
+    <div class="rs-gh">In-sample table · ${t.rows.length} box${t.rows.length === 1 ? '' : 'es'}${win.start ? ` · ${esc(wfMon(win.start))} – ${esc(wfMon(win.end))}` : ''}</div>
+    ${rd ? `<div class="rl-count">${esc(`${rd.up} of ${rd.n} boxes made money${rd.n ? ` (${Math.round(rd.up / rd.n * 100)}%)` : ''}`)}</div>` : ''}
     ${own ? `<div class="heat-note">${esc(own)}</div>` : ''}
     <div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr><th></th>${th}</tr></thead><tbody>${tr}</tbody></table></div>
+    ${realHtml(rd, sid)}
     <div class="rs-gh">Test months</div><div class="rs-group wf-oos">${test}
       ${w.say ? `<div class="heat-err">${esc(w.say)}</div>` : ''}</div>
     <div class="rs-gh">Block by block${bc ? ` · ${esc(X.boxNo(bi))} ${esc(bRow ? bRow.label : '')}` : ''}</div>${blocks}

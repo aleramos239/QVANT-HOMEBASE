@@ -169,3 +169,33 @@ test('a strategy with no own_stop says so in one line where its 20 boxes show (f
   assert.equal(X.ownStopNote(STRAT, [{ key: 'ctl.trail_pts', values: [0, 5] }], 2), '');    // no stop axis: not an hm40 table
   assert.equal((LAB.match(/X\.ownStopNote\(/g) || []).length, 2);      // the heat map's run count and the in-sample table's header
 });
+
+test('the in-sample table says how many boxes made money, a per-year row first, then the six lines and the verdict (plan 4.2)', async () => {
+  const vm = await import('node:vm');
+  const RL = require('../../homebase/static/charts/reallines.js');
+  const a = LAB.indexOf('const curSid'), b = LAB.indexOf('function wfFixedHtml');
+  const c = vm.createContext({ X, RL, S: { tries: {} }, buf: () => null, formOf: () => null,
+    esc: (t) => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;') });
+  vm.runInContext(`${LAB.slice(a, b)}\nglobalThis.realRead = realRead; globalThis.realHtml = realHtml; globalThis.perYearHtml = perYearHtml;`, c);
+  const res = { ...RES, cells: RES.cells.map((x, k) => ({ ...x, is: k ? x.is : IS(52, -100), blocks: [{ i: 0, is: ['2022-02', '2022-03', '2022-04'], trades: 10, net: k ? 300 : -100 }] })) };
+  const rd = c.realRead(res, 'draft_x');
+  assert.equal(rd.up, 1);
+  assert.equal(rd.n, 2);
+  assert.equal(rd.verdict.word, 'LUCK');                     // 1 of 2 boxes is under 60%
+  const h = c.realHtml(rd, 'draft_x');
+  assert.match(h, /Real or luck/);
+  assert.match(h, /FAIL<\/b><span>boxes: 1 of 2 boxes made money in-sample/);
+  assert.match(h, /not run<\/b><span>picked box: not picked yet/);
+  assert.match(h, /LUCK: 1 of 2 boxes/);
+  assert.match(h, /Luck test: tries not counted yet/);
+  assert.ok(!/\bIS\b|\bOOS\b|\bcell\b/.test(h.replace(/<[^>]+>/g, '')), 'no IS / OOS / cell on screen');
+  assert.match(c.perYearHtml(res.cells, 'the average box'), /Per year · the average box.*2022 <b class="up">\+\$100<\/b>/s);
+  // the order in the result: per year, the table, its count, the six lines, then the test months
+  const w = LAB.slice(b, LAB.indexOf('\n}\n', b));
+  const at = (s) => { const i = w.indexOf(s); assert.ok(i >= 0, s); return i; };
+  assert.ok(at('${perYearHtml(yc') < at('In-sample table ·'));
+  assert.ok(at('In-sample table ·') < at('boxes made money'));
+  assert.ok(at('boxes made money') < at('${realHtml(rd, sid)}'));
+  assert.ok(at('${realHtml(rd, sid)}') < at('<div class="rs-gh">Test months</div>'));
+  assert.match(LAB, /perYearHtml\(cell \? \[cell\] : \[\], 'in-sample, as set'\)/);     // the test months view too
+});

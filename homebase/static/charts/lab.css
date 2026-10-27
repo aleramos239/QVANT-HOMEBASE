@@ -790,3 +790,15 @@ html.hb-apple .lab-dlg.am-dlg { width: min(1040px, calc(100vw - 32px)); max-heig
 .wf-key.oos { background: var(--hb-accent); }
 .wf-key.is { background: var(--hb-fg2); opacity: .55; }
 #labRes #wfRes .rs-trio { grid-template-columns: repeat(2, 1fr); row-gap: 12px; }
+
+/* the six real-or-luck lines under a 3:1 result (reallines.js: real.py's own words), the verdict, and the per-year row before them */
+.rl-line { display: grid; grid-template-columns: 58px 1fr; gap: 8px; padding: 6px 12px; font-size: var(--hb-fs-ui); line-height: 1.4; }
+.rl-line b { font-weight: 600; }
+.rl-line.pass b { color: var(--hb-gain, #2e6b4f); }
+.rl-line.fail b { color: var(--down); }
+.rl-line.wait b { color: var(--hb-fg2); font-weight: 500; }
+.rl-verdict { padding: 8px 12px; font-weight: 600; }
+.rl .heat-note, .rl-count { padding: 0 12px 8px; font-size: var(--hb-fs-ui); color: var(--hb-fg2); }
+.rl-years { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 4px 6px; font-variant-numeric: tabular-nums; font-size: var(--hb-fs-ui); }
+.rl-years b { font-weight: 600; }
+.rl-years .up { color: var(--up); } .rl-years .down { color: var(--down); }

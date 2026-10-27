@@ -81,6 +81,13 @@ function years(blocks) {
   const v = [...by.values()], sum = v.reduce((a, x) => a + x, 0);
   return { years_n: v.length, years_green: v.filter((x) => x > 0).length, best_year_share: v.length && sum > 0 ? Math.max(...v) / sum : null };
 }
+/* The per-year row: [[year, net]] of the in-sample blocks that traded, summed over `cells` and divided by their count (one cell =
+   that box; the whole table = the average box, never the best). */
+function perYear(cells) {
+  const by = new Map(), n = (cells || []).length;
+  for (const c of cells || []) for (const b of (c && c.blocks) || []) if (b && b.trades > 0 && b.is && b.is[0]) { const y = String(b.is[0]).slice(0, 4); by.set(y, (by.get(y) || 0) + (b.net || 0)); }
+  return [...by.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([y, v]) => [y, v / n]);
+}
 function fromLab(res) {
   const r = res || {}, o = r.oos;
   return {
@@ -104,11 +111,13 @@ function labRead(res, tries, cut) {
     if (x.line === 'worse fills' && x.ok == null) x.said = 'not run in the Lab';
     if (x.line === 'luck' && box && box.t_stat == null && box.net > 0) { x.ok = null; x.said = 'not read: the t-statistic is not saved in the Lab'; }
   }
-  return { lines: ls, verdict: verdict(ls, s, cut), up: s.is.filter((r) => r.net != null && r.net > 0).length, n: s.is.filter((r) => r.net != null).length };
+  const v = verdict(ls, s, cut), lk = ls.find((x) => x.line === 'luck');
+  if (cut && lk && lk.ok) { lk.ok = null; lk.said += ' (not read: the tries count is incomplete)'; }   // a short count never shows PASS
+  return { lines: ls, verdict: v, up: s.is.filter((r) => r.net != null && r.net > 0).length, n: s.is.filter((r) => r.net != null).length };
 }
 
 const api = { MIN_TRADES_IS, MIN_TRADES_OOS, MIN_YEARS_GREEN, MAX_BEST_YEAR, MIN_BOXES_PROFIT, T_BAR, T_PER_TRY,
-  lines, verdict, fromLab, years, barText, labRead, pyFmt: { f0, pct0, g, round2 } };
+  lines, verdict, fromLab, years, perYear, barText, labRead, pyFmt: { f0, pct0, g, round2 } };
 if (typeof window !== 'undefined') window.HBReal = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

@@ -80,6 +80,18 @@ test('labRead: worse fills is not run in the Lab, an unsaved t is not read, so t
   // a losing box with no t fails the luck line, as real.py does
   const lose = R.labRead({ ...RES, lock: { cell: 1 } }, 1, false);
   assert.equal(lose.lines.find((x) => x.line === 'luck').ok, false);
+  // a cut tries count: a t over the bar shows as not read, never PASS, and the verdict asks for a full count
+  const cut = R.labRead({ ...t, cells: t.cells.map((c) => (c.i === 0 ? { ...c, is: { ...c.is, t_stat: 300 } } : c)) }, 500, true);
+  const lk = cut.lines.find((x) => x.line === 'luck');
+  assert.equal(lk.ok, null);
+  assert.match(lk.said, /tries count is incomplete/);
+  assert.equal(cut.verdict.word, 'NOT YET');
   // test months that lose: FAKE, whatever else
   assert.equal(R.labRead({ ...t, oos: { state: 'done', record: { trades: 70, net: -10 } } }, 1, false).verdict.word, 'FAKE');
+});
+
+test('perYear: one box, or the average box of the whole table, from the in-sample blocks that traded', () => {
+  assert.deepEqual(R.perYear([RES.cells[0]]), [['2021', 500], ['2022', 700], ['2023', 400]]);
+  assert.deepEqual(R.perYear(RES.cells.slice(0, 2)), [['2021', 250], ['2022', 350], ['2023', 200]]);
+  assert.deepEqual(R.perYear([]), []);
 });
