@@ -85,3 +85,34 @@ test('Reconnect all shows while an account is offline and reconnects each offlin
   on.ctx.api.openAccts();
   assert.doesNotMatch(on.els.acctList2.innerHTML, /Reconnect all/);
 });
+
+test('I: a double click on Reconnect all runs the loop once, and a later click runs it again', async () => {
+  const t = load();
+  const open = [];
+  t.ctx.reconnectAcct = (id) => { t.calls.push(id); return new Promise((r) => open.push(r)); };
+  const first = t.ctx.api.reconnectOffline(), second = t.ctx.api.reconnectOffline();
+  open.forEach((r) => r()); await first; await second;
+  assert.deepEqual(t.calls, ['a3'], 'one loop, not two');
+  t.ctx.reconnectAcct = async (id) => { t.calls.push(id); };
+  await t.ctx.api.reconnectOffline();
+  assert.deepEqual(t.calls, ['a3', 'a3'], 'the guard is let go once the loop ends');
+  t.ctx.reconnectAcct = async () => { throw new Error('down'); };
+  await assert.rejects(t.ctx.api.reconnectOffline());
+  t.ctx.reconnectAcct = async (id) => { t.calls.push(id); };
+  await t.ctx.api.reconnectOffline();
+  assert.equal(t.calls.length, 3, 'and after a loop that failed');
+});
+
+test('P: a row whose account the Desk removed leaves the open popup on the next tick', () => {
+  const t = load();
+  t.ctx.api.openAccts();
+  const rows = fakeRows(t.els.acctList2.innerHTML), removed = [];
+  for (const r of rows) r.remove = () => removed.push(r.id);
+  t.els.acctList2.querySelectorAll = () => rows;
+  t.els.acctList2.querySelector = () => ({ innerHTML: '' });
+  const a = ACCTS(); delete a.a2;
+  t.ctx.ST.accounts = a;
+  t.ctx.api.tickAccts();
+  assert.deepEqual(removed, ['a2']);
+  assert.equal(rows[0].cells.bal.textContent, '$50000', 'the others still tick');
+});

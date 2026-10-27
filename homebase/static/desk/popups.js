@@ -316,7 +316,12 @@ const acctRunning = (id) => Object.entries((ST && ST.book) || {})
 const acctsOffline = () => Object.keys((ST && ST.accounts) || {}).filter(id => !ST.accounts[id].connected);
 const reconnectAllHtml = () => acctsOffline().length ? `<div class="row-btns" style="justify-content:flex-start;margin:6px 0">
   <button class="btn btn-outline btn-sm" onclick="reconnectOffline()" title="Rebuild the broker connection of every offline account, one at a time">Reconnect all (${acctsOffline().length} offline)</button></div>` : "";
-async function reconnectOffline() { for (const id of acctsOffline()) await reconnectAcct(id); }
+let RC_ALL = false;   // a second click while the loop runs starts no second loop
+async function reconnectOffline() {
+  if (RC_ALL) return;
+  RC_ALL = true;
+  try { for (const id of acctsOffline()) await reconnectAcct(id); } finally { RC_ALL = false; }
+}
 function acctPopRow(id, focused) {
   const accts = (ST && ST.accounts) || {}, running = acctRunning(id);
   // replacer FUNCTIONS, never strings: a replacement string reads $&, $`, $$ … specially, and an
@@ -332,14 +337,15 @@ function acctPopRow(id, focused) {
             onclick="removeAcct(${jsArg(id)})" title="Remove this account">&times;</button></div>`);
 }
 /* While the popup is open, each tick writes its read-only cells in place: the rows keep the order they opened in, no button
-   or field is rebuilt, and a row being typed in (its day take has focus) is left alone. A new account shows on the next open. */
+   or field is rebuilt, and a row being typed in (its day take has focus) is left alone. A new account shows on the next open; a removed one leaves on the next tick. */
 function tickAccts() {
   const box = $("#acctList2"), accts = (ST && ST.accounts) || {};
   const rc = box.querySelector('[data-ro="reconnect"]'), h = reconnectAllHtml();
   if (rc && ACCT_RC !== h) { rc.innerHTML = h; ACCT_RC = h; }      // its button is rebuilt only when the count changes
   for (const row of box.querySelectorAll(".acct[data-acct]")) {
     const a = accts[row.getAttribute("data-acct")];
-    if (!a || row.contains(document.activeElement)) continue;
+    if (!a) { row.remove(); continue; }   // the Desk removed this account
+    if (row.contains(document.activeElement)) continue;
     const cell = (k) => row.querySelector(`[data-ro="${k}"]`) || {}, pnl = a.realized_pnl;
     cell("dot").className = "dot " + (a.connected ? "on" : "off");
     cell("bal").textContent = usd(a.balance);
