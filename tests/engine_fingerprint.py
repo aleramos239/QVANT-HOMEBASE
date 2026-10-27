@@ -5,7 +5,7 @@ numbers and qualname dropped, defaults, closure contents, and the object every g
 module; plus the homebase.engine namespace. Two trees whose code differs only by where the methods live give the
 same JSON, except the new mixin names in the namespace.
 
-    cd <tree> && PYTHONHASHSEED=0 python tools/engine_fingerprint.py > fp.json      (set reprs are seed-ordered)
+    cd <tree> && PYTHONHASHSEED=0 python tests/engine_fingerprint.py > fp.json      (set reprs are seed-ordered)
 """
 from __future__ import annotations
 

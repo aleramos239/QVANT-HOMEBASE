@@ -1,6 +1,6 @@
 """Opt-in pytest plugin for move-only engine refactors: per test, every broker-adapter call and its answer and every
 Engine.journal line, in order, plus the engine's files under tmp_path at teardown, written to
-$ENGINE_TRACE_DIR/<sha1(nodeid)>.json. Compare two trees with tools/engine_parity.py.
+$ENGINE_TRACE_DIR/<sha1(nodeid)>.json. Compare two trees with tests/engine_parity.py.
 
     ENGINE_TRACE_DIR=/tmp/trace_a python -m pytest -p tests.engine_trace tests/test_engine.py ...
 

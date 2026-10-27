@@ -1,4 +1,4 @@
-"""Compare two engine traces (tests/engine_trace.py): python tools/engine_parity.py BASE NEW [BASE2]
+"""Compare two engine traces (tests/engine_trace.py): python tests/engine_parity.py BASE NEW [BASE2]
 
 Per test: equal, or the first differing fields. Timing keys (ts, *_ms, *_ts, until) and the arguments of timing calls
 (request_rtts_ms) are dropped, and pytest's numbered tmp folders are read as one name. Rows are grouped by account,
