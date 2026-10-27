@@ -1009,8 +1009,14 @@ def test_every_change_is_published_as_that_strategys_whole_snapshot(tmp_path):
     (name, snap), = drain(q)
     assert name == "strategy" and snap == d.ld.snapshot()["strategies"][LAB]
     assert set(snap) == {"strategy", "mark", "date", "symbol", "enabled", "armed", "killed", "stopped", "brain", "rounds",
-                         "answered"}
+                         "answered", "turns", "cycle_sized"}
     assert snap["symbol"] == "NQ"                                                  # the market this desk's orders go to
+    assert snap["turns"] is False and snap["cycle_sized"] is False                 # no Take turns, no account cycle
+    d.eng.groups["g1"] = {"name": "x", "members": [LAB], "accounts": [], "risk_usd": 1000.0, "max_minis": 17, "on": True}
+    assert d.ld.snapshot()["strategies"][LAB]["turns"] is True and d.ld.snapshot()["strategies"][LAB]["cycle_sized"] is True
+    d.eng.groups["g1"]["risk_usd"] = 0.0                                           # a cycle with no risk set keeps each size
+    assert d.ld.snapshot()["strategies"][LAB]["cycle_sized"] is False
+    del d.eng.groups["g1"]
     assert set(snap["rounds"][0]) == {"account", "round", "status", "date", "carried", "iid", "qty", "entry_side",
                                       "entry_qty", "entry_fill", "exit_qty", "exit_fill", "exit_reason", "sl", "tp",
                                       "pnl", "clean", "entry_ms", "exit_ms", "why"}

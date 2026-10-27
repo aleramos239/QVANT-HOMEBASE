@@ -1632,7 +1632,12 @@ class LabDesk:
         d = self._rec(name)
         keep = ("account", "round", "status", "date", "carried", "iid", "qty", "entry_side", "entry_qty", "entry_fill",
                 "exit_qty", "exit_fill", "exit_reason", "sl", "tp", "pnl", "clean", "entry_ms", "exit_ms", "why")
+        grp = self.engine.group_of(name)
         return {"strategy": name, "mark": labcfg.mark_of(self.cfg, name), "date": d["date"],
+                # its trades take turns over the accounts (one strategy, one trade at a time, any account), and the
+                # account cycle sets each trade's size: the runner's daily match reads them so (owner 2026-10-26)
+                "turns": grp is not None or self.engine.rotating(name),
+                "cycle_sized": bool(grp and grp[1].get("risk_usd")),
                 "symbol": str(self.cfg.strategies[name].symbol),     # the market THIS desk's orders go to
                 "enabled": bool(self.cfg.strategies[name].enabled), "armed": bool(self.cfg.armed),
                 "killed": self.engine.killed_today(name), "stopped": d["stopped"],
