@@ -248,15 +248,20 @@ function dayTakeBox(id, a) {
   const state = d.locked ? ` <span class="neg" title="No new entry on this account for the rest of the day">stopped for the day (${usd(d.closed_net)})</span>`
     : (v ? ` <span class="mcap" title="The day's closed P&amp;L so far">${usd(d.closed_net || 0)} of ${usd(v)}</span>` : "");
   return `<span class="mcap" title="Closed profit that ends the day for this account: no new entry after it, for any strategy. 0 = off">Day take $</span>
-    <input type="number" min="0" max="100000" step="50" value="${v}" style="width:72px" aria-label="Day take, dollars"
+    <input type="number" min="0" max="100000" step="50" value="${v || ""}" placeholder="OFF" style="width:72px" aria-label="Day take, dollars (empty = OFF)"
       onkeydown="if(event.key==='Enter')setDayTake(${jsArg(id)}, this.value)"><button class="btn btn-outline btn-sm"
       onclick="setDayTake(${jsArg(id)}, this.previousElementSibling.value)">Set</button>${state}`;
 }
 async function setDayTake(id, raw) {
   const v = Number(raw);
   if (raw === "" || !Number.isFinite(v) || v < 0 || v > 100000) return toast("The day take is a dollar amount from 0 (off) to 100000.", 5000);
+  const was = Number(((((ST && ST.accounts) || {})[id] || {}).day || {}).day_lock);
+  // OFF removes a stop: it asks, unless the take is already known to be off (an unknown take asks)
+  if (v === 0 && was !== 0 && !await confirmDlg(`Day take OFF for ${acctShort(id)}: nothing stops it today?`,
+      "No profit amount ends its day: every strategy booked on it keeps taking new trades.", "Turn it off", false)) return;
   const r = await post("/api/account-day-lock", {account: id, day_lock: v});
-  if (r && r.ok) toast(r.locked ? "Day take set. This account is stopped for the day." : (v ? "Day take set: " + usd(v) + "." : "Day take off."), 4000);
+  if (r && r.ok) toast(r.locked ? `Day take set: ${usd(v)}. ${acctShort(id)} has already made ${usd(r.closed_net || 0)} today, so it takes no new trade for the rest of the day. Open trades run to their stop or target.`
+    : (v ? "Day take set: " + usd(v) + "." : "Day take off."), r.locked ? 8000 : 4000);
   else toast((r && r.detail) || "Could not set the day take.", 5000);
   await refresh();
   if ($("#acctOverlay").classList.contains("open")) openAccts(id);   // the popup shows the new take at once

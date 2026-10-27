@@ -11,9 +11,12 @@ const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
 const ESC = between('const esc = (v) =>', 'async function chartPost(');
 const CODE = between('/* ---- the account\'s day take (the group\'s) ----', '/* ---- accounts popup ---- */');
 
-function ctx({ reply = { ok: true }, open = true } = {}) {
-  const sent = [], toasts = [], reopened = [];
+function ctx({ reply = { ok: true }, open = true, yes = true, accounts = {} } = {}) {
+  const sent = [], toasts = [], reopened = [], asked = [];
   const c = vm.createContext({
+    ST: { accounts },
+    acctShort: (id) => '…' + String(id).slice(-3),
+    confirmDlg: async (...a) => { asked.push(a); return yes; },
     usd: (v) => (v < 0 ? '-$' : '$') + Math.abs(v),
     toast: (m) => toasts.push(m),
     post: async (url, body) => { sent.push([url, body]); return reply; },
@@ -22,7 +25,7 @@ function ctx({ reply = { ok: true }, open = true } = {}) {
     $: () => ({ classList: { contains: () => open } }),
   });
   vm.runInContext(ESC + CODE + '\nglobalThis.dayTakeBox = dayTakeBox; globalThis.setDayTake = setDayTake;', c);
-  return { c, sent, toasts, reopened };
+  return { c, sent, toasts, reopened, asked };
 }
 
 test('the box shows the take in force and the day so far', () => {
@@ -37,7 +40,7 @@ test('a locked day says so; no take shows no counter', () => {
   const { c } = ctx();
   assert.match(c.dayTakeBox('a1', { day: { day_lock: 1000, closed_net: 1250, locked: 'day_lock' } }), /stopped for the day/);
   const off = c.dayTakeBox('a1', { day: { day_lock: 0, closed_net: 0, locked: null } });
-  assert.match(off, /value="0"/);
+  assert.match(off, /value="" placeholder="OFF"/);     // the field reads OFF at 0
   assert.doesNotMatch(off, /of \$/);
   assert.doesNotThrow(() => c.dayTakeBox('a1', {}));
 });
@@ -73,6 +76,29 @@ test('0 turns it off; a bad value never reaches the desk', async () => {
   assert.match(t.toasts[0], /off/);
   for (const bad of ['', 'abc', '-5', '100001']) await t.c.setDayTake('a1', bad);
   assert.equal(t.sent.length, 1);
+});
+
+test('turning it OFF asks first; No sends nothing; already off or a new take asks nothing', async () => {
+  const on = { a047: { label: 'APEX047', day: { day_lock: 1000 } } };
+  const t = ctx({ yes: false, accounts: on });
+  await t.c.setDayTake('a047', '0');
+  assert.equal(t.asked.length, 1);
+  assert.equal(t.asked[0][0], 'Day take OFF for …047: nothing stops it today?');
+  assert.equal(t.sent.length, 0);
+  const y = ctx({ accounts: on });
+  await y.c.setDayTake('a047', '0');
+  assert.deepEqual(JSON.parse(JSON.stringify(y.sent)), [['/api/account-day-lock', { account: 'a047', day_lock: 0 }]]);
+  const off = ctx({ accounts: { a047: { day: { day_lock: 0 } } } });
+  await off.c.setDayTake('a047', '0');
+  await off.c.setDayTake('a047', '500');
+  assert.equal(off.asked.length, 0);
+  assert.equal(off.sent.length, 2);
+});
+
+test('a take that stops the day at once says so in words', async () => {
+  const t = ctx({ reply: { ok: true, locked: 'day_lock', closed_net: 1250, day_lock: 1000 } });
+  await t.c.setDayTake('a047', '1000');
+  assert.equal(t.toasts[0], 'Day take set: $1000. …047 has already made $1250 today, so it takes no new trade for the rest of the day. Open trades run to their stop or target.');
 });
 
 test('the desk refusing it is shown in its own words', async () => {
