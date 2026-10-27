@@ -98,6 +98,9 @@ NO_HOURLY = "The earlier hours' prices could not be read."
 NO_MINVOL = "The earlier days' volume could not be read."
 NO_SIDES = "The prices carry no buy/sell side: this strategy needs it (needs_delta)."
 TOO_LATE = "Started too late to follow today."
+LATE_GRACE_NS = 60 * 1_000_000_000  # the first print may come this long after the window opens: a session's first
+# trade is never AT its open (6 PM evening windows were "too late" every night, owner 2026-10-27).
+# shortcut: up to 60 s of a window's first prints may be missing from a rebuild; tighten if a strategy acts in them
 EVENING_DESK = "It starts the evening before: the Desk does not trade that yet (shadow only)."
 NOT_CHECKED = "Not checked yet: the check failed."
 PROBLEM = "Stopped: the runner had a problem."
@@ -2004,7 +2007,7 @@ class Runner:
             self._write(store.put_shadow_day, name, summary)
 
         day = StrategyDay(rec, date, spawn=self._spawn, daily=self._daily, deadline_s=self._deadline, save=save,
-                          wall=self._wall, late=lambda t0: now > t0 and oldest > t0, now_ns=now)
+                          wall=self._wall, late=lambda t0: now > t0 and oldest > t0 + LATE_GRACE_NS, now_ns=now)
         c = self._twins[name] = _Hosted(day, root, h.key, fed=len(ts), rec=rec)
         if self._silent:
             day.no_prices(True)
@@ -2059,7 +2062,7 @@ class Runner:
         # Fail closed: the clock is past the window's start and the prints held begin after it (the stream's backlog
         # is the session from its open; a tape that starts later cannot rebuild the day in full).
         day = StrategyDay(rec, date, spawn=self._spawn, daily=self._daily, deadline_s=self._deadline, save=save,
-                          wall=self._wall, late=lambda t0: now > t0 and oldest > t0, now_ns=now, **plan)
+                          wall=self._wall, late=lambda t0: now > t0 and oldest > t0 + LATE_GRACE_NS, now_ns=now, **plan)
         h = self._days[name] = _Hosted(day, root, _key(rec), fed=len(ts), rec=rec)
         if self._silent:
             day.no_prices(True)
