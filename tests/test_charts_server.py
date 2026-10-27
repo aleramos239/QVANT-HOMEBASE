@@ -613,19 +613,19 @@ def test_refill_running_gets_a_followup_not_absorbed(tmp_path, monkeypatch):
 
 
 def test_a_failed_subscribe_leaves_no_orphaned_stream_or_pending_update(tmp_path, monkeypatch):
-    """If s.payload() raises AFTER hub.subscribe() has already registered the
-    sub, it must not stay registered -- otherwise the pump keeps sending
+    """If s.snapshot() (the history message, made in ws_endpoint) raises AFTER hub.subscribe() has already
+    registered the sub, it must not stay registered -- otherwise the pump keeps sending
     `update`s for an id that only ever received `error`, never `history`."""
-    orig_payload = Stream.payload
+    orig_snapshot = Stream.snapshot
     calls = [0]
 
-    def payload(self, fp=True, big=True, flow=True):
+    def snapshot(self, fp=True, big=True, flow=True):
         calls[0] += 1
         if calls[0] == 1:
             raise RuntimeError("payload boom")
-        return orig_payload(self, fp, big, flow)
+        return orig_snapshot(self, fp, big, flow)
 
-    monkeypatch.setattr(Stream, "payload", payload)
+    monkeypatch.setattr(Stream, "snapshot", snapshot)
 
     sent: list = []
     orig_send = Conn.send
