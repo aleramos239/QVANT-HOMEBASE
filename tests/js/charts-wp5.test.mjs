@@ -215,3 +215,23 @@ test('5.2 run: the account spot -- "Accounts:" when it cannot trade, "Trade on: 
   down.ov.paintAccts({ mode: 'off', accounts: [] });
   assert.equal(down.ov.accts.hidden, true, 'chart trading off at the desk: no prompt on every chart');
 });
+
+test('5.12 run: a chip whose order the desk said is not working reads so and greys; unmarked, it is as before', () => {
+  const T = createRequire(import.meta.url)('../../homebase/static/charts/trade.js');
+  const ctx = vm.createContext({ window: { HBDeskClient: { quotes: {} } }, T });
+  vm.runInContext(`globalThis.O = { ${method('paint')} };`, ctx);
+  const props = {};
+  const chip = { ...fakeEl('div'), text: fakeEl('span'), style: { setProperty: (k, v) => { props[k] = v; } } };
+  const g = { kind: 'sl', side: 'Sell', qty: 1, price: 29990, legs: [{ account: 'sim041', order_id: '7', who: '…041' }] };
+  const ov = { root: 'NQ', named: false, cell: { tick: 0.25, P: { up: 'U', down: 'D', accent: 'A', text2: 'G' } } };
+  const paint = ctx.O.paint.bind(ov);
+  paint({ g: { ...g, gone: true }, chip });
+  assert.match(chip.text.textContent, / · not working$/);
+  assert.equal(props['--c'], 'G');
+  assert.equal(chip.classList.contains('gone'), true);
+  assert.match(chip.title, /not working/);
+  paint({ g, chip });
+  assert.doesNotMatch(chip.text.textContent, /not working/);
+  assert.equal(props['--c'], 'D', 'its own colour back');
+  assert.equal(chip.classList.contains('gone'), false);
+});
