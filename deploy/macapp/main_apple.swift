@@ -89,35 +89,47 @@ func env(_ k: String) -> String? {
     return (v == nil || v!.isEmpty) ? nil : v
 }
 
-/// Small synchronous GETs (launch and ⌘R only), all at once: each distinct URL's body when it answered 200 within the
-/// timeout (+1 s), keyed by its absolute URL. The caller waits for the slowest one, not for the sum of them.
-func fetchAll(_ urls: [URL], timeout: TimeInterval = 3) -> [URL: Data] {
+/// A small synchronous GET (launch and ⌘R only): the body of a 200, else nil.
+func fetch(_ url: URL, timeout: TimeInterval = 3) -> Data? {
+    var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: timeout)
+    req.httpMethod = "GET"
+    let sem = DispatchSemaphore(value: 0)
+    var out: Data?
     let conf = URLSessionConfiguration.ephemeral
-    conf.httpMaximumConnectionsPerHost = 16     // the skin is ~7 files a host: none queues behind the others
     #if VPS
     conf.proxyConfigurations = [vpsProxy]
     #endif
-    let session = URLSession(configuration: conf)
-    let group = DispatchGroup()
-    let lock = NSLock()
-    var out: [URL: Data] = [:]
-    for url in Set(urls.map { $0.absoluteURL }) {
-        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: timeout)
-        req.httpMethod = "GET"
-        group.enter()
-        session.dataTask(with: req) { data, resp, _ in
-            if let http = resp as? HTTPURLResponse, http.statusCode == 200, let d = data { lock.lock(); out[url] = d; lock.unlock() }
-            group.leave()
-        }.resume()
+    let task = URLSession(configuration: conf).dataTask(with: req) { data, resp, _ in
+        if let http = resp as? HTTPURLResponse, http.statusCode == 200 { out = data }
+        sem.signal()
     }
-    _ = group.wait(timeout: .now() + timeout + 1)
-    session.invalidateAndCancel()
-    lock.lock(); defer { lock.unlock() }
+    task.resume()
+    _ = sem.wait(timeout: .now() + timeout + 1)
     return out
 }
 
-/// A small synchronous GET (launch and ⌘R only): the body of a 200, else nil.
-func fetch(_ url: URL, timeout: TimeInterval = 3) -> Data? { fetchAll([url], timeout: timeout)[url.absoluteURL] }
+/// Many small GETs (launch and ⌘R only): one chain per server (origin), the chains side by side, each chain one fetch()
+/// after another in the given order. Every server still gets its GETs one at a time, each with fetch()'s own budget,
+/// so launch waits for the slowest server, not for the sum. Each distinct URL is fetched once; every chain stops at the
+/// first miss (the caller then drops the whole skin anyway). The bodies that answered 200, keyed by absolute URL.
+func fetchAll(_ urls: [URL]) -> [URL: Data] {
+    var chains: [URL: [URL]] = [:]
+    for u in urls.map({ $0.absoluteURL }) where !(chains[origin(of: u)]?.contains(u) ?? false) {
+        chains[origin(of: u), default: []].append(u)
+    }
+    let list = Array(chains.values), lock = NSLock()
+    var out: [URL: Data] = [:], missed = false
+    DispatchQueue.concurrentPerform(iterations: list.count) { i in
+        for u in list[i] {
+            lock.lock(); let stop = missed; lock.unlock()
+            if stop { return }
+            let d = fetch(u)
+            lock.lock(); if let d = d { out[u] = d } else { missed = true }; lock.unlock()
+            if d == nil { return }
+        }
+    }
+    return out
+}
 
 func jsString(_ s: String) -> String {
     guard let d = try? JSONSerialization.data(withJSONObject: [s]), let t = String(data: d, encoding: .utf8) else { return "\"\"" }
@@ -288,7 +300,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let tabs = root["tabs"] as? [String: Any] else { return nil }
         let shared = root["shared"] as? [String: Any] ?? [:]
-        // every file of every tab fetched at once (launch waits for the slowest, not the sum), then read below in order
+        // every file of every tab fetched first (one chain per server, the servers side by side), then read below in order
         var urls: [URL] = []
         for tab in Tab.allCases {
             guard let t = tabs[tab.key] as? [String: Any] else { return nil }
