@@ -1215,3 +1215,57 @@ test('1.11: the foot says only how many accounts are connected, and opens the ac
   assert.doesNotMatch(t.els.todayFoot.innerHTML, /need a look|Last event|openChecks/);
   assert.match(t.side(), /Last event 09:59/, 'the sidebar\'s Activity row keeps the last event');
 });
+
+// ---- WP1.19: a group's page, live: each member today, the group's P&L today, the cycle's last turn ---------------------
+function groupDesk({ events = null, on = true, rounds = [{ account: 'a1', round: 1, status: 'live', side: 'Buy', qty: 1 }] } = {}) {
+  const lab = deskStrat({ rounds });
+  lab.accounts = [{ account: 'a1', date: '2026-10-10', status: 'done', pnl: 50 }];
+  const built = nq930();
+  built.accounts = [{ account: 'a2', date: '2026-10-10', status: 'done', pnl: 120 }];
+  const t = load({ strategies: { nq930: built, lab_nq_orb: lab }, book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  t.ctx.ST.groups = { g1: { id: 'g1', name: 'Apex', members: ['lab_nq_orb'], accounts: ['a1', 'a2'], risk_usd: 1000, max_minis: 17, on, next: 'a2', outside: {} } };
+  vm.runInContext('DESKGROUPS = {groups: [{id: "g1", name: "Apex", kind: "together", members: ["lab_nq_orb", "nq930"]}], ok: true};', t.ctx);
+  const urls = [];
+  t.ctx.fetch = events ? jsonAnswer(events, urls) : async (u) => { urls.push(u); return { ok: false }; };
+  return { ...t, urls, page: () => vm.runInContext('groupView("g1")', t.ctx) };
+}
+const TURN_DAY = [
+  { et: '2026-10-10T10:41:12-04:00', event: 'lab_round', strategy: 'lab_nq_orb', account: 'a1', round: 1 },
+  { et: '2026-10-10T09:30:02-04:00', event: 'placed', strategy: 'nq930', account: 'a2' }];
+test('1.19: each member\'s state, last signal, position and today; the group today; the last turn of the cycle', async () => {
+  const t = groupDesk({ events: TURN_DAY });
+  t.page();
+  await tick();
+  assert.deepEqual(t.urls, ['/api/journal?group=g1&strategy=lab_nq_orb%2Cnq930&limit=2000'], 'the group\'s read, the Activity page\'s query');
+  const html = t.page(), a1 = vm.runInContext('acctShort("a1")', t.ctx), a2 = vm.runInContext('acctShort("a2")', t.ctx);
+  assert.match(html, /<h2>Today<\/h2><div class="sd-state">The group today: <b>\+\$170<\/b><\/div>/);
+  assert.match(html, new RegExp(`<span class="t dim">Last signal 10:41 · Long 1 on ${a1}</span><span class="t net pos">\\+\\$50</span>`));
+  assert.match(html, /NQ930 · <span class="dim">Done today|NQ930 · <span class="dim">Watching/);
+  assert.match(html, /<span class="t dim">Last signal 09:30<\/span><span class="t net pos">\+\$120<\/span>/);
+  assert.match(html, new RegExp(`<span class="h">Last turn 10:41: NQ ORB on ${a1}</span>`));
+  assert.ok(html.indexOf('Next account: ' + a2) < html.indexOf('Last turn'), 'beside the next account, in the cycle card');
+  assert.ok(html.indexOf('<h2>Account cycle</h2>') < html.indexOf('<h2>Today</h2>'), 'the members under the cycle card, as drawn');
+  assert.match(html, /onclick="openGroupMember\(&quot;lab_nq_orb&quot;\)"/);
+});
+
+test('1.19: a piece with no data is left out: no answer, no turn, the cycle off, no member on the Desk', async () => {
+  const none = groupDesk({ rounds: [] });
+  none.page(); await tick();
+  const html = none.page();
+  assert.doesNotMatch(html, /Last signal|Last turn/, 'the journal not answering: no time is guessed');
+  assert.match(html, /<span class="t dim"><\/span><span class="t net pos">\+\$50<\/span>/, 'flat and no signal: the cell is empty');
+  const off = groupDesk({ events: TURN_DAY, on: false });
+  off.page(); await tick();
+  assert.doesNotMatch(off.page(), /Last turn/, 'the cycle off: no turn line');
+  const skip = groupDesk({ events: [{ et: '2026-10-10T11:02:00-04:00', event: 'group_skipped', group: 'g1', strategy: 'lab_nq_orb',
+    reason: 'No account of its group could take this trade.' }, ...TURN_DAY] });
+  skip.page(); await tick();
+  assert.match(skip.page(), /Last turn 11:02: NQ ORB was skipped\. No account of its group could take this trade\.</);
+  const empty = groupDesk();
+  empty.ctx.ST.strategies = {};
+  assert.doesNotMatch(empty.page(), /<h2>Today<\/h2>|The group today/);
+  const noPnl = groupDesk();
+  noPnl.ctx.ST.strategies.lab_nq_orb.accounts = []; noPnl.ctx.ST.strategies.nq930.accounts = [];
+  assert.doesNotMatch(noPnl.page(), /The group today/, 'no trade closed today: no group total');
+  assert.match(noPnl.page(), /<h2>Today<\/h2>/);
+});

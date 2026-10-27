@@ -80,6 +80,7 @@ function groupView(id) {
       <span class="h">${esc(m.label)}${m.state ? ` · <span class="dim">${esc(m.state)}</span>` : ""}</span>
       <span class="t dim">${esc(m.build)}</span><span class="t net">${esc(m.unseen)}</span></div>`);
   const out = p.leftOut.map(x => `<div class="feed-row"><span class="h">${esc(x.label)}</span><span class="t dim">${esc(x.why)}</span></div>`);
+  // WP1.15 ("Changes (7 days)", not built yet) goes right under the Today section below: /api/journal?group=<id>&days=7
   const curve = p.curve ? `<div class="sec"><h2>${esc(p.curve.title)}</h2>${eqPlot(p.curve.vals, p.curve.label, p.curve.total, p.curve.aria, p.curve.ends, p.curve.days, p.curve.notes, p.curve.build, p.curve.both)}</div>` : "";
   return `<button class="back" onclick="setView('today')">‹ Today</button>
     <div class="sd-top"><div><h1 class="sd-title">${esc(p.title)}</h1><div class="sp mono">${esc(p.lead)}</div></div></div>
@@ -96,6 +97,7 @@ function groupView(id) {
       <div class="feed-row"><span class="h dim">Strategy</span><span class="t dim">Build</span><span class="t dim">Unseen</span></div>${members.join("")}</div></div>` : ""}
     ${out.length ? `<div class="sec"><h2>Left out of the sum</h2><div class="agroup feed static">${out.join("")}</div></div>` : ""}
     ${labSafe(() => cycleHtml(g), "")}
+    ${labSafe(() => groupTodayHtml(g), "")}
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openGroupMgr()">Manage groups</button>
       <button class="btn btn-outline btn-sm" onclick="deleteGroup(${jsArg(g.id)})" title="The strategies stay on the Desk, in no group.">Delete group</button></div>`;
 }
@@ -149,6 +151,7 @@ function cycleHtml(g) {
   if (!mem.length && !cyc) return `<div class="sec"><h2>Account cycle</h2><div class="mcap">Put this group's strategies in it first
     (Manage groups): then tick the accounts here and switch the cycle on.</div></div>`;
   const on = !!(cyc && cyc.on), chosen = new Set(dr ? dr.accounts : cyc ? cyc.accounts : []);
+  const turn = on ? labSafe(() => cycleLastTurn(g), "") : "";
   const tagCls = {LIVE: "tag-live", PAPER: "tag-paper", DEMO: "tag"};
   const boxes = Object.keys(ST.accounts || {}).map(a => `<label class="feed-row" style="cursor:pointer">
       <span class="h"><input type="checkbox" class="cyc-acct" data-acct="${esc(a)}" ${chosen.has(a) ? "checked" : ""}
@@ -164,6 +167,7 @@ function cycleHtml(g) {
         title="${on ? "ON — each trade goes to the next account below" : "OFF — each strategy trades its own booked accounts"}"
         onclick="toggleCycle(${jsArg(g.id)})"></button></div>
     ${on && cyc.next ? `<div class="feed-row"><span class="h">Next account: ${esc(acctShort(cyc.next))}</span></div>` : ""}
+    ${turn ? `<div class="feed-row"><span class="h">${esc(turn)}</span></div>` : ""}
     <div class="feed-row"><span class="h">Risk per trade ($)</span><span class="t">${num("cyc-risk", dr ? dr.risk : cyc ? cyc.risk_usd : 1000, "1000")}</span></div>
     <div class="feed-row"><span class="h">Most per trade (full contracts)</span><span class="t">${num("cyc-minis", dr ? dr.minis : cyc ? cyc.max_minis : 17, "17")}</span></div>
     ${boxes}</div>
@@ -446,6 +450,40 @@ function bookEnvTag(name) {
   const [cls, t] = {LIVE: ["tag-live", "Its orders go to a LIVE account: real money"], PAPER: ["tag-paper", "Paper accounts only: no money"],
                     DEMO: ["tag", "Demo accounts only: no money"]}[w];
   return `<span class="${cls}" title="${t}">${w}</span>`;
+}
+/* A group's page, live (WP1.19): today's lines of the group and its strategies (the Activity page's group read), each member
+   on the Desk with its state, last signal, position and today, the group's P&L today, and the cycle's last turn. Anything
+   with no data is left out, never shown as a guess. */
+const groupJournal = (g) => journalToday("group", "/api/journal?" + new URLSearchParams({group: g.id, strategy: (g.members || []).join(","), limit: "2000"}));
+function groupTodayHtml(g) {
+  const live = (g.members || []).filter(m => ST.strategies && ST.strategies[m]);
+  if (!live.length) return "";
+  const rows = labSafe(() => groupJournal(g), null);
+  const pnls = live.map(m => todayPnl(ST.strategies[m])).filter(p => p != null);
+  const tot = pnls.length ? pnls.reduce((a, p) => a + p, 0) : null;
+  const line = (m) => {
+    const s = ST.strategies[m], p = todayPnl(s), sig = lastSignal(m, rows);
+    const pos = stratOpen(s).map(x => `${x.side} ${x.qty} on ${acctShort(x.account)}`).join(", ");
+    const bits = [sig ? "Last signal " + sig : "", pos].filter(Boolean).join(" · ");
+    return `<div class="feed-row" role="button" tabindex="0" onclick="openGroupMember(${jsArg(m)})"
+      onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openGroupMember(${jsArg(m)})}">
+      <span class="h">${esc(stratLabel(m))} · <span class="dim">${esc(stratState(m, s))}</span></span>
+      <span class="t dim">${esc(bits)}</span><span class="t net${p < 0 ? " neg" : p > 0 ? " pos" : ""}">${p == null ? "" : esc(usdS(p))}</span></div>`;
+  };
+  return `<div class="sec"><h2>Today</h2>${tot == null ? "" : `<div class="sd-state">The group today: <b>${esc(usdS(tot))}</b></div>`}
+    <div class="agroup feed static">${live.map(line).join("")}</div></div>`;
+}
+/* The cycle's last turn today: the newest trade one of its strategies opened on one of its accounts, or the newest turn it
+   skipped. "" until the journal answers, or with no turn today. */
+function cycleLastTurn(g) {
+  const cyc = ((ST && ST.groups) || {})[g.id], rows = groupJournal(g);
+  if (!cyc || !rows) return "";
+  const r = rows.find(x => x && x.et && ((x.event === "lab_round" && (cyc.members || []).includes(x.strategy) && (cyc.accounts || []).includes(x.account))
+    || ((x.event === "group_skipped" || x.event === "group_hedge_skipped") && x.group === g.id)));
+  if (!r) return "";
+  const t = `Last turn ${jHm(r)}: ${stratLabel(r.strategy)}`;
+  return r.event === "lab_round" ? `${t} on ${acctShort(r.account)}`
+    : `${t} was skipped. ${r.event === "group_hedge_skipped" ? "It was the opposite way to a trade open on another of these accounts." : String(r.reason || "")}`.trim();
 }
 function todayRow(name, s) {
   const c = s.cfg, state = stratState(name, s), p = todayPnl(s);
