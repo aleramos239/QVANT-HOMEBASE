@@ -23,6 +23,8 @@ import sys
 from pathlib import Path
 
 from . import importrun
+from ..charts.history import History      # the chart service's 1-minute bar cache, read only (nothing imports this CLI)
+from ..charts.store import TickStore
 from ..contracts import point_value
 
 COMMISSION = 4.00                  # $ a round turn: importrun's own default
@@ -48,8 +50,6 @@ def priced(trades: list, opens: dict, pv: float, commission: float = COMMISSION)
 
 def minute_opens(root: str, dates, base=None) -> dict:
     """{date: {minute epoch ms: open}} from the 1-minute bar cache (History.minutes; read only)."""
-    from ..charts.history import History
-    from ..charts.store import TickStore
     h = History(TickStore(base)) if base else History(TickStore())
     out = {}
     for d in sorted(set(dates)):

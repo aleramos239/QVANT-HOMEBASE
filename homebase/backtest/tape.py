@@ -47,6 +47,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from . import minutebars
+from .sides import order_sides, quote_sides
 
 ARCHIVE = Path.home() / "futures_ticks"
 CACHE = Path.home() / "futures_derived" / "homebase_tape"
@@ -100,7 +101,6 @@ class Tape:
         that needs_delta pays for it): by the quotes when its archive file recorded them, else by the flow builder's rule
         (backtest/sides.py)."""
         if self._sides is None:
-            from .sides import order_sides, quote_sides
             q = quote_sides(self.src, len(self.ts)) if self.src is not None else None
             self._sides = q if q is not None else order_sides(self.ts, self.px)
         return self._sides
