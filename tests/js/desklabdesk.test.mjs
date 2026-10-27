@@ -367,6 +367,17 @@ test('L: an account with no demo or paper mark is LIVE in the Setup and the side
   assert.equal((side.match(/tag-live/g) || []).length, 2, 'demo and paper never say LIVE');
 });
 
+test('M: a Setup or Changes block that fails to draw leaves the rest of a Lab strategy\'s page, its Flatten button too', () => {
+  for (const broken of ['setupHtml', 'deskChangesHtml']) {
+    const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+    vm.runInContext(`${broken} = () => { throw new Error('bad data'); };`, t.ctx);
+    const html = t.ctx.api.stratView('lab_nq_orb');
+    assert.doesNotMatch(html, /could not be shown/, broken);
+    assert.match(html, /Flatten &amp; turn off/, broken);
+    assert.match(html, /<h2>Accounts<\/h2>/, broken);
+  }
+});
+
 test('WP1.14 the built-in page has the Setup too: its contracts, when it fires, flat time and days, shown only', () => {
   const t = load({ book: { nq930: [{ account: 'a2', qty: 3 }] } });
   t.ctx.ST.strategies.nq930.cfg.fire_et = '09:30:00';

@@ -170,7 +170,7 @@ function labDeskView(name, s) {
     ${stateNote ? `<div class="sd-note">${esc(stateNote)}</div>` : ""}
     <div class="sd-note">${esc(DeskLab.deskNote(book.length > 0))}</div>
     ${ro ? `<div class="sd-note">${esc(DeskLab.OTHER_DESK)}</div>` : ""}
-    ${setupHtml(name, s)}
+    ${labSafe(() => setupHtml(name, s), "")}
     ${lab.auto === true ? "" : `<div class="sec"><h2>Limits</h2><div class="agroup feed static">${limits}</div>${winNote ? `<div class="mcap warn">${esc(winNote)}</div>` : ""}
       <button class="btn btn-outline btn-sm" onclick="openLabLimits(${jsArg(name)})"${ro ? " disabled" : ""}>${esc(DeskLab.EDIT_LIMITS)}</button></div>`}
     <div class="sec"><h2>${shadow ? "Today, in shadow" : "Today"}</h2>${today}${actBtn("s:" + name)}</div>${lab.name ? stratCal(name, lab.name) : ""}
@@ -178,7 +178,7 @@ function labDeskView(name, s) {
     ${row ? `<div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
     ${labCurveHtml(row.name)}${labResHtml(row.name, name)}` : ""}
     <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div>` : ""}${ro ? "" : rotationHtml(name)}${addForm}</div>
-    ${deskChangesHtml("s:" + name)}
+    ${labSafe(() => deskChangesHtml("s:" + name), "")}
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat(${jsArg(name)})" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       ${deskMachine() === "server" ? "" : `<button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>`}
       <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(lab.name || "")}, ${jsArg(name)})"${busy || ro || !lab.name ? " disabled" : ""} title="Off the Desk, switched off, its accounts off, and kept. Restore it from Archive any time.">Archive</button>
