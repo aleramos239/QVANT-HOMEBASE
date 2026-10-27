@@ -12,17 +12,22 @@ const C = require('../../homebase/static/charts/labcode.js');
 const X = require('../../homebase/static/charts/tester.js');
 const LAB = readFileSync(new URL('../../homebase/static/charts/lab.js', import.meta.url), 'utf8');
 const CODE = LAB.slice(LAB.indexOf('async function runAll'), LAB.indexOf('async function oosGo'));
+const RUN = LAB.slice(LAB.indexOf('async function run(opts = {})'), LAB.indexOf('/* A "Blueprint record" file'));
 
 const flush = async () => { for (let i = 0; i < 12; i++) await new Promise((r) => setImmediate(r)); };
 const F = (range) => ({ strategy: 'draft_x', range });
 const R31 = { ...X.LAB_RANGE };
-function lab({ picked = false, runs = [], wfs = [] } = {}) {
+/* NQ's in-sample months as backtest/wfmonths.blocks lays them out (Oct-Dec 2021, Feb-Apr 2022, ... Jun-Aug 2026) */
+const NQ_IS = []; for (let y = 2021, m = 10, k = 0; k < 60; k++, m === 12 ? (y += 1, m = 1) : (m += 1)) if (k % 4 < 3) NQ_IS.push(`${y}-${String(m).padStart(2, '0')}`);
+const LAYOUT = (strategy = 'draft_x', root = 'NQ', months = NQ_IS) => ({ strategy, status: 'done', range: { kind: 'wf_is', start: '2021-10-01', end: '2026-08-31', root, months } });
+const NQ_DRAFT = { key: 'd:x', kind: 'draft', valid: { ok: true, meta: { root: 'NQ' } } };
+function lab({ picked = false, runs = [], wfs = [], real = false } = {}) {
   const sent = [], logs = [], dialogs = [], did = [];
   const fixed = wfs.filter((w) => w.scheme === 'fixed');
   const c = vm.createContext({
     X, C, S: { tries: {}, three: {}, wf: {}, busy: false }, OOS_SAID: 'x',
     esc: (t) => String(t == null ? '' : t), log: (h) => logs.push(h), paintRes() {}, curSid: () => 'draft_x', triesOf: (sid) => c.S.tries[sid] || null,
-    buf: () => ({ key: 'd:x' }), formOf: () => c.form, is31: (f) => f.range.wf === X.WF_ROLL,
+    buf: () => c.cur || NQ_DRAFT, formOf: (b) => (c.forms && b ? c.forms[b.key] : c.form), is31: (f) => f.range.wf === X.WF_ROLL,
     threeState: () => ({ oos: { busy: false, result: null } }), oosGo: () => did.push('oosGo'), run: (o) => did.push(['run', o]),
     closeDialog() {}, dialog: (html) => { const d = { html, on: null, addEventListener(t, f) { d.on = f; } }; dialogs.push(d); return d; },
     send: async (m, url) => {
@@ -33,7 +38,9 @@ function lab({ picked = false, runs = [], wfs = [] } = {}) {
       return { ok: false, error: 'no' };
     },
   });
-  vm.runInContext(`${CODE}\nObject.assign(globalThis, { runAll, oosRun, datedRunOk, loadTries, hasPick });`, c);
+  if (real) Object.assign(c, { metaOf: () => ({ inputs: [] }), validateNow: async () => ({ ok: true }), wfRun() {}, paintHead() {}, isDirty: () => false,
+    save: async () => true, release() {}, P: {}, setPanel() {}, poll() {}, threeKeep() {}, stopAsk() {}, threeRunBody: (f) => ({ ...X.body(f), range: { kind: 'wf_is' } }) });
+  vm.runInContext(`${CODE}\n${real ? RUN : ''}\nObject.assign(globalThis, { runAll, oosRun, datedRunOk, loadTries, hasPick });`, c);
   const press = (x) => dialogs.at(-1).on({ target: { closest: () => ({ dataset: { x } }) } });
   return { c, sent, logs, dialogs, did, press, fixed };
 }
@@ -52,18 +59,41 @@ test('before a pick: Run all years is refused, no dialog, nothing runs; only rea
 });
 
 test('before a pick: a Run on Other dates that hold a test month is refused; dates without one run at once', async () => {
-  const p = lab();
+  const p = lab({ runs: [LAYOUT()] });
   assert.equal(await p.c.datedRunOk(F({ id: 'custom', start: '2022-01-03', end: '2022-01-31', wf: null }), () => p.did.push('again')), false);
   assert.match(p.logs.join(' '), /Pick a box first: 2022-01-03 → 2022-01-31 holds test months/);
   assert.equal(p.dialogs.length, 0);
   assert.equal(await p.c.datedRunOk(F({ id: 'custom', start: '2021-09-22', end: '2021-12-31', wf: null }), () => p.did.push('again')), true);
+  assert.equal(await p.c.datedRunOk(F({ id: 'custom', start: '2022-02-01', end: '2022-04-30', wf: null }), () => p.did.push('again')), true);   // NQ in-sample
   assert.equal(await p.c.datedRunOk(F({ id: 'all', start: '', end: '', wf: null }), () => p.did.push('again')), false);    // to today
   assert.deepEqual(p.did, []);
   assert.equal(p.dialogs.length, 0);
 });
 
+test('before a pick: each market\'s own test months are refused -- 6E Feb 2023, BTC Mar 2026 after its gap; no months known = refused from Jan 2022', async () => {
+  const E6 = ['2022-11', '2022-12', '2023-01', '2023-03', '2023-04', '2023-05'];
+  const e = lab({ runs: [LAYOUT('draft_x', '6E', E6)] });
+  e.c.cur = { key: 'd:x', kind: 'draft', valid: { ok: true, meta: { root: '6E' } } };
+  assert.equal(await e.c.datedRunOk(F({ id: 'custom', start: '2023-02-01', end: '2023-02-28', wf: null }), () => e.did.push('again')), false);
+  assert.match(e.logs.join(' '), /Pick a box first: 2023-02-01 → 2023-02-28 holds test months/);
+  assert.equal(await e.c.datedRunOk(F({ id: 'custom', start: '2023-01-02', end: '2023-01-31', wf: null }), () => e.did.push('again')), true);   // 6E in-sample
+  const btc = lab({ runs: [LAYOUT('draft_x', 'BTC', [...NQ_IS.slice(0, 27), '2026-04', '2026-05', '2026-06'])] });
+  btc.c.cur = { key: 'd:x', kind: 'draft', valid: { ok: true, meta: { root: 'BTC' } } };
+  assert.equal(await btc.c.datedRunOk(F({ id: 'custom', start: '2026-03-02', end: '2026-03-31', wf: null }), () => btc.did.push('again')), false);
+  assert.equal(await btc.c.datedRunOk(F({ id: 'custom', start: '2025-06-02', end: '2025-06-30', wf: null }), () => btc.did.push('again')), false);  // the gap
+  // the layout of another market, an unchecked edit, or none at all: every month from Jan 2022 may be a test month
+  for (const [runs, cur] of [[[LAYOUT('draft_x', 'NQ')], { key: 'd:x', kind: 'draft', valid: { ok: true, meta: { root: '6E' } } }],
+    [[LAYOUT()], { key: 'd:x', kind: 'draft', valid: { ok: true, stale: true, meta: { root: 'NQ' } } }], [[], NQ_DRAFT]]) {
+    const q = lab({ runs }); q.c.cur = cur;
+    assert.equal(await q.c.datedRunOk(F({ id: 'custom', start: '2022-02-01', end: '2022-04-30', wf: null }), () => q.did.push('again')), false);
+    assert.match(q.logs.join(' '), /may hold test months \(run In-sample once and the Lab knows this market's months\)/);
+    assert.equal(await q.c.datedRunOk(F({ id: 'custom', start: '2021-10-01', end: '2021-12-31', wf: null }), () => q.did.push('again')), true);
+  }
+  for (const p of [e, btc]) { assert.deepEqual(p.did, []); assert.equal(p.dialogs.length, 0); }
+});
+
 test('after a pick: one ask says the reads and the try; Not yet sends nothing, a yes runs what ran before', async () => {
-  const runs = [{ strategy: 'draft_x', status: 'done', range: { kind: 'wf_is', start: '2021-10-01', end: '2026-08-31' } },
+  const runs = [LAYOUT(),
     { strategy: 'draft_x', status: 'done', range: { kind: 'custom', start: '2022-01-01', end: '2022-01-31' } }];
   const p = lab({ picked: true, runs, wfs: [TABLE] });
   p.c.form = F(R31);

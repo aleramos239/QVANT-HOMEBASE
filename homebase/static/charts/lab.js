@@ -2424,14 +2424,17 @@ async function testMonthsAsk(f, what, go) {
 }
 /* A Run on dates that hold a test month (Other dates, a custom range): refused before a pick, asked after one (plan 4.5).
    true = it may run now; `again` runs it after a yes. */
-async function datedRunOk(f, again) {
-  const d = X.rangeDates(f.range);
-  if (!C.touchesTestMonths(d.start, d.end)) return true;
-  const span = `${d.start || '?'} → ${d.end || 'today'}`;
-  if (!(await hasPick(f))) { log(`<span class="err">Pick a box first: ${esc(span)} holds test months, and they open only after a pick.</span>`); return false; }
-  testMonthsAsk(f, { title: 'Run these dates?', text: `${span} holds test months.`, go: 'Run them' }, again);
+async function datedRunOk(f, again, b = buf()) {
+  const d = X.rangeDates(f.range), t = await loadTries(f.strategy), lay = t && t.layout, root = rootOf(b);
+  const ins = lay && root && lay.root === root ? lay.months : null;          // that market's own months, or none known (fail closed)
+  if (!C.touchesTestMonths(d.start, d.end, ins)) return true;
+  const span = `${d.start || '?'} → ${d.end || 'today'}`, holds = ins ? 'holds test months' : 'may hold test months (run In-sample once and the Lab knows this market\'s months)';
+  if (!(await hasPick(f))) { log(`<span class="err">Pick a box first: ${esc(span)} ${esc(holds)}, and they open only after a pick.</span>`); return false; }
+  testMonthsAsk(f, { title: 'Run these dates?', text: `${span} ${holds}.`, go: 'Run them' }, again);
   return false;
 }
+/* The market a strategy's code trades now: a built-in's, or the draft's last check of its code (none while an edit is unchecked). */
+const rootOf = (b) => (!b ? '' : b.kind === 'builtin' ? (b.meta && b.meta.root) || '' : (b.valid && b.valid.ok && !b.valid.stale && b.valid.meta && b.valid.meta.root) || '');
 async function oosGo(b, f, T) {
   const o = T.oos, token = ++o.token, id = () => encodeURIComponent(o.id), sleep = (ms) => new Promise((res) => setTimeout(res, ms));
   o.busy = true; o.err = ''; o.step = 'Starting…'; paintRes();
