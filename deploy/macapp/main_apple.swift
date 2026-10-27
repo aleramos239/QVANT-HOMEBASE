@@ -187,7 +187,8 @@ func vpsEnsureTunnel() {
 }
 #endif
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler,
+                   NSMenuItemValidation {
     var window: NSWindow!
     var webViews: [Tab: WKWebView] = [:]
     var currentTab: Tab = .desk
@@ -411,9 +412,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let tabs = root["tabs"] as? [String: Any] else { return nil }
         let shared = root["shared"] as? [String: Any] ?? [:]
+        #if VPS
+        let shown: [Tab] = [.desk]      // the VPS app is the Desk only: a Charts/Lab file that fails cannot unskin it
+        #else
+        let shown = Tab.allCases
+        #endif
         // every file of every tab fetched first (one chain per server, the servers side by side), then read below in order
         var urls: [URL] = []
-        for tab in Tab.allCases {
+        for tab in shown {
             guard let t = tabs[tab.key] as? [String: Any] else { return nil }
             let base = origin(of: tab.baseURL)
             var paths: [String] = (shared["css"] as? [String] ?? []) + (t["css"] as? [String] ?? [])
@@ -432,7 +438,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             return out.joined(separator: "\n")
         }
         var result: [Tab: TabSkin] = [:]
-        for tab in Tab.allCases {
+        for tab in shown {
             guard let t = tabs[tab.key] as? [String: Any] else { return nil }
             let base = origin(of: tab.baseURL)
             let cssPaths = (shared["css"] as? [String] ?? []) + (t["css"] as? [String] ?? [])
@@ -651,6 +657,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         UserDefaults.standard.set(["system", "light", "dark"][max(0, min(2, sender.tag))], forKey: appearanceKey)
         applyAppearance()
         for item in sender.menu?.items ?? [] { item.state = item === sender ? .on : .off }
+    }
+
+    /// Charts has no sidebar: its Toggle Sidebar is greyed out there.
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        !(item.action == #selector(pageCommand(_:)) && item.representedObject as? String == "sidebar" && currentTab == .charts)
     }
 
     /// A View-menu command the page carries out (toggle the sidebar / the inspector): the page owns its layout.
