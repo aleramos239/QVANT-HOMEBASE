@@ -851,10 +851,10 @@ function fmFirstError(errors, order) {
    The server lays out each market's 3:1 blocks from that market's own months (backtest/wfmonths.blocks): for NQ the test months
    are Jan, May, Sep from 2022 (Oct-Dec 2021 -> Jan 2022, Feb-Apr -> May, ...), but a market whose tapes start later (6E: Nov 2022)
    or have a gap (BTC) has others. The Lab learns a market's layout from a saved in-sample run: range kind wf_is carries its root and
-   its in-sample `months` (layoutOf). `ins` = those months. A month is safe only before the first of them or as one of them; any
-   other month (a test month, a gap, a part block, a month after the layout) may be a test month. No layout: every month from Jan
-   2022 may be one (fail closed; no market's first test month is earlier). */
-const isTestMonth = (ym, ins) => (ins && ins.length ? ym >= ins[0] && !ins.includes(ym) : ym >= '2022-01');
+   its in-sample `months` (layoutOf). `ins` = those months. A month is safe only before Jan 2022 (no market's first test month is
+   earlier) or as one of them; any other month (a test month, a gap, a part block, a month before or after the layout) may be a
+   test month (fail closed: a layout learned before a backfill must not let the new early months through). */
+const isTestMonth = (ym, ins) => ym >= '2022-01' && !(ins || []).includes(ym);
 /* Does a run from `start` to `end` (YYYY-MM-DD) read a test month? No end = "to today": yes. Not a date: yes (fail closed). */
 function touchesTestMonths(start, end, ins) {
   if (!end) return true;

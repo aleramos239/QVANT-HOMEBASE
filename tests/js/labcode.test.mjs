@@ -803,6 +803,10 @@ test('touchesTestMonths: the test months are those of the market\'s own 3:1 bloc
   assert.equal(L.isTestMonth('2022-02'), true);
   assert.equal(L.isTestMonth('2022-02', NQ), false);
   assert.equal(L.isTestMonth('2026-09', NQ), true);
+  // a month before the layout's first in-sample month (a later backfill) may be a test month: fail closed
+  assert.equal(L.isTestMonth('2022-05', E6), true);
+  assert.equal(L.touchesTestMonths('2022-02-01', '2022-03-31', E6), true);
+  assert.equal(L.isTestMonth('2021-11', E6), false);
 });
 
 test('layoutOf: the newest saved in-sample run of the strategy names its market and months', () => {
