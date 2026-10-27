@@ -404,8 +404,53 @@ function dayTimeline(names) {
     </div>`;
 }
 
+/* Today's journal for a few strategies (or a group), read from GET /api/journal at most once a minute -- not the /api/status
+   tail, 60 lines for the whole desk, which would miss most of them. One slot a page part; a new query starts its slot afresh.
+   Never in the demo or while the page is hidden. null until the first answer (the pieces that need it are then left out). */
+const JREAD = {};
+function journalToday(slot, q) {
+  let c = JREAD[slot];
+  if (!c || c.q !== q) c = JREAD[slot] = {q, at: 0, busy: false, rows: null};
+  if (!DEMO && !document.hidden && !c.busy && Date.now() - c.at >= 60000) {
+    c.busy = true; c.at = Date.now();
+    fetch(q).then(r => r.ok ? r.json() : null).then(j => { if (j && JREAD[slot] === c) c.rows = Array.isArray(j.events) ? j.events : []; })
+      .catch(() => {}).finally(() => { c.busy = false; });
+  }
+  return c.rows;
+}
+const SIGNAL_EVENTS = new Set(["placed", "levels_placed", "dry_run", "shadow_signal", "signal_refused", "alert_refused", "lab_round", "lab_refused"]);
+const jHm = (r) => hbClock(String((r && r.et) || "").slice(11, 16));
+/* A strategy's last signal today ("10:41"), from the newest signal line that names it; "" when none is known. */
+function lastSignal(name, rows) {
+  const r = (rows || []).find(x => x && x.strategy === name && SIGNAL_EVENTS.has(x.event) && x.et);
+  return r ? jHm(r) : "";
+}
+const todaySignals = () => journalToday("today", "/api/journal?" + new URLSearchParams({strategy: Object.keys((ST && ST.strategies) || {}).sort().join(","), limit: "2000"}));
+/* A strategy's open trades now, from its own day rows (a Lab strategy: its rounds): [{side: "Long" | "Short", qty, account}]. */
+function stratOpen(s) {
+  const rows = s && s.cfg && s.cfg.kind === "lab" && s.lab && Array.isArray(s.lab.rounds) ? s.lab.rounds : (s && s.accounts) || [];
+  return rows.filter(r => r && r.status === "live" && (r.side || r.entry_side)).map(r => ({
+    side: /^(buy|long)/i.test(r.side || r.entry_side) ? "Long" : "Short", account: r.account,
+    qty: Number(r.entry_qty) > 0 ? Number(r.entry_qty) - (Number(r.exit_qty) || 0) : Number(r.qty)})).filter(p => p.qty > 0);
+}
+function openText(s) {      // "Long 2" (both sides: "Long 1 · Short 1"); "" when flat
+  const by = {};
+  for (const p of stratOpen(s)) by[p.side] = (by[p.side] || 0) + p.qty;
+  return ["Long", "Short"].filter(k => by[k]).map(k => `${k} ${by[k]}`).join(" · ");
+}
+/* LIVE when any booked account is live, PAPER when all are paper, else DEMO; nothing with no account. */
+function bookEnvTag(name) {
+  const accts = ((ST && ST.book && ST.book[name]) || []).map(r => r && r.account).filter(Boolean);
+  if (!accts.length) return "";
+  const w = accts.some(a => cycleEnvWord(a) === "LIVE") ? "LIVE" : accts.every(a => cycleEnvWord(a) === "PAPER") ? "PAPER" : "DEMO";
+  const [cls, t] = {LIVE: ["tag-live", "Its orders go to a LIVE account: real money"], PAPER: ["tag-paper", "Paper accounts only: no money"],
+                    DEMO: ["tag", "Demo accounts only: no money"]}[w];
+  return `<span class="${cls}" title="${t}">${w}</span>`;
+}
 function todayRow(name, s) {
   const c = s.cfg, state = stratState(name, s), p = todayPnl(s);
+  const sig = labSafe(() => lastSignal(name, todaySignals()), "");
+  const extra = [openText(s), sig ? "Last signal " + sig : ""].filter(Boolean);      // the position and the last signal: each only when known
   const sh = c.kind === "lab" ? labSafe(() => labShadowNet(name, s), null) : null;      // a Lab strategy with no account: what the day would have made
   const sw = `<button class="switch" role="switch" aria-label="${esc(stratLabel(name))} on or off" aria-checked="${c.enabled}"
     title="${c.kind === "lab" ? esc(labSafe(() => DeskLab.deskSwitchTitle(s, (ST.book && ST.book[name]) || []), "")) : c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
@@ -413,8 +458,8 @@ function todayRow(name, s) {
   const go = `setView('strat','${name}')`;
   return `<div class="srow" role="button" tabindex="0" onclick="${go}"
       onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();${go}}">
-    <div><div class="n">${esc(stratLabel(name))}${c.shadow ? '<span class="tag" title="Signals are journaled only — nothing is placed, even when armed">Shadow</span>' : c.kind === "lab" ? labSafe(() => labShadowTag(name, s), "") : ""}</div>
-      <div class="sp mono">${esc(specOf(c, name))}</div></div>
+    <div><div class="n">${esc(stratLabel(name))}${c.shadow ? '<span class="tag" title="Signals are journaled only — nothing is placed, even when armed">Shadow</span>' : (c.kind === "lab" ? labSafe(() => labShadowTag(name, s), "") : "") + labSafe(() => bookEnvTag(name), "")}</div>
+      <div class="sp mono">${esc([specOf(c, name), ...extra].join(" · "))}</div></div>
     <div class="rs">${esc(state)}</div>
     <div class="rp mono${sh ? " dim" : p < 0 ? " neg" : p > 0 ? " pos" : ""}"${sh ? ` title="${esc(sh.title)}"` : ""}>${usdS(sh ? sh.net : p)}</div>${sw}</div>`;
 }

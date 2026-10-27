@@ -54,7 +54,7 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
     },
     showOverlay: (id) => shown.push(id), hideOverlay: (id) => hidden.push(id), closeAsgMenus() {},
     switchBounced: () => false, render() {}, loadDeskLab() {}, refresh: async () => { refreshes.push(1); },
-    fetch: async () => ({ ok: false }), setView() {},
+    fetch: async () => ({ ok: false }), setView() {}, URLSearchParams,
   });
   const code = SLICE('/* ---- which machine this Desk runs on', '/* ---- algo manager') + SLICE('const esc = (v) =>', 'async function chartPost(') + SLICE('const stratLabel = ', 'const actStrat = ') + SLICE('const fmt = ', 'const usd = ') +
     'const usd = (v) => v == null ? "—" : (v < 0 ? "-$" : "$") + fmt(Math.abs(v));\n' +
@@ -1135,4 +1135,71 @@ test('1.9: the day bar is 9:00-16:00 for the 9:30 straddle; a booked London Lab 
   assert.equal(openAt(shadowOnly.api.dayTimeline()), 7.14, 'a Lab strategy with no account never sets the bar');
   const evening = load({ rows: [ROW({ session_window: ['-20:00', '08:00'] })], book: BOOKED });
   assert.equal(openAt(evening.api.dayTimeline()), 7.14, 'an evening-before window is left out: the bar is one day');
+});
+
+// ---- WP1.10: each Today row says its position, its last signal and LIVE / paper ---------------------------------------
+const tick = () => new Promise((r) => setImmediate(r));
+const jsonAnswer = (events, urls) => async (u) => { urls.push(u); return { ok: true, json: async () => ({ events }) }; };
+test('1.10: the row says LIVE when a booked account is live, DEMO or PAPER when none is, nothing with no account', () => {
+  const tagOf = (book, accounts = ACCOUNTS) => { const t = load({ book, accounts }); return t.api.todayRow('lab_nq_orb', t.ctx.ST.strategies.lab_nq_orb); };
+  assert.match(tagOf({ lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] }), /<span class="tag-live" title="Its orders go to a LIVE account: real money">LIVE<\/span>/);
+  assert.match(tagOf({ lab_nq_orb: [{ account: 'a1', qty: 1 }] }), /<span class="tag" title="Demo accounts only: no money">DEMO<\/span>/);
+  assert.match(tagOf({ lab_nq_orb: [{ account: 'p1', qty: 1 }] }, { p1: { label: 'Paper 1', env: 'paper', connected: true } }), />PAPER<\/span>/);
+  assert.match(tagOf({ lab_nq_orb: [{ account: 'gone', qty: 1 }] }), />LIVE<\/span>/, 'an account the desk does not know counts as LIVE');
+  const none = tagOf({});
+  assert.doesNotMatch(none, /LIVE|DEMO|PAPER/);
+  assert.match(none, />Shadow<\/span>/);
+});
+
+test('1.10: the position from the strategy\'s own open trades: a built-in\'s filled contracts, a Lab strategy\'s rounds', () => {
+  const built = nq930();
+  built.accounts = [{ account: 'a1', date: '2026-10-10', status: 'live', entry_side: 'Buy', qty: 3, entry_qty: 3, exit_qty: 1 },
+                    { account: 'a2', date: '2026-10-10', status: 'done', entry_side: 'Sell', qty: 3, entry_qty: 3, exit_qty: 3, pnl: 120 }];
+  built.day_status = 'live';
+  const t = load({ strategies: { nq930: built, lab_nq_orb: deskStrat({ rounds: [{ account: 'a1', round: 1, status: 'live', side: 'Sell', qty: 2 },
+    { account: 'a1', round: 2, status: 'done', side: 'Buy', qty: 1, pnl: 50 }] }) } });
+  assert.match(t.api.todayRow('nq930', t.ctx.ST.strategies.nq930), /<div class="sp mono">NQ · ±5 off · SL 5 \/ TP 15 · Long 2<\/div>/);
+  assert.match(t.api.todayRow('lab_nq_orb', t.ctx.ST.strategies.lab_nq_orb), /<div class="sp mono">NQ · 09:25-16:00 ET · from the Lab · Short 2<\/div>/);
+  assert.match(t.api.todayRow('nq930', t.ctx.ST.strategies.nq930), /<div class="rs">In position<\/div>/, 'the state words are as they were');
+  const flat = load();
+  assert.match(flat.api.todayRow('nq930', flat.ctx.ST.strategies.nq930), /<div class="sp mono">NQ · ±5 off · SL 5 \/ TP 15<\/div>/, 'flat: nothing added');
+});
+
+test('1.10: the last signal comes from /api/journal, read at most once a minute; until it answers the row leaves it out', async () => {
+  const t = load(), urls = [];
+  t.ctx.fetch = jsonAnswer([
+    { et: '2026-10-10T10:55:00-04:00', event: 'lab_event', strategy: 'lab_nq_orb' },          // bookkeeping: not a signal
+    { et: '2026-10-10T10:50:00-04:00', event: 'book_updated', strategy: 'nq930' },
+    { et: '2026-10-10T10:41:12-04:00', event: 'lab_round', strategy: 'lab_nq_orb', account: 'a1' },
+    { et: '2026-10-10T09:30:02-04:00', event: 'placed', strategy: 'nq930', account: 'a1' },
+    { et: '2026-10-10T09:00:00-04:00', event: 'shadow_signal', strategy: 'lab_nq_orb' }], urls);
+  const row = (n) => t.api.todayRow(n, t.ctx.ST.strategies[n]);
+  assert.doesNotMatch(row('lab_nq_orb'), /Last signal/, 'no answer yet: blank, never a guess');
+  await tick();
+  assert.deepEqual(urls, ['/api/journal?strategy=lab_nq_orb%2Cnq930&limit=2000']);
+  assert.match(row('lab_nq_orb'), /from the Lab · Last signal 10:41<\/div>/);
+  assert.match(row('nq930'), /TP 15 · Last signal 09:30<\/div>/);
+  for (let i = 0; i < 5; i++) row('nq930');
+  await tick();
+  assert.equal(urls.length, 1, 'every 2.5 s repaint reads the cache, not the desk');
+  vm.runInContext('JREAD.today.at -= 60000;', t.ctx);
+  row('nq930');
+  await tick();
+  assert.equal(urls.length, 2, 'a minute later it reads again');
+});
+
+test('1.10: no read in the demo or while the page is hidden, and a refused read leaves the row as it was', async () => {
+  for (const [opts, hide] of [[{ demo: true }, false], [{}, true]]) {
+    const t = load(opts), urls = [];
+    t.ctx.fetch = jsonAnswer([], urls);
+    t.ctx.document.hidden = hide;
+    t.api.todayRow('nq930', t.ctx.ST.strategies.nq930);
+    await tick();
+    assert.deepEqual(urls, []);
+  }
+  const t = load();
+  t.ctx.fetch = async () => { throw new Error('down'); };
+  assert.doesNotThrow(() => t.api.todayRow('nq930', t.ctx.ST.strategies.nq930));
+  await tick();
+  assert.doesNotMatch(t.api.todayRow('nq930', t.ctx.ST.strategies.nq930), /Last signal/);
 });
