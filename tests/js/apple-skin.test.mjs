@@ -94,7 +94,7 @@ function toolbarWords(ctx = {}) {
   const i = DESK_SKIN.indexOf('/* ---- toolbar words'), j = DESK_SKIN.indexOf('/* ---- end toolbar words ---- */');
   assert.ok(i >= 0 && j > i, 'the toolbar words block');
   const c = vm.createContext({ window: {}, ...ctx });
-  vm.runInContext(DESK_SKIN.slice(i, j) + '\nglobalThis.W = { machineWord, readyWord, chartWords, researchWord };', c);
+  vm.runInContext(DESK_SKIN.slice(i, j) + '\nglobalThis.W = { machineWord, readyWord, chartWords, recordOf, researchWord };', c);
   return c.W;
 }
 
@@ -258,12 +258,32 @@ test('desk skin: the research heading names the route from the record itself -- 
   assert.equal(researchWord({ walkforward: true, unseen: {} }, false), '3:1 test months');
   assert.equal(researchWord({ walkforward: true, unseen_state: 'pending' }, false), '3:1 test months', 'a 3:1 record still running is still the 3:1');
   assert.equal(researchWord({ walkforward: true, build: {}, both: {} }, true), '3:1 in-sample · test months', 'with its in-sample column');
-  for (const rec of [{ unseen: {} }, { walkforward: false }, { walkforward: 'true' }, { build: {} }]) {
+  for (const rec of [{ unseen: {} }, { walkforward: false, unseen: {} }, { walkforward: 'true', build: {} }, { build: {} }]) {
     for (const cols of [false, true]) assert.equal(researchWord(rec, cols), 'Old record (before 3:1)');
   }
   for (const rec of [undefined, null, 'x']) assert.equal(researchWord(rec, false), 'Results', 'not read yet: no route claimed');
+  // an old-route record with no run at all (a built-in twin never run) is no record: no "Old record" over "Not run…"
+  for (const rec of [{ unseen: null, manual: true }, { walkforward: false }, { unseen_state: 'pending' }]) assert.equal(researchWord(rec, false), 'Results');
   assert.doesNotMatch(DESK_SKIN, /OOS|Unseen days/, 'the retired route\'s words are gone from the skin');
-  assert.match(DESK_SKIN, /researchWord\(rec, !!\$\('\.fh', u\)\)/, 'the heading comes from the record, not the page\'s old title');
+  assert.match(DESK_SKIN, /researchWord\(recordOf\(grp, dl, name\), !!\$\('\.fh', u\)\)/, 'the heading comes from the record, not the page\'s old title');
+});
+
+test('desk skin: the research heading reads the record the page drew -- a group by id, a Desk Lab strategy by its Lab name, the rest by name', () => {
+  const DESKRES = { nq930: { walkforward: false, unseen: {} }, vbp_mid5: { walkforward: true, unseen: {} }, lab_vbp_mid5: { unseen: {} } };
+  const DESKGRES = { g5: { walkforward: true, unseen: {} }, nq930: { walkforward: true } };
+  const { recordOf } = toolbarWords({ DESKRES, DESKGRES });
+  assert.equal(recordOf({ id: 'g5' }, null, 'g5'), DESKGRES.g5, 'a group: DESKGRES by its id (groupView)');
+  assert.equal(recordOf(null, { lab: { name: 'vbp_mid5' } }, 'lab_vbp_mid5'), DESKRES.vbp_mid5, 'a Desk Lab strategy: by its Lab name, not its desk id');
+  assert.equal(recordOf(null, null, 'vbp_mid5'), DESKRES.vbp_mid5, 'a Lab strategy: by the view\'s name');
+  assert.equal(recordOf(null, null, 'nq930'), DESKRES.nq930, 'a built-in twin: by its name, never the group of the same name');
+  assert.equal(recordOf(null, null, 'gone'), null);
+  assert.equal(recordOf({ id: 'gone' }, null, 'gone'), null);
+  assert.equal(toolbarWords().recordOf(null, null, 'nq930'), null, 'before the page has its records: none, no throw');
+  // the page still keys them so
+  const page = read('index.html');
+  assert.match(page, /DeskLab\.groupPage\(g, DESKGRES\[g\.id\]\)/);
+  assert.match(page, /labResHtml\(row\.name, name\)/);
+  assert.match(page, /function labResHtml\(lab, view\) \{\n  let v;\n  try \{ v = DeskLab\.results\(DESKRES\[lab\]\); \}/);
 });
 
 test('desk skin: the sidebar hides its rows\' second lines but the Activity row\'s ("N things need a look")', () => {

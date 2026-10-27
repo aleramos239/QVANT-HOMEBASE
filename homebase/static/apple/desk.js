@@ -245,9 +245,15 @@
       if (short) return 'Chart ON' + (n ? ' · ' + n + ' live' : '');
       return 'Chart trading ON' + (n ? ' · ' + n + ' live account' + (n === 1 ? '' : 's') : '');
     };
-    // the research block's heading, by the record's own route flag (walkforward: the 3:1 blocks), never the retired route's words
-    const researchWord = (rec, withInSample) => !rec || typeof rec !== 'object' ? 'Results'
-      : rec.walkforward !== true ? 'Old record (before 3:1)' : withInSample ? '3:1 in-sample · test months' : '3:1 test months';
+    // a strategy's research record, read only: a group's by its id, a Desk Lab strategy's by its Lab name, the rest by the view's name
+    // (the keys the page's groupView / labResHtml read)
+    const recordOf = (grp, dl, name) => { try { return (grp ? DESKGRES[grp.id] : DESKRES[dl ? dl.lab.name : name]) || null; } catch (_) { return null; } };
+    // the research block's heading, by the record's own route flag (walkforward: the 3:1 blocks), never the retired route's words;
+    // an old-route record with no run at all is no record: "Results" over the page's own note
+    const isObj = (o) => !!o && typeof o === 'object';
+    const researchWord = (rec, withInSample) => !isObj(rec) ? 'Results'
+      : rec.walkforward === true ? (withInSample ? '3:1 in-sample · test months' : '3:1 test months')
+      : isObj(rec.unseen) || isObj(rec.build) ? 'Old record (before 3:1)' : 'Results';
     /* ---- end toolbar words ---- */
 
     let syncing = false;
@@ -278,10 +284,7 @@
           const res = $(':scope > .labres', vStrat);
           if (res) {
             const u = $('.labres-unseen', res), p = $('.labres-prop', res);
-            // its record, read only: a group's by id, a Desk Lab strategy's by its Lab name, the rest by the view's name
-            let rec = null;
-            try { rec = grp ? DESKGRES[grp.id] : DESKRES[dl ? dl.lab.name : name]; } catch (_) {}
-            if (u) { unseenH.textContent = researchWord(rec, !!$('.fh', u)); unseenBox.replaceChildren(u); }
+            if (u) { unseenH.textContent = researchWord(recordOf(grp, dl, name), !!$('.fh', u)); unseenBox.replaceChildren(u); }
             if (p) { propH.textContent = p.dataset.h || ''; propBox.replaceChildren(p); }
             unseenSec.dataset.for = res.dataset.for || '';
             res.remove();
