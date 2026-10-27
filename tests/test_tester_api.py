@@ -547,3 +547,33 @@ def test_a_fixed_walkforward_is_picked_then_its_test_months_run_once_on_the_owne
         for path, b in (("/api/tester/run", {**RUN, "range": oos}), ("/api/tester/grid", {**GRID, "range": oos})):
             r = c.post(path, json=b)
             assert r.status_code == 400 and "only from its walk-forward" in r.json()["detail"], path
+
+
+def test_run_match_finds_the_finished_run_a_run_body_would_only_repeat(tmp_path):
+    """The Lab shows a strategy's last run on opening it instead of running it again: run-match names it, or null."""
+    with client(tmp_path) as c:
+        assert c.post("/api/tester/run-match", json=RUN).json() == {"id": None}
+        assert c.post("/api/tester/run-match", json=RUN, headers=EVIL).status_code == 403
+        rid = c.post("/api/tester/run", json=RUN).json()["id"]
+        assert poll(c, rid)["status"] == "done"
+        assert c.post("/api/tester/run-match", json=RUN).json() == {"id": rid}
+        assert c.post("/api/tester/run-match", json={**RUN, "qty": 2}).json() == {"id": None}       # another request
+        assert c.post("/api/tester/run-match", json={**RUN, "inputs": {"adx_gate": True}}).json() == {"id": None}
+        assert c.post("/api/tester/run-match", json={**RUN, "strategy": "nope"}).status_code == 400
+
+
+def test_walkforward_match_finds_the_finished_fixed_walkforward_a_body_would_only_repeat(tmp_path, monkeypatch):
+    """The same for the Lab's 3:1 walk-forward: the newest DONE job with the same settings, months and boxes, or null."""
+    from homebase.backtest import wfmonths
+    layout = [{"i": 0, "is": ["2024-01", "2024-02", "2024-03"], "oos": "2024-04"}]
+    monkeypatch.setattr(wfmonths, "blocks", lambda root, store=None: layout if root == "NQ" else [])
+    body = {"strategy": "nq930", "inputs": {"adx_gate": False}, "axes": WF["axes"]}
+    with client(tmp_path) as c:
+        assert c.post("/api/tester/walkforward-match", json=body).json() == {"id": None}
+        assert c.post("/api/tester/walkforward-match", json=body, headers=EVIL).status_code == 403
+        wid = c.post("/api/tester/walkforward", json=body).json()["id"]
+        assert poll_wf(c, wid)["status"] == "done"
+        assert c.post("/api/tester/walkforward-match", json=body).json() == {"id": wid}
+        assert c.post("/api/tester/walkforward-match", json={**body, "inputs": {"adx_gate": True}}).json() == {"id": None}
+        assert c.post("/api/tester/walkforward-match", json={**body, "qty": 2}).json() == {"id": None}
+        assert c.post("/api/tester/walkforward-match", json={**body, "strategy": "nope"}).status_code == 400
