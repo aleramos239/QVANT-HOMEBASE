@@ -71,3 +71,12 @@ test('5.4 the button and the ENTRY tag read their words from the send\'s own qty
   assert.match(OP, /T\.sendTag\(st\.side, Number\.isInteger\(n\) \? n : 0, c\.root, m\.mode === 'on' \? m\.accounts : \[\], D\(\)\.state\)\.full/);
   assert.match(OP, /title: `ENTRY · \$\{tag\}\$\{rr\}`/);
 });
+
+test('5.2 the account spot\'s chips open this chart\'s Settings › Trading and do nothing else', () => {
+  const TL = rd('charts/tradelines.js');
+  const body = TL.slice(TL.indexOf('  paintAccts(mode) {'), TL.indexOf('  /* ---- lines: positions'));
+  assert.match(body, /T\.tradeSpot\(t\.accounts\.length, mode\.mode === 'on', !!this\.cell\.replay \|\| !!cfg\.replayHalt\)/);
+  assert.match(body, /el\.onclick = \(e\) => \{ e\.stopPropagation\(\); el\.blur\(\); this\.page\.chartSettings\(this\.cell, 'trading'\); \};/);
+  assert.doesNotMatch(body, /toggleAccount|setCellTrade|placeOrder|send\(/, 'a chip never ticks an account or sends');
+  assert.match(rd('charts/app.js'), /^function chartSettings\(c = cur\(\), tab = null\)/m);
+});

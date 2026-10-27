@@ -305,19 +305,33 @@ class Overlay {
   }
 
   /* The chart's accounts next to the block whenever it has any; one not in the chart's effective set right
-     now (unarmed LIVE, not tradable, unknown, replay) is dimmed. Rebuilt only when the chips change. */
+     now (unarmed LIVE, not tradable, unknown, replay) is dimmed. Rebuilt only when the chips change.
+     2026-10-26: "Trade on:" leads them while the block is hidden, "Trade on: none" stands in for none (HBTrade.tradeSpot),
+     and a chip opens this chart's Settings › Trading -- it never trades or ticks anything itself. */
   paintAccts(mode) {
-    const t = window.HBTradeUI.tradeOf(this.cell);
-    this.accts.hidden = !t.accounts.length;
+    const t = window.HBTradeUI.tradeOf(this.cell), cfg = this.cell.cfg || {};
+    const spot = T.tradeSpot(t.accounts.length, mode.mode === 'on', !!this.cell.replay || !!cfg.replayHalt);
+    this.accts.hidden = !t.accounts.length && !spot.empty;
     if (this.accts.hidden) return;
     const chips = T.accountChips(window.HBDeskClient.state, t.accounts, mode.mode === 'on' ? mode.accounts : []);
-    const key = JSON.stringify(chips);
+    const key = JSON.stringify([spot, chips]);
     if (key === this.acctsKey) return;
     this.acctsKey = key;
-    this.accts.replaceChildren(...chips.map((c) => {
-      const el = mk('span', 'tr-acct' + (c.active ? '' : ' off'), c.who);
+    const open = (el) => {
+      el.type = 'button';
+      el.onclick = (e) => { e.stopPropagation(); el.blur(); this.page.chartSettings(this.cell, 'trading'); };
+      return el;
+    };
+    if (spot.empty) {
+      const el = open(mk('button', 'tr-acct off', spot.empty));
+      el.title = 'Pick the accounts this chart trades on';
+      this.accts.replaceChildren(el);
+      return;
+    }
+    this.accts.replaceChildren(...(spot.lead ? [mk('span', 'tr-on', spot.lead)] : []), ...chips.map((c) => {
+      const el = open(mk('button', 'tr-acct' + (c.active ? '' : ' off'), c.who));
       if (c.env) el.append(mk('span', 'env' + (c.live ? ' live' : c.paper ? ' paper' : ''), c.env));
-      el.title = c.active ? `Orders from this chart go to ${c.id}` : `${c.id} — not trading from this chart right now`;
+      el.title = (c.active ? `Orders from this chart go to ${c.id}` : `${c.id} — not trading from this chart right now`) + ' · click to change';
       return el;
     }));
   }

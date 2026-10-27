@@ -679,6 +679,8 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .tr-acct { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 2px 0 6px; border-radius: 4px;
   background: var(--panel); box-shadow: 0 0 0 1px var(--border); font-size: 11px; color: var(--text); font-variant-numeric: tabular-nums; }
 .tr-acct.off { opacity: .5; }
+.tr-acct:hover { box-shadow: 0 0 0 1px var(--accent); }   /* 2026-10-26: a chip opens Settings › Trading */
+.tr-on { font-size: 11px; line-height: 14px; color: var(--text-2); }
 .tl-layer { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
 .tl-chip { position: absolute; top: 0; display: inline-flex; height: 22px; border-radius: 4px; overflow: hidden; pointer-events: auto;
   font-size: 12px; font-variant-numeric: tabular-nums; box-shadow: 0 0 0 1px var(--c); background: var(--panel); }

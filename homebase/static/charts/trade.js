@@ -425,6 +425,14 @@ function accountChips(state, accounts, activeIds) {
   });
 }
 
+/* The legend's account spot (2026-10-26): while the chart's BUY / SELL is hidden, "Trade on:" leads its account chips,
+   and a chart with no account says "Trade on: none" -- each opens Settings › Trading. A replaying (or replay-ended)
+   chart gets neither: its practice block or its Resume sits there. */
+function tradeSpot(n, shown, replay) {
+  const idle = !shown && !replay;
+  return { lead: idle && n > 0 ? 'Trade on:' : '', empty: idle && n === 0 ? 'Trade on: none' : '' };
+}
+
 /* An account's env as its chip: LIVE (red), DEMO (grey), PAPER (the paper colour -- Task 2's virtual account), or
    '?' for an env the desk did not give (an account it does not list). */
 const ENV_CHIPS = { live: 'LIVE', demo: 'DEMO', paper: 'PAPER' };
@@ -1712,7 +1720,7 @@ const api = { PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, r
   killConfirm, killToasts, killBlock, killSold,
   enterConfirms, wireSend, sendingSide, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
-  migrateTicked, deskGate, armedMode, liveSendIds, liveCueTitle, replayGuard, legsWithin, lineAccounts, accountChips, acctTick, hiddenCellsLoaded,
+  migrateTicked, deskGate, armedMode, liveSendIds, liveCueTitle, replayGuard, legsWithin, lineAccounts, accountChips, tradeSpot, acctTick, hiddenCellsLoaded,
   NO_ACCOUNTS, SYMBOL_CHANGE_ACCOUNTS_CLEARED, liveIds, liveDroppedMessage, envChip, algoBookings, algoForAccount,
   accountsForAlgo, algoTickAccounts, accountPickRows, deskStatusText, deskStatusParts,
   verifyLoaded, verifyCells, nextUnverified, unverifiedMode, CHECKING_ACCOUNTS, REPLAY_ENDED, replayHaltGuard,
