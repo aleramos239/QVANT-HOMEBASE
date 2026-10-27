@@ -178,6 +178,7 @@ function labDeskView(name, s) {
     ${row ? `<div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
     ${labCurveHtml(row.name)}${labResHtml(row.name, name)}` : ""}
     <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div>` : ""}${ro ? "" : rotationHtml(name)}${addForm}</div>
+    ${deskChangesHtml("s:" + name)}
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat(${jsArg(name)})" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       ${deskMachine() === "server" ? "" : `<button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>`}
       <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(lab.name || "")}, ${jsArg(name)})"${busy || ro || !lab.name ? " disabled" : ""} title="Off the Desk, switched off, its accounts off, and kept. Restore it from Archive any time.">Archive</button>
@@ -196,12 +197,12 @@ function labLimErrors(errors) {
   }
 }
 function labLimKey(e) { if (e.key === "Enter" && !e.repeat) { e.preventDefault(); saveLabLimits(); } }      // Enter saves; a held key does not
-function openLabLimits(name) {
+function openLabLimits(name, fill) {      // fill: other limits to show (Changes' Put back: the old ones), else the ones set
   const s = ST && ST.strategies && ST.strategies[name];
   if (!s || !s.lab || DeskLab.readOnly(s)) return;
   LAB_LIM = {name, tok: ++LAB_TOK};
   $("#llTitle").textContent = DeskLab.limitsTitle(stratLabel(name));
-  const f = DeskLab.limitsFields(s.lab.limits);
+  const f = DeskLab.limitsFields(fill || s.lab.limits);
   for (const [k, id] of LAB_LIM_FIELDS) { $("#" + id).value = f[k]; $("#" + id).oninput = labLimSaveText; }
   labLimSaveText();
   labLimErrors({});

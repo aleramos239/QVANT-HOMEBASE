@@ -61,14 +61,15 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
     SLICE('const killText = ', 'function killFailures(') + SLICE('const actErr = ', 'const actFail = ') + SLICE('const STEP_OK = ', 'const REFUSED_WHY') +
     SLICE('const SWITCH_AT = {};', 'function cfDone(') +
     'function needsConfirm(kind, turningOn, opts) { return window.AlgoVisibility.switchNeedsConfirm(kind, turningOn, opts); }\n' +
-    SLICE('const labAct = ', 'let FEED_ROWS') +
+    SLICE('const labAct = ', 'let FEED_ROWS') + SLICE('/* ---- Changes (7 days) (WP1.15)', '/* ---- end of Changes') +
+    SLICE('const actDay = ', '/* Activity for one strategy or one group') +
     SLICE('/* ===== Desk views', 'function render() {') +
     SLICE('/* ---- account row (rendered inside strategy cards) ---- */', '/* ---- connect wizard ---- */') +
     SLICE('/* ---- strategy on/off + flatten ----', '/* ---- accounts popup ---- */') +
     `\nDESKLAB = { strategies: ${JSON.stringify(rows)}, runner: { alive: true } }; DESKLAB_OK = ${readOk};` +
     `\nVIEW = ${JSON.stringify(view)};` +
     '\nglobalThis.api = { renderSide, renderMain, labDeskView, stratView, stratState, stratDotCls, todayRow, specOf, setBook, pickAsg, liveBookingNote, toggleStrat,' +
-    ' setLabSetting, flattenStrat, dayHeadline, dayTimeline, journalShown, todayFoot, openLabLimits, closeLabLimits, saveLabLimits, removeLabStrat, clearLabBlock, labRowsHtml, calView, shadowData, deleteLabStrat, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
+    ' setLabSetting, setStratRr, pickAsg, removeAsg, deskChangesHtml, deskChangeList, putBackChange, flattenStrat, dayHeadline, dayTimeline, journalShown, todayFoot, openLabLimits, closeLabLimits, saveLabLimits, removeLabStrat, clearLabBlock, labRowsHtml, calView, shadowData, deleteLabStrat, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
   vm.runInContext(code, ctx);
   return { ctx, api: ctx.api, els, el, posts, toasts, confirms, alerts, shown, hidden, refreshes,
     side: () => { ctx.api.renderSide(['nq930', 'lab_nq_orb'].filter((n) => ctx.ST.strategies[n]), 0, 0); return els.side.innerHTML; },
@@ -133,6 +134,109 @@ test('one row, never two: until the Desk knows it, the Step A row draws it; the 
   // and the chart service answering with nothing changes nothing on the Desk's own row
   const none = load({ rows: [] });
   assert.match(none.side(), /lab_nq_orb/);
+});
+
+// ---- WP1.15 Changes (7 days) -----------------------------------------------------------------------------------------------
+const changes = (t, rows, who = 's:lab_nq_orb') => vm.runInContext(`CHG[${JSON.stringify(who)}] = {rows: ${JSON.stringify(rows)}, at: Date.now(), busy: false}`, t.ctx);
+const chg = (event, over) => ({ ts: Math.random(), et: '2026-10-10T09:05:00', event, ...over });
+const LIM_OLD = { max_trades_day: 2, max_qty: 1, max_risk_usd: 300, last_entry_et: '11:00', flat_et: '15:55' };
+const LIM_NEW = { ...LIM_OLD, max_trades_day: 3, max_risk_usd: 450 };
+
+test('WP1.15 Changes (7 days): each row is old → new in words; no Put back when the old value is unknown', () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 2 }] } });
+  t.ctx.ST.strategies.lab_nq_orb.lab.limits = LIM_NEW;
+  changes(t, [
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 2 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }] }),
+    chg('lab_limits_set', { strategy: 'lab_nq_orb', limits: LIM_NEW, previous: LIM_OLD }),
+    chg('lab_limits_set', { strategy: 'lab_nq_orb', limits: LIM_OLD, previous: null }),
+  ]);
+  const list = t.api.deskChangeList('s:lab_nq_orb');
+  assert.deepEqual(plain(list.map((x) => [x.text, !!x.back])), [
+    ['APEX…048 added ×2', true],
+    ['Accounts: Lucid Eval #1 ×1', false],
+    ['Limits: Trades a day 2 → 3 · Most at risk per trade $300 → $450', true],
+    ['Limits set: Trades a day 2 · Most contracts per account 1 · Most at risk per trade $300 · No new trade after 11:00 ET · Flat by 15:55 ET', false],
+  ]);
+  const html = t.api.deskChangesHtml('s:lab_nq_orb');
+  assert.match(html, /<h2>Changes \(7 days\)<\/h2>/);
+  assert.equal((html.match(/>Put back</g) || []).length, 2);
+  assert.match(t.view(), /<h2>Changes \(7 days\)<\/h2>/, 'on the Lab strategy page');
+  changes(t, [], 's:nq930');
+  assert.match(t.ctx.api.stratView('nq930'), /<h2>Changes \(7 days\)<\/h2>[\s\S]*No changes in the last 7 days\./, 'and on the built-in page');
+});
+
+test('WP1.15 Put back limits: the Limits dialog\'s own Save, with the same body as typing the old values and pressing Save', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  t.ctx.ST.strategies.lab_nq_orb.lab.limits = LIM_NEW;
+  changes(t, [chg('lab_limits_set', { strategy: 'lab_nq_orb', limits: LIM_NEW, previous: LIM_OLD })]);
+  await t.api.putBackChange('s:lab_nq_orb', t.api.deskChangeList('s:lab_nq_orb')[0].key);
+  const byHand = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  byHand.ctx.ST.strategies.lab_nq_orb.lab.limits = LIM_NEW;
+  byHand.api.openLabLimits('lab_nq_orb');
+  Object.assign(byHand.el('llTrades'), { value: '2' }); Object.assign(byHand.el('llRisk'), { value: '300' });
+  await byHand.api.saveLabLimits();
+  assert.equal(t.posts.length, 1);
+  assert.deepEqual(t.posts, byHand.posts);
+  assert.deepEqual(t.posts[0], { url: '/api/lab-limits', body: { strategy: 'lab_nq_orb', limits: LIM_OLD } });
+  assert.equal(t.confirms.length, 0, 'tightening back never asks');
+});
+
+test('WP1.15 Put back a setting, the RR and the book: the same setter and body as the control; LIVE asks as the control asks', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }], nq930: [{ account: 'a1', qty: 3 }] } });
+  Object.assign(t.ctx.ST.strategies.lab_nq_orb.lab, { params: { stop_atr: 2 }, labels: { stop_atr: 'Stop (ATR)' } });
+  Object.assign(t.ctx.ST.strategies.nq930.cfg, { rr: 2, sl_pts: 5 });
+  changes(t, [chg('lab_settings_set', { strategy: 'lab_nq_orb', settings: { stop_atr: 2 }, previous: { stop_atr: 1.5 } }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] })]);
+  changes(t, [chg('strategy_rr_changed', { strategy: 'nq930', rr: 2, tp_pts: 10, sl_pts: 5, previous: { rr: 1.5, tp_pts: 7.5, sl_pts: 5 } }),
+    chg('book_updated', { strategy: 'nq930', assignments: [{ account: 'a1', qty: 3 }] }),
+    chg('book_updated', { strategy: 'nq930', assignments: [{ account: 'a1', qty: 4 }] })], 's:nq930');
+  const lab = t.api.deskChangeList('s:lab_nq_orb'), bi = t.api.deskChangeList('s:nq930');
+  assert.deepEqual(plain(lab.map((x) => x.text)), ['Stop (ATR) 1.5 → 2', 'APEX…048 taken off', 'Accounts: Lucid Eval #1 ×1 · APEX…048 ×1']);
+  assert.deepEqual(plain(bi.map((x) => x.text)), ['Target 1:1.5 → 1:2', 'Lucid Eval #1 qty 4 → 3', 'Accounts: Lucid Eval #1 ×4']);
+  for (const [who, x] of [['s:lab_nq_orb', lab[0]], ['s:lab_nq_orb', lab[1]], ['s:nq930', bi[0]], ['s:nq930', bi[1]]]) await t.api.putBackChange(who, x.key);
+  const byHand = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }], nq930: [{ account: 'a1', qty: 3 }] } });
+  await byHand.api.setLabSetting('lab_nq_orb', 'stop_atr', 1.5);
+  await byHand.api.pickAsg('lab_nq_orb', 'a2', 1);
+  await byHand.api.setStratRr('nq930', 1.5);
+  byHand.ctx.ST.book.nq930 = [{ account: 'a1', qty: 3 }];
+  await byHand.api.pickAsg('nq930', 'a1', 4);
+  assert.deepEqual(t.posts, byHand.posts);
+  assert.deepEqual(t.posts.map((p) => p.url), ['/api/lab-settings', '/api/book', '/api/strategy-rr', '/api/book']);
+  assert.deepEqual(t.confirms.map((c) => c.title), byHand.confirms.map((c) => c.title));
+  assert.deepEqual(t.confirms.map((c) => c.title), ['Book NQ ORB on APEX…048 LIVE, qty 1?'], 'a LIVE account booked back asks; a setting on a demo-only strategy, the RR and a demo qty do not');
+});
+
+test('WP1.15 putting back a lower qty or taking an account off never asks, even LIVE (as editQty and the × do)', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a2', qty: 3 }] } });
+  changes(t, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 3 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }] })]);
+  const [x] = t.api.deskChangeList('s:lab_nq_orb');
+  assert.equal(x.text, 'APEX…048 qty 1 → 3');
+  await t.api.putBackChange('s:lab_nq_orb', x.key);
+  assert.deepEqual(t.posts, [{ url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }] } }]);
+  assert.equal(t.confirms.length, 0);
+  t.ctx.ST.book.lab_nq_orb = [{ account: 'a2', qty: 3 }, { account: 'a1', qty: 1 }];
+  changes(t, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 3 }, { account: 'a1', qty: 1 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 3 }] })]);
+  await t.api.putBackChange('s:lab_nq_orb', t.api.deskChangeList('s:lab_nq_orb')[0].key);
+  assert.deepEqual(t.posts[1], { url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 3 }] } }, 'the × body');
+  assert.equal(t.confirms.length, 0);
+});
+
+test('WP1.15 a change no longer in force, or a group row off its group page, has no Put back', () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 2 }] } });
+  t.ctx.ST.strategies.lab_nq_orb.lab.limits = LIM_OLD;
+  changes(t, [chg('lab_limits_set', { strategy: 'lab_nq_orb', limits: LIM_NEW, previous: LIM_OLD }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 3 }] })]);
+  assert.deepEqual(plain(t.api.deskChangeList('s:lab_nq_orb').map((x) => !!x.back)), [false, false, false]);
+  t.ctx.ST.groups = { g3: { name: 'apex', members: [], accounts: [], risk_usd: 750, max_minis: 17, on: true } };
+  changes(t, [chg('group_set', { group: 'g3', name: 'apex', members: [], accounts: [], risk_usd: 750, max_minis: 17, on: true }),
+    chg('group_set', { group: 'g3', name: 'apex', members: [], accounts: [], risk_usd: 500, max_minis: 17, on: true })], 'g:g3');
+  const g = t.api.deskChangeList('g:g3');
+  assert.deepEqual(plain(g.map((x) => [x.text, !!x.back])), [['Size $500 at risk a trade → $750 at risk a trade', false], ['Account cycle ON · $500 at risk a trade', false]]);
 });
 
 // ---- WP1.14 the Setup summary --------------------------------------------------------------------------------------------
