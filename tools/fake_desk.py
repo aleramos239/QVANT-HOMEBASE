@@ -1066,8 +1066,10 @@ class LabRig:
         checks.append({"level": "info", "label": "Mode", "detail": "ARMED — signals place real orders" if cfg.armed
                        else "shadow — signals journal only"})
         date = engine.now_et().date().isoformat()
+        from homebase.backtest.slots import backtests_off
         return {
             "armed": cfg.armed,
+            "machine": "server" if backtests_off() else "mac",   # as the real route
             "chart_trading": _asdict(cfg.chart_trading),
             "et_now": engine.now_et().isoformat(timespec="seconds"),
             "readiness": {"ready": not any(c["level"] == "bad" for c in checks), "checks": checks},

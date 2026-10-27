@@ -83,6 +83,14 @@ def test_status_shape(client):
     assert d["accounts"]["main"]["label"] == "MAIN"
 
 
+def test_status_names_the_machine_from_the_no_backtests_switch(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))          # Path.home() reads HOME
+    assert client.get("/api/status").json()["machine"] == "mac"
+    (tmp_path / ".homebase").mkdir()
+    (tmp_path / ".homebase" / "no_backtests").write_text("")
+    assert client.get("/api/status").json()["machine"] == "server"
+
+
 def test_arm_toggle_persists(client):
     r = client.post("/api/arm", json={"armed": True}).json()
     assert r["armed"] is True
