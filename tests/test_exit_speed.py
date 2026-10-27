@@ -163,8 +163,8 @@ def test_the_kill_runs_the_accounts_side_by_side(kill_desk, tmp_path):
     assert wire.peak_accounts == EXIT_CONCURRENCY
     assert wall < N * KILL_RTS * RT / 2
     assert all(ad.flat for ad in ads.values())
-    for a in ads:                                 # its own cancels first, then the sweep closes at the broker
-        assert wire.of(a) == cancel_calls(a) + ["cancel_all", "flatten_all"]
+    for a in ads:                                 # the sweep closes at the broker FIRST (audit 2026-10-27), then its own cancels
+        assert wire.of(a) == ["flatten_all", "cancel_all"] + cancel_calls(a)
         assert status(eng, a) == ("done", "killed")
     swept = {"cancel_all": {"ok": True, "error": None}, "flatten_all": {"ok": True, "error": None}}
     assert out["ok"] and out["armed"] is False
@@ -235,7 +235,7 @@ def test_the_kills_sweep_takes_turns_on_one_broker_account_too(kill_desk):
     kill, _, ads, wire = kill_desk(3, same_broker={"a03": "a02"})
     out, _ = timed(kill())
     assert not wire.overlapped("a02", "a03") and wire.overlapped("a01", "a02")
-    assert wire.of("a03") == cancel_calls("a03") + ["cancel_all", "flatten_all"]
+    assert wire.of("a03") == ["flatten_all", "cancel_all"] + cancel_calls("a03")
     assert ads["a02"].net == 0 and all(ad.flat for ad in ads.values())
     assert list(out["results"]) == ["a01", "a02", "a03"]
 
@@ -269,14 +269,15 @@ def test_a_bad_day_never_stops_the_kill_on_another_account(kill_desk, tmp_path):
     s = out["strategies"]
     assert s["nq930@a01"] == cancel_acts("a01") and s["nq930@a08"] == cancel_acts("a08")
     assert s["nq930@a02"] == cancel_acts("a02")                             # never a market order: the sweep closes
-    assert s["nq930@a03"] == [UNREACHED]
+    assert "nq930@a03" not in s                                             # its flatten failed: nothing of it cancelled
     assert s["nq930@a04"] == cancel_acts("a04") and s["nq930@a06"] == UNREAD_429
     assert s["nq930@a05"] == cancel_acts("a05")                             # its market order is never sent
     assert f"cancel a07-101-sl: order/cancelorder {RATE_LIMITED}" in s["nq930@a07"]
-    assert list(s) == [f"nq930@{a}" for a in ads]
+    assert not out["ok"] and set(out["failed"]) >= {"a03", "nq930@a06", "nq930@a07"}      # the report says who failed
+    assert list(s) == [f"nq930@{a}" for a in ads if a != "a03"]
     # the account-wide sweep then covers what the strategy's own flatten could not do
     down = {"ok": False, "error": "adapter not connected"}
-    assert out["results"]["a03"] == {"cancel_all": down, "flatten_all": down}
+    assert out["results"]["a03"]["flatten_all"] == down and not out["results"]["a03"]["cancel_all"]["ok"]
     assert all(r["cancel_all"]["ok"] and r["flatten_all"]["ok"]
                for a, r in out["results"].items() if a != "a03")
     for a, ad in ads.items():
@@ -284,7 +285,7 @@ def test_a_bad_day_never_stops_the_kill_on_another_account(kill_desk, tmp_path):
             assert protected(ad, a)               # unreachable: nothing sent, nothing taken away
         else:
             assert ad.flat, a                     # flat, nothing working -- and never sold twice
-    assert wire.of("a04") == cancel_calls("a04") + ["cancel_all", "flatten_all"]
+    assert wire.of("a04") == ["flatten_all", "cancel_all"] + cancel_calls("a04")
     assert status(eng, "a02") == ("done", "tp") and status(eng, "a01") == ("done", "killed")
     assert status(eng, "a06") == ("live", None)   # not marked killed by a read that failed
     assert journal(tmp_path, "kill_switch")[0]["strategies"] == s
@@ -300,13 +301,15 @@ def test_a_bad_day_never_stops_the_clock_on_another_account(tmp_path, monkeypatc
     for a in ("a03", "a04", "a05", "a06"):
         assert protected(ads[a], a) and status(eng, a) == ("live", None)
     failed = {r["account"]: r["actions"] for r in journal(tmp_path, "clock_flat_failed")}
-    assert failed == {"a03": [UNREACHED], "a04": REFUSED_429, "a06": UNREAD_429}
+    assert set(failed) == {"a03", "a04", "a06", "a07"} and failed["a03"] == [UNREACHED]
+    assert failed["a04"] == REFUSED_429 and failed["a06"] == UNREAD_429
+    assert f"cancel a07-101-sl: order/cancelorder {RATE_LIMITED}" in failed["a07"]       # its stop is still working: not done
     (err,) = journal(tmp_path, "clock_error")                     # the raise: journaled, on its own run
     assert (err["strategy"], err["account"], err["error"]) == ("nq930", "a05", "place_order blew up")
     flat = {r["account"]: r["actions"] for r in journal(tmp_path, "clock_flat")}
-    assert set(flat) == {"a01", "a07", "a08"} and flat["a01"] == flatten_acts("a01")
-    # a cancel refused after the market-out is SAID, not retried (as before): a07 is flat, its stop is not gone
-    assert f"cancel a07-101-sl: order/cancelorder {RATE_LIMITED}" in flat["a07"]
+    assert set(flat) == {"a01", "a08"} and flat["a01"] == flatten_acts("a01")
+    # a cancel refused after the market-out leaves the run NOT done (audit 2026-10-27): a07 is flat, its stop still rests
+    assert status(eng, "a07") == ("live", None)
     assert ads["a07"].net == 0 and ads["a07"].working == {"a07-101-sl"}
 
     later(monkeypatch, 6)                                         # the clock's own retry, 5 s on

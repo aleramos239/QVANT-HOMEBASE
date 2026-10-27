@@ -48,7 +48,7 @@ from ..backtest import hourly as hourlymod, minvol, sandbox, slots
 from ..backtest.engine import Costs, build_bars
 from ..backtest.sides import split_delta
 from ..backtest.runner import DAILY_LOOKBACK
-from ..backtest.tape import ARCHIVE, CACHE, ET, TapeStore, effective_session_window, et_ns
+from ..backtest.tape import ARCHIVE, CACHE, ET, TapeStore, effective_session_window, et_ns, exchange_holiday
 from ..core.clock import et_hms as _hms, utc_iso as _utc
 from ..core.num import finite_big_int_ok as _num, is_int as _int
 from ..core.session import session_date, session_range_ms
@@ -95,6 +95,8 @@ BAD_SETTINGS = "The strategy's settings cannot be read."
 NO_DAILY = "The daily bars could not be read."
 NO_YESTERDAY = "Yesterday's prices are not stored yet."
 WAIT_YESTERDAY = "Yesterday's prices are not stored yet: it checks again every minute."
+_LOAD_LOCK = threading.Lock()   # the history loaders (tape builds) run one at a time, the warm thread and the session event alike
+_WARMED: set = set()             # (root, date, n, delta) already warmed: many strategies on one market build the tapes once
 WAIT_RETRY_S = 60.0              # a day waiting for yesterday's prices asks again this often (its own wall clock)
 NO_HOURLY = "The earlier hours' prices could not be read."
 NO_MINVOL = "The earlier days' volume could not be read."
@@ -645,6 +647,7 @@ class StrategyDay:
         b0, b1 = meta["bar_window"] or (w0, w1)
         self._bar_next, self._bar_end = et_ns(self.date, b0), et_ns(self.date, b1)
         self._root = root
+        self._tapes = TapeStore()                    # _before's holiday check reads this day's own store, not a new one per call
         self._daily = daily if meta["needs_daily"] else None     # read when the session event fires (_session_daily)
         self._hourly_n = meta.get("needs_hourly", 0)
         self._hourly = hourly if self._hourly_n else None      # ... and so are the earlier sessions' 1-hour closes
@@ -653,11 +656,8 @@ class StrategyDay:
         if self._needs_delta and callable(minute_vol):         # the earlier minutes carry their delta too
             minute_vol = partial(minute_vol, delta=True)
         self._mv = minute_vol if self._mv_n else None          # ... and the earlier trade dates' minute volume
-        if callable(self._mv):
-            try:                                     # warm the cache now (hosting: 18:00 the evening before, or a restart while
-                self._mv(root, self.date, self._mv_n)    # flat), so the session event loads at most the newest file
-            except Exception:                        # noqa: BLE001 - the session event reads again and fails closed there
-                pass
+        if callable(self._mv):                       # warm the minute-volume cache now, off the runner's thread (_warm)
+            threading.Thread(target=self._warm, daemon=True).start()
         self.fills = ShadowFills(root, self.date, costs_of(record), meta["placement_ms"], ex)
         if self._desk is not None:
             self._desk_start()
@@ -782,6 +782,29 @@ class StrategyDay:
             self._bars.append((b.end_ns, 1, 0, "bar", arg))
         self._bar_next = -(-upto // step) * step
 
+    def _warm(self) -> None:
+        """Hosting is often 18:00 ET the evening before, or a restart while flat: build the minute-volume history now so the
+        session event loads at most the newest file (the daily and hourly reads stay at the session event, tests C2). One load at a time (_LOAD_LOCK); a failure is read again, and fails closed, there."""
+        key = (self._root, self.date, self._mv_n, self._needs_delta)
+        with _LOAD_LOCK:
+            if key in _WARMED:
+                return
+            try:
+                self._mv(self._root, self.date, self._mv_n)
+                _WARMED.add(key)                     # a failed warm is not kept: the session event reads again
+            except Exception:  # noqa: BLE001
+                pass
+
+    @staticmethod
+    def _load(load, *args):
+        if not callable(load):
+            return list(load)
+        with _LOAD_LOCK:                             # not while _warm builds the same tapes (one writer per cache file)
+            return load(*args)
+
+    def _prev(self) -> dt.date:
+        return _before(self.date, self._root, self._tapes)
+
     def _session_daily(self) -> list:
         """The completed daily bars before the date, for a strategy that needs them: read when its session event
         fires, not when the day was hosted (often 18:00 ET the evening before, before the tick job has stored that
@@ -790,11 +813,11 @@ class StrategyDay:
         if self._daily is None:
             return []
         try:
-            bars = self._daily(self._root, self.date) if callable(self._daily) else list(self._daily)
+            bars = self._load(self._daily, self._root, self.date)
         except OSError as e:
             raise _Stop(NO_DAILY, f"{type(e).__name__}: {e}") from None
         newest = bars[-1].get("date") if bars and isinstance(bars[-1], dict) else None
-        if not isinstance(newest, str) or newest < _before(self.date).isoformat():
+        if not isinstance(newest, str) or newest < self._prev().isoformat():
             raise _Wait(NO_YESTERDAY, f"the newest daily bar is {newest if isinstance(newest, str) else 'none'}")
         return bars
 
@@ -806,10 +829,10 @@ class StrategyDay:
         if self._hourly is None:
             return None
         try:
-            hours = self._hourly(self._root, self.date, self._hourly_n) if callable(self._hourly) else list(self._hourly)
+            hours = self._load(self._hourly, self._root, self.date, self._hourly_n)
         except OSError as e:
             raise _Stop(NO_HOURLY, f"{type(e).__name__}: {e}") from None
-        if hours and _session_of(hours[-1][0]) < _before(self.date):
+        if hours and _session_of(hours[-1][0]) < self._prev():
             raise _Wait(NO_YESTERDAY, f"the newest 1-hour close is of {_session_of(hours[-1][0]).isoformat()}")
         return hours
 
@@ -820,11 +843,11 @@ class StrategyDay:
         if self._mv is None:
             return None
         try:
-            got = self._mv(self._root, self.date, self._mv_n) if callable(self._mv) else list(self._mv)
+            got = self._load(self._mv, self._root, self.date, self._mv_n)
         except OSError as e:
             raise _Stop(NO_MINVOL, f"{type(e).__name__}: {e}") from None
         newest = got[-1].get("date") if got and isinstance(got[-1], dict) else None
-        if (not isinstance(newest, str) or newest < _before(self.date).isoformat() or got[-1].get("vol") is None
+        if (not isinstance(newest, str) or newest < self._prev().isoformat() or got[-1].get("vol") is None
                 or self._needs_delta and got[-1].get("delta") is None):
             raise _Wait(NO_YESTERDAY, f"the newest minute volume is of {newest if isinstance(newest, str) else 'none'}"
                                       f"{' (its tape did not load)' if isinstance(newest, str) and got[-1].get('vol') is None else ''}")
@@ -1636,10 +1659,12 @@ def _key(rec: dict) -> tuple:
     return (*_mark(rec), json.dumps(rec.get("params"), sort_keys=True, default=str), rec.get("qty"))
 
 
-def _before(d: dt.date) -> dt.date:
-    """The weekday before d."""
+def _before(d: dt.date, root: str | None = None, tapes=None) -> dt.date:
+    """The weekday before d; with a root, a holiday with no tape of its own (exchange_holiday and no archive manifest: a day
+    the tick job only lags on still counts, the loaders wait for it) is passed over to the session before it. `tapes`: the
+    store to ask (a day's own); none = the default archive."""
     d -= dt.timedelta(days=1)
-    while d.weekday() >= 5:
+    while d.weekday() >= 5 or (root and exchange_holiday(d) and not (tapes or TapeStore()).manifests(root, d)):
         d -= dt.timedelta(days=1)
     return d
 

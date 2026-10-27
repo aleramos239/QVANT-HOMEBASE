@@ -349,7 +349,7 @@ def test_refill_budget_is_serialized_and_never_exceeded(tmp_path, monkeypatch):
                     "budget_hour": self.budget, "reconnects": 0}
 
     base = tmp_path / "ticks"
-    app = create_app(roots=["NQ", "ES", "YM"], base=base, feed_factory=FakeFeed,
+    app = create_app(roots=["YM", "RTY", "GC"], base=base, feed_factory=FakeFeed,
                      now_ms=lambda: session_ms(D, 9, 45), state=tmp_path / "state")
     with TestClient(app):
         deadline = time.time() + 5
@@ -360,7 +360,7 @@ def test_refill_budget_is_serialized_and_never_exceeded(tmp_path, monkeypatch):
     assert violations == [], f"refill ran concurrently with itself: {violations}"
     assert len(calls) == 2, calls
     assert sum(c["max_pages"] for c in calls) <= 60 - 27
-    skipped = {"NQ", "ES", "YM"} - {c["root"] for c in calls}
+    skipped = {"YM", "RTY", "GC"} - {c["root"] for c in calls}
     assert len(skipped) == 1, skipped
     root = next(iter(skipped))
     gp = base / root / str(D.year) / f"{D.isoformat()}_{root}.live.gaps"

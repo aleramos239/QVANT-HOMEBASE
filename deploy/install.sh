@@ -1,23 +1,25 @@
 #!/bin/bash
 # Install Homebase as always-on launchd services on THIS machine (laptop or
 # mini — same script). Idempotent: re-running updates and restarts.
-#   ./deploy/install.sh          install/refresh app + ticks + charts + sleep-blocker (the pipeline runner is off, owner 2026-10-20)
+#   ./deploy/install.sh          install/refresh app + charts + sleep-blocker (the pipeline runner is off, owner 2026-10-20)
 #                                + the Lab strategies' runner at login (reload it outside the sessions only)
 #                                + the weekly prune of old tester output
 #   ./deploy/install.sh remove   unload everything
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 AGENTS="$HOME/Library/LaunchAgents"
-LABELS=(com.ramosquant.homebase com.ramosquant.homebase-awake com.ramosquant.homebase-ticks com.ramosquant.homebase-charts com.ramosquant.homebase-labrun com.ramosquant.homebase-prune)
+LABELS=(com.ramosquant.homebase com.ramosquant.homebase-awake com.ramosquant.homebase-charts com.ramosquant.homebase-labrun com.ramosquant.homebase-prune)
 # no longer installed; still unloaded and deleted so an old install gets cleaned
-RETIRED=(com.ramosquant.homebase-tunnel com.ramosquant.homebase-pipeline)  # pipeline: off for now (owner, 2026-10-20)
+# pipeline: off for now (owner, 2026-10-20). ticks: the hourly tick job runs on the server only (2026-10-20): on this Mac it logs in on
+# the live md login and kicks the server's chart feed, so an install must never bring it back
+RETIRED=(com.ramosquant.homebase-tunnel com.ramosquant.homebase-pipeline com.ramosquant.homebase-ticks)
 # One Desk on the server (docs/superpowers/specs/2026-10-18-one-desk-on-the-server-design.md, set by
 # deploy/linux/switch.sh): the tunnel to the server's desk holds 8850, this Mac's desk is a logins-only helper on
 # 8849, and the Lab strategies' runner runs on the server only.
 PORT=8850
 if [ -f "$REPO/homebase/.state/onedesk.on" ]; then
   PORT=8849
-  LABELS=(com.ramosquant.homebase com.ramosquant.homebase-awake com.ramosquant.homebase-ticks com.ramosquant.homebase-charts com.ramosquant.homebase-prune)
+  LABELS=(com.ramosquant.homebase com.ramosquant.homebase-awake com.ramosquant.homebase-charts com.ramosquant.homebase-prune)
   RETIRED+=(com.ramosquant.homebase-labrun)
 fi
 

@@ -42,6 +42,7 @@ from .. import qos
 from ..core.clock import utc_iso as _now
 from ..paths import repo_root, state_dir
 from .export import read_json, write_json
+from .settings_store import md_only
 from .tester_api import host_ok
 
 FINAL = ("done", "error", "cancelled")
@@ -117,6 +118,9 @@ class RefreshManager:
         with self._lock:
             if self._status.get("status") == "running":
                 raise ValueError("a refresh is already running")
+            if md_only() == "demo":
+                raise ValueError("this machine's charts use the demo login only, so a refresh here would take the live md "
+                                 "seat from the server: run Refresh data on the server")
             if self.md_ready is not None and not self.md_ready():
                 raise ValueError(NO_LOGIN)
             if self._archive_busy():

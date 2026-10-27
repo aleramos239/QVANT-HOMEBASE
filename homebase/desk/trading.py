@@ -496,7 +496,18 @@ async def _call(coro) -> OrderResult:
     try:
         return await coro
     except Exception as e:  # noqa: BLE001
-        return OrderResult(ok=False, error=str(e))
+        # a timeout / transport failure (or a bare one with no reason) may have reached the broker; a pre-send error did not
+        lost = isinstance(e, (OSError, asyncio.TimeoutError)) or not str(e) or \
+            any(w in type(e).__name__ for w in ("Timeout", "Connection", "Closed", "Disconnect"))
+        return OrderResult(ok=False, error=str(e) or type(e).__name__, raw={"outcome_unknown": True} if lost else {})
+
+
+def _unknown(r: OrderResult) -> bool:
+    """A placement that did not come back ok but may be working at the broker: the adapter said so, or it is a bare
+    failure with no order id and no reason (a plain place_order timeout is OrderResult(ok=False, error="")) --
+    never a clean refusal, never retried or restored on top of."""
+    return not r.ok and bool((r.raw or {}).get("outcome_unknown")
+                             or (not r.order_id and not (r.error or "").strip()))
 
 
 class ChartDesk:
@@ -587,7 +598,7 @@ class ChartDesk:
         connected = bool(ad is not None and ad.connected)
         return {
             "id": aid, "label": self._label(aid), "pinned": a.account_name,
-            "broker_account": lv.get("broker_account"), "env": "live" if a.live else "demo",
+            "broker_account": lv.get("broker_account"), "env": "live",    # every non-paper account is real money: funded PA/LTF accounts are live=False (2026-10-27)
             "connected": connected, "error": (self.acct_status.get(aid) or {}).get("error"),
             "tradable": (connected and bool(a.account_name) and not self._pinned_twice(aid)
                          and bool(getattr(ad, "pinned_ok", False)) and bool(lv.get("seeded"))),
@@ -653,7 +664,7 @@ class ChartDesk:
         from .timer import fire_time
         secs = now.hour * 3600 + now.minute * 60 + now.second + now.microsecond / 1e6
         for s in self.cfg.strategies.values():
-            if not (s.enabled and s.self_fire and s.kind == "straddle" and s.trades_on(now.date())):
+            if not (s.enabled and s.self_fire and s.kind in ("straddle", "levels") and s.trades_on(now.date())):
                 continue
             f = fire_time(s)
             fs = f.hour * 3600 + f.minute * 60 + f.second
@@ -851,9 +862,11 @@ class ChartDesk:
         return sum(1 for b in self._accts().values()
                    if (b.keyring_key, (b.account_name or "").strip().lower()) == key) > 1
 
-    def _gate(self, aid: str) -> tuple:
-        """Guards 1, 2 and 5. Returns (adapter, live view, label)."""
-        if not self.cfg.chart_trading.enabled:
+    def _gate(self, aid: str, *, entry: bool = True) -> tuple:
+        """Guards 1, 2 and 5. Returns (adapter, live view, label). Guard 1 (chart trading on) holds back what can open
+        or grow a position; `entry=False` (cancel, flatten, modify, exits: they only reduce risk or protect) works
+        with it off, so the Kill's switch-off cannot leave a position the chart can neither close nor protect."""
+        if entry and not self.cfg.chart_trading.enabled:
             raise Refused("chart trading is off — switch it on on the desk page")
         a = self._accts().get(aid)
         if a is None:
@@ -887,6 +900,15 @@ class ChartDesk:
             return symbols.resolve_contract(root)
         except ValueError as e:
             raise Refused(f"{root}: no front contract ({e})") from None
+
+    def _contract_held(self, root: str, view: dict) -> str:
+        """The contract a flatten / exits / reverse on `root` means: the one month the account holds a position or a
+        working order in -- across the roll the front month is not it, and its net reads 0. The front month when the
+        account holds none or two months."""
+        front = self._contract(root)
+        held = {s for s in [p.get("symbol") for p in view.get("positions", []) if p.get("net")]
+                + [o.get("symbol") for o in view.get("orders", [])] if s and root_of(s) == root}
+        return next(iter(held)) if len(held) == 1 else front
 
     def _day_state(self, aid: str, name: str):
         # the pair's state of today AT ITS PLAIN KEY: a Lab strategy trades in rounds, its open round keeps that key,
@@ -1100,7 +1122,18 @@ class ChartDesk:
         lim = self.cfg.chart_trading
         if it.qty < 1:
             raise Refused("quantity must be at least 1")
+        if it.qty > lim.max_order_qty:
+            raise Refused(f"quantity {it.qty} is over the chart-trading limit of {lim.max_order_qty} an order "
+                          "— change it on the desk page")
         self._unresolved(view)
+        worst = worst_net(view, contract, it.side, it.qty, self._reservations(aid, view))
+        net = sum(int(p.get("net") or 0) for p in view.get("positions", []) if p.get("symbol") == contract)
+        # the position cap is for orders that can grow |net|: one against the position, no bigger than it, only closes
+        # (the position's own SL/TP count in `worst`, so a scale-out near the cap would be refused for nothing)
+        reduces = net != 0 and it.side == ("Sell" if net > 0 else "Buy") and it.qty <= abs(net)
+        if worst > lim.max_position_qty and not reduces:
+            raise Refused(f"this order could take {contract} on {label} to {worst}, over the "
+                          f"chart-trading limit of {lim.max_position_qty} a position — change it on the desk page")
         price, sl, tp, trigger = check_prices(it.side, it.type, it.price, it.sl_price,
                                               it.tp_price, contract, quote,
                                               trigger=it.trigger_price)
@@ -1111,6 +1144,11 @@ class ChartDesk:
         r = await _call(ad.place_bracket(req) if bracket else ad.place_order(req))
         if r.ok:
             self._placed(aid, contract, it.side, it.qty, r)
+        elif _unknown(r):      # a timeout: it may be working at the broker -- reserved, never reported as a refusal
+            self._placed(aid, contract, it.side, it.qty, r)
+            r = OrderResult(ok=False, order_id=r.order_id, raw=r.raw, error=(
+                f"outcome unknown ({r.error or 'no answer from the broker'}) — the order may be working: "
+                "check the Orders tab before sending it again"))
         jerr = self._jsafe("manual_order", source="chart", client_id=it.client_id, account=aid,
                            root=it.root, contract=contract, side=it.side, qty=it.qty,
                            type=it.type, price=price, trigger=trigger, tif=it.tif,
@@ -1136,7 +1174,7 @@ class ChartDesk:
         return await self._once("modify", cid, work)
 
     async def _modify(self, body, cid: str, aid: str, oid: str, price: float) -> dict:
-        ad, view, label = self._gate(aid)
+        ad, view, label = self._gate(aid, entry=False)
         o = self._find_order(view, oid, label)
         self._not_bot_order(aid, oid)
         contract = o.get("symbol")
@@ -1149,9 +1187,18 @@ class ChartDesk:
         if typ not in ("Limit", "Stop"):
             raise Refused(f"only Limit and Stop orders can be moved (this one is {typ})")
         px = round_to_tick(contract, price)
+        net = sum(int(p.get("net") or 0) for p in view.get("positions", []) if p.get("symbol") == contract)
+        # a stop that only closes the open position (its side against the net, no bigger than it) protects it
+        protects = typ == "Stop" and net != 0 and o.get("side") == ("Sell" if net > 0 else "Buy") \
+            and int(o.get("qty") or 0) <= abs(net)
+        if not protects and not self.cfg.chart_trading.enabled:     # any other modify can open or grow a position
+            raise Refused("chart trading is off — switch it on on the desk page")
         if typ == "Stop":
-            check_prices(o.get("side"), "Stop", px, None, None, contract,
-                         fresh_quote(body, root_of(contract), self._now_s()))
+            quote = fresh_quote(body, root_of(contract), self._now_s())
+            # no fresh trade (md feed down, a quiet contract): a protective stop goes to the broker, which checks
+            # it; any other stop still needs one
+            if quote is not None or not protects:
+                check_prices(o.get("side"), "Stop", px, None, None, contract, quote)
         r = await _call(ad.modify_order(oid, typ,
                                         price=px if typ == "Limit" else None,
                                         stop_price=px if typ == "Stop" else None,
@@ -1171,7 +1218,7 @@ class ChartDesk:
         return await self._once("cancel", cid, work)
 
     async def _cancel(self, cid: str, aid: str, oid: str) -> dict:
-        ad, view, label = self._gate(aid)
+        ad, view, label = self._gate(aid, entry=False)
         o = self._find_order(view, oid, label)
         self._not_bot_order(aid, oid)
         contract = o.get("symbol")
@@ -1223,8 +1270,9 @@ class ChartDesk:
         after that; and a DEFINITE refusal of the pair re-places the original
         exit alone at once. A result whose outcome is unknown (a timeout: it
         may be working) is never doubled up, and says so loudly."""
-        ad, view, label = self._gate(aid)
-        contract = self._contract(it.root)
+        ad, view, label = self._gate(aid, entry=False)
+        was_on = self.cfg.chart_trading.enabled      # on at the start: a Kill landing mid-swap puts the old exit back
+        contract = self._contract_held(it.root, view)
         self._lock(aid, contract, label)
         self._unresolved(view)
         await self._settle_reservations(aid, ad, contract)
@@ -1258,7 +1306,10 @@ class ChartDesk:
         if owner:
             raise Refused(f"the {owner} bot's exits protect this position — they can't be "
                           "changed from the chart")
-        last = quote["last"] if quote else None
+        pos = next((p for p in view.get("positions", []) if p.get("symbol") == contract), {})
+        # no fresh trade: the position's average price stands in, so a new stop must sit on the losing side of it and
+        # a target on the winning side (safe for any market); the broker checks the rest
+        last = quote["last"] if quote else (float(pos["avg_price"]) if _finite(pos.get("avg_price")) else None)
         rnd = (lambda p: None if p is None else round_to_tick(contract, p))
         ex_sl, ex_tp, sl, tp = exit_levels(net, exits, rnd(it.sl_price), rnd(it.tp_price), last)
         qty = abs(net)
@@ -1312,7 +1363,7 @@ class ChartDesk:
                                         f"replaced (now {after if after is not None else 'unreadable'}) "
                                         f"— NO exit was placed; {CHECK_NOW}")
             try:                               # the Kill or the 09:20 lock may have landed meanwhile
-                self._still_allowed(aid, contract, label, "nothing new placed")
+                self._still_allowed(aid, contract, label, "nothing new placed", entry=was_on)
             except Refused as e:
                 return await self._exits_restore(it, aid, contract, exit_side, qty, sl, tp, steps, kept, ad,
                                                  str(e))
@@ -1334,7 +1385,7 @@ class ChartDesk:
                           "tp_order_id": (r.raw or {}).get("tp_order_id")}
         if r.order_id:
             self._placed(aid, contract, exit_side, qty, r)
-        if not r.ok and ((r.raw or {}).get("outcome_unknown") or r.order_id):
+        if not r.ok and (_unknown(r) or r.order_id):
             # it may be working at the broker: never doubled up, never reported as a plain refusal --
             # with or without an exit before it
             gone = " and the old exit was cancelled" if kept is not None else ""
@@ -1394,7 +1445,10 @@ class ChartDesk:
             price=px if typ == "Limit" else None, stop_price=px if typ == "Stop" else None,
             text=EXIT_TEXT, time_in_force=kept.get("tif") or EXIT_TIF)))
         steps["restore"] = {"ok": rr.ok, "order_id": rr.order_id, "error": rr.error}
-        if rr.ok:
+        if _unknown(rr):
+            msg = (f"{why} AND putting the original {'stop' if typ == 'Stop' else 'target'} back has an unknown "
+                   f"outcome ({rr.error}) — {CHECK_NOW}")
+        elif rr.ok:
             self._placed(aid, contract, exit_side, qty, OrderResult(
                 ok=True, order_id=rr.order_id, raw={"sl_order_id": rr.order_id if typ == "Stop" else None,
                                                     "tp_order_id": rr.order_id if typ == "Limit" else None}))
@@ -1466,15 +1520,15 @@ class ChartDesk:
         async def work():
             outs = await asyncio.gather(
                 *(self._one(action, cid, aid,
-                            lambda aid=aid: self._symbol_one(cid, aid, root, fn))
+                            lambda aid=aid: self._symbol_one(cid, aid, root, fn, action == "reverse"))
                   for aid in accounts), return_exceptions=True)
             return self._finish(action, cid, self._gathered(accounts, outs))
 
         return await self._once(action, cid, work)
 
-    async def _symbol_one(self, cid: str, aid: str, root: str, fn) -> dict:
-        ad, view, label = self._gate(aid)
-        contract = self._contract(root)
+    async def _symbol_one(self, cid: str, aid: str, root: str, fn, entry: bool = False) -> dict:
+        ad, view, label = self._gate(aid, entry=entry)
+        contract = self._contract_held(root, view)
         self._lock(aid, contract, label)
         return await fn(cid, aid, ad, view, contract, label)
 
@@ -1568,10 +1622,11 @@ class ChartDesk:
             raise Refused(f"the reverse in {contract} on {label} is not confirmed yet — the broker shows "
                           "no position; nothing sent, try again in a moment")
 
-    def _still_allowed(self, aid: str, contract: str, label: str, done: str) -> None:
+    def _still_allowed(self, aid: str, contract: str, label: str, done: str, entry: bool = True) -> None:
         """Re-run guards 1 and 4 between a reverse's awaits: the desk's Kill
-        or the 09:20 lock may have landed while the broker answered."""
-        if not self.cfg.chart_trading.enabled:
+        or the 09:20 lock may have landed while the broker answered. (`entry=False`: an exits swap only protects,
+        it goes on when chart trading was off from the start.)"""
+        if entry and not self.cfg.chart_trading.enabled:
             raise Refused(f"chart trading was switched off during the reverse — {done}")
         try:
             self._lock(aid, contract, label)
@@ -1579,6 +1634,7 @@ class ChartDesk:
             raise Refused(f"{e} — {done}") from None
 
     async def _do_reverse(self, cid, aid, ad, view, contract, label, quote=None) -> dict:
+        await self._settle_reservations(aid, ad, contract)     # an entry that already filled no longer blocks it
         if any(r["contract"] == contract for r in self._reservations(aid, view)):
             raise Refused(f"an order sent from the chart in {contract} on {label} is not "
                           "confirmed yet — try again in a moment")
@@ -1606,12 +1662,22 @@ class ChartDesk:
         if close.get("ok") and close.get("order_id") and closed:     # as _do_flatten: one close at a time
             self._placed(aid, contract, "Sell" if closed > 0 else "Buy", abs(closed),
                          OrderResult(ok=True, order_id=str(close["order_id"])), close_net=closed)
+        if closed != net:       # the position moved between the two reads (a stop filled): never open `net` the other way
+            return self._result(False, None, f"the {contract} position changed while it was being reversed "
+                                f"({net:+d} → {closed if closed is not None else 'unreadable'}) — flattened only, "
+                                "nothing opened", jerr)
         self._still_allowed(aid, contract, label, "flattened only")
         req = OrderRequest(symbol=contract, side=side, qty=abs(net), order_type="Market",
                            stop_price=sl, text="homebase:chart-reverse")
         r = await _call(ad.place_bracket(req) if sl is not None else ad.place_order(req))
         if r.ok:
             self._placed(aid, contract, side, abs(net), r, reverse=True)
+        elif _unknown(r):      # a timeout after the flatten: the reversed position may be working -- reserved, not a refusal
+            self._placed(aid, contract, side, abs(net), r, reverse=True)
+            r = OrderResult(ok=False, order_id=r.order_id, raw=r.raw, error=(
+                f"the {contract} flatten went through; reversed order: outcome unknown "
+                f"({r.error or 'no answer from the broker'}) — check the Orders tab and the position before "
+                "sending it again"))
         jerr = self._jsafe("manual_reverse", source="chart", step="open", client_id=cid,
                            account=aid, contract=contract, side=side, qty=abs(net), sl=sl, ok=r.ok,
                            order_id=r.order_id, error=r.error, ack_ms=self._ack_ms()) or jerr

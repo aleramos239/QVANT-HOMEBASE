@@ -261,9 +261,10 @@ def test_marketable_levels_are_refused(tmp_path):
     desk, eng, ad, clock = setup(tmp_path)
     assert "stop loss must be below the last price" in exits(desk, clock, sl_price=100.0)["error"]
     assert "target must be above the last price" in exits(desk, clock, cid="x2", tp_price=99.75)["error"]
-    stale = {"client_id": "x3", "accounts": ["a1"], "root": "NQ", "sl_price": 95.0,
+    # no fresh trade (audit 2026-10-27): the position's average (100) stands in, so only a safe-side level goes
+    stale = {"client_id": "x3", "accounts": ["a1"], "root": "NQ", "sl_price": 105.0,
              "quotes": quote(clock, last=100.0, age_s=60), "expected_net": {"a1": 3}}
-    assert "needs a fresh price" in run(desk.exits(stale))["results"]["a1"]["error"]
+    assert "stop loss must be below" in run(desk.exits(stale))["results"]["a1"]["error"]
     assert ad.orders == []
 
 
@@ -275,17 +276,17 @@ def test_a_kept_exit_already_through_the_market_is_refused(tmp_path):
 
 def test_the_desk_gates_apply(tmp_path):
     desk, eng, ad, clock = setup(tmp_path, et=(11, 0))
-    desk.cfg.chart_trading.enabled = False
-    assert exits(desk, clock, cid="x2", sl_price=95.0)["error"] == \
-        "chart trading is off — switch it on on the desk page"
+    desk.cfg.chart_trading.enabled = False          # off: an exit only protects, so it still goes (audit 2026-10-27)
+    assert exits(desk, clock, cid="x2", sl_price=95.0)["ok"] is True
     desk.cfg.chart_trading.enabled = True
+    ad.view["orders"] = []
     clock.set_et(11, 0)
     ad.pinned_ok = False
     assert "pinned broker account" in exits(desk, clock, cid="x3", sl_price=95.0)["error"]
     ad.pinned_ok = True
     ad.view["positions"][0]["symbol"] = None
     assert "not resolved yet" in exits(desk, clock, cid="x4", sl_price=95.0)["error"]
-    assert ad.orders == []
+    assert len(ad.orders) == 1                       # only the one placed with chart trading off
 
 
 def test_a_repeated_client_id_places_once(tmp_path):

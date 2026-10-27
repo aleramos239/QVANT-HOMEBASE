@@ -71,9 +71,13 @@ function cellGate(cell, root) {
    send itself. Presentation only: the send re-checks its own gate at click and at send as before. `root`: the
    symbol the surface was painted for. */
 function liveCue(cell, root) { return T.liveSendIds(cellGate(cell, root), D().state); }
-/* The bottom panel's per-account gate: the desk up and on, and the named account armed if it is LIVE. */
+/* The desk-level gate for what only reduces risk (a line's drag / ×, the panel's Close / Cancel): the desk down stops it,
+   chart trading switched OFF does not -- the desk lets cancel, flatten and exits through then (a Kill switches it off). */
+function exitGate() { const g = D().gate(); return g && g.mode === 'down' ? g : null; }
+/* The bottom panel's per-account gate: the desk up (chart trading may be off: it only closes or cancels), and the
+   named account armed if it is LIVE. */
 function accountGate(account) {
-  const g = D().gate();
+  const g = exitGate();
   if (g) return g;
   if (!isArmedAccount(account)) {
     const st = D().state, a = st && (st.accounts || []).find((x) => x.id === account);
@@ -83,14 +87,13 @@ function accountGate(account) {
 }
 /* The mode for MANAGING existing lines (drag, ×, a position chip's exit drag) on a chart (2026-09-27): any account the desk
    lists as tradable (HBTrade.lineAccounts), not only the chart's ticked ones -- those decide where NEW entries go.
-   The desk up with chart trading on, and the chart not replaying (nor latched by a replay's end), as for entries;
-   a LIVE account only while it is armed THIS session (isArmedAccount) -- the same rule the entry path's armedMode
-   applies, and since lineGate re-runs this at send (guardedSend), a LIVE account disarmed while a confirm is open
-   drops out and the send refuses ("Accounts changed"). The desk refuses a bot's order whatever we say. */
+   The desk up (chart trading may be off, see exitGate), and the chart not replaying (nor latched by a replay's end).
+   Managing a line needs no arm (audit 2026-10-27: every non-paper account is real money, and a reload must not strand
+   a live position's stop). The desk refuses a bot's order whatever we say. */
 function lineMode(cell) {
-  const g = D().gate();
+  const g = exitGate();
   if (g) return g;
-  const m = { mode: 'on', reason: '', accounts: T.lineAccounts(D().state).filter(isArmedAccount) };
+  const m = { mode: 'on', reason: '', accounts: T.lineAccounts(D().state) };
   return T.replayGuard(T.replayHaltGuard(m, !!(cell && cell.cfg && cell.cfg.replayHalt)), !!(cell && cell.replay));
 }
 /* lineMode, re-run at send time: plus the chart still on the page and still showing the root. */
@@ -139,12 +142,6 @@ function isArmedAccount(id) {
   const st = D().state, a = st && (st.accounts || []).find((x) => x.id === id);
   if (!a) return false;
   return a.env !== 'live' || liveConfirmed.has(id);
-}
-/* The first unarmed LIVE account among ids, or null -- for a single refusal toast naming it. */
-function findUnarmed(ids) {
-  const st = D().state, list = (st && st.accounts) || [];
-  for (const id of ids) if (!isArmedAccount(id)) return list.find((x) => x.id === id) || { id };
-  return null;
 }
 /* final review I3: the emergency Kill has its OWN lock, per strategy -- never the page-wide one above, so an order,
    modify or flatten hung on the desk (up to its 20 s timeout) can never hold a Kill back. It still needs its
@@ -400,8 +397,6 @@ function moveLine(cell, line, price, root, tick, { onCancel, noConfirm = false }
   const g = () => lineGate(cell, root), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); if (onCancel) onCancel(); return; }
   const accountIds = line.legs.map((l) => l.account);
-  const unarmed = findUnarmed(accountIds);   // review item 5: refuse a LIVE leg that isn't armed this session
-  if (unarmed) { D().toast('err', T.unarmedLiveMessage(unarmed)); if (onCancel) onCancel(); return; }
   if (line.editable === false || !T.legsWithin(line, gate.accounts)) { D().toast('err', NOT_TRADABLE); if (onCancel) onCancel(); return; }
   const rounded = T.roundTick(price, tick);
   if (rounded === T.roundTick(line.price, tick)) { if (onCancel) onCancel(); return; }   // M8: a zero-tick move sends nothing
@@ -439,8 +434,6 @@ function addExit(cell, line, kind, price, root, tick, { onCancel, noConfirm = fa
   const g = () => lineGate(cell, root), gate = g();
   if (gate.mode !== 'on') return cancel(gate.reason);
   const accounts = [...new Set(line.legs.map((l) => l.account))];
-  const unarmed = findUnarmed(accounts);
-  if (unarmed) return cancel(T.unarmedLiveMessage(unarmed));
   if (line.editable === false || !T.legsWithin(line, gate.accounts)) return cancel(NOT_TRADABLE);
   const at = T.roundTick(price, tick);
   const q0 = D().quotes[root], bad = T.exitDropError(line, kind, at, q0 ? q0.last : null);
@@ -467,8 +460,6 @@ function closeLine(cell, line, root, tick) {
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
   const isPosition = line.kind === 'position';
   const accounts = [...new Set(line.legs.map((l) => l.account))];
-  const unarmed = findUnarmed(accounts);   // review item 5
-  if (unarmed) { D().toast('err', T.unarmedLiveMessage(unarmed)); return; }
   if (line.editable === false || !T.legsWithin(line, gate.accounts)) { D().toast('err', NOT_TRADABLE); return; }
   const action = isPosition ? 'flatten' : 'cancel';
   const build = (m) => {

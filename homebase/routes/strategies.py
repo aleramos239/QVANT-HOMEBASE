@@ -19,10 +19,12 @@ def register(app, *, cfg, engine, labdesk) -> None:
         name = str(body.get("strategy") or "")
         if name not in cfg.strategies:
             raise HTTPException(404, f"unknown strategy {name!r}")
+        if not isinstance(body.get("enabled"), bool):
+            raise HTTPException(400, "enabled must be true or false")     # bool("false") is True: it would switch ON
         if labdesk.is_lab(name):
             # a promoted Lab strategy has ONE switch, its store record's (the runner hosts by it): nothing of it
             # is in config.json
-            on = bool(body.get("enabled"))
+            on = body["enabled"]
             if not on:                       # first, whatever the write below does: its unfilled entries are
                 await labdesk.stop(name, "off")      # cancelled and its day is over (never raises)
             try:
@@ -32,7 +34,7 @@ def register(app, *, cfg, engine, labdesk) -> None:
                 raise HTTPException(e.status, str(e)) from None
             engine.journal("strategy_toggled", strategy=name, enabled=on)
             return {"ok": True, "strategy": name, "enabled": on}
-        cfg.strategies[name].enabled = bool(body.get("enabled"))
+        cfg.strategies[name].enabled = body["enabled"]
         config_mod.save(cfg)
         engine.journal("strategy_toggled", strategy=name,
                        enabled=cfg.strategies[name].enabled)

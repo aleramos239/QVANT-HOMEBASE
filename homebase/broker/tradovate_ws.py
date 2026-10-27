@@ -30,7 +30,12 @@ RTTS_KEPT = 64      # the latest request round trips, for timing only
 
 
 def log(msg: str) -> None:
-    print(f"[tradovate_ws] {msg}", file=sys.stderr, flush=True)
+    print(f"{time.strftime('%H:%M:%S')} [tradovate_ws] {msg}", file=sys.stderr, flush=True)
+
+
+class WSClosed(ConnectionError):
+    """The socket died with this request in flight: it may or may not have reached the
+    broker. Not a RuntimeError on purpose -- callers read a RuntimeError as 'nothing was sent'."""
 
 
 def _ws_is_closed(ws) -> bool:
@@ -63,15 +68,18 @@ class TradovateWS:
         # requests -- timing only, e.g. the prestage's broker round trip at 09:28:30
         self.rtts: deque = deque(maxlen=RTTS_KEPT)
         self._perf = time.perf_counter
+        self._opened_at = 0.0
 
     async def connect(self) -> None:
         log(f"connecting → {self.url}")
         self.ws = await websockets.connect(self.url, max_size=64 * 1024 * 1024)
+        self._opened_at = time.time()
         self._reader_task = asyncio.create_task(self._reader())
         deadline = time.time() + 10
         while not self.connected and time.time() < deadline:
             await asyncio.sleep(0.05)
         if not self.connected:
+            await self.close()          # no zombie socket + reader task per failed attempt
             raise RuntimeError("did not receive 'o' (open) frame from server")
         self._heartbeat_task = asyncio.create_task(self._heartbeat())
 
@@ -121,6 +129,17 @@ class TradovateWS:
             # The socket is dead once the read loop exits — surface that so the
             # adapter (and the dashboard) stop reporting a phantom connection.
             self.connected = False
+            # a clean close ends the loop silently: always say why and how old the socket was
+            ws = self.ws
+            log(f"reader ended: {self.url} code={getattr(ws, 'close_code', None)} "
+                f"reason={getattr(ws, 'close_reason', None)!r} "
+                f"age_s={round(time.time() - self._opened_at) if self._opened_at else None}")
+            # every request still waiting was sent on this dead socket: fail it now (it may
+            # have reached the broker) instead of letting each one sit its full 15 s
+            for fut in list(self._pending.values()):
+                if not fut.done():
+                    fut.set_exception(WSClosed("websocket closed with the request in flight"))
+            self._pending.clear()
 
     async def request(self, endpoint: str, body: Any = "", query: str = "") -> Any:
         """Send a request, await the matching response, return its `.d` payload."""
@@ -133,8 +152,11 @@ class TradovateWS:
         fut = asyncio.get_running_loop().create_future()
         self._pending[mid] = fut
         sent = self._perf()
-        await self.ws.send(frame)
-        m = await asyncio.wait_for(fut, timeout=15)
+        try:
+            await self.ws.send(frame)
+            m = await asyncio.wait_for(fut, timeout=15)
+        finally:
+            self._pending.pop(mid, None)    # a timed-out or cancelled id never stays behind
         done = self._perf()
         self.rtts.append((done, endpoint, round((done - sent) * 1000, 1)))
         status = m.get("s")
@@ -150,10 +172,15 @@ class TradovateWS:
         frame = f"authorize\n{mid}\n\n{self.token}"
         fut = asyncio.get_running_loop().create_future()
         self._pending[mid] = fut
-        await self.ws.send(frame)
-        m = await asyncio.wait_for(fut, timeout=10)
-        if m.get("s") != 200:
-            raise RuntimeError(f"authorize failed: {m}")
+        try:
+            await self.ws.send(frame)
+            m = await asyncio.wait_for(fut, timeout=10)
+            if m.get("s") != 200:
+                raise RuntimeError(f"authorize failed: {m}")
+        except BaseException:
+            self._pending.pop(mid, None)
+            await self.close()          # a refused authorize must not leave the socket and its tasks running
+            raise
         self.authorized = True
         log("authorized")
 

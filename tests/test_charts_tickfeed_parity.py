@@ -233,7 +233,7 @@ def drive(cls):
         log.append(("tick", root, contract, [r["ts_ms"] for r in rows]))
 
     feed = cls(ROOTS, on_ticks, on_subscribed=on_sub, connect=connect, sleep=sleep,
-               now=lambda: clock[0])
+               now=lambda: clock[0], watchdog=False)
 
     async def main():
         await asyncio.wait_for(feed.run(), timeout=2)

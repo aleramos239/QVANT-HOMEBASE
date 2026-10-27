@@ -259,7 +259,12 @@ class SelfTimer:
         has no subscriptions: _subs is cleared and every symbol a staged or
         waiting strategy needs is subscribed on it again."""
         if self._md is None or not self._md.connected:
-            self._md = self._md_factory()
+            old, self._md = self._md, self._md_factory()
+            if old is not None:             # a dead socket's tasks must not outlive its replacement
+                try:
+                    await old.close()
+                except Exception:  # noqa: BLE001
+                    pass
             self._subs.clear()
             await (self._md.connect() if allow_login else self._md.connect(allow_login=False))
             for sym in self._symbols_needed():
@@ -409,7 +414,7 @@ class SelfTimer:
                 if _t.time() - self._gate_attempt < GATE_RETRY_S:
                     return
                 self._gate_attempt = _t.time()
-                md = await self._ensure_md()
+                md = await self._ensure_md(allow_login=False)
                 bars = [b for b in await md.daily_bars(s.symbol, GATE_BARS)
                         if b["date"] < date]        # completed days only
                 gate, adx = (None, None) if len(bars) < MIN_GATE_BARS \
@@ -419,7 +424,7 @@ class SelfTimer:
                                     adx=adx, bars=len(bars))
 
         if st["stage"] == "gated" and t >= stage_t:
-            md = await self._ensure_md()
+            md = await self._ensure_md(allow_login=False)
             if s.symbol not in self._subs:
                 self._subs[s.symbol] = await md.subscribe_quote(s.symbol)
             await self._prestage_skip(name, s, st)

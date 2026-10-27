@@ -86,6 +86,8 @@ CLOSE_GRACE_MS = 1500         # a time bar closes this long after its end if no 
 ROLL_GRACE_MS = 60_000        # a 24/7 root rolls at 18:00 with no dead hour: its old session's last
                               # prints can reach us after the clock passed 18:00 and are kept this long
 REFILL_BUDGET = 60            # this process's own chart requests per hour
+REFILL_RESERVE = 30           # ... and this many more, for NQ and ES only (the 180/h login is shared with the tick job: cap 150)
+REFILL_FIRST = ("NQ", "ES")
 WARM_EVERY_S = 120.0          # the Desk results pre-warm repeats this often (saved runs only; a run already scored is a cache hit)
 REPAIR_POLL_S = 60.0           # how often today's archive files are stat'ed for a repair that landed (a stat per root)
 PAST_REDRAW_S = 600.0          # a root's charts reload for a repaired PAST session at most this often: a fill lands piece
@@ -181,9 +183,10 @@ def _backlog_rows(root: str, tape: list, i: int, j: int) -> str:
     return _sse({"root": root, "rows": [[t.ts_ms, t.price, t.size, t.side] for t in tape[i:j]]})
 
 
-def _live_rows(root: str, ticks: list) -> str:
-    """One live batch: the hub's classified prints (charts/tick.py Tick), in the order it took them."""
-    return _sse({"root": root, "rows": [[t.ts_ms, t.price, t.size, t.side] for t in ticks]})
+def _live_rows(root: str, ticks: list, event: str = "") -> str:
+    """One live batch: the hub's classified prints (charts/tick.py Tick), in the order it took them. event "refill": the
+    prints a reconnect's gap fill found, OLDER than what the reader already holds (it must take them, not drop them)."""
+    return _sse({"root": root, "rows": [[t.ts_ms, t.price, t.size, t.side] for t in ticks]}, event)
 
 
 class _TickReader:
@@ -221,6 +224,18 @@ class TickFan:
                         self.readers.discard(rd)
         except Exception as e:  # noqa: BLE001 — a reader must never break the live tick path
             log(f"labrun ticks: {type(e).__name__}: {e}")
+
+    def publish_refill(self, root: str, rows: list) -> None:
+        """publish() for the prints a gap refill added after the fact: an `event: refill` batch."""
+        if not rows or not self.readers:
+            return
+        for rd in list(self.readers):
+            if root in rd.roots:
+                try:
+                    rd.q.put_nowait((root, rows, "refill"))
+                except asyncio.QueueFull:
+                    rd.dropped = True
+                    self.readers.discard(rd)
 
     async def stream(self, roots: list, since_ms: int, clock_s: float | None = None):
         """The backlog -- each market's prints of the current session with ts_ms >= since_ms, oldest first, at most
@@ -444,6 +459,24 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         sess = store.load(root, d)
         _apply_today(root, d, sess)
 
+    async def reseed_async(root: str) -> list:
+        """reseed() with the big read in a worker thread: the loop keeps serving the md heartbeat, the exit runner and the
+        order relay meanwhile (a 2.4M-tick day blocks it seconds). What the hub tape took while the files were read
+        is spliced back on, as _repair_check does. Returns the hub's tape ticks of the rebuilt session."""
+        if recorder is not None:
+            recorder.flush()
+        d = session_date(clock(), root)
+        t0 = clock()
+        stamp = await asyncio.to_thread(store.archive_stamp, root, d)
+        sess = await asyncio.to_thread(store.load, root, d)
+        if hub.today_date.get(root) not in (d, None) and session_date(clock(), root) != d:
+            return hub.today.get(root, [])      # the 18:00 roll landed during the reads: d is the old session, the hub has moved on
+        cur = hub.today.get(root, ()) if hub.today_date.get(root) == d else ()
+        ticks = splice_tail(sess.ticks if sess else [], cur, t0 - REPAIR_SPLICE_MS)
+        repair_seen[root] = stamp
+        _apply_today(root, d, sess, ticks)
+        return hub.today.get(root, [])
+
     def _apply_today(root: str, d: dt.date, sess, ticks=None) -> None:
         """Hand a loaded session (store.load's; `ticks` overrides its tape) to the hub and the paper runner."""
         if ticks is None:
@@ -605,7 +638,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     rows: list[dict] = []
                     reached = to
                     fd = feed_other if feed_other is not None and root in feed_other.roots else feed
-                    pages = min(REFILL_MAX_PAGES, REFILL_BUDGET - fd.budget_used())
+                    # NQ/ES (what the Lab strategies trade) keep a reserve the others cannot spend
+                    pages = min(REFILL_MAX_PAGES, REFILL_BUDGET + (REFILL_RESERVE if root in REFILL_FIRST else 0)
+                                - fd.budget_used())
                     if pages > 0:
                         try:
                             rows, reached = await refill(fd.ws, contract, frm, to, max_pages=pages,
@@ -621,7 +656,13 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     log(f"{root}: refilled {len(rows)} ticks"
                         + (f", gap {(reached - frm) / 1000:.0f}s marked" if reached > frm else ""))
                     if added or reached > frm:
-                        reseed(root)            # else nothing changed: no reload for every open chart
+                        tape = await reseed_async(root)   # else nothing changed: no reload for every open chart
+                        if added and tape:
+                            # the runner never saw these (its stream carried only the live prints): ship them as a refill
+                            ids = {int(r["id"]) for r in added if r.get("id") not in (None, "")}
+                            keys = {(int(r["ts_ms"]), float(r["price"]), int(r["size"])) for r in added}
+                            lo = bisect_left(tape, min(int(r["ts_ms"]) for r in added), key=lambda t: t.ts_ms)
+                            tick_fan.publish_refill(root, [t for t in tape[lo:] if t.id in ids or (t.ts_ms, t.price, t.size) in keys])
                         oldest = min((int(r["ts_ms"]) for r in added), default=None)
                         if oldest is not None and session_date(oldest, root) < session_date(clock(), root):
                             # rows landed in an older session (a 24/7 root's tail before its

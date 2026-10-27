@@ -61,6 +61,7 @@ import datetime as dt
 import decimal
 import fcntl
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -498,7 +499,10 @@ def accounts_by_env() -> dict[str, "str | None"]:
 
 
 async def connect_md(prefer_live: bool = True, strict: bool = False) -> TradovateWS:
-    tok, env = md_token(prefer_live, strict)
+    pin = os.environ.get("HOMEBASE_CHARTS_MD_ONLY", "").strip().lower()
+    tok, env = md_token(pin == "live" if pin in ("live", "demo") else prefer_live, strict)
+    if pin in ("live", "demo") and env != pin:        # this machine must not take the other login's md seat
+        raise NoMdToken(f"this machine's md login is pinned to {pin} (HOMEBASE_CHARTS_MD_ONLY); the token on disk is {env}")
     ws = TradovateWS(tok, env)
     ws.url = MD_LIVE if env == "live" else MD_DEMO
     await ws.connect()

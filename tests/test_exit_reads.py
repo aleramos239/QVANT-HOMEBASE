@@ -229,12 +229,13 @@ def test_a_reverse_is_two_position_reads_the_close_and_the_open(tmp_path):
 def test_a_reverse_closes_what_the_broker_holds_not_what_it_read_before(tmp_path):
     """The position's own target took one contract between the reverse's read (+2) and the flatten's
     own read (+1). The close carries no size of ours: the broker closes what it holds (1) -- selling
-    the 2 read before would leave the account short before the open even goes out."""
+    the 2 read before would leave the account short before the open even goes out. The open is then
+    NOT sent (audit 2026-10-27: it would open the stale size): flattened only."""
     desk, ad, sent = reverse_desk(tmp_path, [2, 1])
-    assert reverse(desk)["ok"]
+    r = reverse(desk)
+    assert not r["ok"] and "flattened only" in r["error"]
     assert eps(sent).count("order/liquidateposition") == 1
-    (open_,) = [b for e, _, b in sent if e == "order/placeorder"]
-    assert (open_["action"], open_["orderQty"], open_["text"]) == ("Sell", 2, "homebase:chart-reverse")
+    assert [b for e, _, b in sent if e == "order/placeorder"] == []
     assert eps(sent).count("position/list") == 2
     flat = next(e for e in journal(tmp_path) if e["event"] == "manual_reverse" and e["step"] == "flatten")
     assert flat["net_before"] == 2 and flat["ok"]
@@ -242,9 +243,9 @@ def test_a_reverse_closes_what_the_broker_holds_not_what_it_read_before(tmp_path
 
 def test_a_reverse_that_finds_the_position_gone_at_the_close_sells_nothing_there(tmp_path):
     desk, ad, sent = reverse_desk(tmp_path, [2, 0])                   # its stop closed it meanwhile
-    reverse(desk)
+    assert not reverse(desk)["ok"]
     placed = [b for e, _, b in sent if e == "order/placeorder"]
-    assert [b["text"] for b in placed] == ["homebase:chart-reverse"]  # no close order: nothing to close
+    assert placed == []                                               # no close order (nothing to close), no open
 
 
 # --- the chart's Flatten, clicked again before the broker's position caught up -----------------------

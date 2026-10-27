@@ -268,9 +268,12 @@ def test_the_adapter_stamps_the_push_and_an_enrichment_only_when_it_read_the_bro
     assert "order/item" not in _asked(ad) and "fill/item" not in _asked(ad)
     # every lookup 404s (2026-09-21): the order was asked for -> an enrichment stamp after the push
     ad = mkadapter(tmp_path, every_lookup_404s)
-    ev, = collect_fills(ad, [fill_push(663695020149, "Buy", 3, 30231.75, 2)])
+    ev, = collect_fills(ad, [fill_push(663695020149, "Buy", 3, 30231.75, 2)], place=BUY_STOP)     # our own order: still delivered by its id
     assert ev.seen <= ev.enriched <= time.perf_counter() and ad._fill_seen == {}
     assert "order/item" in _asked(ad)
+    # an order that is NOT ours with no account (audit 2026-10-27): parked, never booked here
+    ad = mkadapter(tmp_path, every_lookup_404s)
+    assert collect_fills(ad, [fill_push(663695020149, "Buy", 3, 30231.75, 3)]) == []
 
 
 # --- manual_*: the request coming in -> the broker's answer ---------------------------------------

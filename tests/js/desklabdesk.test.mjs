@@ -182,8 +182,9 @@ test('WP1.15 Put back limits: the Limits dialog\'s own Save, with the same body 
   assert.equal(t.confirms.length, 0, 'tightening back never asks');
 });
 
+const PAPER_A1 = { ...ACCOUNTS, a1: { ...ACCOUNTS.a1, env: 'paper' } };      // audit 2026-10-27: a demo-env account asks like LIVE
 test('WP1.15 Put back a setting, the RR and the book: the same setter and body as the control; LIVE asks as the control asks', async () => {
-  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }], nq930: [{ account: 'a1', qty: 3 }] } });
+  const t = load({ accounts: PAPER_A1, book: { lab_nq_orb: [{ account: 'a1', qty: 1 }], nq930: [{ account: 'a1', qty: 3 }] } });
   Object.assign(t.ctx.ST.strategies.lab_nq_orb.lab, { params: { stop_atr: 2 }, labels: { stop_atr: 'Stop (ATR)' } });
   Object.assign(t.ctx.ST.strategies.nq930.cfg, { rr: 2, sl_pts: 5 });
   changes(t, [chg('lab_settings_set', { strategy: 'lab_nq_orb', settings: { stop_atr: 2 }, previous: { stop_atr: 1.5 } }),
@@ -196,7 +197,7 @@ test('WP1.15 Put back a setting, the RR and the book: the same setter and body a
   assert.deepEqual(plain(lab.map((x) => x.text)), ['Stop (ATR) 1.5 → 2', 'APEX…048 taken off', 'Accounts: Lucid Eval #1 ×1 · APEX…048 ×1']);
   assert.deepEqual(plain(bi.map((x) => x.text)), ['Target 1:1.5 → 1:2', 'Lucid Eval #1 qty 4 → 3', 'Accounts: Lucid Eval #1 ×4']);
   for (const [who, x] of [['s:lab_nq_orb', lab[0]], ['s:lab_nq_orb', lab[1]], ['s:nq930', bi[0]], ['s:nq930', bi[1]]]) await t.api.putBackChange(who, x.key);
-  const byHand = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }], nq930: [{ account: 'a1', qty: 3 }] } });
+  const byHand = load({ accounts: PAPER_A1, book: { lab_nq_orb: [{ account: 'a1', qty: 1 }], nq930: [{ account: 'a1', qty: 3 }] } });
   await byHand.api.setLabSetting('lab_nq_orb', 'stop_atr', 1.5);
   await byHand.api.pickAsg('lab_nq_orb', 'a2', 1);
   await byHand.api.setStratRr('nq930', 1.5);
@@ -710,10 +711,13 @@ test('booking a live account onto a Lab strategy: the Desk\'s own confirm, with 
   assert.equal(t.confirms[0].body, 'It will trade real money on its next order. Every entry carries a stop held at the broker. Account APEX2941870000048.');
   assert.equal(t.confirms[0].action, 'Book live');
   assert.deepEqual(t.posts, [{ url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }] } }]);
-  const demo = load();
+  const demo = load({ accounts: PAPER_A1 });
   await demo.api.pickAsg('lab_nq_orb', 'a1', 1);
-  assert.deepEqual(demo.confirms, [], 'a demo account books at once');
+  assert.deepEqual(demo.confirms, [], 'a paper account books at once');
   assert.equal(demo.posts.length, 1);
+  const funded = load();
+  await funded.api.pickAsg('lab_nq_orb', 'a1', 1);
+  assert.equal(funded.confirms.length, 1, 'a demo-env account is a possible funded one: it asks');
   // the note of any other strategy is as it was
   assert.match(t.api.liveBookingNote('nq930', 'a2'), /^It will trade real money at the next 9:30 fire\./);
 });

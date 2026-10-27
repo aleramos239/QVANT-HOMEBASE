@@ -60,7 +60,7 @@ function rotationHtml(name) {
 async function setRotation(name, on) {
   if (switchBounced("rotation:" + name)) return;
   const book = (ST.book && ST.book[name]) || [], N = stratLabel(name);
-  if (!on && book.length > 1 && book.some(a => !isDemoAcct(a.account)) && !await confirmDlg(
+  if (!on && book.length > 1 && book.some(a => isRealAcct(a.account)) && !await confirmDlg(
       `Stop taking turns on ${N}?`, `Its next trade goes to all ${book.length} booked accounts, LIVE ones included.`,
       "Stop taking turns", false)) { refresh(); return; }
   let r, err = null;
@@ -120,6 +120,13 @@ function isDemoAcct(id) {
   const a = ((ST && ST.accounts) || {})[id];
   return !!a && (a.env === "demo" || a.env === "paper");     // paper: no money at all
 }
+/* The confirms' check (booking, a size raise, the cycle): real money unless the account is paper. Funded PA/LTF prop
+   accounts are live=False, so the desk sends them as env "demo" and a demo account cannot be told from a funded one
+   (audit 2026-10-27, waits on a stake field): isDemoAcct stays the display word, this asks wherever money may be at stake. */
+function isRealAcct(id) {
+  const a = ((ST && ST.accounts) || {})[id];
+  return !(a && a.env === "paper");
+}
 /* "APEX…048" / "…885": a broker's long numbered name shortened the way the chart page shows it,
    keeping a short letter prefix when there is one; a plain label ("Lucid Funded") stays whole. */
 function acctShort(id) {
@@ -155,7 +162,7 @@ async function pickAsg(strategy, account, qty) {
   FREEZE = false;
   closeAsgMenus(false);
   const was = ((ST.book[strategy] || []).find(a => a.account === account) || {}).qty;
-  if (!isDemoAcct(account) && !await confirmDlg(
+  if (isRealAcct(account) && !await confirmDlg(
       `Book ${stratLabel(strategy)} on ${acctShort(account)} LIVE, qty ${was ? was + " → " : ""}${qty}?`,
       liveBookingNote(strategy, account) + bookMachine(), "Book live", false)) { refresh(); return; }
   const cur = (ST.book[strategy] || []).filter(a => a.account !== account);
@@ -178,7 +185,7 @@ function editQty(ev, strategy, account, qty) {
     FREEZE = false;
     const v = parseInt(inp.value || "0", 10);
     if (v > 0 && v !== qty) {
-      if (v > qty && !isDemoAcct(account)) {
+      if (v > qty && isRealAcct(account)) {
         if (!explicit) {
           toast(`${stratLabel(strategy)} on ${acctShort(account)} stays × ${qty} — ` +
                 "press Enter to raise a LIVE booking.");

@@ -35,6 +35,9 @@ GRACE_S = 15.0            # after the send: no position and no order by then = r
 MAX_AGE_S = 8 * 3600.0    # an arm never outlives a trading day's session
 MOVE_GAP_S = 2.0          # a trail's moves at most this often (the last one is still landing)
 QUOTE_MAX_AGE_S = 10.0
+RETRY_S = 3.0             # a refused or failed stop send is tried again after this
+NO_PRICE_S = 15.0         # no fresh price this long: the arm says so (its stop is not being moved)
+NO_PRICE = "no live price: the stop is not being moved"
 MAX_ARMS = 50
 
 
@@ -93,13 +96,17 @@ def account_state(view: dict, root: str) -> dict:
     return {"net": net, "avg": avg, "orders": orders}
 
 
-def stop_plan(side: str, orders: list, price: float, step: int, tick: float) -> tuple:
+def stop_plan(side: str, orders: list, price: float, step: int, tick: float, qty: Optional[int] = None) -> tuple:
     """The account's stop to `price`: ('move', [order ids]) -- every order at its one stop price --, ('add', []),
-    ('none', []) unless that tightens it by `step` ticks (never loosened), or ('error', why)."""
+    ('none', []) unless that tightens it by `step` ticks (never loosened), or ('error', why). `qty`: the position's
+    size -- a stop of another size is not its protective stop (a reverse-entry stop, a partial one): error, as the
+    desk's exits refuse that shape."""
     if any(_pending(o) for o in orders):
         return "error", "an order on this position is still pending"
     exit_side = "Sell" if side == "Buy" else "Buy"
     sls = [o for o in orders if o.get("side") == exit_side and "stop" in str(o.get("type") or "").lower()]
+    if qty is not None and any(o.get("qty") is not None and int(o["qty"]) != qty for o in sls):
+        return "error", "a stop on this position is not sized to it — manage it in the order panel"
     if not sls:
         return "add", []
     prices = {_order_price(o) for o in sls}
@@ -126,7 +133,11 @@ def arm_step(arm: dict, views: dict, last: Optional[float], now: float, armed_id
         return ("wait", None) if working or now - arm["at"] < GRACE_S else ("drop", "no order")
     arm["seen"] = True
     if not _finite(last):
+        if now - arm.setdefault("no_price_since", now) > NO_PRICE_S:
+            arm["error"] = NO_PRICE
         return "wait", None
+    if arm.pop("no_price_since", None) is not None and arm.get("error") == NO_PRICE:
+        arm["error"] = None
     tick = tick_size(root)
     acts = []
     if arm["kind"] == "be":
@@ -136,7 +147,7 @@ def arm_step(arm: dict, views: dict, last: Optional[float], now: float, armed_id
             if aid in arm.setdefault("done", []):
                 continue
             price = round_to_tick(root, st["avg"] + s * tick)
-            plan, ids = stop_plan(side, st["orders"], price, 1, tick)
+            plan, ids = stop_plan(side, st["orders"], price, 1, tick, abs(st["net"]))
             acts.append({"account": aid, "net": st["net"], "price": price, "plan": plan, "ids": ids})
         return ("act", acts) if acts else ("drop", "done")
     best = arm.get("best")
@@ -149,7 +160,7 @@ def arm_step(arm: dict, views: dict, last: Optional[float], now: float, armed_id
     if (last <= price) if s > 0 else (last >= price):
         return "wait", None                                   # the market is at or through it: a stop there is refused
     for aid, st in held.items():
-        plan, ids = stop_plan(side, st["orders"], price, trail_step(arm["dist"]), tick)
+        plan, ids = stop_plan(side, st["orders"], price, trail_step(arm["dist"]), tick, abs(st["net"]))
         if plan != "none":
             acts.append({"account": aid, "net": st["net"], "price": price, "plan": plan, "ids": ids})
     return ("act", acts) if acts else ("wait", None)
@@ -196,7 +207,7 @@ class ExitRunner:
         self._save()
         return len(self.arms) != n
 
-    async def _do(self, arm: dict, act: dict) -> None:
+    async def _do(self, arm: dict, act: dict) -> bool:
         cid = lambda: f"xr-{secrets.token_hex(6)}"   # noqa: E731
         aid, price = act["account"], act["price"]
         if act["plan"] == "move":
@@ -209,6 +220,7 @@ class ExitRunner:
         bad += [o.get("detail") for o in outs if o and "detail" in o]
         arm["error"] = "; ".join(str(b) for b in bad if b) or None
         self.log(f"exit runner: {arm['kind']} {arm['root']} {aid} stop -> {price}" + (f" FAILED: {arm['error']}" if arm["error"] else ""))
+        return arm["error"] is None
 
     async def tick_once(self) -> None:
         if not self.arms:
@@ -216,9 +228,9 @@ class ExitRunner:
         views, now, changed = self.views(), self.clock(), False
         armed = frozenset(a["id"] for a in self.arms)
         for arm in list(self.arms):
-            before = (arm.get("seen"), arm.get("best"))
+            before = (arm.get("seen"), arm.get("best"), arm.get("error"))
             what, acts = arm_step(arm, views, self.last_of(arm["root"]), now, armed)
-            changed |= before != (arm.get("seen"), arm.get("best"))
+            changed |= before != (arm.get("seen"), arm.get("best"), arm.get("error"))
             if what == "drop":
                 self.arms.remove(arm)
                 changed = True
@@ -226,16 +238,24 @@ class ExitRunner:
             if what != "act":
                 continue
             for act in acts:
-                if arm["kind"] == "be":
-                    arm.setdefault("done", []).append(act["account"])   # each account once, whatever happens next
-                if act["plan"] == "error":
+                if act["plan"] == "error":      # not done: it is looked at again, and the page shows why
                     arm["error"] = act["ids"] if isinstance(act["ids"], str) else "can't move this stop"
                     continue
                 if act["plan"] == "none":
+                    if arm["kind"] == "be":
+                        arm.setdefault("done", []).append(act["account"])   # already at or past breakeven
+                    continue
+                retry = arm.get("retry_at")
+                if not isinstance(retry, dict):
+                    retry = arm["retry_at"] = {}
+                if retry.get(act["account"], 0) > now:      # per account: one account's refusal holds back only its own resend
                     continue
                 arm["sent_at"] = now
                 self._save()
-                await self._do(arm, act)
+                if not await self._do(arm, act):
+                    retry[act["account"]] = now + RETRY_S
+                elif arm["kind"] == "be":
+                    arm.setdefault("done", []).append(act["account"])      # each account once, when it landed
             changed = True
         if changed:
             self._save()

@@ -14,6 +14,7 @@ from ..core.num import to_tick as _to_tick
 
 WORKING = {"Working", "PendingNew", "Pending", "Suspended", "PendingReplace"}
 TERMINAL = {"Filled", "Canceled", "Rejected", "Expired"}    # an order that can never fill (more)
+GONE = {"Canceled", "Rejected", "Expired"}                  # ... and never filled: its position is not there
 KILL_POLL_S, KILL_POLL_N = 0.25, 12     # the kill waits up to 3 s for its entry cancels to settle
 MARKET_OUT_FAILED = "check it — market-out reported failure; verify the position"
 PLACING_UNKNOWN = "placement outcome unknown after a restart — check the broker"

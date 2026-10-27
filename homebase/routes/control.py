@@ -9,6 +9,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from .. import config as config_mod
+from ..desk.engine_kill import EXIT_TIMEOUT_S
 
 
 def register(app, *, _kill_lock, adapters, cfg, desk, engine) -> None:
@@ -16,7 +17,9 @@ def register(app, *, _kill_lock, adapters, cfg, desk, engine) -> None:
     @app.post("/api/arm")
     async def arm(request: Request):
         body = await request.json()
-        cfg.armed = bool(body.get("armed"))
+        if not isinstance(body, dict) or not isinstance(body.get("armed"), bool):
+            raise HTTPException(400, "armed must be true or false")      # bool("false") is True: it would ARM
+        cfg.armed = body["armed"]
         config_mod.save(cfg)
         engine.journal("armed_toggled", armed=cfg.armed)
         return {"ok": True, "armed": cfg.armed}
@@ -48,16 +51,29 @@ def register(app, *, _kill_lock, adapters, cfg, desk, engine) -> None:
         return {"ok": True, "account": aid, **engine.day_view(aid)}
 
     async def _sweep(ad) -> dict:
-        """One account's two account-wide calls: cancel every working order, then flatten every position.
-        Never raises: each call's own answer, or why it could not be made."""
+        """One account's two account-wide calls: flatten every position FIRST, then -- only when the broker took the
+        flatten -- cancel every working order. A flatten that failed leaves every stop and target working (a cancel
+        first would leave the position naked). Never raises: each call's own answer, or why it could not be made."""
         r = {}
-        for call in ("cancel_all", "flatten_all"):
+        for call in ("flatten_all", "cancel_all"):
+            if call == "cancel_all" and not r["flatten_all"]["ok"]:
+                r[call] = {"ok": False, "error": "not sent: the flatten failed, its stops are left working"}
+                continue
             try:
                 x = await getattr(ad, call)()
                 r[call] = {"ok": x.ok, "error": x.error}
             except Exception as e:  # noqa: BLE001 — kill always finishes
                 r[call] = {"ok": False, "error": str(e)}
         return r
+
+    def _failed(results: dict, strategies: dict) -> list:
+        """The accounts / runs the Kill did not finish: a sweep call the broker refused, or a run flatten_today could not close."""
+        bad = [aid for aid, v in results.items() if not all((v.get(c) or {}).get("ok") is True
+                                                             for c in ("flatten_all", "cancel_all"))]
+        bad += [k for k, acts in strategies.items()
+                if any("internal error" in a or "left working" in a or "check it" in a or "unreadable" in a
+                       for a in acts)]
+        return bad
 
     @app.post("/api/kill")
     async def kill():
@@ -71,38 +87,53 @@ def register(app, *, _kill_lock, adapters, cfg, desk, engine) -> None:
         act)."""
         cfg.armed = False
         desk.disable(cause="kill")          # chart trading off too; never raises
-        config_mod.save(cfg)
+        save_error = None
+        try:
+            config_mod.save(cfg)
+        except Exception as e:  # noqa: BLE001 -- the broker work below must still run: memory is disarmed already
+            save_error = f"{type(e).__name__}: {e}"
         # ... and never alongside a per-strategy Kill from the chart (engine.kill_strategy):
         # the broker work also holds every strategy's own kill lock
         async with _kill_lock(), engine.all_kill_locks():
             import time as _t
             t0 = _t.perf_counter()
-            # every strategy's own orders first, with the proven per-order calls;
-            # then the account-wide calls sweep up anything else. Both go account
-            # beside account (engine.each_account), each account's own steps in order
-            strategies = await engine.flatten_today(close=False)    # the sweep closes at the broker
-            t1 = _t.perf_counter()
-
+            # close first, cancel after: each account's positions are flattened at the broker, then its working
+            # orders are cancelled (an account whose flatten failed keeps its stops). The strategies' own orders
+            # go only on the accounts that flattened. Accounts go side by side (engine.each_account)
             pool = dict(adapters)
-            got, took = await engine.each_account(pool, lambda aid: _sweep(pool[aid]))
+            got, took = await engine.each_account(pool, lambda aid: _sweep(pool[aid]), EXIT_TIMEOUT_S)
             results = {aid: (g if isinstance(g, dict) else
                              {call: {"ok": False, "error": str(g)}
-                              for call in ("cancel_all", "flatten_all")})
+                              for call in ("flatten_all", "cancel_all")})
                        for aid, g in got.items()}
+            t1 = _t.perf_counter()
+            # the strategies' per-order cancels are also the fallback for an account whose cancel_all failed
+            flat = {aid for aid, v in results.items() if v["flatten_all"]["ok"]}
+            strategies = await engine.flatten_today(close=False, accounts=flat)   # the sweep closed at the broker
             t2 = _t.perf_counter()
-            engine.journal("kill_switch", results=results, strategies=strategies,
-                           # timing only: the strategies' own flatten, the sweep, each account's sweep
-                           kill_ms={"strategies": round((t1 - t0) * 1000, 1),
-                                    "sweep": round((t2 - t1) * 1000, 1),
-                                    "total": round((t2 - t0) * 1000, 1), "accounts": took})
-        return {"ok": True, "armed": False, "results": results,
-                "strategies": strategies}
+            failed = _failed(results, strategies)
+            try:
+                engine.journal("kill_switch", results=results, strategies=strategies, failed=failed,
+                               save_error=save_error,
+                               # timing only: the sweep, the strategies' own flatten, each account's sweep
+                               kill_ms={"strategies": round((t2 - t1) * 1000, 1),
+                                        "sweep": round((t1 - t0) * 1000, 1),
+                                        "total": round((t2 - t0) * 1000, 1), "accounts": took})
+            except Exception as e:  # noqa: BLE001 -- the answer below is the Kill's report
+                save_error = save_error or f"journal: {e}"
+        out = {"ok": not failed, "armed": False, "results": results, "strategies": strategies}
+        if failed:
+            out["failed"] = failed
+            out["error"] = "not finished on: " + ", ".join(failed)
+        if save_error:
+            out["save_error"] = save_error
+        return out
 
     @app.post("/api/account-flatten")
     async def account_flatten(request: Request):
-        """The Kill's broker work for ONE account: its strategies' orders today (engine.flatten_today,
-        cancels only), then the account-wide cancel and the broker-side flatten (liquidateposition: the
-        broker closes what IT holds, so a repeat click never sells a stale position twice). Nothing is
+        """The Kill's broker work for ONE account: the broker-side flatten (liquidateposition: the broker closes
+        what IT holds, so a repeat click never sells a stale position twice) and the account-wide cancel, then --
+        once the flatten went through -- its strategies' orders today (engine.flatten_today, cancels only). Nothing is
         disarmed and no strategy is switched off; a run that was working on this account today is over
         for today. It holds the Kill's locks, so it never reads a net alongside a Kill or a
         per-strategy Kill."""
@@ -114,10 +145,13 @@ def register(app, *, _kill_lock, adapters, cfg, desk, engine) -> None:
         if ad is None:
             raise HTTPException(409, "account not connected — nothing can be sent to it")
         async with _kill_lock(), engine.all_kill_locks():
-            strategies = await engine.flatten_today(account=aid, reason="manual_flat", close=False)
-            results = await _sweep(ad)
-            engine.journal("account_flatten", account=aid, results=results, strategies=strategies)
-        return {"ok": True, "account": aid, "results": {aid: results}, "strategies": strategies}
+            results = await _sweep(ad)          # close first, cancel after: a failed flatten keeps its stops
+            strategies = (await engine.flatten_today(account=aid, reason="manual_flat", close=False)
+                          if results["flatten_all"]["ok"] else {})      # also when only cancel_all failed: the fallback
+            failed = _failed({aid: results}, strategies)
+            engine.journal("account_flatten", account=aid, results=results, strategies=strategies, failed=failed)
+        return {"ok": not failed, "account": aid, "results": {aid: results}, "strategies": strategies,
+                **({"failed": failed, "error": f"not finished on {aid}"} if failed else {})}
 
     @app.post("/api/test-alert")
     async def test_alert(request: Request):

@@ -24,6 +24,7 @@ check_takes(prices) is run -- the day_take backstop to the broker-side take limi
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime as dt
 import json
 import sys
@@ -150,6 +151,11 @@ class LevelTimer:
                 self._hist[sym] = {"ok": False, "at": 0.0}      # read the history again: it closes the hole
         except Exception:
             self._md = None
+            self._subs.clear()
+            self._subs.update(old)               # the next rebuild subscribes them again, none is forgotten
+            self._by_contract.clear()
+            with contextlib.suppress(Exception):
+                await md.close()                 # a half-built socket is never left running
             raise
         return md
 
@@ -206,26 +212,42 @@ class LevelTimer:
             mine.append((name, s, st))
         await self._release_old(now)
         await self._resubscribe_for_open_trades(now)
+        tails = []
         for name, s, st in mine:
             try:
-                await self._advance(name, s, st, now, date)
+                tail = await self._advance(name, s, st, now, date)
             except Exception as e:  # noqa: BLE001 — journal, never die; the stage stands and is tried again
-                # (nothing that could place twice is retried: a day that acted reads "done", see _advance)
-                st["error"] = str(e)[:200]
-                t = self._now().timestamp()
-                if t - self._err_at.get(name, float("-inf")) >= ERROR_JOURNAL_S:
-                    self._err_at[name] = t
-                    self._journal("level_error", strategy=name, error=st["error"])
+                self._stage_error(name, st, e)
+                continue
+            if tail is not None:
+                tails.append(self._guard(name, st, tail))
+        if tails:       # the history read and the fire of each strategy run apart: a slow one never holds another's fire
+            await asyncio.gather(*tails)
         await self._watch(now)
+
+    def _stage_error(self, name, st, e) -> None:
+        # (nothing that could place twice is retried: a day that acted reads "done", see _advance)
+        st["error"] = str(e)[:200]
+        t = self._now().timestamp()
+        if t - self._err_at.get(name, float("-inf")) >= ERROR_JOURNAL_S:
+            self._err_at[name] = t
+            self._journal("level_error", strategy=name, error=st["error"])
+
+    async def _guard(self, name, st, coro) -> None:
+        try:
+            await coro
+        except Exception as e:  # noqa: BLE001 — as in tick: journal, never die
+            self._stage_error(name, st, e)
 
     async def _resubscribe_for_open_trades(self, now: dt.datetime) -> None:
         """A desk restarted mid-trade (or one whose strategy is already done for the day) still has a
         position / resting entries out: its day_take watcher needs a price, so the quote is subscribed again."""
         today = now.date().isoformat()
+        dead = self._md is None or not self._md.connected     # a socket that died with a trade open: rebuilt too
         need = sorted({cfg.symbol for st in self.engine.states.values()
                        for cfg in [self.cfg.strategies.get(st.strategy)]
                        if cfg is not None and cfg.kind == "levels" and st.date == today
-                       and st.status in ("placed", "live") and cfg.symbol not in self._subs})
+                       and st.status in ("placed", "live") and (dead or cfg.symbol not in self._subs)})
         if need and await self._keep_md(now):
             for sym in need:
                 if sym not in self._subs:
@@ -241,7 +263,8 @@ class LevelTimer:
                     pass
             self._drop.clear()
 
-    async def _advance(self, name, s, st, now, date) -> None:
+    async def _advance(self, name, s, st, now, date):
+        """Walks the stages; returns the history + fire work of a live/waiting strategy (tick runs those apart), else None."""
         d = dt.date.fromisoformat(date)
         fire_at = dt.datetime.combine(d, _t(s.fire_et), tzinfo=ET)
         stage_at = fire_at - dt.timedelta(minutes=lead_min(s))
@@ -281,10 +304,15 @@ class LevelTimer:
             st.update(stage="live", staged_at=now.strftime("%H:%M:%S"))
             self._journal("level_staged", strategy=name, contract=self._subs[s.symbol], fire=s.fire_et)
         if st["stage"] in ("live", "waiting"):
-            await self._keep_md(now)                      # a socket that died after the stage is rebuilt
-            await self._history(s.symbol, now, stage_at)
-            if now >= fire_at:
-                await self._fire(name, s, st, now, fire_at)
+            if await self._keep_md(now) and s.symbol not in self._subs:     # a socket that died after the stage is rebuilt
+                await self._subscribe(s.symbol, now)                        # ... and a symbol it lost is subscribed again
+                self._hist[s.symbol] = {"ok": False, "at": 0.0}
+            return self._tail(name, s, st, now, stage_at, fire_at)
+
+    async def _tail(self, name, s, st, now, stage_at, fire_at) -> None:
+        await self._history(s.symbol, now, stage_at)
+        if now >= fire_at:
+            await self._fire(name, s, st, now, fire_at)
 
     async def _history(self, symbol: str, now: dt.datetime, stage_at: dt.datetime) -> None:
         h = self._hist.setdefault(symbol, {"ok": False, "at": 0.0})

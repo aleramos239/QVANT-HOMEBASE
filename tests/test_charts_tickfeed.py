@@ -201,7 +201,7 @@ def test_a_refused_root_is_asked_again_every_ten_minutes():
         if waits[0] >= 3:
             feed.stop()
 
-    feed = TickFeed(["NQ", "BTC"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
+    feed = TickFeed(["NQ", "BTC"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0], watchdog=False)
     run(feed.run())
     assert [b["symbol"] for _, b in ws.sent] == [symbols.resolve_contract("NQ"), symbols.resolve_contract("BTC"),
                                                  symbols.resolve_contract("BTC")]
@@ -449,7 +449,7 @@ class Rig:
 
         self.feed = TickFeed(roots, on_ticks, on_subscribed=on_sub, connect=connect,
                              connect_env=connect_env, sleep=sleep, now=lambda: self.clock[0],
-                             md_env=md_env)
+                             md_env=md_env, watchdog=False)      # the fake clock runs minutes without a print
 
     async def polls(self, n):
         """Let run() take n more 1 s steady-loop steps."""
@@ -1109,7 +1109,7 @@ def test_a_refused_root_backs_off_exponentially_and_resets_when_it_subscribes():
         if clock[0] >= t0 + 7 * 3600:
             feed.stop()
 
-    feed = TickFeed(["NQ", "BTC"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
+    feed = TickFeed(["NQ", "BTC"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0], watchdog=False)
     run(feed.run())
     assert asked[:5] == [0, 10, 30, 70, 150]             # minutes after 11:00: +10, +20, +40, +80
     assert asked[5] == 310 and "BTC" not in feed.refused  # +160, now entitled

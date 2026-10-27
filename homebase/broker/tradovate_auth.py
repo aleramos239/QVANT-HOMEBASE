@@ -16,6 +16,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import time
 import urllib.error
 import urllib.request
@@ -320,6 +321,28 @@ class TradovateAuth:
             return self.refresh()
         return self.tokens
 
+    def load_persisted(self, username: str, min_left_sec: float = 600,
+                       now: Optional[float] = None) -> Optional[TradovateTokens]:
+        """After a restart: reuse the token on disk instead of spending a login. Only the same
+        user (its `name`), the same env, and one with more than `min_left_sec` of life left;
+        otherwise None and nothing changes."""
+        try:
+            d = json.loads(self.token_persist_path.read_text())
+        except Exception:  # noqa: BLE001 -- missing or torn file: log in
+            return None
+        if not isinstance(d, dict) or d.get("env") != self.env or not d.get("access_token") \
+                or str(d.get("name") or "").lower() != str(username or "").lower():
+            return None
+        t = TradovateTokens(
+            access_token=d["access_token"], md_access_token=d.get("md_access_token", ""),
+            expiration_time=d.get("expiration_time", ""), user_id=d.get("user_id", 0),
+            user_status=d.get("user_status", ""), has_live=d.get("has_live", False),
+            has_funded=d.get("has_funded", False), name=d.get("name", ""))
+        if t.expires_at_unix - (time.time() if now is None else now) < min_left_sec:
+            return None
+        self._username, self.tokens = username, t
+        return t
+
     def _persist_tokens(self):
         if self.tokens is None:
             return
@@ -336,11 +359,13 @@ class TradovateAuth:
         }
         for path in list(getattr(self, "persist_paths", None) or [self.token_persist_path]):
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(data, indent=2))
+            tmp = path.with_name(path.name + ".tmp")     # a crash mid-write never leaves a torn file
+            tmp.write_text(json.dumps(data, indent=2))
             try:
-                path.chmod(0o600)   # owner-only: holds live tokens
+                tmp.chmod(0o600)   # owner-only: holds live tokens
             except OSError:
                 pass
+            os.replace(tmp, path)
 
 
 def _selftest():

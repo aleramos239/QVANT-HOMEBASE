@@ -149,6 +149,7 @@ def test_unnameable_fill_is_still_delivered_with_its_order_id(tmp_path):
     """Not our order, no name to be had: deliver it anyway — the engine
     matches entry legs on the order id, never on the name."""
     ad = mkadapter(tmp_path, every_lookup_404s)
+    ad._order_symbols[663695020151] = ""     # one of our orders (an unplaced one is parked: audit 2026-10-27)
     got = collect_fills(ad, [fill_push(663695020151, "Sell", 2, 30246.5,
                                        663695020181)])
     assert len(got) == 1 and got[0].raw["orderId"] == 663695020151
@@ -157,6 +158,7 @@ def test_unnameable_fill_is_still_delivered_with_its_order_id(tmp_path):
 
 def test_cold_cache_fill_is_named_by_the_fixed_lookup(tmp_path):
     ad = mkadapter(tmp_path, tradovate_like)
+    ad._order_symbols[663695020151] = ""     # one of our orders (an unplaced one is parked: audit 2026-10-27)
     got = collect_fills(ad, [fill_push(663695020151, "Sell", 2, 30246.5,
                                        663695020181)])
     assert got[0].symbol == "NQZ6"

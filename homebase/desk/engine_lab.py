@@ -1001,7 +1001,8 @@ class LabMixin:
         rounds = [s for s in self.day_states(name) if s.account == account and s.status != "idle"]
         # the cap counts trades that filled (as the backtest that set it did): a limit cancelled unfilled is not a
         # trade (owner 2026-10-27). A round that ended in error may have filled: it counts.
-        used = sum(1 for s in rounds if s.entry_side or s.entry_qty or s.status == "error")
+        used = sum(1 for s in rounds if s.entry_side or s.entry_qty
+                   or (s.status == "error" and not self._lab_x(s).get("clean")))   # a clean refusal sent nothing
         if used >= max_rounds or len(rounds) >= LAB_PLACED_CAP:
             return f"Daily limit reached ({max_rounds} trade{'' if max_rounds == 1 else 's'})."
         return None

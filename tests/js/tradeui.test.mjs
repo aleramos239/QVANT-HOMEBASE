@@ -441,7 +441,7 @@ test('one-click per surface: the chart block and the order panel read their own 
 test('no more "view only": a chart manages ANY tradable account\'s lines; the arm, replay and unlisted rules still hold', async () => {
   reset();
   const c = chart([]);                                        // nothing ticked on this chart
-  assert.deepEqual(UI.editableIds(c), ['sim041'], 'an unarmed LIVE account manages nothing (fix round 1, item 3)');
+  assert.deepEqual(UI.editableIds(c), ['sim041', 'live099'], 'an unarmed LIVE account still manages its own lines (audit 2026-10-27: every non-paper account is live, a reload must not strand them)');
   const line = (account, extra = {}) => ({ key: 'k', kind: 'order', side: 'Buy', type: 'Limit', price: 29990, qty: 1,
     editable: true, legs: [{ account, who: '…', qty: 1, order_id: '77' }], ...extra });
   UI.closeLine(c, line('sim041'), 'NQ', 0.25);                 // oneClick on: sends at once
@@ -450,18 +450,17 @@ test('no more "view only": a chart manages ANY tradable account\'s lines; the ar
   UI.moveLine(c, line('sim041'), 29980, 'NQ', 0.25);
   await flush();
   assert.deepEqual(desk.sent[1].body, { client_id: desk.sent[1].body.client_id, account: 'sim041', order_id: '77', price: 29980 });
-  UI.closeLine(c, line('live099'), 'NQ', 0.25);                // LIVE, not armed this session
+  UI.closeLine(c, line('live099'), 'NQ', 0.25);                // LIVE, not armed: managing a line still works
   await flush();
-  assert.equal(desk.sent.length, 2);
-  assert.match(desk.toasts.at(-1), /LIVE/);
+  assert.equal(desk.sent.length, 3);
   UI.closeLine(c, line('ghost'), 'NQ', 0.25);                  // an account the desk does not list
   await flush();
-  assert.equal(desk.sent.length, 2);
+  assert.equal(desk.sent.length, 3);
   c.replay = { id: 'r' };                                     // a replaying chart manages nothing
   assert.deepEqual(UI.editableIds(c), []);
   UI.closeLine(c, line('sim041'), 'NQ', 0.25);
   await flush();
-  assert.equal(desk.sent.length, 2);
+  assert.equal(desk.sent.length, 3);
   assert.equal(desk.toasts.at(-1), 'Replay — trading is off');
 });
 
@@ -527,7 +526,7 @@ test('addExit: the dropped SL / TP goes out as `exits` for the whole position, f
   }
 });
 
-test('addExit: an unarmed LIVE position and a non-position line are refused before any dialog', async () => {
+test('addExit: an unarmed LIVE position opens the LIVE-cued dialog; a non-position line is refused', async () => {
   reset();
   const was = desk.state;
   desk.state = { ...STATE, accounts: [acct('live099', 'FAKELIVE099', 'live', {
@@ -537,43 +536,10 @@ test('addExit: an unarmed LIVE position and a non-position line are refused befo
     const short = T.linesFor(desk.state, 'NQ', UI.editableIds(c)).find((g) => g.kind === 'position');
     UI.addExit(c, short, 'tp', 29990, 'NQ', 0.25);
     await flush();
-    assert.equal(dialogs.length, 0);
-    assert.match(desk.toasts.at(-1), /LIVE/);
+    assert.ok(dialogs.length === 1 || desk.sent.length === 1, 'goes through the normal confirm / one-click path, not the unarmed refusal');
+    desk.sent.length = 0; dialogs.length = 0;
     UI.addExit(c, { ...short, kind: 'order' }, 'tp', 29990, 'NQ', 0.25);
     assert.equal(desk.sent.length, 0);
-  } finally {
-    desk.state = was;
-  }
-});
-
-test('fix round 1, item 3: a LIVE account disarmed while a line action\'s confirm is open gets nothing', async () => {
-  reset();
-  const pos = [{ symbol: 'NQZ6', net: 1, avg_price: 30000, root: 'NQ', point_value: 20 }];
-  const order = { order_id: '88', symbol: 'NQZ6', side: 'Sell', type: 'Stop', qty: 1, price: null, stop_price: 29990,
-    owner: null, status: 'Working' };
-  const was = desk.state;
-  desk.state = { ...STATE, accounts: [STATE.accounts[0], acct('live099', 'FAKELIVE099', 'live', { positions: pos, orders: [order] })] };
-  try {
-    const c = chart([]);
-    UI.toggleAccount(c, 'live099'); UI.toggleAccount(c, 'live099');   // armed (and ticked) this session
-    assert.deepEqual(UI.editableIds(c), ['sim041', 'live099']);
-    desk.prefs.oneClick = false;
-    const lines = T.linesFor(desk.state, 'NQ', UI.editableIds(c));
-    const posLine = lines.find((g) => g.kind === 'position'), sl = lines.find((g) => g.kind === 'sl');
-    // three line actions, each confirmed only after the LIVE account was unticked (which disarms it)
-    for (const start of [() => UI.closeLine(c, sl, 'NQ', 0.25), () => UI.moveLine(c, sl, 29980, 'NQ', 0.25),
-      () => UI.addExit(c, posLine, 'tp', 30010, 'NQ', 0.25)]) {
-      start();
-      assert.equal(dialogs.length, 1, 'the confirm is open');
-      UI.toggleAccount(c, 'live099');                                  // untick -> disarmed
-      assert.deepEqual(UI.editableIds(c), ['sim041']);
-      clickPrimary(dialogs[0].box.children.find((x) => x.className === 'dlg-foot').children[1].textContent);
-      await flush(); await flush();
-      assert.equal(desk.sent.length, 0, 'nothing reaches the disarmed LIVE account');
-      assert.equal(desk.toasts.at(-1), 'Accounts changed — review and try again');
-      dialogs.length = 0;
-      UI.toggleAccount(c, 'live099'); UI.toggleAccount(c, 'live099');   // re-arm for the next action
-    }
   } finally {
     desk.state = was;
   }
@@ -692,4 +658,29 @@ test('5.5 the chart menu: Reverse is the last row, behind its own divider after 
   assert.deepEqual(desk.sent.map((x) => [x.action, x.body.accounts, x.body.root]), [['reverse', ['sim041'], 'NQ']]);
   // not tradable here (no accounts): no trading rows at all, Reverse included
   assert.deepEqual(MENU.items({ ...ctx, cell: chart([]) }).map((x) => (x.sep ? '—' : x.text)), ['Reset chart view', '—', 'Settings…']);
+});
+
+test('repair pass: with chart trading OFF (after a Kill) lines and the panel still flatten / cancel; entries do not', async () => {
+  reset();
+  const was = desk.state;
+  const pos = [{ symbol: 'NQZ6', net: 1, avg_price: 30000, root: 'NQ', point_value: 20 }];
+  const order = { order_id: '88', symbol: 'NQZ6', side: 'Sell', type: 'Stop', qty: 1, price: null, stop_price: 29990,
+    owner: null, status: 'Working' };
+  desk.state = { ...STATE, enabled: false, accounts: [acct('sim041', 'SIM0000041', 'demo', { positions: pos, orders: [order] })] };
+  try {
+    const c = chart(['sim041']);
+    assert.deepEqual(UI.editableIds(c), ['sim041'], 'lines stay manageable');
+    UI.cancelOrder('sim041', '88');
+    UI.flattenAccount('sim041', 'NQ');
+    await flush();
+    assert.deepEqual(desk.sent.map((s) => s.action), ['cancel', 'flatten']);
+    desk.sent.length = 0;
+    UI.placeOrder({ cell: c, root: 'NQ', side: 'Buy', type: 'Market', qty: 1 });
+    await flush();
+    assert.equal(desk.sent.length, 0, 'no entry while chart trading is off');
+    desk.down = 'desk down'; desk.state = null;
+    assert.deepEqual(UI.editableIds(c), [], 'a down desk still stops everything');
+  } finally {
+    desk.state = was; desk.down = '';
+  }
 });

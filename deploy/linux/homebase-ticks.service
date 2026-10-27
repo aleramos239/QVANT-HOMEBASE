@@ -8,6 +8,10 @@ User=__USER__
 WorkingDirectory=__REPO__
 ExecStart=__REPO__/.venv/bin/python -m homebase.ticks
 Nice=10
+OOMScoreAdjust=500
+# the live md login serves ONE connection and the charts service holds it: not by day (09:00-16:00 ET, Mon-Fri), when a
+# plan job here kicks its feed (audit 2026-10-27). Exit 1 skips the run quietly; the 17:20 and 05:30 runs catch up.
+ExecCondition=/bin/sh -c 'TZ=America/New_York; export TZ; t=$(date +%%H%%M); [ $(date +%%u) -ge 6 ] || [ "$t" -lt 0900 ] || [ "$t" -ge 1600 ]'
 IOSchedulingClass=idle
 StandardOutput=append:__REPO__/homebase/.state/ticks.log
 StandardError=append:__REPO__/homebase/.state/ticks.log

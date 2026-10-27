@@ -28,6 +28,7 @@ function ctx({ cyc = null, live = false, liveSet = null, yes = true, reply, tick
     acctShort: (id) => id.toUpperCase(),
     stratLabel: (n) => n,
     isDemoAcct: (a) => (liveSet ? !liveSet.includes(a) : !live),
+    isRealAcct: (a) => (liveSet ? liveSet.includes(a) : live),
     machineWords: () => ({ server: 'on the SERVER · Chicago', mac: 'on this Mac' })[machine] || '',
     switchBounced: () => false,
     confirmDlg: async (title, body) => { asked.push(body); titles.push(title); return yes; },

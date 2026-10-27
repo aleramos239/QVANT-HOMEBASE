@@ -128,7 +128,7 @@ function cycleDiff(cyc, nw) {
   for (const a of added) parts.push("+" + acctShort(a));
   for (const a of gone) parts.push("−" + acctShort(a));
   const up = !(nw.risk_usd <= old.risk) || (old.risk > 0 && nw.risk_usd === 0) || !(nw.max_minis <= old.minis);
-  return {parts, up, liveIn: added.filter(a => !isDemoAcct(a))};
+  return {parts, up, liveIn: added.filter(isRealAcct)};
 }
 const cycleDraftBody = (dr) => ({risk_usd: cycNum(dr.risk), max_minis: Math.round(cycNum(dr.minis)),
                                  accounts: dr.accounts.filter(a => a in ((ST && ST.accounts) || {}))});   // as cycleBody reads the ticks
@@ -186,7 +186,7 @@ function cycleCopies(members) {     // the strategies that, out of the cycle, wo
   return members.filter(m => ((ST.book || {})[m] || []).length > 1 && !((((ST.strategies || {})[m]) || {}).rotation || {}).on);
 }
 function cycleLive(members) {        // ", 3 of them LIVE" for the accounts these strategies are booked on
-  const live = new Set(members.flatMap(m => ((ST.book || {})[m] || []).map(r => r.account)).filter(a => !isDemoAcct(a))).size;
+  const live = new Set(members.flatMap(m => ((ST.book || {})[m] || []).map(r => r.account)).filter(isRealAcct)).size;
   return live ? `, ${live} of them LIVE` : "";
 }
 /* The cycle follows its Desk group: its strategies are the group's Lab strategies; a group deleted takes its cycle with it.
@@ -210,7 +210,7 @@ async function bookCycle(id) {
   const cyc = ((ST && ST.groups) || {})[id];
   if (!cyc || !cyc.on) return;
   const todo = cyc.members.map(m => [m, cyc.accounts.filter(a => !((ST.book || {})[m] || []).some(r => r.account === a))]).filter(x => x[1].length);
-  const n = todo.reduce((k, x) => k + x[1].length, 0), live = new Set(todo.flatMap(x => x[1]).filter(a => !isDemoAcct(a))).size;
+  const n = todo.reduce((k, x) => k + x[1].length, 0), live = new Set(todo.flatMap(x => x[1]).filter(isRealAcct)).size;
   if (!n || !await confirmDlg(`Book ${n} account${n === 1 ? "" : "s"}?`, `${todo.length} strateg${todo.length === 1 ? "y" : "ies"} on the cycle's accounts` +
       `${live ? ` (${live} LIVE)` : ""}. Each trade still goes to ONE account, in turn, sized by the cycle.`, "Book", false)) return;
   const bad = [];
@@ -237,7 +237,7 @@ async function saveCycle(id, extra) {
   const body = {...cycleBody(id), ...(extra || {})};
   const cyc = ((ST && ST.groups) || {})[id] || null;
   if (!extra && cyc && cyc.on) {
-    const d = cycleDiff(cyc, body), live = body.accounts.filter(a => !isDemoAcct(a)), where = machineWords();
+    const d = cycleDiff(cyc, body), live = body.accounts.filter(isRealAcct), where = machineWords();
     if (live.length && (d.up || d.liveIn.length) && !await confirmDlg("Change the LIVE account cycle?",
         `${d.parts.join(" · ")}.${d.liveIn.length ? ` LIVE account${d.liveIn.length === 1 ? "" : "s"} ticked in: ${d.liveIn.map(acctShort).join(", ")}.` : ""}` +
         ` The cycle is ON across ${live.length} LIVE account${live.length === 1 ? "" : "s"}${where ? " " + where : ""}: the next trade uses this.`,
@@ -268,7 +268,7 @@ async function setCycle(id, on) {
   if (copies.length && !await confirmDlg(`Stop the account cycle?`,
       `${copies.length} strateg${copies.length === 1 ? "y" : "ies"} then send each trade to EVERY account booked${cycleLive(copies)}.`, "Stop the cycle", true)) { refresh(); return; }
   if (on) {
-    const live = b.accounts.filter(a => !isDemoAcct(a)).length;
+    const live = b.accounts.filter(isRealAcct).length;
     if (!await confirmDlg(`Start the account cycle?`, `${b.members.length} strateg${b.members.length === 1 ? "y" : "ies"} take turns across ${b.accounts.length} account${b.accounts.length === 1 ? "" : "s"}${live ? ` (${live} LIVE)` : ""}` +
         (b.risk_usd > 0 ? `, each trade sized to $${b.risk_usd.toLocaleString("en-US")} at risk, at most ${b.max_minis} full contracts.` : ", each at its own size."), "Start", false)) { refresh(); return; }
   }

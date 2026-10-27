@@ -28,6 +28,7 @@ Rules, per login key:
 from __future__ import annotations
 
 import datetime as dt
+import os
 import re
 import threading
 import time
@@ -35,7 +36,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-MAX_LOGINS_PER_HOUR = 4
+MAX_LOGINS_PER_HOUR = 4         # per PROCESS: a second Desk on the same user (Mac + VPS) has its own count --
+                                # set HOMEBASE_LOGINS_PER_HOUR (e.g. 1) on the machine that is not the trading one
 BACKOFF_BASE_S = 300.0
 BACKOFF_CAP_S = 1800.0
 COOLDOWN_DEFAULT_S = 900.0
@@ -61,6 +63,14 @@ def penalty_seconds(err) -> Optional[float]:
     """Tradovate's own wait (p-time, seconds) when the answer carries one."""
     m = _P_TIME.search(str(err or ""))
     return float(m.group(1)) if m else None
+
+
+def _cap() -> int:
+    """MAX_LOGINS_PER_HOUR, lowered (never raised) by HOMEBASE_LOGINS_PER_HOUR."""
+    try:
+        return max(0, min(MAX_LOGINS_PER_HOUR, int(os.environ["HOMEBASE_LOGINS_PER_HOUR"])))
+    except (KeyError, ValueError):
+        return MAX_LOGINS_PER_HOUR
 
 
 def _hhmm(ts: float) -> str:
@@ -140,7 +150,8 @@ class LoginBudget:
                         f"{_hhmm(u.cool_until)}")
             if first:
                 return None
-            if len(u.logins) >= MAX_LOGINS_PER_HOUR:
+            cap = _cap()
+            if len(u.logins) >= cap:
                 return (f"{len(u.logins)} logins on this user in the last hour — next "
                         f"allowed at {_hhmm(u.logins[0] + _HOUR)}")
             if not manual and now < u.next_at:

@@ -6,6 +6,7 @@ methods, and own self.books (set in Engine.__init__, kept in <state>/daybook-<da
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import sys
 from typing import Optional
@@ -13,9 +14,11 @@ from typing import Optional
 from ..broker.base import BrokerAdapter
 from ..config import StrategyCfg, assignments
 from ..contracts import point_value
+from ..core import atomic
 from .dayrules import LOCK_LOCK, LOCK_TAKE, DayBook, DayRules, merge_rules, standing, take_level
-from .daystate import DayState
+from .daystate import TERMINAL, DayState
 
+TAKE_PRINT_NOTE = "day take booked at the last print -- the fill trues it up"
 TAKE_GRACE_S = 2.0      # a day_take touch the resting limit has not filled for this long is market-flattened
 
 
@@ -36,10 +39,13 @@ class DayRulesMixin:
                           if isinstance(d, dict) and d.get("date") == self._today()}
         except Exception as e:  # noqa: BLE001
             print(f"homebase engine: reading {p.name} failed: {e!r}", file=sys.stderr)
+            with contextlib.suppress(OSError):
+                p.replace(p.with_name(p.name + ".corrupt"))      # kept for a human
+            self._day_unreadable_now(p.name, e)      # a lost day lock must not let a locked account trade
 
     def _save_books(self) -> None:
-        self._books_path().write_text(json.dumps({a: b.to_dict() for a, b in self.books.items()},
-                                                 indent=2) + "\n")
+        atomic.write_text(self._books_path(), json.dumps({a: b.to_dict() for a, b in self.books.items()},
+                                                         indent=2) + "\n")      # never half a file
 
     def book(self, account: str) -> DayBook:
         today = self._today()
@@ -173,11 +179,26 @@ class DayRulesMixin:
         for st in self.day_states_for_account(account):
             if st.status != "placed" or ad is None:
                 continue
-            for oid in (st.upper_id, st.lower_id, st.up_sl_id, st.up_tp_id, st.dn_sl_id, st.dn_tp_id):
+            # the entries first: the stop / target ride on them, and an entry that filled needs them. Done only
+            # when every entry is read gone unfilled and every order's cancel went through (or it was gone)
+            clean = True
+            for oid in (st.upper_id, st.lower_id):
                 if oid:
                     r = await ad.cancel_order_by_id(oid)
                     cancelled.append(f"{oid}: {'ok' if r.ok else r.error}")
-            st.status, st.exit_reason = "done", reason
+                    if not await self._order_gone(ad, oid, r.ok):
+                        clean = False        # still working, or filled (a position: its brackets stay), or refused
+            if clean:
+                for oid in (st.up_sl_id, st.up_tp_id, st.dn_sl_id, st.dn_tp_id):
+                    if oid:
+                        r = await ad.cancel_order_by_id(oid)
+                        cancelled.append(f"{oid}: {'ok' if r.ok else r.error}")
+                        if not r.ok and not await self._order_gone(ad, oid, False, TERMINAL):
+                            clean = False
+            if clean:
+                st.status, st.exit_reason = "done", reason
+            else:
+                st.note = "day lock: an entry could not be cancelled or may have filled — check it"
         self._save()
         self.journal("day_rule_lock", account=account, reason=reason, why=why,
                      closed_net=book.closed_net, cancelled=cancelled)
@@ -238,6 +259,7 @@ class DayRulesMixin:
                 continue
             acts: dict = {}
             booked = 0.0
+            failed: list = []
             sold: set = set()           # _flatten_state sells the account's WHOLE net in the symbol: once per symbol
             for s in sorted(self.day_states_for_account(account), key=lambda x: x.status != "live"):
                 cfg = self.cfg.strategies.get(s.strategy)
@@ -251,18 +273,22 @@ class DayRulesMixin:
                     if flat:
                         sold.add(cfg.symbol)
                 if flat:
-                    if was_live:               # the market-out's fill arrives after the state is done
-                        px = prices.get(cfg.symbol)
+                    if was_live:               # booked at the last print now; the market-out's real fill (it
+                        px = prices.get(cfg.symbol)     # arrives after the state is done) trues it up (_book_flat_fill)
                         s.exit_fill = px
                         s.pnl = self._gross_pnl(s, cfg)
+                        s.note = TAKE_PRINT_NOTE
                         booked += self._open_net(s, cfg, float(px))
                         book.closes += 1
                     s.exit_reason, s.status = "day_take", "done"
+                else:
+                    failed.append(s.strategy)
             book.closed_net = round(book.closed_net + booked, 2)
-            book.locked = book.locked or LOCK_TAKE
+            book.locked = book.locked or LOCK_TAKE      # kept on a failed flatten too: nothing new goes in on top of it
             self._save()
             self._save_books()
-            self.journal("day_take_flatten", account=account, open_net=round(total, 2),
-                         closed_net=book.closed_net, take=book.take_net(rules), actions=acts)
+            self.journal("day_take_flatten" if not failed else "day_take_flatten_failed", account=account,
+                         open_net=round(total, 2), closed_net=book.closed_net, take=book.take_net(rules),
+                         actions=acts, failed=failed)
             out.append({"account": account, "open_net": total, "actions": acts})
         return out

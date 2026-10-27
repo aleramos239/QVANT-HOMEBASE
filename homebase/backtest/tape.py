@@ -41,6 +41,7 @@ from array import array
 from bisect import bisect_left
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from functools import lru_cache
 from operator import le
 from pathlib import Path
 
@@ -189,10 +190,11 @@ def coverage_reason(gaps: list[tuple[str, str]]) -> str:
 EQUITY_INDEX_ROOTS = {"ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "NKD"}
 EQUITY_EARLY_CLOSE_ET = "13:15"
 
-_JULY_HALF_DAY_OR_OBSERVED: dict[int, dt.date | None] = {
-    2021: dt.date(2021, 7, 2), 2022: None, 2023: dt.date(2023, 7, 3),
-    2024: dt.date(2024, 7, 3), 2025: dt.date(2025, 7, 3), 2026: dt.date(2026, 7, 3),
-}
+def _july_half_day(y: int) -> dt.date | None:
+    """The reduced session ahead of Jul 4th (see above): Jul 3 for a Jul 4 on Tue-Sat, the Friday Jul 2 when
+    Jul 4 is a Sunday (2021, 2027), none when it is a Monday (2022). Same dates as the old 2021-2026 table."""
+    wd = dt.date(y, 7, 4).weekday()
+    return None if wd == 0 else dt.date(y, 7, 2) if wd == 6 else dt.date(y, 7, 3)
 
 
 def _thanksgiving_friday(year: int) -> dt.date:
@@ -202,6 +204,11 @@ def _thanksgiving_friday(year: int) -> dt.date:
     return first_thu + dt.timedelta(weeks=3, days=1)
 
 
+@lru_cache(maxsize=None)
+def _early_closes_of(year: int) -> frozenset[dt.date]:
+    return _build_early_closes((year,))
+
+
 def _build_early_closes(years) -> frozenset[dt.date]:
     out = set()
     for y in years:
@@ -209,19 +216,35 @@ def _build_early_closes(years) -> frozenset[dt.date]:
         dec24 = dt.date(y, 12, 24)
         if dec24.weekday() < 5:
             out.add(dec24)
-        jul = _JULY_HALF_DAY_OR_OBSERVED.get(y)
+        jul = _july_half_day(y)
         if jul is not None:
             out.add(jul)
     return frozenset(out)
 
 
-EARLY_CLOSES = _build_early_closes(range(2021, 2027))    # the research window + a margin
+EARLY_CLOSES = _build_early_closes(range(2021, 2036))    # a table for lookups; early_close_et builds by the date's own year
+
+
+def exchange_holiday(d: dt.date) -> bool:
+    """A weekday the exchange has no session of its own for (full closure, or a 13:00 halt whose trades the archive files under
+    the next trade date: tickcoverage). Conservative list for callers that must skip a day with no tape; use it together
+    with "the store has no file for d". Fixed-date holidays on a weekend are not observed here."""
+    y = d.year
+    nth = lambda m, wd, n: dt.date(y, m, 1) + dt.timedelta(days=(wd - dt.date(y, m, 1).weekday()) % 7 + 7 * (n - 1))
+    a, b, c = y % 19, y // 100, y % 100
+    h = (19 * a + b - b // 4 - (b - (b + 8) // 25 + 1) // 3 + 15) % 30
+    l = (32 + 2 * (b % 4) + 2 * (c // 4) - h - c % 4) % 7
+    k = h + l - 7 * ((a + 11 * h + 22 * l) // 451) + 114                # Gauss's Easter
+    easter = dt.date(y, k // 31, k % 31 + 1)
+    last_may = dt.date(y, 5, 31) - dt.timedelta(days=(dt.date(y, 5, 31).weekday()) % 7)
+    return d in {dt.date(y, 1, 1), nth(1, 0, 3), nth(2, 0, 3), easter - dt.timedelta(days=2), last_may, dt.date(y, 6, 19),
+                 dt.date(y, 7, 4), nth(9, 0, 1), nth(11, 3, 4), dt.date(y, 12, 25)}
 
 
 def early_close_et(root: str, d: dt.date) -> str | None:
     """The ET wall-clock time trading ends on an early-close session for `root`, or
     None on an ordinary day (or a root/asset class this calendar has no time for)."""
-    if d in EARLY_CLOSES and root in EQUITY_INDEX_ROOTS:
+    if d in _early_closes_of(d.year) and root in EQUITY_INDEX_ROOTS:
         return EQUITY_EARLY_CLOSE_ET
     return None
 

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 import datetime as dt
 import json
 import sys
@@ -44,6 +45,7 @@ from ..broker.base import BrokerAdapter, FillEvent, OrderRequest, OrderResult
 from ..config import AppCfg, StrategyCfg, assignments
 from ..contracts import point_value, tick_size
 from .levels import AccountLeg, Geometry, account_leg
+from ..core import atomic
 from ..paths import state_dir
 from .dayrules import LOCK_LOCK, LOCK_TAKE, DayBook, DayRules, merge_rules, standing, take_level
 from .daystate import (KILL_POLL_N, KILL_POLL_S, MARKET_OUT_FAILED, PLACING_UNKNOWN, TERMINAL, WORKING, DayState,
@@ -57,7 +59,7 @@ from .engine_lab import (LAB, LAB_ACCOUNT_STOPPED, LAB_BAD_ORDER, LAB_CANNOT_CHE
                          LAB_SLOT_BUSY, LAB_TAKE_RULE, LAB_TOO_LATE, LAB_WRONG_SIDE, LabLeg, LabMixin)
 # The engine's other halves, each a mixin of Engine (methods moved from here unchanged).
 from .engine_rotation import ROTATION_NONE, RotationMixin  # noqa: F401
-from .engine_dayrules import TAKE_GRACE_S, DayRulesMixin  # noqa: F401
+from .engine_dayrules import TAKE_GRACE_S, TAKE_PRINT_NOTE, DayRulesMixin  # noqa: F401
 from .engine_kill import EXIT_CONCURRENCY, KillMixin  # noqa: F401
 
 ET = ZoneInfo("America/New_York")
@@ -96,6 +98,8 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
         # manual position or working order in its symbol at the prestage
         # (timer.STAGE_T)
         self._skips: dict[tuple[str, str], set[str]] = {}
+        # date: today's day file / day book was unreadable (state lost): nothing new is placed today (killed_today)
+        self._day_unreadable: Optional[str] = None
         # date -> strategies killed that day (the per-strategy Kill); rebuilt
         # from today's `strategy_killed` journal lines on a restart
         self._killed: dict[str, set[str]] = {}
@@ -134,9 +138,24 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
     def _load_today(self) -> None:
         p = self._day_path(self._today())
         if p.exists():
-            data = json.loads(p.read_text())
-            self.states = {k: DayState(**v) for k, v in data.items()
-                           if "account" in v}   # drop pre-book records
+            self.states = {}
+            try:
+                data = json.loads(p.read_text())
+                if not isinstance(data, dict):
+                    raise ValueError("not an object")
+            except Exception as e:  # noqa: BLE001 — a bad day file must never stop the desk starting
+                # keep the bad file for a human, start the day with no states (stderr: the journal may be what failed)
+                print(f"homebase engine: reading {p.name} failed: {e!r}", file=sys.stderr)
+                with contextlib.suppress(OSError):
+                    p.replace(p.with_name(p.name + ".corrupt"))
+                self._day_unreadable_now(p.name, e)
+                data = {}
+            for k, v in data.items():        # one bad record never drops the others
+                try:
+                    if "account" in v:       # drop pre-book records
+                        self.states[k] = DayState(**v)
+                except Exception as e:  # noqa: BLE001
+                    self._day_unreadable_now(f"day record {k!r}", e)
             # "placing" saved by a desk that died with the acks outstanding: nothing will
             # ever settle it here (it would pause the chart views, park fills and keep a
             # Kill "pending" all day). Not idle, so never fired again: an error to check.
@@ -186,6 +205,9 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
                         and str(rec.get("et", "")).startswith(today) and rec.get("strategy"):
                     self._killed.setdefault(today, set()).add(str(rec["strategy"]))
                     continue
+                if rec.get("event") == "day_state_unreadable" and str(rec.get("et", "")).startswith(today):
+                    self._day_unreadable = today
+                    continue
                 if rec.get("event") == "inactive_today" and str(rec.get("et", "")).startswith(today) \
                         and rec.get("strategy") and rec.get("code"):
                     self._inactive.setdefault(str(rec["strategy"]), {})[str(rec["code"])] = str(rec.get("reason", ""))
@@ -208,14 +230,17 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
 
     def _save(self) -> None:
         p = self._day_path(self._today())
-        p.write_text(json.dumps({k: asdict(v) for k, v in self.states.items()},
-                                indent=2) + "\n")
+        atomic.write_text(p, json.dumps({k: asdict(v) for k, v in self.states.items()},
+                                        indent=2) + "\n")      # never half a file: a torn day file stops the desk
 
     def journal(self, event: str, **data) -> None:
         rec = {"ts": time.time(), "et": self.now_et().isoformat(timespec="seconds"),
                "event": event, **data}
-        with open(self._root / "journal.jsonl", "a") as f:
-            f.write(json.dumps(rec) + "\n")
+        try:        # a full disk must never kill a watch loop that journals its own errors
+            with open(self._root / "journal.jsonl", "a") as f:
+                f.write(json.dumps(rec, default=str) + "\n")
+        except OSError as e:
+            print(f"homebase engine: journal {event} failed: {e!r}", file=sys.stderr)
 
     def note_inactive(self, strategy: str, code: str, why: str, **kw) -> bool:
         """A booked strategy will not trade today: say so ONCE per (day, strategy, code) -- the journal event
@@ -270,7 +295,14 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
         self._killed.setdefault(self._today(), set()).add(strategy)
 
     def killed_today(self, strategy: str) -> bool:
-        return strategy in self._killed.get(self._today(), ())
+        # an unreadable day file means runs we no longer know about may be at the broker: no new placement today
+        return strategy in self._killed.get(self._today(), ()) or self._day_unreadable == self._today()
+
+    def _day_unreadable_now(self, what: str, err) -> None:
+        """A day file / record / book was unreadable: say so loudly, journal it (a restart rebuilds the block from it)."""
+        self._day_unreadable = self._today()
+        print(f"homebase engine: {what} unreadable ({err!r}): nothing new is placed today", file=sys.stderr)
+        self.journal("day_state_unreadable", what=what, error=repr(err)[:200])
 
     # --- the signal ----------------------------------------------------------
     async def handle_alert(self, payload: dict, *, force_window: bool = False,
@@ -651,12 +683,33 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
             # never leave half a straddle: cancel whichever leg did go in
             leg, err = ("upper", r_up.error) if not r_up.ok else ("lower", r_dn.error)
             survivor = r_dn if not r_up.ok else r_up
+            failed = r_up if not r_up.ok else r_dn
+            cancelled, cancel_err = None, None
             if survivor.ok:
-                await ad.cancel_order_by_id(survivor.order_id)
+                for _ in range(3):         # a refused cancel is retried, and read back: it may have gone anyway
+                    try:
+                        c = await ad.cancel_order_by_id(survivor.order_id)
+                        cancelled, cancel_err = (survivor.order_id if c.ok else None), (None if c.ok else c.error)
+                    except Exception as e:  # noqa: BLE001 — a raise is a refused cancel
+                        cancelled, cancel_err = None, str(e)
+                    if cancelled is not None:
+                        break
+                    with contextlib.suppress(Exception):
+                        if await ad.get_order_status(survivor.order_id) in ("Canceled", "Rejected", "Expired"):
+                            cancelled = survivor.order_id
+                            break
             st.status, st.exit_reason, st.note = "error", "error", f"{leg} leg: {err}"
+            if survivor.ok and cancelled is None:     # the other leg is still working at the broker
+                st.upper_id, st.lower_id = (survivor.order_id, None) if leg == "lower" else (None, survivor.order_id)
+                st.note += f" — check it: the other leg {survivor.order_id} is still working ({cancel_err})"
+                # still resting: "placed", so its fill is tracked and booked, 12:55 cancels it and the day lock sees it
+                st.status, st.exit_reason = "placed", None
+            if (failed.raw or {}).get("outcome_unknown"):        # no answer: that leg may be working too
+                st.note += " — its outcome is unknown, check the broker"
             self._save()
             self.journal("place_failed", strategy=name, account=account, leg=leg,
-                         error=err, cancelled=survivor.order_id if survivor.ok else None,
+                         error=err, cancelled=cancelled, survivor_cancel_error=cancel_err,
+                         outcome_unknown=bool((failed.raw or {}).get("outcome_unknown")),
                          leg_ms=leg_ms)
             await self._replay_early(account)
             return {"ok": False, "reason": f"{leg} leg rejected: {err}"}
@@ -695,6 +748,7 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
     async def on_fill(self, ev: FillEvent) -> None:
         got = self._perf()                   # timing only (_fill_timing)
         oid = str((ev.raw or {}).get("orderId") or "")
+        remainder = 0                        # a flatten fill's contracts no done run took
         for st in self.states.values():
             if ev.account_id and st.account != ev.account_id:
                 continue
@@ -788,11 +842,15 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
                              account=st.account, order_id=oid, actions=acts)
                 return
             if st.status == "live" and ev.symbol and cfg.symbol.upper() in ev.symbol.upper() \
-                    and ev.side != st.entry_side:
+                    and ev.side != st.entry_side and not self._owned_by_other(oid, st):
                 # an exit can come in pieces, and before the whole entry is in (gc_nfp 2026-10-02:
                 # 1 contract in, 1 out, then the other 3): keep the AVERAGE exit and stay live
                 # until every contract that went in is out again (_close_if_out)
                 q = int(ev.qty or 0) or max(st.entry_qty - st.exit_qty, 1)
+                if st.entry_qty and st.entry_qty >= st.qty:   # a whole entry: never more out than went in -- a
+                    if st.exit_qty >= st.entry_qty:     # stray or repeated exit fill is not this run's
+                        continue
+                    q = min(q, st.entry_qty - st.exit_qty)
                 if ev.price is not None:
                     st.exit_fill = (ev.price if st.exit_fill is None or not st.exit_qty else
                                     (st.exit_fill * st.exit_qty + ev.price * q) / (st.exit_qty + q))
@@ -802,12 +860,81 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
                     self.journal("exit_part", strategy=st.strategy, account=st.account,
                                  fill=ev.price, qty=q, out=st.exit_qty, entered=st.entry_qty)
                 return
+            if st.status == "done" and st.entry_fill is not None and cfg.kind != "lab" \
+                    and ev.symbol and cfg.symbol.upper() in ev.symbol.upper() \
+                    and ev.side != st.entry_side and not self._owned_by_other(oid, st) \
+                    and (took := await self._book_flat_fill(st, cfg, ev)):
+                # one market-out sells the account's WHOLE net: what this run did not hold goes to the next done run
+                left = int(ev.qty or 0) - took
+                if left <= 0:
+                    return
+                ev = dataclasses.replace(ev, qty=left)
+                remainder = left
+        if remainder:
+            self.journal("exit_fill_remainder", account=ev.account_id, symbol=ev.symbol, qty=remainder, fill=ev.price)
+            return
         # Nothing matched. An entry fill can beat the placement acks — the
         # order is live at the broker before we know its id — so while this
         # account is placing, hold it; _place replays it once the ids are in.
         if any(s.status == "placing" and s.account == ev.account_id
                for s in self.states.values()):
             self._early.append(ev)
+
+    @staticmethod
+    def _ids(st: DayState) -> set:
+        return {i for i in (st.upper_id, st.lower_id, st.up_sl_id, st.up_tp_id, st.dn_sl_id, st.dn_tp_id) if i}
+
+    def _owned_by_other(self, oid: str, st: DayState) -> bool:
+        """The fill's order is one another run of this account placed (its entry or its stop / target)."""
+        if not oid:
+            return False
+        mine = self._ids(st)
+        return oid not in mine and any(o is not st and o.account == st.account and oid in self._ids(o)
+                                       for o in self.states.values())
+
+    async def _book_flat_fill(self, st: DayState, cfg: StrategyCfg, ev: FillEvent) -> int:
+        """The market-out of a flatten / kill / clock-flat, or of the day_take watcher, fills AFTER the run was
+        closed (status done at once): book its real fill. A flatten-type exit with no P&L yet takes the fill
+        into exit_fill / exit_qty and books the trade when every contract is out; a day_take run booked at the
+        last print is trued up to the fill. -> the contracts of the fill this run took (0: none)."""
+        entered = int(st.entry_qty or st.qty or 0)
+        q = int(ev.qty or 0)
+        if ev.price is None or q <= 0 or entered <= 0:
+            return 0
+        if any(o is not st and o.account == st.account and o.status == "live"
+               and (c := self.cfg.strategies.get(o.strategy)) is not None and c.symbol == cfg.symbol
+               for o in self.states.values()):
+            return 0                         # another live run here owns that fill as much as this one: not told apart
+        if st.exit_reason == "day_take" and st.note == TAKE_PRINT_NOTE and st.pnl is not None:
+            if q < entered:
+                return 0                     # a piece of it: the print booking stands
+            old = self._net_pnl(st, cfg, st.pnl)
+            st.exit_fill, st.note = ev.price, ""
+            st.pnl = self._gross_pnl(st, cfg)
+            book = self.book(st.account)
+            book.closed_net = round(book.closed_net + (self._net_pnl(st, cfg, st.pnl) or 0.0) - (old or 0.0), 2)
+            self._save()
+            self._save_books()
+            self.journal("exit_fill", strategy=st.strategy, account=st.account, reason="day_take",
+                         fill=st.exit_fill, qty=entered, pnl=st.pnl, trued_up=True)
+            return entered
+        if st.pnl is not None or st.exit_reason not in ("flat", "manual_flat", "killed") or st.exit_qty >= entered:
+            return 0
+        q = min(q, entered - st.exit_qty)
+        st.exit_fill = (ev.price if st.exit_fill is None or not st.exit_qty else
+                        (st.exit_fill * st.exit_qty + ev.price * q) / (st.exit_qty + q))
+        st.exit_qty += q
+        if st.exit_qty < entered:
+            self._save()
+            self.journal("exit_part", strategy=st.strategy, account=st.account, fill=ev.price, qty=q,
+                         out=st.exit_qty, entered=entered)
+            return q
+        st.pnl = self._gross_pnl(st, cfg)
+        self._save()
+        self.journal("exit_fill", strategy=st.strategy, account=st.account, reason=st.exit_reason,
+                     fill=st.exit_fill, qty=st.exit_qty, pnl=st.pnl)
+        await self._book_close(st, cfg)
+        return q
 
     def _fill_timing(self, ev: FillEvent, got: float, tm: dict) -> dict:
         """Timing only, journaled on entry_fill.  fill_seen_ts: when the fill was first seen (epoch
@@ -1075,14 +1202,57 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
                     note="entry filled while disconnected — recovered on reconnect")
                 if got:
                     out[st.strategy] = got
-            elif not await ad.get_net_position(cfg.symbol):
+            else:
+                try:
+                    net = await ad.get_net_position(cfg.symbol)
+                except Exception as e:  # noqa: BLE001 — unreadable is not flat; the next reconnect asks again
+                    self.journal("exit_recovery_unreadable", strategy=st.strategy, account=account, error=str(e)[:200])
+                    continue
+                if net:
+                    continue
                 st.status = "done"
                 st.exit_reason = st.exit_reason or "closed_while_disconnected"
+                px = await self._recovered_exit_px(st, cfg, ad)
+                booked = False
+                if px is not None and st.entry_fill is not None:
+                    st.exit_fill, st.exit_qty = px, int(st.entry_qty or st.qty or 0)
+                    st.exit_reason = self._grade_exit(st, px)
+                    st.pnl = self._gross_pnl(st, cfg)
+                    booked = st.pnl is not None
+                if not booked:
+                    st.note = "closed while disconnected — check it: its P&L was not booked"
                 self._save()
                 self.journal("exit_recovered_on_reconnect", strategy=st.strategy,
-                             account=account)
+                             account=account, fill=st.exit_fill, pnl=st.pnl, booked=booked)
+                if booked:
+                    await self._book_close(st, cfg)
                 out[st.strategy] = "exit_recovered"
         return out
+
+    async def _recovered_exit_px(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter) -> Optional[float]:
+        """A run the bracket closed while the socket was down: its exit price is its target / stop when exactly one of
+        them reads Filled at the broker (an estimate: a stop can slip). None: not known -- nothing is booked."""
+        if st.entry_fill is None or not st.entry_side:
+            return None
+        buy = st.entry_side == "Buy"
+        sl_id, tp_id = (st.up_sl_id, st.up_tp_id) if buy else (st.dn_sl_id, st.dn_tp_id)
+        try:
+            sl_s = await ad.get_order_status(sl_id) if sl_id else None
+            tp_s = await ad.get_order_status(tp_id) if tp_id else None
+        except Exception:  # noqa: BLE001
+            return None
+        if (sl_s == "Filled") == (tp_s == "Filled"):
+            return None                      # neither, or both: not told apart
+        if st.sl_px is not None and st.tp_px is not None:           # a rule's absolute levels
+            return st.tp_px if tp_s == "Filled" else st.sl_px
+        sign = 1 if buy else -1
+        sl_pts = st.sl_pts if st.sl_pts is not None else cfg.sl_pts
+        if not buy and st.sl_sell_pts is not None:
+            sl_pts = st.sl_sell_pts
+        tp_pts = st.tp_pts if st.tp_pts is not None else cfg.tp_pts
+        if not (sl_pts > 0 and tp_pts > 0):
+            return None
+        return st.entry_fill + sign * tp_pts if tp_s == "Filled" else st.entry_fill - sign * sl_pts
 
     def day_states_for_account(self, account: str) -> list[DayState]:
         today = self._today()
@@ -1136,9 +1306,19 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
                         event="entry_found_by_check",
                         note="fill push missed — entry found by the order-status check")
             elif st.status == "placed" and now >= _hhmm(cfg.cancel_et) and not check_it:
+                refused = []
                 for oid in (st.upper_id, st.lower_id):
                     if oid:
-                        await ad.cancel_order_by_id(oid)
+                        c = await ad.cancel_order_by_id(oid)
+                        if not c.ok and await ad.get_order_status(oid) in WORKING:
+                            refused.append(f"{oid}: {c.error}")
+                if refused:                  # an entry still rests: the day is not over, the next tick cancels again
+                    key = f"cancelfail:{st.strategy}@{st.account}"
+                    if time.time() - self._retry_at.get(key, 0.0) >= 60.0:      # one line a minute, not one a tick
+                        self._retry_at[key] = time.time()
+                        self.journal("cancel_entries_failed", strategy=st.strategy, account=st.account,
+                                     errors=refused)
+                    return
                 net = await ad.get_net_position(cfg.symbol)
                 if net == 0:
                     st.status, st.exit_reason = "done", "no_fill"

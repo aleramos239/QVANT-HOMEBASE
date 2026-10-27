@@ -405,7 +405,7 @@ async function putBackBook(name, old) {
   if (off.length) return removeAsg(name, off[0].account);
   const b = back[0], a = cur.find(x => x.account === b.account);
   if (!a) return pickAsg(name, b.account, b.qty);
-  if (b.qty > a.qty && !isDemoAcct(b.account) && !await confirmDlg(
+  if (b.qty > a.qty && isRealAcct(b.account) && !await confirmDlg(
       `Book ${stratLabel(name)} on ${acctShort(b.account)} LIVE, qty ${a.qty} → ${b.qty}?`,
       liveBookingNote(name, b.account) + bookMachine(), "Book live", false)) { refresh(); return; }
   return setBook(name, cur.map(x => x.account === b.account ? {account: b.account, qty: b.qty} : x));

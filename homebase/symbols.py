@@ -110,7 +110,10 @@ def front_month(root: str, today=None) -> str:
     month. Crypto (LAST_FRIDAY_ROLL): monthly, rolled `lead` days before the
     last-Friday expiry. Never a dying contract."""
     from datetime import date, timedelta
-    today = today or date.today()
+    if today is None:                  # the feed's clock (tickfeed.session_contract): the ET session date, not the host's calendar day
+        import time
+        from .core.session import session_date
+        today = session_date(int(time.time() * 1000), root.upper())
     lead = LAST_FRIDAY_ROLL.get(root.upper())
     if lead is not None:
         y, m = today.year, today.month

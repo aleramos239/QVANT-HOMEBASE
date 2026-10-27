@@ -18,9 +18,10 @@
 #      research/ only its .py code, as push.sh. What they need: deploy/linux/vpssync_plan.py (services by the code's own
 #      imports; a page file restarts nothing; a new requirements.txt blocks it until installed by hand).
 #   4. The gate, on the server, as deploy/autopull.sh: every account flat with no working orders, and not 09:10-09:35 ET.
-#      And when the Lab runner must restart, on a weekday 08:00-16:15 ET no Lab strategy may be booked on an account
-#      (a runner restart ends a desk day that has begun). No: nothing is copied; the next pass asks again.
-#   5. vpssync_remote.sh on the server: copy, delete, units, restart only those services, each one up and answering.
+#      And when the Lab runner must restart, while the market is open no Lab strategy may be booked on an account
+#      (a runner restart ends a desk day that has begun). A Desk that does not answer, or an account not connected or
+#      not seeded yet, waits too (deploy/linux/vpssync_gate.py). No: nothing is copied; the next pass asks again.
+#   5. vpssync_remote.sh on the server: the gate again, copy, delete, units, restart only those services, each one up and answering.
 #      A failure is never retried for that commit (the next commit is shipped as usual).
 set -uo pipefail
 HOST="${HOMEBASE_SERVER:-root@144.202.51.163}"
@@ -98,8 +99,9 @@ fi
 awk -F'\t' '$1 != "D" {print $2}' "$WORK/.changes" | grep -v -E '^research/' > "$WORK/.ship"
 awk -F'\t' '$1 != "D" {print $2}' "$WORK/.changes" | grep -E '^research/.*\.py$' >> "$WORK/.ship"
 awk -F'\t' '$1 == "D" {print $2}' "$WORK/.changes" > "$WORK/.deleted"
-if [ ! -f "$WORK/deploy/linux/vpssync_plan.py" ] || [ ! -f "$WORK/deploy/linux/vpssync_remote.sh" ]; then
-  say "${REV:0:8}: waits -- this commit has no deploy/linux/vpssync_plan.py or vpssync_remote.sh"; exit 0
+if [ ! -f "$WORK/deploy/linux/vpssync_plan.py" ] || [ ! -f "$WORK/deploy/linux/vpssync_remote.sh" ] \
+   || [ ! -f "$WORK/deploy/linux/vpssync_gate.py" ]; then
+  say "${REV:0:8}: waits -- this commit has no deploy/linux/vpssync_plan.py, vpssync_remote.sh or vpssync_gate.py"; exit 0
 fi
 ASK=$(cat "$WORK/.ship" "$WORK/.deleted")
 if grep -qx requirements.txt "$WORK/.ship" && [ "$("${SSH[@]}" "md5sum < $DEST/requirements.txt" | cut -c1-32)" = "$(md5 -q "$WORK/requirements.txt")" ]; then
@@ -108,7 +110,10 @@ fi
 PLAN="$("$PY" "$WORK/deploy/linux/vpssync_plan.py" "$WORK" $ASK)" \
   || { say "${REV:0:8}: waits -- the plan could not be read"; exit 0; }
 if echo "$PLAN" | grep -q '^block '; then
-  say "${REV:0:8}: waits -- $(echo "$PLAN" | sed -n 's/^block //p' | head -1)"; exit 0
+  say "${REV:0:8}: waits -- $(echo "$PLAN" | sed -n 's/^block //p' | head -1)"
+  [ $DRY = 1 ] || [ "$(cat "$STATE/vpssync.blocked" 2>/dev/null)" = "$REV" ] \
+    || { echo "$REV" > "$STATE/vpssync.blocked"; tell "main ${REV:0:8} waits: new packages to install on the server by hand"; }   # told once, not silent
+  exit 0
 fi
 UNITS="$(echo "$PLAN" | sed -n 's/^unit //p' | tr '\n' ' ' | sed 's/ $//')"
 SERVICES="$(echo "$PLAN" | sed -n 's/^service //p' | tr '\n' ' ' | sed 's/ $//')"
@@ -116,35 +121,20 @@ NFILES=$(wc -l < "$WORK/.ship" | tr -d ' '); NDEL=$(wc -l < "$WORK/.deleted" | t
 
 # 4. the gate, on the server
 NEEDS_RUNNER=0; case " $SERVICES " in *" homebase-labrun "*) NEEDS_RUNNER=1 ;; esac
-GATE=$("${SSH[@]}" "python3 - $NEEDS_RUNNER" <<'PY'
-import json, sys, urllib.request
-from datetime import datetime
-from zoneinfo import ZoneInfo
-now = datetime.now(ZoneInfo("America/New_York"))
-m = now.hour * 60 + now.minute
-if 9 * 60 + 10 <= m <= 9 * 60 + 35:
-    print("no: 09:10-09:35 ET"); raise SystemExit
-try:
-    d = json.load(urllib.request.urlopen("http://127.0.0.1:8850/api/status", timeout=8))
-except Exception as e:
-    print("ok: the desk is not answering (%s)" % type(e).__name__); raise SystemExit
-for k, a in (d.get("accounts") or {}).items():
-    if a.get("open_position_count") or a.get("working_orders"):
-        print("no: %s has a position or working orders" % (a.get("label") or k)); raise SystemExit
-if sys.argv[1] == "1" and now.weekday() < 5 and 8 * 60 <= m <= 16 * 60 + 15:
-    booked = [k for k, v in (d.get("book") or {}).items() if k.startswith("lab_") and v]
-    if booked:
-        print("no: %s is booked on an account (a runner restart would end its day)" % booked[0]); raise SystemExit
-print("ok")
-PY
-) || { say "${REV:0:8}: server not reachable for the gate"; exit 0; }
+GATE=$("${SSH[@]}" "python3 - $NEEDS_RUNNER" < "$WORK/deploy/linux/vpssync_gate.py") || { say "${REV:0:8}: server not reachable for the gate"; exit 0; }
 
 WHAT="${REV:0:8}: $NFILES files, $NDEL deleted, units [${UNITS}], restart [${SERVICES:-nothing}]"
 if [ $DRY = 1 ]; then
   echo "$WHAT"; echo "gate: $GATE"; head -n 15 "$WORK/.ship" | sed 's/^/  /'; [ "$NFILES" -gt 15 ] && echo "  ..."
   exit 0
 fi
-if [ "${GATE%%:*}" != "ok" ]; then say "$WHAT -- waits: $GATE"; exit 0; fi
+# the same gate "no" for 90 passes in a row (3 h): the owner is told once, as for a blocked requirements.txt
+gate_waits() { local n=0 w="$STATE/vpssync.gatewait"
+  [ "$(head -n1 "$w" 2>/dev/null)" = "$1" ] && n=$(( $(sed -n 2p "$w") + 1 )) || n=1
+  printf '%s\n%s\n' "$1" "$n" > "$w"
+  [ $n -eq 90 ] && tell "main ${REV:0:8} still waits after 3 h: $1"; return 0; }
+if [ "${GATE%%:*}" != "ok" ]; then say "$WHAT -- waits: $GATE"; gate_waits "$GATE"; exit 0; fi
+rm -f "$STATE/vpssync.gatewait"
 
 # 5. ship
 (cd "$WORK" && tar -cf "$WORK/.ship.tar" -T .ship) || { say "${REV:0:8}: could not pack"; exit 0; }
@@ -152,8 +142,12 @@ NAME="vpssync-${REV:0:12}"
 scp -q -o BatchMode=yes "$WORK/.ship.tar" "$HOST:/tmp/$NAME.tar" && scp -q -o BatchMode=yes "$WORK/.deleted" "$HOST:/tmp/$NAME.del" \
   || { say "${REV:0:8}: upload failed"; exit 0; }
 OUT=$("${SSH[@]}" "bash -s -- '$REV' '/tmp/$NAME.tar' '/tmp/$NAME.del' '$UNITS' '$SERVICES'" < "$WORK/deploy/linux/vpssync_remote.sh" 2>&1)
-if [ $? -eq 0 ]; then
+RC=$?
+if [ $RC -eq 0 ]; then
   say "$WHAT -- shipped. $(echo "$OUT" | tail -1)"
+elif [ $RC -eq 3 ]; then
+  say "$WHAT -- waits: $(echo "$OUT" | tail -1)"      # the server's own gate said no: retried next pass (a restart may still be owed)
+  gate_waits "$(echo "$OUT" | tail -1)"
 else
   say "$WHAT -- FAILED: $(echo "$OUT" | tail -2 | tr '\n' ' ')"
   tell "main ${REV:0:8} failed on the server: $(echo "$OUT" | tail -1)"

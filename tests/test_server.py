@@ -286,9 +286,9 @@ def test_account_flatten_refuses_an_unknown_or_unconnected_account(client):
     assert r.status_code == 409 and "not connected" in r.json()["detail"]
 
 
-def test_account_flatten_ends_todays_run_on_that_account_with_the_proven_calls_first(client):
-    """A strategy's footprint on the account goes first, by the same per-order calls the Kill uses
-    (engine.flatten_today), and only then the account-wide sweep."""
+def test_account_flatten_ends_todays_run_on_that_account_after_the_broker_flatten(client):
+    """The broker flatten and the account-wide cancel go first (audit 2026-10-27: close first, cancel after), then
+    the strategy's footprint by the same per-order calls the Kill uses (engine.flatten_today)."""
     engine, order = client.app.state.engine, []
     real = engine.flatten_today
 
@@ -306,8 +306,8 @@ def test_account_flatten_ends_todays_run_on_that_account_with_the_proven_calls_f
 
     ad.cancel_all = cancel_all
     r = client.post("/api/account-flatten", json={"account": "main"}).json()
-    assert [o[0] for o in order] == ["strategies", "sweep"]
-    assert order[0][1] == {"account": "main", "reason": "manual_flat", "close": False}
+    assert [o[0] for o in order] == ["sweep", "strategies"]
+    assert order[1][1] == {"account": "main", "reason": "manual_flat", "close": False}
     assert r["strategies"] == {}                       # nothing was working today
 
 

@@ -8,7 +8,10 @@ WorkingDirectory=__REPO__
 ExecStart=__REPO__/.venv/bin/python -m homebase.labrun --desk http://127.0.0.1:8850
 Restart=always
 RestartSec=30
-Nice=10
+# Nice 0, weight 200: it carries the Lab strategies' order intents, which must answer within a second; below the
+# charts it missed that deadline under load and the strategy was flattened (audit 2026-10-27)
+Nice=0
+CPUWeight=200
 StandardOutput=append:__REPO__/homebase/.state/labrun.log
 StandardError=append:__REPO__/homebase/.state/labrun.log
 

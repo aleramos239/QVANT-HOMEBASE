@@ -19,6 +19,7 @@ function ctx({ rotation = { on: false, next: null }, book = ['a', 'b'], live = f
     acctShort: (id) => id.toUpperCase(),
     stratLabel: (n) => n,
     isDemoAcct: () => !live,
+    isRealAcct: () => live,
     switchBounced: () => false,
     confirmDlg: async (title) => { asked.push(title); return yes; },
     post: async (url, body) => { sent.push([url, body]); return reply || { ok: true, ...body }; },

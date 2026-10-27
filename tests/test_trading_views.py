@@ -39,7 +39,7 @@ def test_snapshot_shape(tmp_path):
     s = desk.snapshot()
     assert s["enabled"] is True and s["limits"] == {}
     a1, a2 = s["accounts"]
-    assert (a1["id"], a1["label"], a1["pinned"], a1["env"]) == ("a1", "A1", "A1", "demo")
+    assert (a1["id"], a1["label"], a1["pinned"], a1["env"]) == ("a1", "A1", "A1", "live")
     assert a1["connected"] is True and a1["tradable"] is True and a1["error"] is None
     assert a1["positions"] == [{"contract_id": 1, "symbol": NQC, "net": 2, "avg_price": 100.5,
                                 "root": "NQ", "point_value": 20.0}]

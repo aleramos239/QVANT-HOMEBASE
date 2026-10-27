@@ -183,6 +183,8 @@ def _reject_reason(d) -> str:
 # entry keeps its own socket and its own pinned account.
 _SHARED_AUTHS: dict = {}
 CONTRACT_RETRY_S = 60          # a failed contract/item is not asked again for this long
+FILL_READ_S = 3.0              # a fill's REST lookups wait this long: the per-account queue is serial
+PARK_DELAYS_S = (1.0, 3.0, 8.0, 20.0)   # a fill whose account is unknown is looked up again after these
 COOL_RENEW_WITHIN_S = 180      # a 429'd user renews only a token that dies within this
 RENEW_FAIL_HOLD_S = 60         # after a failed renewal, siblings on the token wait this long
 
@@ -260,6 +262,8 @@ class TradovateAdapter(BrokerAdapter):
         self._cache_ts = 0.0                      # unix time the position/cash caches last changed
         self._seed_gen = 0                        # bumped by every seed start/stop
         self._contract_failed: dict = {}          # contractId -> unix time contract/item failed
+        self._lost_retry_s = 5.0                  # wait before the second look for a lost OSO
+        self._lost_polls, self._lost_poll_s = 5, 0.5   # a lost market entry's cancel is read this often
 
     @property
     def auth_shared(self) -> bool:
@@ -318,8 +322,22 @@ class TradovateAdapter(BrokerAdapter):
                 f"no credentials in keychain for key {self.keyring_key!r} — run: "
                 f"python -m homebase.secrets_store set {self.keyring_key}"
             )
-        await asyncio.to_thread(self._auth.login, creds["username"], creds["password"])
-        await self._open_socket()
+        reused = False
+        if self._auth.tokens is None and self._auth.load_persisted(
+                creds["username"], reconnect_buffer_s(self._now()), self._now().timestamp()):
+            # a restart (or a crash loop) reuses the token on disk: no login spent on it
+            self._auth._password = creds["password"]
+            try:
+                await self._open_socket()
+                reused = True
+            except AccountNotOnLogin:
+                raise
+            except Exception as e:  # noqa: BLE001 -- refused or dead: the normal login below
+                _log(f"{self.account_id}: the saved token did not work ({type(e).__name__}: {e}): logging in")
+                self._auth.tokens = None
+        if not reused:
+            await asyncio.to_thread(self._auth.login, creds["username"], creds["password"])
+            await self._open_socket()
         self._schedule_seed()
         # a repeat connect() used to stack a new keepalive on top of the old one
         # every time — a night of drops leaked dozens of them
@@ -903,7 +921,7 @@ class TradovateAdapter(BrokerAdapter):
         if (contract_id is None or ent.get("qty") is None) and fid is not None:
             read = True
             try:
-                full = await self._ws.fill_item(fid)
+                full = await asyncio.wait_for(self._ws.fill_item(fid), FILL_READ_S)
             except Exception as e:
                 _log(f"{self.account_id}: fill/item {fid} failed: {e}")
                 full = None
@@ -917,6 +935,12 @@ class TradovateAdapter(BrokerAdapter):
         acct_id = (order or {}).get("accountId")
         if acct_id is not None and self._acct_num is not None and acct_id != self._acct_num:
             return None  # fill belongs to another account under the same login
+        if acct_id is None and order_id is not None and order_id not in self._order_symbols:
+            # whose fill is it? Fills carry no account: with the lookup failed, fail CLOSED (a sibling
+            # account on this login must not book it here); look again in the background
+            _log(f"{self.account_id}: fill {fid} (order {order_id}) has no account yet: parked")
+            self._park_fill(ent)
+            return None
 
         symbol = self._contracts.get(contract_id, "") if contract_id is not None else ""
         if not symbol and order_id is not None:
@@ -928,7 +952,7 @@ class TradovateAdapter(BrokerAdapter):
         if not symbol and contract_id is not None:
             read = True
             try:
-                c = await self._ws.contract_item(contract_id)
+                c = await asyncio.wait_for(self._ws.contract_item(contract_id), FILL_READ_S)
                 symbol = (c or {}).get("name", "")
                 if symbol:
                     self._contracts[contract_id] = symbol
@@ -959,6 +983,24 @@ class TradovateAdapter(BrokerAdapter):
             enriched=time.perf_counter() if read else None,
         )
 
+    def _park_fill(self, ent: dict) -> None:
+        t = asyncio.create_task(self._retry_fill(ent))
+        self._lookup_tasks.add(t)
+        t.add_done_callback(self._lookup_tasks.discard)
+
+    async def _retry_fill(self, ent: dict) -> None:
+        """Look the parked fill's order up again; once it resolves the fill goes back through
+        the normal path (which drops it if it is another account's). Never resolved: audited."""
+        for delay in PARK_DELAYS_S:
+            await asyncio.sleep(delay)
+            o = await self._lookup_order(ent.get("orderId"))
+            if o is not None and o.get("accountId") is not None:     # an order with no account would park it again for ever
+                self._enqueue_fill(ent)
+                return
+        _log(f"{self.account_id}: fill {ent.get('id')} never resolved to an account: dropped")
+        self.audit({"event": "fill_unresolved", "account": self.account_id,
+                    "fill_id": ent.get("id"), "order_id": ent.get("orderId")})
+
     async def _lookup_order(self, order_id) -> Optional[dict]:
         """Return the cached order for `order_id`, fetching it once if needed."""
         if order_id is None:
@@ -967,9 +1009,9 @@ class TradovateAdapter(BrokerAdapter):
         if order is not None:
             return order
         try:
-            order = await self._ws.order_item(order_id)
+            order = await asyncio.wait_for(self._ws.order_item(order_id), FILL_READ_S)
         except Exception as e:
-            _log(f"{self.account_id}: order/item {order_id} failed: {e}")
+            _log(f"{self.account_id}: order/item {order_id} failed: {type(e).__name__}: {e}")
             return None
         if isinstance(order, dict) and "id" in order:
             self._orders[order["id"]] = order
@@ -987,6 +1029,7 @@ class TradovateAdapter(BrokerAdapter):
             _log(f"{self.account_id}: LIVE ORDER {req.side} {req.qty} {sym}")
         # a StopLimit's stopPrice is its TRIGGER, never the bracket's SL
         stop = req.trigger_price if req.order_type == "StopLimit" else req.stop_price
+        sent_utc = dt.datetime.now(dt.timezone.utc)
         try:
             d = await self._ws.place_order(
                 account_id=self._acct_num, symbol=sym, side=req.side,
@@ -1004,8 +1047,19 @@ class TradovateAdapter(BrokerAdapter):
             self._order_symbols[int(oid)] = sym
             return OrderResult(ok=True, order_id=str(oid),
                                raw=d if isinstance(d, dict) else {})
-        except Exception as e:
+        except RuntimeError as e:      # an error status or no socket: nothing was sent through
             return OrderResult(ok=False, error=str(e))
+        except Exception as e:  # noqa: BLE001 -- a timeout or a drop after the send: it may be at the broker
+            words = f"{type(e).__name__}: {e}".rstrip(": ")
+            _log(f"{self.account_id}: order failed: {words}")
+            try:
+                found = await asyncio.wait_for(self._find_lost_order(req, sym, sent_utc), timeout=30)
+            except Exception as e2:  # noqa: BLE001 -- not found is unknown
+                _log(f"{self.account_id}: looking for the lost order failed: {type(e2).__name__}: {e2}")
+                found = None
+            return found or OrderResult(ok=False, raw={"outcome_unknown": True},
+                                        error=f"no answer in time: the order may be working ({words}) "
+                                              "-- check the orders before sending again")
 
     async def place_bracket(self, req: OrderRequest) -> OrderResult:
         """Entry + protective stop/target as a single Tradovate OSO, so the
@@ -1047,6 +1101,9 @@ class TradovateAdapter(BrokerAdapter):
             raw = d if isinstance(d, dict) else {}
             b1, b2 = raw.get("oso1Id"), raw.get("oso2Id")
             sl_id, tp_id = (b1, b2) if req.stop_price is not None else (None, b1)
+            for b in (b1, b2):                  # their exit fills resolve to this account without a lookup
+                if b is not None:
+                    self._order_symbols[int(b)] = sym
             return OrderResult(ok=True, order_id=str(oid),
                                raw={**raw, "sl_order_id": sl_id, "tp_order_id": tp_id})
         except Exception as e:
@@ -1054,18 +1111,26 @@ class TradovateAdapter(BrokerAdapter):
             words = f"{type(e).__name__}: {e}".rstrip(": ")
             _log(f"{self.account_id}: OSO failed: {words}")
             try:
-                found = await asyncio.wait_for(self._find_lost_oso(req, sym, sent_utc), timeout=30)
+                found, none_seen = await asyncio.wait_for(self._find_lost_oso(req, sym, sent_utc), timeout=30)
             except Exception as e2:  # noqa: BLE001 -- not found is unknown, as before
                 _log(f"{self.account_id}: looking for the lost OSO failed: {type(e2).__name__}: {e2}")
-                found = None
-            return found or OrderResult(ok=False, error=f"OSO failed: {words}")
+                found, none_seen = None, False
+            if found is None and none_seen:             # none seen yet: a late accept may still show
+                await asyncio.sleep(self._lost_retry_s)
+                try:
+                    found, _ = await asyncio.wait_for(self._find_lost_oso(req, sym, sent_utc), timeout=30)
+                except Exception as e3:  # noqa: BLE001
+                    _log(f"{self.account_id}: second look for the lost OSO failed: {type(e3).__name__}: {e3}")
+            return found or OrderResult(ok=False, error=f"OSO failed: {words}", raw={"outcome_unknown": True})
 
-    async def _find_lost_oso(self, req: OrderRequest, sym: str, sent_utc: dt.datetime) -> Optional[OrderResult]:
-        """An OSO whose answer never came may still be at the broker (2026-10-27: a market buy of 5 sat unseen for
-        88 minutes, then filled 84 points away). Look it up: an unfilled MARKET entry is stale, so cancel it and say so
-        (a clear refusal: nothing is left at the broker); any other order found (a resting entry, or one that filled)
-        is handed back as placed, with its bracket ids, so the Desk manages and books it. None = not found for sure
-        (none, or more than one candidate, or a part fill): the outcome stays unknown."""
+    _FINAL_STATUSES = {"Filled", "Canceled", "Rejected", "Expired", "Completed"}
+
+    async def _lost_candidates(self, req: OrderRequest, sym: str, sent_utc: dt.datetime,
+                               need_version: bool = False):
+        """(every order we know of, the ids that could be the entry whose answer never came):
+        this account and contract, the side, no parent / oco, not placed by this adapter, newer
+        than the send. When the order's version is known its qty / type / price must match too
+        (a version we never saw is not checked, unless need_version: then it is no candidate)."""
         cid = await self.contract_id(sym)
         listed = await self._ws.order_list() or []
         seen = {int(o["id"]): o for o in listed if o.get("id") is not None}
@@ -1080,22 +1145,74 @@ class TradovateAdapter(BrokerAdapter):
             except ValueError:
                 return None
 
+        def same(oid) -> bool:
+            v = self._order_versions.get(oid)
+            if not v:
+                return not need_version       # nothing shows it is ours (a manual order looks the same)
+            px = req.price if req.order_type in ("Limit", "StopLimit", "Stop") else None
+            vpx = v.get("stopPrice") if req.order_type == "Stop" else v.get("price")
+            return (v.get("orderQty") in (None, req.qty) and v.get("orderType") in (None, req.order_type)
+                    and (px is None or vpx in (None, px)))
+
         cands = [oid for oid, o in seen.items()
                  if o.get("accountId") == self._acct_num and o.get("contractId") == cid
                  and o.get("action") == action and o.get("parentId") is None and o.get("ocoId") is None
-                 and oid not in self._order_symbols and (at(o) or since) > since]
+                 and oid not in self._order_symbols and (at(o) or since) > since and same(oid)]
+        return seen, cands
+
+    async def _find_lost_order(self, req: OrderRequest, sym: str, sent_utc: dt.datetime) -> Optional[OrderResult]:
+        """A plain order whose answer never came: exactly one matching order at the broker is
+        handed back as placed (so the Desk reserves it); none or several stay unknown."""
+        _, cands = await self._lost_candidates(req, sym, sent_utc, need_version=True)
+        if len(cands) != 1:
+            _log(f"{self.account_id}: lost order: {len(cands)} candidate orders, outcome stays unknown")
+            return None
+        self._order_symbols[cands[0]] = sym
+        _log(f"{self.account_id}: lost order {cands[0]} found: handed back as placed")
+        return OrderResult(ok=True, order_id=str(cands[0]), raw={"orderId": cands[0], "recovered": True})
+
+    async def _find_lost_oso(self, req: OrderRequest, sym: str, sent_utc: dt.datetime):
+        """An OSO whose answer never came may still be at the broker (2026-10-27: a market buy of 5 sat unseen for
+        88 minutes, then filled 84 points away). Look it up: an unfilled MARKET entry is stale, so cancel it and say so
+        (a clear refusal: nothing is left at the broker); any other order found (a resting entry, or one that filled)
+        is handed back as placed, with its bracket ids, so the Desk manages and books it. None = not found for sure
+        (none, or more than one candidate, or a part fill): the outcome stays unknown.
+        Returns (result or None, no candidate was seen at all)"""
+        seen, cands = await self._lost_candidates(req, sym, sent_utc)
         if len(cands) != 1:
             _log(f"{self.account_id}: lost OSO: {len(cands)} candidate orders, outcome stays unknown")
-            return None
-        entry = cands[0]
+            return None, not cands
+        return await self._adopt_lost_oso(req, sym, seen, cands[0]), False
+
+    async def _adopt_lost_oso(self, req: OrderRequest, sym: str, seen: dict, entry: int) -> Optional[OrderResult]:
         b1 = next((oid for oid, o in seen.items() if o.get("parentId") == entry), None)
+        if b1 is None and not self._order_versions.get(entry):
+            # a lone order with no bracket and no version could be anyone's (a manual order): not ours to touch
+            _log(f"{self.account_id}: lost OSO {entry}: no bracket and no version seen, outcome stays unknown")
+            return None
         b2 = (seen.get(b1) or {}).get("ocoId") if b1 is not None else None
         sl_id, tp_id = (b1, b2) if req.stop_price is not None else (None, b1)
+        # the brackets, when their price is known, must be the ones we asked for
+        want = {b1: req.stop_price if req.stop_price is not None else req.tp_price, b2: req.tp_price}
+        for b, px in want.items():
+            v = self._order_versions.get(b) if b is not None else None
+            if v and px is not None and (v.get("stopPrice") if v.get("orderType") == "Stop" else v.get("price")) not in (None, px):
+                _log(f"{self.account_id}: lost OSO {entry}: bracket {b} price differs from the request, outcome stays unknown")
+                return None
         status = seen[entry].get("ordStatus")
         if req.order_type == "Market" and status in self._WORKING_STATUSES:
-            await self.cancel_order_by_id(str(entry))
-            full = await self._ws.order_item(entry)
-            status = (full or {}).get("ordStatus") if isinstance(full, dict) else None
+            res = await self.cancel_order_by_id(str(entry))
+            full = None
+            for _ in range(self._lost_polls):      # a cancel is accepted before it is done: read until final
+                full = await self._ws.order_item(entry)
+                status = (full or {}).get("ordStatus") if isinstance(full, dict) else None
+                if status in self._FINAL_STATUSES:
+                    break
+                await asyncio.sleep(self._lost_poll_s)
+            if status not in self._FINAL_STATUSES:
+                _log(f"{self.account_id}: lost OSO {entry} still {status} after its cancel "
+                     f"({res.error or 'sent'}): outcome stays unknown")
+                return None
             if status == "Canceled":
                 if self._order_filled.get(entry) or await self.get_net_position(sym):
                     _log(f"{self.account_id}: lost OSO {entry} part-filled before its cancel: outcome stays unknown")
@@ -1109,6 +1226,45 @@ class TradovateAdapter(BrokerAdapter):
         _log(f"{self.account_id}: lost OSO {entry} found ({status}): handed back as placed")
         return OrderResult(ok=True, order_id=str(entry),
                            raw={"orderId": entry, "recovered": True, "sl_order_id": sl_id, "tp_order_id": tp_id})
+
+    async def _find_lost_oco(self, exit_side: str, sym: str, sent_utc: dt.datetime) -> Optional[OrderResult]:
+        """An OCO whose answer never came: exactly one pair of orders linked by ocoId, this
+        account and contract and side, newer than the send and not ours yet, is handed back as
+        placed (Stop = the SL, the other = the TP). Anything else stays unknown."""
+        cid = await self.contract_id(sym)
+        listed = await self._ws.order_list() or []
+        seen = {int(o["id"]): o for o in listed if o.get("id") is not None}
+        for oid, o in list(self._orders.items()):
+            seen.setdefault(int(oid), o)
+        action = "Buy" if exit_side.lower() == "buy" else "Sell"
+        since = sent_utc - dt.timedelta(seconds=5)
+
+        def new(o) -> bool:
+            try:
+                return dt.datetime.fromisoformat(str(o.get("timestamp")).replace("Z", "+00:00")) > since
+            except ValueError:
+                return False
+
+        mine = {oid: o for oid, o in seen.items()
+                if o.get("accountId") == self._acct_num and o.get("contractId") == cid
+                and o.get("action") == action and o.get("ocoId") is not None
+                and o.get("parentId") is None and oid not in self._order_symbols and new(o)
+                and o.get("ordStatus") in self._WORKING_STATUSES}
+        pairs = {frozenset((oid, int(o["ocoId"]))) for oid, o in mine.items() if int(o["ocoId"]) in mine}
+        if len(pairs) != 1:
+            _log(f"{self.account_id}: lost OCO: {len(pairs)} candidate pairs, outcome stays unknown")
+            return None
+        a, b = sorted(next(iter(pairs)))
+        ta = (self._order_versions.get(a) or {}).get("orderType")
+        tb = (self._order_versions.get(b) or {}).get("orderType")
+        if {ta, tb} != {"Stop", "Limit"}:           # which leg is the stop is not known: do not guess
+            _log(f"{self.account_id}: lost OCO {a}/{b}: leg types unknown, outcome stays unknown")
+            return None
+        sl, tp = (a, b) if ta == "Stop" else (b, a)
+        self._order_symbols[a] = self._order_symbols[b] = sym
+        _log(f"{self.account_id}: lost OCO {a}/{b} found: handed back as placed")
+        return OrderResult(ok=True, order_id=str(sl), raw={"orderId": sl, "ocoId": tp, "recovered": True,
+                                                            "sl_order_id": str(sl), "tp_order_id": str(tp)})
 
     async def place_oco(self, symbol: str, exit_side: str, qty: int, stop_price: float,
                         limit_price: float, *, text: str = "homebase:chart-exit",
@@ -1127,6 +1283,7 @@ class TradovateAdapter(BrokerAdapter):
         if self.live:
             _log(f"{self.account_id}: LIVE OCO {exit_side} {qty} {sym} "
                  f"stop={stop_price} limit={limit_price}")
+        sent_utc = dt.datetime.now(dt.timezone.utc)
         try:
             d = await self._ws.place_oco(
                 account_id=self._acct_num, symbol=sym, exit_side=exit_side, qty=qty,
@@ -1136,7 +1293,12 @@ class TradovateAdapter(BrokerAdapter):
         except Exception as e:
             # incl. a timeout, where the pair may exist at the broker — loud
             _log(f"{self.account_id}: OCO failed: {e}")
-            return OrderResult(ok=False, error=f"OCO failed: {e}", raw={"outcome_unknown": True})
+            try:
+                found = await asyncio.wait_for(self._find_lost_oco(exit_side, sym, sent_utc), timeout=30)
+            except Exception as e2:  # noqa: BLE001 -- not found is unknown
+                _log(f"{self.account_id}: looking for the lost OCO failed: {type(e2).__name__}: {e2}")
+                found = None
+            return found or OrderResult(ok=False, error=f"OCO failed: {e}", raw={"outcome_unknown": True})
         raw = d if isinstance(d, dict) else {}
         oid, other = raw.get("orderId"), raw.get("ocoId")
         if oid is None:
@@ -1271,7 +1433,14 @@ class TradovateAdapter(BrokerAdapter):
         try:
             net = await self.get_net_position(symbol)
         except Exception as e:  # noqa: BLE001
-            return OrderResult(ok=False, error=f"position unreadable ({e}) — nothing done")
+            # the liquidate needs no size from us: the read is only the journal's net_before
+            liq = await self._liquidate(symbol)
+            if liq["ok"]:
+                return OrderResult(ok=True, raw={"net_before": None, "liquidate": liq,
+                                                 "market": {"ok": True, "order_id": liq["order_id"], "error": None}})
+            return OrderResult(ok=False, raw={"net_before": None, "liquidate": liq},
+                               error=f"position unreadable ({e}) and the broker's close failed "
+                                     f"({liq['error']}) — check the position")
         raw: dict = {"net_before": net}
         if net:
             liq = raw["liquidate"] = await self._liquidate(symbol)
@@ -1476,13 +1645,15 @@ class TradovateAdapter(BrokerAdapter):
         except (TypeError, ValueError):
             return None
         o = self._orders.get(oid) or {}
-        if not o.get("ordStatus") and self._ws is not None:
+        # a final status is trusted from the push cache; anything else is read from the broker, so
+        # a lost push cannot leave a backstop reading 'Working' for ever
+        if o.get("ordStatus") not in self._FINAL_STATUSES and self._ws is not None:
             try:
                 full = await self._ws.order_item(oid)
             except Exception:
-                return None
+                return o.get("ordStatus") or None
             if isinstance(full, dict) and "id" in full:
-                o = self._orders[oid] = {**full, **o}
+                o = self._orders[oid] = {**o, **full}
         return o.get("ordStatus")
 
     async def get_order_state(self, order_id: str) -> dict:

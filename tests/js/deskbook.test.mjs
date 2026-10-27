@@ -23,6 +23,7 @@ const ACCOUNTS = {
   '1234567885': { label: '1234567885', env: 'live' },
   apex2941870000048: { label: 'APEX2941870000048', env: 'live' },
   'lucid-eval-1': { label: 'Lucid Eval #1', env: 'demo' },
+  'paper-1': { label: 'Paper 1', env: 'paper' },
 };
 const STRATS = {
   nq930_1030: { cfg: { symbol: 'NQ', qty: 3, enabled: true, self_fire: true, kind: 'straddle' } },
@@ -72,14 +73,21 @@ test('booking a LIVE account asks first -- the strategy, the account, the size a
     assignments: [{ account: 'lucid-eval-1', qty: 1 }, { account: '1234567885', qty: 3 }] } }]);
 });
 
-test('booking a DEMO account never asks and sends exactly what it always did', async () => {
+test('booking a PAPER account never asks and sends exactly what it always did', async () => {
   const s = load({ book: { nq930_1030: [{ account: '1234567885', qty: 2 }] } });
-  const p = s.api.pickAsg('nq930_1030', 'lucid-eval-1', 3);
+  const p = s.api.pickAsg('nq930_1030', 'paper-1', 3);
   assert.equal(s.posts.length, 1, 'sent synchronously, no dialog in front of it');
   await p;
   assert.equal(s.confirms.length, 0);
   assert.deepEqual(plain(s.posts), [{ url: '/api/book', body: { strategy: 'nq930_1030',
-    assignments: [{ account: '1234567885', qty: 2 }, { account: 'lucid-eval-1', qty: 3 }] } }]);
+    assignments: [{ account: '1234567885', qty: 2 }, { account: 'paper-1', qty: 3 }] } }]);
+});
+
+test('audit 2026-10-27: booking a demo-env account asks too -- a funded prop account is sent as env "demo"', async () => {
+  const s = load({ book: { nq930_1030: [{ account: '1234567885', qty: 2 }] } });
+  await s.api.pickAsg('nq930_1030', 'lucid-eval-1', 3);
+  assert.equal(s.confirms.length, 1);
+  assert.equal(s.confirms[0].title, 'Book NQ930_1030 on Lucid Eval #1 LIVE, qty 3?');
 });
 
 test('Cancel on a live booking sends nothing (the menu closes and the page repaints)', async () => {
@@ -190,15 +198,15 @@ test('a blur on a live raise never opens a dialog: it reverts, says so, and send
   assert.equal(s.api.FREEZE, false);
 });
 
-test('lowering a live size, or any demo size change, never asks and sends as before -- on a blur too', async () => {
-  const s = load({ book: { nq930_1030: [{ account: '1234567885', qty: 3 }, { account: 'lucid-eval-1', qty: 1 }] } });
+test('lowering a live size, or any paper size change, never asks and sends as before -- on a blur too', async () => {
+  const s = load({ book: { nq930_1030: [{ account: '1234567885', qty: 3 }, { account: 'paper-1', qty: 1 }] } });
   editSize(s, 'nq930_1030', '1234567885', 3, 1, 'blur');
   await tick();
-  editSize(s, 'nq930_1030', 'lucid-eval-1', 1, 4, 'blur');
+  editSize(s, 'nq930_1030', 'paper-1', 1, 4, 'blur');
   await tick();
   assert.equal(s.confirms.length, 0);
   assert.equal(s.posts.length, 2);
-  assert.deepEqual(plain(s.posts[0].body.assignments), [{ account: '1234567885', qty: 1 }, { account: 'lucid-eval-1', qty: 1 }]);
+  assert.deepEqual(plain(s.posts[0].body.assignments), [{ account: '1234567885', qty: 1 }, { account: 'paper-1', qty: 1 }]);
 });
 
 test('one commit per edit: the blur that follows Enter never sends twice, asks twice or reverts', async () => {

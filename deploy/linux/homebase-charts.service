@@ -16,6 +16,7 @@ ExecStart=__REPO__/.venv/bin/python -m homebase.charts
 Restart=always
 RestartSec=10
 Nice=5
+OOMScoreAdjust=300
 LimitNOFILE=4096
 StandardOutput=append:__REPO__/homebase/.state/charts.log
 StandardError=append:__REPO__/homebase/.state/charts.log

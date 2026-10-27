@@ -8,6 +8,9 @@ User=__USER__
 WorkingDirectory=__REPO__
 ExecStart=__REPO__/.venv/bin/python -m uvicorn homebase.server:app --app-dir __REPO__ --host 127.0.0.1 --port 8850 --log-level warning --timeout-graceful-shutdown 5
 Restart=always
+# the process that holds the live positions: the kernel kills charts or the runner before it, and it keeps the CPU (2 GB box, OOM 2026-10-20)
+OOMScoreAdjust=-900
+CPUWeight=200
 RestartSec=5
 StandardOutput=append:__REPO__/homebase/.state/service.log
 StandardError=append:__REPO__/homebase/.state/service.log

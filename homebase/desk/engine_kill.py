@@ -11,22 +11,27 @@ from typing import Optional
 
 from ..broker.base import BrokerAdapter, OrderRequest
 from ..config import StrategyCfg, assignments
-from .daystate import KILL_POLL_N, KILL_POLL_S, MARKET_OUT_FAILED, TERMINAL, WORKING, DayState
+from .daystate import GONE, KILL_POLL_N, KILL_POLL_S, MARKET_OUT_FAILED, TERMINAL, WORKING, DayState
 
 # Accounts whose exits run side by side (each_account). A bound, not "all at once": the broker caps a
 # login's requests per second / minute / hour (values unpublished), a 429 is never retried on the order
 # path, and several desk entries ride one login. 4 accounts x (6 cancels at once) = 24 requests out
 # together at most.
 EXIT_CONCURRENCY = 4
+# One account's whole exit (its calls one after another) may not hold a slot longer: a hung account is reported as
+# failed (TimeoutError) and the next account goes. Longer than the broker's own 15 s answer wait several times over.
+EXIT_TIMEOUT_S = 90.0
 
 
 class KillMixin:
-    async def each_account(self, accounts, fn) -> tuple[dict, dict]:
+    async def each_account(self, accounts, fn, timeout: Optional[float] = None) -> tuple[dict, dict]:
         """fn(account) for every account, the accounts side by side (asyncio.gather) instead of one
         after another: the Kill, the clock and the strategy flatten. At most EXIT_CONCURRENCY at
         once. Desk entries that trade ONE broker account (adapter.broker_key) share a turn, in the
         order given: each reads that account's net and sells all of it, so they must never read it
-        together. One account's raise never stops or cancels another's.
+        together. One account's raise never stops or cancels another's. `timeout`: an account's whole turn is
+        cut off after that many seconds and reported as its TimeoutError (the Kill's sweep only: a cancel in the
+        middle of the clock's or the Lab's own bookkeeping would leave it half done).
         -> ({account: fn's result, or the exception it raised}, {account: ms it took -- timing only})"""
         turns: dict = {}
         for a in accounts:
@@ -40,7 +45,7 @@ class KillMixin:
                 for a in group:
                     t = self._perf()
                     try:
-                        out[a] = await fn(a)
+                        out[a] = await asyncio.wait_for(fn(a), timeout)
                     except Exception as e:  # noqa: BLE001 — this account failed; the others still run
                         out[a] = e
                     took[a] = round((self._perf() - t) * 1000, 1)
@@ -81,7 +86,7 @@ class KillMixin:
         return results
 
     async def flatten_today(self, account: Optional[str] = None, reason: str = "killed",
-                            close: bool = True) -> dict:
+                            close: bool = True, accounts: Optional[set] = None) -> dict:
         """Kill switch: every strategy's footprint today, proven calls only. The
         accounts go side by side (each_account); one account's runs go one after
         another, in today's order -- _flatten_state sells the account's WHOLE net
@@ -92,7 +97,8 @@ class KillMixin:
         never the market-out -- the caller's account sweep closes the positions at
         the broker (liquidateposition), so a stale read can never sell twice and
         flip a position (2026-10-23)."""
-        states = [st for st in self.states.values() if account is None or st.account == account]
+        states = [st for st in self.states.values() if (account is None or st.account == account)
+                  and (accounts is None or st.account in accounts)]     # accounts: only these (the Kill's flattened ones)
         by_account: dict[str, list[DayState]] = {}
         for st in states:
             by_account.setdefault(st.account, []).append(st)
@@ -130,6 +136,10 @@ class KillMixin:
 
         got, _ = await self.each_account(by_account, account)
         done = {k: v for g in got.values() if isinstance(g, dict) for k, v in g.items()}
+        for a, g in got.items():            # an account whose turn raised: every run of it is reported, never dropped
+            if not isinstance(g, dict):
+                for st in by_account[a]:
+                    done[f"{st.strategy}@{a}"] = [f"internal error: {type(g).__name__}: {g}"]
         out = {k: done[k] for k in (f"{st.strategy}@{st.account}" for st in states) if k in done}
         self._save()
         return out
@@ -404,6 +414,24 @@ class KillMixin:
                 print(f"homebase engine: kill after ack failed ({e!r}); journal failed ({e2!r})",
                       file=sys.stderr)
 
+    async def _order_gone(self, ad: BrokerAdapter, oid: str, accepted: bool, gone=GONE) -> bool:
+        """After a cancel: is the order read gone? A PendingCancel or a stale Working settles within a few reads
+        (KILL_POLL_S apart); no record at all counts as gone only when the broker accepted the cancel."""
+        for n in range(4):
+            try:
+                got = await ad.get_order_status(oid)
+            except Exception:  # noqa: BLE001 -- unreadable is not gone
+                return False
+            if got in gone:
+                return True
+            if got is None:
+                return accepted
+            if got not in WORKING and got != "PendingCancel":
+                return False
+            if n < 3:
+                await self._kill_sleep(KILL_POLL_S)
+        return False
+
     async def _flatten_state(self, st: DayState, cfg: StrategyCfg,
                              ad: BrokerAdapter, close: bool = True) -> tuple[bool, list[str]]:
         """Close ONE strategy's footprint on one account using only calls
@@ -432,8 +460,14 @@ class KillMixin:
                            st.dn_sl_id, st.dn_tp_id) if i]
         res = await asyncio.gather(*(ad.cancel_order_by_id(i) for i in ids),
                                    return_exceptions=True)
+        left = []
         for i, r in zip(ids, res):
             ok = not isinstance(r, Exception) and r.ok
             acts.append(f"cancel {i}: " + ("ok" if ok else
                         str(r if isinstance(r, Exception) else r.error)))
+            if not ok and not await self._order_gone(ad, i, False, TERMINAL):   # refused because it is already gone is
+                left.append(i)                                                  # fine; one still resting is not
+        if left:        # the position is out but a GTC order still rests: not done, the next try cancels again
+            acts.append(f"check it — {', '.join(left)} still working after the flatten")
+            return False, acts
         return True, acts

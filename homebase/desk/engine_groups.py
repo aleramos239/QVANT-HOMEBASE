@@ -60,7 +60,11 @@ class GroupMixin:
             return
         try:
             data = json.loads(p.read_text())
-            for gid, g in (data.items() if isinstance(data, dict) else ()):
+        except Exception as e:  # noqa: BLE001 -- the desk must still start (every group reads off)
+            print(f"homebase engine: reading {p.name} failed: {e!r}", file=sys.stderr)
+            return
+        for gid, g in (data.items() if isinstance(data, dict) else ()):
+            try:            # one bad group is left out; the others keep their switch and their turn
                 if GROUP_ID_RE.fullmatch(str(gid)) and isinstance(g, dict):
                     self.groups[gid] = {"name": str(g.get("name") or gid)[:MAX_NAME],
                                         "members": [m for m in g.get("members") or [] if isinstance(m, str)],
@@ -69,9 +73,8 @@ class GroupMixin:
                                         "max_minis": int(g.get("max_minis") or MINIS_DEFAULT),
                                         "on": g.get("on") is True,
                                         "last": g.get("last") if isinstance(g.get("last"), str) else None}
-        except Exception as e:  # noqa: BLE001 -- the desk must still start (every group reads off)
-            self.groups = {}
-            print(f"homebase engine: reading {p.name} failed: {e!r}", file=sys.stderr)
+            except Exception as e:  # noqa: BLE001
+                print(f"homebase engine: group {gid!r} in {p.name} unreadable: {e!r}", file=sys.stderr)
 
     def _save_groups(self) -> None:
         p = self._groups_path()
@@ -138,7 +141,9 @@ class GroupMixin:
             except Exception:  # noqa: BLE001 -- a cache that cannot be read adds nothing; the rounds above still count
                 view = None
             for p in (view or {}).get("positions") or []:
-                if p.get("symbol") and market_of(p["symbol"]) == market and p.get("net"):     # NQ and MNQ: one market
+                if p.get("net") and not p.get("symbol"):            # an open position whose contract is not named: it may
+                    sides |= {"Buy", "Sell"}                        # be this market on either side -- refuse, never guess
+                elif p.get("symbol") and market_of(p["symbol"]) == market and p.get("net"):     # NQ and MNQ: one market
                     sides.add("Buy" if p["net"] > 0 else "Sell")
         return sides
 
@@ -196,10 +201,18 @@ class GroupMixin:
             raise GroupError("on must be true or false.")
         if on and (not members or not accounts):
             raise GroupError("A group needs a strategy and an account before it can go on.")
+        had = self.groups.get(gid)
         self.groups[gid] = {"name": name.strip(), "members": members, "accounts": accounts, "risk_usd": float(risk),
                             "max_minis": minis, "on": on,
                             "last": old.get("last") if old.get("last") in accounts else None}
-        self._save_groups()
+        try:
+            self._save_groups()
+        except Exception:  # noqa: BLE001 -- the memory goes back with the file: never a switch that is on only in memory
+            if had is None:
+                self.groups.pop(gid, None)
+            else:
+                self.groups[gid] = had
+            raise
         self.journal("group_set", group=gid, **{k: v for k, v in self.groups[gid].items() if k != "last"})
         if on:                                       # each member's own Take turns goes on with the cycle (owner 2026-10-25):
             for m in members:                        # its page says so, and with the cycle off later it still takes one

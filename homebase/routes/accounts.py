@@ -276,8 +276,9 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
                 raise HTTPException(409, "account has an open position — flatten first")
             if view.get("orders"):
                 raise HTTPException(409, "account has a working order — cancel it first")
-        elif from_mcp:
-            # Claude never removes an account whose state it can't read
+        elif from_mcp or (ad is not None and ad.connected and not cfg.accounts[aid].paper):
+            # Claude never removes an account whose state it can't read; nor does the page one that is connected
+            # but not seeded yet (it may hold a position -- only a disconnected, broken-login entry is the holder's call)
             raise HTTPException(409, "account not connected (or its caches haven't "
                                 "seeded yet) — try again once it's connected")
         # else: the account holder's own Remove (the desk page confirms it) of an
@@ -334,6 +335,20 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
         ad = adapters.get(aid)
         if ad is None or not ad.connected:
             raise HTTPException(409, "account not connected")
+        if cfg.accounts[aid].live:
+            raise HTTPException(409, "a live account takes no self-test order")
+        if not cfg.accounts[aid].paper:
+            # funded PA / LTF accounts are live=False but real money, and a stale ref_price can put the stop at the
+            # market: only an account with nothing on it (no position, no working order, no bot busy) is tested
+            try:
+                m = await ad.get_metrics()
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(409, f"can't read this account ({e}) — not tested") from None
+            busy = [st.strategy for st in engine.day_states_for_account(aid)
+                    if st.status in ("placing", "placed", "live")]
+            if m.get("open_positions") or m.get("working_orders") or busy:
+                raise HTTPException(409, "the account has a position, a working order or a bot at work — "
+                                    "the self-test runs only on an idle account")
         symbol = str(body.get("symbol") or "NQ")
         offset = max(20.0, float(body.get("offset_pts") or 1000))
         plain = bool(body.get("plain"))      # single order, no bracket
@@ -396,19 +411,18 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
             if r.ok and r.order_id:
                 c = await ad.cancel_order_by_id(r.order_id)
                 trace["cancelled"] = {"ok": c.ok, "error": c.error}
-                if not c.ok:
-                    ca = await ad.cancel_all()
-                    trace["cancel_all_fallback"] = {"ok": ca.ok, "error": ca.error}
+                # (a failed cancel never falls back to cancel_all: that takes every order of the account)
                 await asyncio.sleep(1.0)
                 try:
                     m2 = await ad.get_metrics()
                     trace["working_orders_after_cancel"] = m2.get("working_orders")
                     # safety: a close-to-market test stop could fill before the
-                    # cancel lands — never leave a position behind
+                    # cancel lands — never leave a position behind. The account was idle at the start, so
+                    # a position here is the test's own: close that symbol only, never the whole account
                     net = await ad.get_net_position(symbol)
                     trace["net_after_cancel"] = net
                     if net:
-                        f = await ad.flatten_all()
+                        f = await ad.flatten_symbol(symbol)
                         trace["emergency_flatten"] = {"ok": f.ok, "error": f.error}
                 except Exception as e:  # noqa: BLE001
                     trace["final_readback_error"] = str(e)

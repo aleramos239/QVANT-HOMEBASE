@@ -42,6 +42,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+import sys
 import time
 from typing import Awaitable, Callable, Optional
 
@@ -54,6 +55,13 @@ from .session import ET, session_date
 MD_ENVS = ("live", "demo")
 BACKOFF_S = (5, 10, 20, 40, 80, 160, 300)
 HEALTHY_S = 600          # a connection that lived this long resets the backoff
+HEALTHY_MIN_S = 30       # ... and so does one that DELIVERED prints and lived this long (a kick is not a sick login)
+HEALTHY_MIN_BUDGET = 100  # ... but only while the hour's chart requests are at most this (a 35 s flap costs ~6 each: 180/h is the limit)
+SILENT_S = 30            # NQ/ES prints during the RTH day: none for this long = a socket that is up but dead
+SILENT_ROOTS = ("NQ", "ES")
+SILENT_MAX_S = 600       # each silent reconnect in a row waits 4x longer (a closed-market weekday must not flap)
+SILENT_HOURS = (dt.time(8, 0), dt.time(16, 10))   # weekdays ET
+ROLL_CHECK_S = 30        # the session's front contract is compared with the subscribed one this often
 RETRY_REFUSED_S = 600    # a root the feed refused is asked again after this, then 2x, 4x ... (and on every reconnect)
 RETRY_REFUSED_MAX = 4 * 3600   # ... but at least every 4 h: a refused root must not eat the NQ/ES refill budget
 # The desk renews its tokens early, weekdays 09:10-09:19:30 ET (broker/tradovate.py): a socket
@@ -64,6 +72,9 @@ RECYCLE = (dt.time(9, 10), dt.time(9, 19, 30))   # weekdays ET, = the desk's ear
 RECYCLE_CHECK_S = 20      # inside it, the token on disk is compared this often
 RECYCLE_PACE_S = 0.5      # between the rebuild's getCharts: no burst
 RECYCLE_BUDGET_MAX = 120  # rebuilt only if the hour's chart requests stay at most this after it
+RECYCLE_DAY = (dt.time(9, 20), dt.time(16, 10))  # weekdays ET: outside the early window a renewed token is also moved to ...
+RECYCLE_DAY_GAP_S = 1200  # ... at most this often (the desk renews about every 80 min; a rebuild costs a getChart per root)
+RECYCLE_DAY_SKIP = (dt.time(9, 27), dt.time(9, 33))  # ... never across the open: the token rides to the next check
 # The swap itself can lose one tick per root: its copy on the new socket came before the
 # install (no handler yet), its copy on the old one after (handler gone). Nothing refills that
 # (no budget spent), so the recording gets a gap marker around the swap: (before, after) ms --
@@ -86,6 +97,10 @@ class SwitchInProgress(RuntimeError):
     the caller (PUT /api/settings) turns this into a 409, never a queue."""
 
 
+class MdSilent(RuntimeError):
+    """The socket is up but sends nothing: reconnect."""
+
+
 class Refused(RuntimeError):
     """The md feed will not chart this root: getChart answered without a
     realtimeId or failed (a non-200 status, no answer in 15 s) while the
@@ -105,10 +120,12 @@ class TickFeed:
                  on_subscribed: Optional[Callable[[str, str, Optional[int]], Awaitable[None]]] = None,
                  connect=None, sleep=asyncio.sleep, now=time.time,
                  connect_env=connect_env, md_env: Optional[str] = None, fresh_token=None,
-                 on_gap: Optional[Callable[[str, str, int, int], None]] = None, usage_path=None):
+                 on_gap: Optional[Callable[[str, str, int, int], None]] = None, usage_path=None,
+                 watchdog: bool = True):
         self.roots = [r.upper() for r in roots]
         self.on_ticks = on_ticks
         self.on_subscribed = on_subscribed
+        self.watchdog = watchdog    # silence + front-contract checks of a socket that is up (tests drive fake clocks without prints)
         self.on_gap = on_gap        # (root, contract, start_ms, end_ms): a recording gap marker
         # md_env: the login in use. It moves only when run() installs a verified switch.
         self.md_env = md_env if md_env is not None else MD_ENV
@@ -130,6 +147,12 @@ class TickFeed:
         self._retry_at: dict[str, float] = {}      # refused root -> when it is asked again
         self._retry_n: dict[str, int] = {}         # refused root -> refusals in a row
         self.reconnects = 0
+        self.drops: list[dict] = []                # the last reconnects: when, why, how long the socket lived
+        self.delivered = 0                         # prints delivered, all sockets
+        self._up_at = 0.0                          # when the socket in use finished subscribing
+        self._silent_n = 0                         # silent reconnects in a row (no print in between)
+        self._roll_check = 0.0
+        self._recycled_at = 0.0
         self.error: Optional[str] = None
         self._stop = False
         self._tasks: set = set()
@@ -207,6 +230,8 @@ class TickFeed:
             rows = T._unpack(ch)
             if rows:
                 root = sub[0]
+                self.delivered += 1
+                self._silent_n = 0
                 self.last_tick[root] = self._now()
                 self.last_ms[root] = max(self.last_ms.get(root, 0), max(r["ts_ms"] for r in rows))
                 self.on_ticks(root, sub[1], rows)
@@ -303,6 +328,35 @@ class TickFeed:
             self._retry_n.setdefault(r, 1)
         return [r for r in self.refused if now >= self._retry_at[r]]
 
+    def _watchdog(self) -> Optional[str]:
+        """Why the socket in use must be replaced although it is up, or None: NQ/ES silent through the RTH day (a dropped
+        subscription answers pings), or the session's front contract is no longer the subscribed one (the roll)."""
+        now = self._now()
+        et = dt.datetime.fromtimestamp(now, ET)
+        if et.weekday() < 5 and SILENT_HOURS[0] <= et.time() < SILENT_HOURS[1]:
+            limit = min(SILENT_S * 4 ** self._silent_n, SILENT_MAX_S)
+            for r in SILENT_ROOTS:
+                if r in self.roots and r not in self.refused and r in self.contracts:
+                    age = now - max(self.last_tick.get(r, 0.0), self._up_at)
+                    if age > limit:
+                        self._silent_n += 1
+                        return f"md silent: no {r} print for {age:.0f} s"
+        if now >= self._roll_check:
+            self._roll_check = now + ROLL_CHECK_S
+            for r, c in list(self.contracts.items()):
+                try:
+                    if session_contract(r, time.time()) != c:
+                        return f"front contract of {r} rolled: {c} is no longer the session's"
+                except ValueError:
+                    continue
+        return None
+
+    def _note_drop(self, started: float) -> None:
+        lived = self._now() - started
+        self.drops = (self.drops + [{"at": self._now(), "error": self.error, "lived_s": round(lived, 1)}])[-10:]
+        print(f"homebase charts md: reconnect #{self.reconnects + 1} ({self.md_env}) after {lived:.0f} s: {self.error}",
+              file=sys.stderr, flush=True)
+
     async def run(self) -> None:
         """main's connection loop, unchanged, plus the two switch hooks marked SWITCH.
         Whatever way this exits (stop, cancel, a crash), a pending switch is answered."""
@@ -319,6 +373,7 @@ class TickFeed:
         attempt = 0
         while not self._stop:
             started = self._now()
+            delivered0 = self.delivered
             refused_all = False
             try:
                 if self._pending_env is not None:
@@ -335,6 +390,7 @@ class TickFeed:
                     self.refused = {}
                     for r in self.roots:
                         await self._start(r)
+                    self._up_at = self._now()
                     if self.roots and all(r in self.refused for r in self.roots):
                         # nothing subscribed: the socket or the login is sick, not a symbol
                         refused_all = True
@@ -361,6 +417,9 @@ class TickFeed:
                         continue
                     for r in (self._refused_due() if self.refused else []):
                         await self._start(r)
+                    why = self._watchdog() if self.watchdog else None
+                    if why:
+                        raise MdSilent(why)      # any socket that is up: the reconnect path, reason kept in self.error
                 if not self._stop:
                     self.error = "md socket closed"
             except Exception as e:  # noqa: BLE001 — any failure = reconnect with backoff
@@ -374,8 +433,11 @@ class TickFeed:
                         pass
             if self._stop:
                 break
-            if self._now() - started >= HEALTHY_S:
+            lived = self._now() - started
+            if lived >= HEALTHY_S or (lived >= HEALTHY_MIN_S and self.delivered > delivered0
+                                      and self.budget_used(self.md_env) <= HEALTHY_MIN_BUDGET):
                 attempt = 0
+            self._note_drop(started)
             self.reconnects += 1
             wait = BACKOFF_S[min(attempt, len(BACKOFF_S) - 1)]
             if refused_all:
@@ -418,13 +480,19 @@ class TickFeed:
         token on disk compared at most every RECYCLE_CHECK_S: due when the socket rides an
         md token other than the freshest valid one for its login (the desk renewed it), and
         the hour's chart requests stay at most RECYCLE_BUDGET_MAX after one getChart per
-        root. Outside the window it returns at once, without awaiting anything."""
+        root. After the window the same rebuild is allowed through the RTH day (RECYCLE_DAY), at most once
+        every RECYCLE_DAY_GAP_S. Otherwise it returns at once, without awaiting anything."""
         now = self._now()
         et = dt.datetime.fromtimestamp(now, ET)
-        if et.weekday() >= 5 or not RECYCLE[0] <= et.time() < RECYCLE[1]:
+        if et.weekday() >= 5:
             return False
+        early = RECYCLE[0] <= et.time() < RECYCLE[1]
+        if not early and not (RECYCLE_DAY[0] <= et.time() < RECYCLE_DAY[1]
+                              and not RECYCLE_DAY_SKIP[0] <= et.time() < RECYCLE_DAY_SKIP[1]
+                              and now - self._recycled_at >= RECYCLE_DAY_GAP_S):
+            return False                    # outside both: at most once an RECYCLE_DAY_GAP_S later in the RTH day
         day = et.date().isoformat()
-        if self._recycled_day == day or now < self._next_recycle_check:
+        if (early and self._recycled_day == day) or now < self._next_recycle_check:
             return False
         self._next_recycle_check = now + RECYCLE_CHECK_S
         mine = getattr(self.ws, "token", None)
@@ -439,6 +507,7 @@ class TickFeed:
         if self.budget_used(self.md_env) + len(self.roots) > RECYCLE_BUDGET_MAX:
             return False                  # the hour's budget stays for the open; asked again later
         self._recycled_day = day
+        self._recycled_at = now
         return True
 
     async def _switch(self, env: str, *, recycle: bool = False) -> None:
@@ -494,6 +563,7 @@ class TickFeed:
             except ValueError:
                 pass
         self.ws = cand
+        self._up_at = self._now()
         cand.event_handlers.append(self._on_event)
         self.subs, self.contracts, self.refused = subs, contracts, refused
         self.md_env = env

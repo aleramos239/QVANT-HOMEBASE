@@ -61,6 +61,7 @@ class TradovateMD:
         self.keyring_key = keyring_key
         self.env = env
         self._token_provider = token_provider
+        self.login_budget = None    # the desk's LoginBudget: without one, a desk md never password-logs-in
         sd = state_dir()
         # own token cache — never race the trading adapter's file
         self._auth = TradovateAuth(
@@ -108,11 +109,28 @@ class TradovateMD:
         if not md_token and not allow_login:
             raise RuntimeError("no md token from a connected login -- not logging in for it")
         if not md_token:
+            budget = self.login_budget
+            if self._token_provider is not None and budget is None:
+                # a desk's md rides its adapters' logins; its own password login would sit outside the budget
+                raise RuntimeError("no md token from a connected login and no login budget -- not logging in")
             creds = get_credentials(self.keyring_key)
             if not creds or not creds.get("username"):
                 raise RuntimeError(f"no credentials for {self.keyring_key!r}")
-            await asyncio.to_thread(self._auth.login, creds["username"],
-                                    creds["password"])
+            if budget is not None:
+                why = budget.blocked(self.keyring_key)
+                if why:
+                    from ..broker.login_budget import LoginDeferred
+                    raise LoginDeferred(why)
+                budget.record_login(self.keyring_key)
+            try:
+                await asyncio.to_thread(self._auth.login, creds["username"],
+                                        creds["password"])
+            except Exception as e:
+                if budget is not None:
+                    budget.login_result(self.keyring_key, e)
+                raise
+            if budget is not None:
+                budget.login_result(self.keyring_key)
             md_token = getattr(self._auth.tokens, "md_access_token", "") or \
                 self._auth.access_token
         ws = TradovateWS(md_token, self.env)

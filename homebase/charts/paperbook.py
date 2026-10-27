@@ -135,7 +135,8 @@ def session_of(ts_ms: int, root: str) -> str:
     17:00 on D, weekends filed into Monday (session.py's rule), and anything from 17:00 on belongs to the NEXT
     one -- an order placed in the 17:00 break is for the coming session. A 24/7 root rolls at 18:00 every day."""
     t = dt.datetime.fromtimestamp(ts_ms / 1000, _ET)
-    roll = dt.time(18, 0) if root in _ALWAYS_OPEN else dt.time(17, 0)
+    roll = dt.time(18, 0) if root in _ALWAYS_OPEN else dt.time(17, 0)   # (charts/session.session_date rolls at 18:00: the 17:00 hour is
+                                                                          # labelled differently there on purpose -- no print is in any session then)
     d = t.date() + dt.timedelta(days=1) if t.time() >= roll else t.date()
     if root not in _ALWAYS_OPEN:
         while d.weekday() >= 5:

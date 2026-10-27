@@ -9,6 +9,6 @@ REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 STAGE="$HOME/.homebase/vps_ticks"
 mkdir -p "$STAGE"
 echo "[tickpull] $(date '+%F %T') from $HOST"
-rsync -a --timeout=120 --exclude='*.live*' --include='*/' --include='*.csv.gz' --include='*.json' --exclude='*' \
+rsync -a --timeout=120 --rsync-path='nice -n 10 ionice -c3 rsync' --exclude='*.live*' --include='*/' --include='*.csv.gz' --include='*.json' --exclude='*' \
   "$HOST:/home/homebase/futures_ticks/" "$STAGE/"
 /usr/bin/python3 "$REPO/deploy/linux/tickmerge.py" "$STAGE" "$HOME/futures_ticks" --lock "$REPO/homebase/.state/ticks.lock"
