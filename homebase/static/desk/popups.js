@@ -265,10 +265,13 @@ async function flattenStrat(name) {
 /* ---- the account's day take (the group's) ----
    Closed net P&L of the day, in dollars: once a trade of ANY strategy booked here closes with the day at or above it, no new
    entry is taken on the account for the rest of the day (open trades run to their stop / target). 0 turns it off. */
-function dayTakeBox(id, a) {
+function dayState(a) {
   const d = (a && a.day) || {}, v = Number(d.day_lock) || 0;
-  const state = d.locked ? ` <span class="neg" title="No new entry on this account for the rest of the day">stopped for the day (${usd(d.closed_net)})</span>`
+  return d.locked ? ` <span class="neg" title="No new entry on this account for the rest of the day">stopped for the day (${usd(d.closed_net)})</span>`
     : (v ? ` <span class="mcap" title="The day's closed P&amp;L so far">${usd(d.closed_net || 0)} of ${usd(v)}</span>` : "");
+}
+function dayTakeBox(id, a) {
+  const d = (a && a.day) || {}, v = Number(d.day_lock) || 0, state = `<span data-ro="day">${dayState(a)}</span>`;
   return `<span class="mcap" title="Closed profit that ends the day for this account: no new entry after it, for any strategy. 0 = off">Day take $</span>
     <input type="number" min="0" max="100000" step="50" value="${v || ""}" placeholder="OFF" style="width:72px" aria-label="Day take, dollars (empty = OFF)"
       onkeydown="if(event.key==='Enter')setDayTake(${jsArg(id)}, this.value)"><button class="btn btn-outline btn-sm"
@@ -295,31 +298,58 @@ function openAccts(focus) {
   const ids = Object.keys(accts);
   $("#acctCount").textContent = ids.length ? ids.length + " connected login" +
     (ids.length > 1 ? "s" : "") : "";
-  const runningOn = (id) => Object.entries((ST && ST.book) || {})
-    .filter(([, rows]) => (rows || []).some(a => a.account === id))
-    .map(([n, rows]) => n + " ×" + rows.find(a => a.account === id).qty)
-    .join(" · ");
   $("#acctList2").innerHTML = ids.length
-    ? ids.map(id => {
-        const running = runningOn(id);
-        // replacer FUNCTIONS, never strings: a replacement string reads $&, $`, $$ … specially, and an
-        // account id is the broker's text -- "$`" in one used to splice the row into itself (second review)
-        return acctRow(id, {}).replace('<div class="acct">', () => `<div class="acct${id === focus ? " acct-focus" : ""}">`)
-          .replace('<span class="spacer"></span>',
-          () => `<span class="strats">${esc(running || "no strategy assigned")}</span><span class="spacer"></span>`)
-          .replace("</div>", () => `${dayTakeBox(id, accts[id])}<button class="btn btn-outline btn-sm" onclick="flattenAcct(${jsArg(id)})"${accts[id].connected ? "" : " disabled"}
-            title="Cancel every working order and close every position on this account">Flatten</button>
-            <button class="btn btn-outline btn-sm" onclick="reconnectAcct(${jsArg(id)})"
-            title="Rebuild this account's broker connection">Reconnect</button>
-            <button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
-            onclick="removeAcct(${jsArg(id)})" title="Remove this account">&times;</button></div>`);
-      }).join("")
+    ? `<div data-ro="reconnect">${ACCT_RC = reconnectAllHtml()}</div>` + ids.map(id => acctPopRow(id, id === focus)).join("")
     : `<div class="mcap" style="padding:14px 0">no accounts yet — add one to start</div>`;
   renderPaper();
   loadPaper();
   showOverlay("acctOverlay");
   const at = $("#acctList2 .acct-focus");
   if (at && at.scrollIntoView) at.scrollIntoView({block: "nearest"});
+}
+let ACCT_RC = "";                 // the "Reconnect all" the popup shows now
+const acctRunning = (id) => Object.entries((ST && ST.book) || {})
+  .filter(([, rows]) => (rows || []).some(a => a.account === id))
+  .map(([n, rows]) => n + " ×" + rows.find(a => a.account === id).qty)
+  .join(" · ");
+const acctsOffline = () => Object.keys((ST && ST.accounts) || {}).filter(id => !ST.accounts[id].connected);
+const reconnectAllHtml = () => acctsOffline().length ? `<div class="row-btns" style="justify-content:flex-start;margin:6px 0">
+  <button class="btn btn-outline btn-sm" onclick="reconnectOffline()" title="Rebuild the broker connection of every offline account, one at a time">Reconnect all (${acctsOffline().length} offline)</button></div>` : "";
+async function reconnectOffline() { for (const id of acctsOffline()) await reconnectAcct(id); }
+function acctPopRow(id, focused) {
+  const accts = (ST && ST.accounts) || {}, running = acctRunning(id);
+  // replacer FUNCTIONS, never strings: a replacement string reads $&, $`, $$ … specially, and an
+  // account id is the broker's text -- "$`" in one used to splice the row into itself (second review)
+  return acctRow(id, {}).replace('<div class="acct">', () => `<div class="acct${focused ? " acct-focus" : ""}" data-acct="${esc(id)}">`)
+          .replace('<span class="spacer"></span>',
+          () => `<span class="strats" data-ro="strats">${esc(running || "no strategy assigned")}</span><span class="mcap" data-ro="trade">${esc(tradeWords(accts[id]))}</span><span class="spacer"></span>`)
+          .replace("</div>", () => `${dayTakeBox(id, accts[id])}<button class="btn btn-outline btn-sm" onclick="flattenAcct(${jsArg(id)})"${accts[id].connected ? "" : " disabled"}
+            data-flat title="Cancel every working order and close every position on this account">Flatten</button>
+            <button class="btn btn-outline btn-sm" onclick="reconnectAcct(${jsArg(id)})"
+            title="Rebuild this account's broker connection">Reconnect</button>
+            <button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
+            onclick="removeAcct(${jsArg(id)})" title="Remove this account">&times;</button></div>`);
+}
+/* While the popup is open, each tick writes its read-only cells in place: the rows keep the order they opened in, no button
+   or field is rebuilt, and a row being typed in (its day take has focus) is left alone. A new account shows on the next open. */
+function tickAccts() {
+  const box = $("#acctList2"), accts = (ST && ST.accounts) || {};
+  const rc = box.querySelector('[data-ro="reconnect"]'), h = reconnectAllHtml();
+  if (rc && ACCT_RC !== h) { rc.innerHTML = h; ACCT_RC = h; }      // its button is rebuilt only when the count changes
+  for (const row of box.querySelectorAll(".acct[data-acct]")) {
+    const a = accts[row.getAttribute("data-acct")];
+    if (!a || row.contains(document.activeElement)) continue;
+    const cell = (k) => row.querySelector(`[data-ro="${k}"]`) || {}, pnl = a.realized_pnl;
+    cell("dot").className = "dot " + (a.connected ? "on" : "off");
+    cell("bal").textContent = usd(a.balance);
+    cell("pnl").className = "kvi " + (pnl > 0 ? "pos" : pnl < 0 ? "neg" : "");
+    cell("pnl").textContent = (pnl > 0 ? "+" : "") + usd(pnl);
+    cell("strats").textContent = acctRunning(row.getAttribute("data-acct")) || "no strategy assigned";
+    cell("trade").textContent = tradeWords(a);
+    cell("day").innerHTML = dayState(a);
+    const f = row.querySelector("[data-flat]");
+    if (f) f.disabled = !a.connected;
+  }
 }
 function closeAccts() { hideOverlay("acctOverlay"); }
 async function removeAcct(id) {

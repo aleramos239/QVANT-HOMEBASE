@@ -135,6 +135,25 @@ test('one row, never two: until the Desk knows it, the Step A row draws it; the 
   assert.match(none.side(), /lab_nq_orb/);
 });
 
+test('WP1.8 sidebar accounts: a LIVE / DEMO / PAPER tag on every row, what it holds, and one in a trade is never under the cut', () => {
+  const accounts = {};
+  for (let i = 1; i <= 14; i++) accounts['d' + i] = { label: 'Demo ' + i, env: 'demo', connected: true, balance: 1000 };
+  accounts.d14 = { ...accounts.d14, open_positions: [{ symbol: 'NQZ6', net: 1 }], working_orders: 1 };
+  accounts.p1 = { label: 'Paper 1', env: 'paper', connected: true, balance: 1000 };
+  accounts.l1 = { label: 'Live 1', env: 'live', connected: true, balance: 1000 };
+  const t = load({ accounts });
+  const side = t.side(), rows = [...side.matchAll(/onclick="openAccts\(([^)]*)\)"/g)].map((m) => m[1].replace(/&quot;|"/g, ''));
+  assert.deepEqual(rows, ['l1', 'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'd10', 'd11', 'd14'], 'the first 12 in their order, then the one in a trade');
+  assert.match(side, />Show 3 more</);
+  assert.match(side, /Live 1<span class="tag-live">LIVE<\/span>/);
+  assert.equal((side.match(/>DEMO</g) || []).length, 12);
+  assert.match(side, /<small>in a trade 1 · 1 working<\/small>/);
+  vm.runInContext("SIDE_ALL = true", t.ctx);
+  const all = t.side();
+  assert.match(all, /Paper 1<span class="tag-paper"[^>]*>PAPER</);
+  assert.match(all, />Show fewer</);
+});
+
 test('the Strategies count in a folded sidebar does not count the same strategy twice', () => {
   const side = SLICE('function renderSide(', '/* ---- strategy detail ---- */');
   // the count is the rows under Strategies: a Lab row the Desk holds is its own row (one row, never two); the groups sit inside

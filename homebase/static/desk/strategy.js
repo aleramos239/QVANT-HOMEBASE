@@ -33,13 +33,16 @@ function renderSide(names, hiddenCount, issues) {
   }).join("");
   const rank = (a) => a.env === "live" ? 0 : a.env === "paper" ? 2 : 1;
   const accts = Object.entries(ST.accounts || {}).sort((a, b) => rank(a[1]) - rank(b[1]));
-  const shown = SIDE_ALL ? accts : accts.slice(0, 12);
+  const inTrade = (a) => Array.isArray(a.open_positions) && a.open_positions.length > 0;
+  const shown = SIDE_ALL ? accts : accts.filter(([, a], i) => i < 12 || inTrade(a));     // one in a trade is never under the cut
+  const envTag = (a) => a.env === "live" ? '<span class="tag-live">LIVE</span>' : a.env === "paper" ? '<span class="tag-paper" style="margin-left:6px">PAPER</span>'
+    : '<span class="tag" style="margin-left:6px">DEMO</span>';
   const shortId = (t) => { t = String(t); return /^[A-Za-z0-9]{12,}$/.test(t) ? t.slice(0, 4) + " ··" + t.slice(-4) : t; };
   const acctRows = shown.map(([id, a]) => `<button class="item one" onclick="openAccts(${jsArg(id)})" title="${esc((a.label || id) + " · " + (a.env === "live" ? "Live" : a.env === "paper" ? "Paper" : "Demo") + (a.connected ? "" : " · offline"))}">
-      <i class="sd ${a.connected ? "ok" : "warn"}"></i><span class="it"><b>${esc(shortId(a.label || id))}${a.env === "live" ? '<span class="tag-live">Live</span>' : ""}${a.connected ? "" : '<span class="tag">offline</span>'}</b></span>
+      <i class="sd ${a.connected ? "ok" : "warn"}"></i><span class="it"><b>${esc(shortId(a.label || id))}${envTag(a)}${a.connected ? "" : '<span class="tag">offline</span>'}</b>${tradeWords(a) ? `<small>${esc(tradeWords(a))}</small>` : ""}</span>
       <span class="ir mono${a.connected ? "" : " dim"}">${a.connected && a.balance != null ? "$" + fmt(a.balance, 0) : ""}</span></button>`).join("");
-  const more = accts.length > 12
-    ? `<button class="side-more" onclick="SIDE_ALL=!SIDE_ALL;render()">${SIDE_ALL ? "Show fewer" : `Show ${accts.length - 12} more`}</button>` : "";
+  const more = (SIDE_ALL ? accts.length > 12 : shown.length < accts.length)
+    ? `<button class="side-more" onclick="SIDE_ALL=!SIDE_ALL;render()">${SIDE_ALL ? "Show fewer" : `Show ${accts.length - shown.length} more`}</button>` : "";
   const last = journalNews(ST.journal)[0];
   $("#side").innerHTML = `
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">

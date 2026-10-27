@@ -486,6 +486,7 @@ function render() {
     if (!document.getElementById("qedit")) FREEZE = false;
   }
   if ($("#algoOverlay").classList.contains("open")) renderAlgoMgr();
+  if ($("#acctOverlay").classList.contains("open")) tickAccts();         // its read-only cells, in place
   renderGroupMgr();
 
   fillActWho();
