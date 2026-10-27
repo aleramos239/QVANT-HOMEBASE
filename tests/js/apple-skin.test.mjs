@@ -108,7 +108,11 @@ test('desk skin: the machine chip reads ONE value -- the shell\'s HB_MACHINE, el
   // missing or unknown: no chip -- never "This Mac" from a localhost address
   for (const [win, st] of [[{}, null], [{}, {}], [{}, undefined], [{ HB_MACHINE: 'vps' }, null], [{}, { machine: 'chicago' }]]) assert.equal(chip(win, st), '');
   assert.doesNotMatch(DESK_SKIN, /location\.(hostname|host)\b/, 'the skin never guesses the machine from the address');
-  assert.match(DESK_SKIN, /el\('span', \{ class: 'hb-machine', hidden: true \}\)/, 'the chip starts hidden');
+  assert.match(DESK_SKIN, /el\('span', \{ class: 'hb-machine', hidden: true \}[,)]/, 'the chip starts hidden');
+  // a narrow window's words: the server keeps its name and colour, the Mac its words
+  assert.equal(toolbarWords({ window: { HB_MACHINE: 'server' } }).machineWord(null, true), 'Server');
+  assert.equal(toolbarWords({ window: { HB_MACHINE: 'mac' } }).machineWord(null, true), 'This Mac');
+  assert.equal(toolbarWords({ window: {} }).machineWord(null, true), '');
 });
 
 test('desk skin: readiness in words comes from the page\'s own readinessShown -- the list openChecks opens', () => {
@@ -220,6 +224,80 @@ test('desk skin: the chart-trading chip and its count never hide at any window w
   // the readiness word is what goes first in a narrow window, never the chip
   assert.equal(last(/\.hb-ready-word$/, MIN_W, 'display'), 'none');
   assert.notEqual(last(/\.hb-ready-word$/, 1440, 'display'), 'none');
+});
+
+/* The Desk toolbar, added up from its stylesheets: lead (sidebar corner) + main bar (padding, gaps, page switch, the right-hand group)
+   + the gear corner's own items (machine chip, gear, inspector button) must fit the window with 8 px to spare, so Arm and Kill never
+   reach the chip, the gear or the inspector button. Text widths: the system font at the CSS sizes, measured with CoreText (NSString size, 2026-10-27),
+   rounded up. The window buttons' room (--hb-native-tl) is taken generous. */
+test('desk skin: the toolbar fits at every window width from 980 px, either pane open or shut, with the widest machine chip', () => {
+  const TXT = { Desk: 32, Charts: 41, Lab: 23, 'Server · Chicago': 91, Server: 36, 'This Mac': 49, '12 things need a look': 133, 'Desk not answering': 125,
+                'Chart trading ON · 12 live accounts': 175, 'Chart ON · 12 live': 88 };
+  const ICON = 24, TL = 92;      // a toolbar symbol (symbols.css --sf-sidebar-right-w), the window buttons' room
+  const rules = deskRules();
+  const htmlOk = (sel, on) => {      // the <html> state a selector asks for: pane classes only (a theme or other state: not the default)
+    const h = sel.split(/\s+/)[0], not = [...h.matchAll(/:not\(\.([\w-]+)\)/g)].map((m) => m[1]), rest = h.replace(/:not\([^)]*\)/g, '');
+    if (/[[:]/.test(rest)) return false;
+    return [...rest.matchAll(/\.([\w-]+)/g)].every((m) => on.has(m[1])) && not.every((c) => !on.has(c));
+  };
+  const decls = (re, w, on) => rules.filter((r) => re.test(r.sel) && w >= r.lo && w <= r.hi && htmlOk(r.sel, on)).flatMap((r) => r.body.split(';'));
+  const get = (re, w, on, prop) => { let v = null; for (const d of decls(re, w, on)) { const m = d.match(/^\s*([\w-]+)\s*:\s*(.+?)\s*$/); if (m && m[1] === prop) v = m[2].replace(/\s*!important$/, ''); } return v; };
+  const ON = new Set(['hb-apple']);
+  const cssVar = (n) => get(/^html\.hb-apple$/, 1400, ON, n);
+  const px = (v) => {      // "12px", "calc(var(--a-side-w) + 8px)"
+    v = String(v).replace(/var\((--a-(?:side|insp)-w)\)/g, (_, n) => cssVar(n)).replace(/var\(--hb-native-tl[^)]*\)/g, TL + 'px');
+    const m = v.match(/^calc\((.+)\)$/);
+    const n = (m ? m[1].split('+') : [v]).reduce((a, x) => a + parseFloat(x), 0);
+    assert.ok(Number.isFinite(n), `a width the test can add up: ${v}`);
+    return n;
+  };
+  const pad = (re, w, on) => {      // [left, right]
+    let l = 0, r = 0;
+    for (const d of decls(re, w, on)) {
+      const m = d.match(/^\s*(padding(?:-left|-right)?)\s*:\s*(.+?)\s*$/);
+      if (!m) continue;
+      const v = m[2].split(/\s+/).map(parseFloat);
+      if (m[1] === 'padding') { const [t, rr = t, , ll = rr] = v; l = ll; r = rr; } else if (m[1] === 'padding-left') l = v[0]; else r = v[0];
+    }
+    return [l, r];
+  };
+  const W = toolbarWords();
+  // between two breakpoints every width is the same and the room left only grows with the window: each range's narrowest width
+  const widths = [...new Set([980, ...rules.flatMap((r) => [r.lo, r.hi + 1])])].filter((w) => w >= 980 && w <= 2400).sort((x, y) => x - y);
+  assert.ok(widths.includes(1201) && widths.includes(1021), 'the narrow windows\' breakpoints are read');
+  for (const sideOff of [false, true]) for (const inspOff of [false, true]) for (const chip of [null, 'mac', 'server']) {
+    const on = new Set(['hb-apple', ...(sideOff ? ['hb-side-off'] : []), ...(inspOff ? ['hb-insp-off'] : [])]);
+    const state = `sidebar ${sideOff ? 'shut' : 'open'}, inspector ${inspOff ? 'shut' : 'open'}, chip ${chip || 'none'}`;
+    for (const w of widths) {
+      const g = (re, prop) => get(re, w, on, prop);
+      // the page switch: three tabs (the Mac's Desk; the server app hides it)
+      const [tl, tr] = pad(/\.hb-seg > a$/, w, on), tabMin = px(g(/\.hb-seg > a$/, 'min-width'));
+      const seg = pad(/\.hb-seg$/, w, on).reduce((a, b) => a + b) + 2 * px(g(/\.hb-seg$/, 'gap')) + ['Desk', 'Charts', 'Lab'].reduce((a, t) => a + Math.max(tabMin, TXT[t] + tl + tr), 0);
+      const centred = g(/\.hb-tb-c$/, 'position') === 'absolute';
+      // the right-hand group: the readiness column and the armed state, then Arm, then Kill
+      const rd = px(g(/\.hb-rd-col$/, 'width')), stc = px(g(/\.hb-st-col$/, 'width'));
+      const rgap = px(g(/\.hb-tb-r$/, 'gap')), right = rd + px(g(/\.hb-(?:desk-)?status$/, 'gap')) + stc + rgap + px(g(/#armBtn$/, 'width')) + rgap + px(g(/#killBtn$/, 'width'));
+      const [ml, mr] = pad(/\.hb-tb-main$/, w, on), mgap = px(g(/\.hb-tb-main$/, 'gap'));
+      const inFlow = (g(/\.hb-tb-l$/, 'display') === 'none' ? 0 : 1) + (centred ? 0 : 1) + 1;
+      const need = ml + mr + (inFlow - 1) * mgap + (centred ? 0 : seg) + right;
+      // the gear corner's own items: the machine chip (long or short words), the gear, the inspector button
+      const short = g(/\.hb-m-long$/, 'display') === 'none';
+      assert.notEqual(short, g(/\.hb-m-short$/, 'display') === 'none', `${w} px: exactly one of the machine chip's words shows`);
+      const word = chip ? W.machineWord({ machine: chip }, short) : '';
+      const [il, ir] = pad(/\.hb-tb-insp$/, w, on), igap = px(g(/\.hb-tb-insp$/, 'gap'));
+      const items = il + ir + (word ? pad(/\.hb-machine$/, w, on).reduce((a, b) => a + b) + TXT[word] + igap : 0) + px(g(/#settingsBtn$/, 'width')) + igap + (ICON + pad(/\.hb-tbtn$/, w, on).reduce((a, b) => a + b));
+      const zone = inspOff ? items : px(g(/\.hb-tb-insp$/, 'width'));
+      const lead = px(g(/\.hb-tb-lead$/, 'width'));
+      assert.ok(items <= zone, `${w} px, ${state}: the gear corner holds its own items`);
+      // the room left between Kill and the gear corner's first item (the bar's own padding on both sides counts): 8 px at least
+      const clear = w - lead - (need - mr) - (items - il);
+      assert.ok(clear >= 8, `${w} px, ${state}: ${clear} px between Kill and the gear corner`);
+      if (centred) assert.ok(w / 2 + seg / 2 + mgap <= w - zone - mr - right, `${w} px, ${state}: the centred page switch clears the right-hand group`);
+      // the readiness column holds its widest words (anything wider would spill left over the page switch)
+      assert.ok(rd >= (short ? TXT['Chart ON · 12 live'] : TXT['Chart trading ON · 12 live accounts']) + pad(/\.hb-ct-chip$/, w, on).reduce((a, b) => a + b), `${w} px: the chip fits its column`);
+      if (g(/\.hb-ready-word$/, 'display') !== 'none') assert.ok(rd >= px(g(/\.bulb$/, 'width')) + px(g(/\.hb-rd-top$/, 'gap')) + Math.max(TXT['12 things need a look'], TXT['Desk not answering']), `${w} px: the readiness word fits its column`);
+    }
+  }
 });
 
 test('desk skin: the stop menu no longer saves on change -- a Set button names the change and sends the same call', async () => {

@@ -51,8 +51,10 @@
       settings.replaceChildren(sf('gear'));
       tb.insp.prepend(el('div', { class: 'hb-platter' }, settings));
     }
-    // which machine this window is, in the fixed corner by the gear (never clipped); filled by sync(), hidden while unknown
-    const machine = el('span', { class: 'hb-machine', hidden: true });
+    // which machine this window is, in the fixed corner by the gear (never clipped); filled by sync(), hidden while unknown. Two
+    // lengths: a narrow window shows the short one ("Server")
+    const mLong = el('span', { class: 'hb-m-long' }), mShort = el('span', { class: 'hb-m-short' });
+    const machine = el('span', { class: 'hb-machine', hidden: true }, mLong, mShort);
     tb.insp.prepend(machine);
     const old = $('.inset-topbar');
     if (old) old.hidden = true;
@@ -225,8 +227,8 @@
 
     /* ---- toolbar words (plain functions of what the page already holds) ---- */
     // ONE machine value: the native shell's window.HB_MACHINE, else the desk's /api/status `machine`. Anything else: no chip,
-    // never a guess from the address (the server's Desk can show as localhost through a tunnel).
-    const machineWord = (st) => { const m = window.HB_MACHINE ?? (st && st.machine); return m === 'mac' ? 'This Mac' : m === 'server' ? 'Server · Chicago' : ''; };
+    // never a guess from the address (the server's Desk can show as localhost through a tunnel). `short`: a narrow window's words
+    const machineWord = (st, short) => { const m = window.HB_MACHINE ?? (st && st.machine); return m === 'mac' ? 'This Mac' : m === 'server' ? (short ? 'Server' : 'Server · Chicago') : ''; };
     // readiness as the page shows it: its own readinessShown(), the list openChecks() opens (bad or warn = needs a look). [level, words]
     // While the desk is not answering (`stale`: the page's DESK_STALE) the last answer is old: "Checking…", never a stale "Ready".
     const readyWord = (st, stale) => {
@@ -305,7 +307,10 @@
           tb.title('Today', date);
         }
         const mw = machineWord(st);
-        if (machine.textContent !== mw) { machine.textContent = mw; machine.dataset.m = mw === 'This Mac' ? 'mac' : 'server'; machine.hidden = !mw; }
+        if (mLong.textContent !== mw) {
+          mLong.textContent = machine.title = mw; mShort.textContent = machineWord(st, true);
+          machine.dataset.m = mw === 'This Mac' ? 'mac' : 'server'; machine.hidden = !mw;
+        }
         // readiness, in words (the bulb is the page's own verdict; the row opens the page's own System checks)
         if (bulb) {
           const lvl = bulb.classList.contains('bad') ? 'bad' : bulb.classList.contains('warn') ? 'warn' : bulb.classList.contains('ok') ? 'ok' : '';
