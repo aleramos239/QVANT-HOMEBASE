@@ -82,7 +82,7 @@ test('apple skin: the Desk skin leans only on things the Desk page still has', (
   for (const cls of ['pill-slot', 'app-main', 'frame', 'inset-topbar']) assert.ok(page.includes(cls), `.${cls} is in the page`);
   for (const fn of ['openChecks', 'setStratRr', 'readinessShown']) assert.match(page, new RegExp(`function ${fn}\\(`), `${fn}() is the page's own`);
   // the page's own state the skin reads by name (a rename would leave the toolbar words stuck, with no error)
-  for (const v of ['ST', 'DESK_STALE', 'DESKRES', 'DESKGRES']) assert.match(page, new RegExp(`\\blet ${v}\\b`), `${v} is the page's own`);
+  for (const v of ['ST', 'DESK_STALE', 'STALE_WHY', 'DESKRES', 'DESKGRES']) assert.match(page, new RegExp(`\\blet ${v}\\b`), `${v} is the page's own`);
   // the nodes the inspector borrows from a strategy's render
   for (const cls of ['figs', 'qlinks', 'sd-actions']) assert.ok(page.includes(`class="${cls}"`), `.${cls} is rendered by the page`);
 });
@@ -127,11 +127,17 @@ test('desk skin: readiness in words comes from the page\'s own readinessShown --
   assert.equal(seen.at(-1)[0], st.readiness); assert.equal(seen.at(-1)[1], st);
   assert.deepEqual(word({ readiness: { checks: [{ label: 'feed', level: 'warn' }] } }), ['warn', '1 thing needs a look']);
   assert.deepEqual(word({ readiness: { checks: [{ label: 'a', level: 'warn' }, { label: 'b', level: 'bad' }, { label: 'c', level: 'info' }] } }), ['bad', '2 things need a look']);
-  // while the desk is not answering (the page's DESK_STALE) the last answer is old: never a stale "Ready"
-  const stale = (s) => [...toolbarWords({ window: { readinessShown: shown } }).readyWord(s, true)];
-  assert.deepEqual(stale({ readiness: { checks: [{ label: 'feed', level: 'ok' }] } }), ['', 'Checking…']);
-  assert.match(DESK_SKIN, /readyWord\(st, stale_\(\)\)/, 'the toolbar word passes the page\'s stale flag');
+  // while the page's state is old (its DESK_STALE) the last answer is not current: never a stale "Ready" (nor a mild "Checking…")
+  const stale = (s, why) => [...toolbarWords({ window: { readinessShown: shown } }).readyWord(s, true, why)];
+  const okSt = { readiness: { checks: [{ label: 'feed', level: 'ok' }] } };
+  for (const why of ['the desk is not answering', 'the desk answered HTTP 403: write guard', "the desk's status was unreadable", '', undefined])
+    assert.deepEqual(stale(okSt, why), ['bad', 'Desk not answering']);
+  assert.deepEqual(stale(null, 'the desk is not answering'), ['bad', 'Desk not answering'], 'never answered at all');
+  assert.deepEqual(stale(okSt, 'updates pause while a menu or a size edit is open'), ['', 'Updates paused'], 'only an open menu holds the page');
+  assert.match(DESK_SKIN, /readyWord\(st, stale, staleWhy_\(\)\)/, 'the toolbar word passes the page\'s stale flag and reason');
   assert.match(DESK_SKIN, /const stale_ = \(\) => \{ try \{ return DESK_STALE === true; \}/);
+  assert.match(DESK_SKIN, /const staleWhy_ = \(\) => \{ try \{ return String\(STALE_WHY \|\| ''\); \}/);
+  assert.match(read('index.html'), /DESK_STALE = true; STALE_WHY = "updates pause while a menu or a size edit is open";/, 'the page\'s pause reason, as the skin reads it');
   assert.match(DESK_SKIN, /new MutationObserver\(words\)\.observe\(pill, \{ attributes: true, attributeFilter: \['class'\] \}\)/, 'the word follows the pill going stale');
   // the inspector's row keeps its own words, from the bulb the page paints (not the toolbar's count)
   assert.match(DESK_SKIN, /const txt = lvl === 'ok' \? 'Ready to trade' : lvl === 'warn' \? 'Needs attention' : lvl === 'bad' \? 'Not ready' : 'Checking…';/);
@@ -186,6 +192,12 @@ test('desk skin: words() writes the machine chip, the readiness words and the ch
   n = wordsOn({ st: { chart_trading: { enabled: false }, accounts: acc } });
   assert.equal(n.machine.hidden, true, 'no machine value: no chip'); assert.equal(n.ctChip.hidden, true, 'chart trading off: no chip');
   assert.match(DESK_SKIN, /syncing = true;\n      try \{\n        words\(\);/, 'every sync() writes the words first, before any view can throw');
+  // the page's state is old: the toolbar word and the inspector's row say the same, whatever the bulb last said
+  n = wordsOn({ st: { ...warn }, bulbLvl: 'ok', stale: true, why: 'the desk is not answering' });
+  assert.equal(n.readyBtn.textContent, 'Desk not answering'); assert.equal(n.readyBtn.dataset.lvl, 'bad');
+  assert.equal(n.row.textContent, 'Desk not answering', 'not "Ready to trade"'); assert.equal(n.sum.dataset.lvl, 'bad');
+  n = wordsOn({ st: { ...warn }, bulbLvl: 'ok', stale: true, why: 'updates pause while a menu or a size edit is open' });
+  assert.equal(n.readyBtn.textContent, 'Updates paused'); assert.equal(n.row.textContent, 'Updates paused'); assert.equal(n.sum.dataset.lvl, '');
 });
 
 // the straddle's RR field and stop menu (desk.js rrCtl), run on small fake nodes: what a pick and a Set send

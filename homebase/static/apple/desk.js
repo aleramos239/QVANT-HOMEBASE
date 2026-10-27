@@ -102,6 +102,7 @@
     const vToday = $('#viewToday'), vStrat = $('#viewStrat'), vAct = $('#viewActivity');
     const status_ = () => { try { return ST; } catch (_) { return null; } };          // the page's own state (read only)
     const stale_ = () => { try { return DESK_STALE === true; } catch (_) { return false; } };      // the page's: ST is the last-known state
+    const staleWhy_ = () => { try { return String(STALE_WHY || ''); } catch (_) { return ''; } };      // and the page's reason why
     const archived = () => { try { return VIEW && VIEW.k === 'archive'; } catch (_) { return false; } };      // the Archive list: no strategy in the inspector
     const viewOf = () => (vStrat && !vStrat.hidden && !archived()) ? 'strat' : (vAct && !vAct.hidden) ? 'activity' : 'today';
     const fmtN = (v) => (v == null || v === '' ? '—' : String(+v === Math.round(+v) ? Math.round(+v) : +v));
@@ -230,9 +231,11 @@
     // never a guess from the address (the server's Desk can show as localhost through a tunnel). `short`: a narrow window's words
     const machineWord = (st, short) => { const m = window.HB_MACHINE ?? (st && st.machine); return m === 'mac' ? 'This Mac' : m === 'server' ? (short ? 'Server' : 'Server · Chicago') : ''; };
     // readiness as the page shows it: its own readinessShown(), the list openChecks() opens (bad or warn = needs a look). [level, words]
-    // While the desk is not answering (`stale`: the page's DESK_STALE) the last answer is old: "Checking…", never a stale "Ready".
-    const readyWord = (st, stale) => {
-      const r = !stale && st && typeof window.readinessShown === 'function' ? window.readinessShown(st.readiness, st) : null;
+    // While the page's state is old (`stale`: its DESK_STALE) the last answer is not current, never a stale "Ready": "Desk not
+    // answering", or "Updates paused" when only an open menu or size edit holds the page (`why`: its STALE_WHY says so).
+    const readyWord = (st, stale, why) => {
+      if (stale) return /^updates pause/.test(why || '') ? ['', 'Updates paused'] : ['bad', 'Desk not answering'];
+      const r = st && typeof window.readinessShown === 'function' ? window.readinessShown(st.readiness, st) : null;
       if (!r || !Array.isArray(r.checks)) return ['', 'Checking…'];
       const probs = r.checks.filter((c) => c && (c.level === 'bad' || c.level === 'warn')), n = probs.length;
       if (!n) return ['ok', 'Ready'];
@@ -267,18 +270,20 @@
           mLong.textContent = machine.title = mw; mShort.textContent = machineWord(st, true);
           machine.dataset.m = mw === 'This Mac' ? 'mac' : 'server'; machine.hidden = !mw;
         }
-        // readiness, in words (the bulb is the page's own verdict; the row opens the page's own System checks)
+        // beside the shield: how many checks need a look (or that the state is old)
+        const stale = stale_(), [wl, wt] = readyWord(st, stale, staleWhy_());
+        if (readyBtn.dataset.lvl !== wl) readyBtn.dataset.lvl = wl;
+        if (readyBtn.textContent !== wt) { readyBtn.textContent = wt; readyBtn.setAttribute('aria-label', 'Readiness: ' + wt); }
+        // the inspector's row, in words (the bulb is the page's own verdict; the row opens the page's own System checks); while the
+        // state is old, the toolbar's words -- one answer on screen
         if (bulb) {
           const lvl = bulb.classList.contains('bad') ? 'bad' : bulb.classList.contains('warn') ? 'warn' : bulb.classList.contains('ok') ? 'ok' : '';
           const txt = lvl === 'ok' ? 'Ready to trade' : lvl === 'warn' ? 'Needs attention' : lvl === 'bad' ? 'Not ready' : 'Checking…';
-          if (sum.dataset.lvl !== lvl) sum.dataset.lvl = lvl;
+          const k = stale ? wl : lvl, w = stale ? wt : txt;
+          if (sum.dataset.lvl !== k) sum.dataset.lvl = k;
           const t = $('#hbReadyTxt');
-          if (t && t.textContent !== txt) t.textContent = txt;
+          if (t && t.textContent !== w) t.textContent = w;
         }
-        // and beside the shield: how many checks need a look
-        const [lvl, txt] = readyWord(st, stale_());
-        if (readyBtn.dataset.lvl !== lvl) readyBtn.dataset.lvl = lvl;
-        if (readyBtn.textContent !== txt) { readyBtn.textContent = txt; readyBtn.setAttribute('aria-label', 'Readiness: ' + txt); }
         const cw = chartWords(st), cs = chartWords(st, true);
         if (ctLong.textContent !== cw) ctLong.textContent = cw;
         if (ctShort.textContent !== cs) ctShort.textContent = cs;
