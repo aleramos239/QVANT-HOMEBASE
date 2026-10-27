@@ -181,6 +181,20 @@ function overlayOn({ ticked, mode, gate = null, qty = 1 }) {
 }
 const texts = (box) => box.children.map((c) => [c.textContent, ...c.children.map((k) => k.textContent)].join(' '));
 
+test('5.4 run: the BUY / SELL words are the qty and accounts the click sends', () => {
+  const { ov, sent } = overlayOn({ ticked: ['live099'], mode: { mode: 'on', accounts: ['live099'] }, qty: 2 });
+  ov.paintBlock({ mode: 'on', accounts: ['live099'] });
+  assert.equal(ov.block.hidden, false);
+  assert.equal(ov.buySub.textContent, '2 NQ · …099');
+  assert.equal(ov.sellBtn.title, 'SELL 2 NQ · …099 LIVE · at market');
+  ov.trade('Buy');
+  assert.deepEqual(sent.map((o) => [o.side, o.qty, o.root, o.type]), [['Buy', 2, 'NQ', 'Market']], 'the qty on the button is the qty sent');
+  const two = overlayOn({ ticked: ['live099', 'sim047'], mode: { mode: 'on', accounts: ['live099', 'sim047'] }, qty: 3 });
+  two.ov.paintBlock({ mode: 'on', accounts: ['live099', 'sim047'] });
+  assert.equal(two.ov.buyBtn.title, 'BUY 3 NQ each · 2 accounts (1 LIVE) · at market');
+  assert.equal(two.ov.buySub.textContent, '3 NQ each · 2 accts');
+});
+
 test('5.2 run: the account spot -- "Accounts:" when it cannot trade, "Trade on: none" only while the desk trades; a chip only opens Settings › Trading', () => {
   const off = overlayOn({ ticked: ['live099'], mode: { mode: 'none', accounts: [] } });
   off.ov.paintAccts({ mode: 'none', accounts: [] });

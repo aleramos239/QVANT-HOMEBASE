@@ -597,12 +597,13 @@ function sendLabel(side, qty, root, type) {
   return [side, qty >= 1 ? String(qty) : null, root, TYPE_WORDS[type] || String(type || '').toUpperCase()].filter(Boolean).join(' ');
 }
 /* What a click on the chart's BUY / SELL or the ENTRY tag sends, in words (2026-10-26; words only -- the send reads its
-   own gate): `ids` are that gate's accounts (the chart's mode). `full` "BUY 1 NQ · …047 LIVE" (2+: "· 2 accounts
-   (1 LIVE)"), `sub` "1 NQ · …047" for under the button's side. No account: the size alone. */
+   own gate): `ids` are that gate's accounts (the chart's mode). `full` "BUY 1 NQ · …047 LIVE" (2+: "BUY 3 NQ each ·
+   2 accounts (1 LIVE)" -- the desk sends the qty to EACH account), `sub` "1 NQ · …047" for under the button's side.
+   No account: the size alone. */
 function sendTag(side, qty, root, ids, state) {
   const list = accountsOf(state), rows = idList(ids).map((id) => list.find((x) => x.id === id) || { id });
   const one = rows.length === 1 ? rows[0] : null, live = rows.filter((a) => a.env === 'live').length;
-  const size = [qty >= 1 ? String(qty) : null, root].filter(Boolean).join(' ');
+  const size = [qty >= 1 ? String(qty) : null, root, qty >= 1 && rows.length > 1 ? 'each' : null].filter(Boolean).join(' ');
   const who = one ? short(one) + (one.env === 'paper' ? '' : ` ${envChip(one.env)}`)
     : rows.length ? `${rows.length} accounts${live ? ` (${live} LIVE)` : ''}` : '';
   return {
