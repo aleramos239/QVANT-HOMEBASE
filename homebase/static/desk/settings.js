@@ -286,6 +286,44 @@ async function applyMd() {
   renderMarketData();
 }
 
+/* ---- Server updates (read-only): which commit the Chicago server runs and why a ship waits ----
+   GET /api/deploy-status reads the Mac's vpssync log; this card only shows it. It has no button: nothing here ships or
+   restarts anything. On the server's own Desk the route answers available:false and the card says so. */
+let DEPLOY_POLL = null, DEPLOY_SIG = "";
+function deployWords(d) {        // the one line first, in simple words
+  if (!d) return "Could not read it";
+  if (d.available === false) return "Not on this machine";
+  const mins = d.waiting_min;
+  const waited = mins ? ` (for ${mins >= 60 ? Math.floor(mins / 60) + " h " + (mins % 60) + " min" : mins + " min"})` : "";
+  return {shipped: "Server is up to date", waiting: "Waiting: " + d.reason + waited, failed: "Failed: " + d.reason,
+          not_set_up: "Not set up here"}[d.state] || "Unknown: " + (d.reason || "no answer");
+}
+function renderDeploy(d) {
+  const root = $("#settingsDeploy");
+  if (!root) return;
+  const sig = JSON.stringify(d);
+  if (sig === DEPLOY_SIG) return;              // unchanged: keep the open log where it is
+  DEPLOY_SIG = sig;
+  const ok = d && d.available && d.state === "shipped";
+  const row = (k, v) => `<tr><td style="padding:2px 12px 2px 0;color:var(--muted-foreground)">${k}</td><td>${esc(v)}</td></tr>`;
+  const table = d && d.available && d.main ? `<table style="font-size:12.5px;margin-top:8px">
+      ${row("This Mac's main", d.main.hash + " " + d.main.subject)}
+      ${row("Server runs", d.server ? d.server.hash : "unknown (not in the log)")}
+      ${row("Server is behind", d.ahead == null ? "unknown" : d.ahead + (d.ahead === 1 ? " commit" : " commits"))}
+      ${row("Last try", d.last_attempt || "none yet")}</table>` : "";
+  const log = d && d.log && d.log.length ? `<details style="margin-top:8px"><summary class="mcap" style="cursor:pointer">log</summary>
+      <pre style="font-size:10.5px;white-space:pre-wrap;max-height:160px;overflow:auto;margin:6px 0 0">${esc(d.log.join("\n"))}</pre></details>` : "";
+  root.innerHTML = `<div class="slabel" style="margin-top:14px">SERVER UPDATES</div>
+    <p class="wnote" style="margin-top:4px;${ok ? "" : "color:var(--foreground)"}">${esc(deployWords(d))}</p>${table}${log}`;
+}
+async function loadDeploy() {
+  if (DEMO) return;
+  try {
+    const r = await fetch("/api/deploy-status");
+    renderDeploy(r.ok ? await r.json() : null);
+  } catch (_) { renderDeploy(null); }
+}
+
 function openSettings() {
   showOverlay("settingsOverlay");
   renderSettings();   // CHART TRADING shows right away -- it never waits on the chart service
@@ -293,11 +331,16 @@ function openSettings() {
   loadChartStatus();
   clearInterval(MD_POLL);
   if (!DEMO) MD_POLL = setInterval(loadChartStatus, 2500);   // preview mode never polls :8852
+  loadDeploy();
+  clearInterval(DEPLOY_POLL);
+  DEPLOY_POLL = setInterval(loadDeploy, 60000);              // while Settings is open
 }
 function closeSettings() {
   hideOverlay("settingsOverlay");
   clearInterval(MD_POLL);
   MD_POLL = null;
+  clearInterval(DEPLOY_POLL);
+  DEPLOY_POLL = null;
 }
 $("#settingsOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeSettings();
