@@ -3,6 +3,7 @@ re-scores of saved runs and cells."""
 from __future__ import annotations
 
 import threading
+import time
 from collections import OrderedDict
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -183,7 +184,7 @@ def register(r: APIRouter, ctx) -> None:
             if test_months not in ("1", "2", "3"):
                 raise HTTPException(400, "test_months: one of 1, 2, 3 (the 1:N walk-forward ratio)")
             n = int(test_months)
-        stamp = wf_stamp(d)
+        now, stamp = time.time_ns(), wf_stamp(d)
         with wf_bytes_lock:
             hit = wf_bytes.get((wid, n))
             if hit is not None and hit[0] == stamp:
@@ -199,7 +200,7 @@ def register(r: APIRouter, ctx) -> None:
         # kept only when no file changed while it was read, none was written in the last 2 s, and no test-month read is under
         # way (its progress moves)
         if stamp is not None and wf_stamp(d) == stamp and (stamp[claim_at] is None or stamp[oos_at] is not None) \
-                and _settled(*stamp):
+                and _settled(now, *stamp):
             with wf_bytes_lock:
                 wf_bytes[(wid, n)] = (stamp, out.body)
                 wf_bytes.move_to_end((wid, n))

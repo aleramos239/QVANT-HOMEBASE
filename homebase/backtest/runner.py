@@ -97,10 +97,9 @@ def _stamp(path: Path):
 SETTLED_NS = 2_000_000_000          # an answer is kept only once its files are this old (2 s)
 
 
-def _settled(*stamps) -> bool:
-    """Every file is old enough that a later write moves its stamp, even on a filesystem whose clock ticks coarsely or reuses
-    inodes (Linux); None (no file) always is."""
-    now = time.time_ns()
+def _settled(now: int, *stamps) -> bool:
+    """Every file was 2 s old at `now` (time.time_ns() taken BEFORE the stamps): a write after its stamp then always moves
+    it, even on a filesystem whose clock ticks coarsely or reuses inodes (Linux). None (no file) always is."""
     return all(s is None or now - s[0] >= SETTLED_NS for s in stamps)
 
 
@@ -116,14 +115,14 @@ _LISTED_LOCK = threading.Lock()
 
 def _strategy_of(d: Path):
     """The strategy run dir `d`'s request names (runs_list's filter)."""
-    stamp = _stamp(d / "request.json")
+    now, stamp = time.time_ns(), _stamp(d / "request.json")
     with _LISTED_LOCK:
         hit = _REQS.get(str(d))
     if hit is not None and hit[0] == stamp:
         return hit[1]
     got = read_json(d / "request.json", None)
     sid = (got or {}).get("strategy")
-    if (got is not None or stamp is None) and _settled(stamp):
+    if (got is not None or stamp is None) and _settled(now, stamp):
         with _LISTED_LOCK:
             _REQS[str(d)] = (stamp, sid)
     return sid
@@ -131,7 +130,7 @@ def _strategy_of(d: Path):
 
 def _listed_row(d: Path) -> dict:
     """The runs_list row of run dir `d`."""
-    stamp = tuple(_stamp(d / f) for f in LISTED)
+    now, stamp = time.time_ns(), tuple(_stamp(d / f) for f in LISTED)
     with _LISTED_LOCK:
         hit = _ROWS.get(str(d))
     if hit is not None and hit[0] == stamp:
@@ -143,7 +142,7 @@ def _listed_row(d: Path) -> dict:
            "status": st.get("status"), "range": req.get("range"),
            "holdout": bool((req.get("range") or {}).get("holdout")), "trades": allc.get("trades"),
            "net_profit": allc.get("net_profit")}
-    if all(x is not None for x, s in zip(got, stamp) if s is not None) and _settled(*stamp):
+    if all(x is not None for x, s in zip(got, stamp) if s is not None) and _settled(now, *stamp):
         with _LISTED_LOCK:
             _ROWS[str(d)] = (stamp, copy.deepcopy(row))
     return row
@@ -651,7 +650,7 @@ class RunManager:
             hit = _SAME.get(key)
         if hit is not None and _same_still(cands, hit[0], hit[1] is None):
             return hit[1]
-        seen, found, clean = [], None, True
+        seen, found, clean, now = [], None, True, time.time_ns()
         for d in cands:
             stamps = (_stamp(d / "status.json"), _stamp(d / "request.json"))
             seen.append((d.name, *stamps))
@@ -664,7 +663,7 @@ class RunManager:
             if {k: v for k, v in (got or {}).items() if k not in ("id", "created")} == want:
                 found = d.name
                 break
-        if clean and _settled(*(s for _, a, b in seen for s in (a, b))):
+        if clean and _settled(now, *(s for _, a, b in seen for s in (a, b))):
             with _LISTED_LOCK:
                 _SAME[key] = (seen, found)
                 _SAME.move_to_end(key)

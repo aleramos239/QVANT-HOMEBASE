@@ -37,6 +37,7 @@ import secrets
 import subprocess
 import sys
 import threading
+import time
 from collections import deque
 from pathlib import Path
 
@@ -456,14 +457,14 @@ class GridManager:
     def _on_file(path: Path, fn):
         """fn(the JSON at `path`, {} when it does not read), kept until the file changes (its stamp, taken before the read;
         a file there that did not read, or written in the last 2 s, is never kept)."""
-        stamp, key = _stamp(path), (str(path), fn.__module__, fn.__qualname__)
+        now, stamp, key = time.time_ns(), _stamp(path), (str(path), fn.__module__, fn.__qualname__)
         with _ON_FILE_LOCK:
             hit = _ON_FILE.get(key)
         if hit is not None and hit[0] == stamp:
             return copy.deepcopy(hit[1])
         got = read_json(path, None)
         val = fn(got or {})
-        if (got is not None or stamp is None) and _settled(stamp):
+        if (got is not None or stamp is None) and _settled(now, stamp):
             with _ON_FILE_LOCK:
                 _ON_FILE[key] = (stamp, copy.deepcopy(val))
         return val
