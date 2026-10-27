@@ -23,7 +23,7 @@ _encode = json.JSONEncoder(separators=(",", ":"), ensure_ascii=False).encode   #
 async def encode_in_steps(msg: dict, room=lambda: True) -> str:
     """send_json's text of msg, byte for byte. Everything but an iterator value is made at once, when this is called
     (the writer takes the message: when send_json made it), and so is msg.tail (Big), the items that end its "bars";
-    an iterator (a history's sealed bars, wired as they are read; a scroll-back chunk's own) an item at a time, the
+    an iterator (a history's sealed bars, a scroll-back chunk's) an item at a time, the
     loop's other work let in every STEP_S while room() (the socket's queue below half full: past it the rest is made
     in one go, so what queues up meanwhile never overflows it). One json call over a 20 MB history held the loop --
     every chart on every page -- for a second or two."""
@@ -53,6 +53,15 @@ class Big(dict):
     def __init__(self, msg: dict, tail: list = ()):
         super().__init__(msg)
         self.tail = tail
+
+
+def history_message(cid: str, p: dict) -> Big:
+    """The history message of p (Stream.payload, wired in ws_endpoint as before: a bar that fails to wire answers an
+    error there). The writer makes its closed bars' text a piece at a time; the live bar (still changing) goes in its
+    tail, made with the rest when the writer takes the message, as send_json did."""
+    bars = p["bars"]
+    n = len(bars) - p["live"]
+    return Big({"type": "history", "id": cid, **p, "bars": iter(bars[:n])}, bars[n:])
 
 
 class Conn:
@@ -285,9 +294,8 @@ def register(app, *, relay, conns, status, paper, desk_fan, book, replays, hub, 
                     hub.subscribe(s, (conn, cid), bool(msg.get("flow", True)))
                     # fp / big: a chart that draws no footprint / no big prints asks for its bars without
                     # them (cell.js need()); a sub that says nothing gets both, as before
-                    p, tail = s.snapshot(bool(msg.get("fp", True)), bool(msg.get("big", True)),
-                                         bool(msg.get("flow", True)))
-                    conn.send(Big({"type": "history", "id": cid, **p}, tail))
+                    conn.send(history_message(cid, s.payload(bool(msg.get("fp", True)), bool(msg.get("big", True)),
+                                                             bool(msg.get("flow", True)))))
                     if depth is not None:
                         depth.view((conn, cid), root, conn.send, room)   # after `history`: depth follows it
                         booklive.view((conn, cid), root, conn.send, room)   # and the book flow's recent state

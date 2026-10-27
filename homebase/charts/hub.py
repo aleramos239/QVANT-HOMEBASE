@@ -173,25 +173,17 @@ class Stream:
         study's values sliced to match. A subscriber's cursor is still
         len(self.bars), so its updates continue where this ends. fp / big:
         whether the bars carry their footprint / big prints / sweeps and bubbles (Bar.wire)."""
-        p, tail = self.snapshot(fp, big, flow)
-        p["bars"] = [*p["bars"], *tail]
-        return p
-
-    def snapshot(self, fp: bool = True, big: bool = True, flow: bool = True) -> tuple[dict, list]:
-        """payload() as (it with its "bars" the closed bars only, an iterator that wires each as it is read, [the live
-        bar's wire] or [] that ends them). A closed bar is sealed (BarBuilder._close) and never changed after, so the
-        socket's writer can make their text a piece at a time (routes/ws.py encode_in_steps); the rest -- the live
-        bar, the studies, the profile -- is read now, as payload() reads it."""
         ts, live = self.tick_size, self.builder.cur
         first = max(0, len(self.bars) + (live is not None) - HISTORY_MAX)
-        closed = self.bars[first:]
-        tail = [live.wire(ts, fp, big, flow)] if live is not None else []
+        bars = [b.wire(ts, fp, big, flow) for b in self.bars[first:]]
+        if live is not None:
+            bars.append(live.wire(ts, fp, big, flow))
         studies = {k: self.values[k][first:] + ([st.preview(live)] if live is not None else [])
                    for k, st in self.studies.items()}
         return {"root": self.root, "spec": self.spec.key, "tick_size": ts, "point_value": point_value(self.root),
-                "bars": (b.wire(ts, fp, big, flow) for b in closed), "live": live is not None, "studies": studies,
+                "bars": bars, "live": live is not None, "studies": studies,
                 "profile": self.profile.value(live) if self.profile is not None else None,
-                "sessions": self.sessions, "partial": self.partial}, tail
+                "sessions": self.sessions, "partial": self.partial}
 
     def update_since(self, cursor: int, flow: bool | None = None) -> dict:
         """The bars after `cursor` and the live one. flow: with sweeps and bubbles (default: the union of the

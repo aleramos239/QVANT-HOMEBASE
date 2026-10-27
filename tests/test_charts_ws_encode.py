@@ -4,12 +4,18 @@ it), and it goes out in its place in the socket's queue."""
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import json
 import math
 
+from fastapi.testclient import TestClient
+
 import homebase.charts.routes.ws as ws_mod
-from homebase.charts.routes.ws import Big, Conn, encode_in_steps
+from homebase.charts.bars import Bar
+from homebase.charts.routes.ws import Big, Conn, encode_in_steps, history_message
+from homebase.charts.server import create_app
 from tests.test_charts_hub import D, open_stream, setup, ticks_of
+from tests.test_charts_server import archive, next_of
 
 
 def send_json_text(msg) -> str:      # starlette WebSocket.send_json
@@ -42,7 +48,7 @@ def test_encode_in_steps_is_send_json_byte_for_byte(monkeypatch):
             assert asyncio.run(encode_in_steps(sent())) == send_json_text(want), want
 
 
-def test_a_streams_snapshot_sends_its_payload(tmp_path, monkeypatch):
+def test_a_history_message_is_its_payloads_send_json_text(tmp_path, monkeypatch):
     monkeypatch.setattr(ws_mod, "STEP_S", 0.0)
     hub, today, _ = setup(tmp_path)
     hub.start_today("NQ", D, ticks_of(today[:60]), {"date": D.isoformat(), "contract": "NQZ6",
@@ -51,9 +57,40 @@ def test_a_streams_snapshot_sends_its_payload(tmp_path, monkeypatch):
     assert s.builder.cur is not None and len(s.bars) > 1      # closed bars and a live one
     for fp, big, flow in [(True, True, True), (False, True, False), (True, False, True), (False, False, False)]:
         want = send_json_text({"type": "history", "id": "c1", **s.payload(fp, big, flow)})
-        p, tail = s.snapshot(fp, big, flow)
-        assert len(tail) == 1
-        assert asyncio.run(encode_in_steps(Big({"type": "history", "id": "c1", **p}, tail))) == want
+        m = history_message("c1", s.payload(fp, big, flow))
+        assert len(m.tail) == 1                               # the live bar: made when the writer takes it
+        assert asyncio.run(encode_in_steps(m)) == want
+    p = {"bars": [{"c": 1}, {"c": 2}], "live": False}         # no live bar: every bar is a sealed one
+    m = history_message("c2", p)
+    assert m.tail == [] and asyncio.run(encode_in_steps(m)) == send_json_text({"type": "history", "id": "c2", **p})
+
+
+def test_a_closed_bar_that_fails_to_wire_answers_an_error_and_the_page_goes_on(tmp_path, monkeypatch):
+    """Bar.wire raising on a sealed bar (in ws_endpoint, as before) answers that chart an error, leaves it unsubscribed,
+    and the socket keeps serving: the next sub gets its history."""
+    orig, armed = Bar.wire, [True]
+
+    def wire(self, *a, **k):
+        if armed[0] and self.closed:
+            armed[0] = False
+            raise AttributeError("wire boom")
+        return orig(self, *a, **k)
+    monkeypatch.setattr(Bar, "wire", wire)
+    app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=50, start_et=dt.time(9, 30),
+                     state=tmp_path / "state")
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client, \
+            client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+        ws.send_json({"op": "sub", "id": "a", "root": "NQ", "spec": "time:60"})
+        assert next_of(ws, "error") == {"type": "error", "id": "a", "error": "wire boom"}
+        ws.send_json({"op": "sub", "id": "b", "root": "NQ", "spec": "time:60"})
+        seen = []
+        for _ in range(200):
+            m = ws.receive_json()
+            seen.append((m.get("type"), m.get("id")))
+            if seen[-1] == ("history", "b"):
+                break
+        assert seen[-1] == ("history", "b"), seen
+        assert ("update", "a") not in seen and ("history", "a") not in seen, seen   # "a" was left unsubscribed
 
 
 def test_all_but_the_sealed_bars_is_read_when_the_writer_takes_the_message(monkeypatch):
