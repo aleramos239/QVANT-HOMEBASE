@@ -662,12 +662,13 @@ function lineLabel(g) {
 function canDrag(g) { return g.kind !== 'position' && g.type !== 'StopLimit'; }
 /* A position's chip is just side, size and P&L ("LONG 1 · −$20", 2026-09-27: the user's call), plus "· 2 accts" when it
    merges several accounts (review of d6bdb2e: its × / exit drag acts on every one of them, so that must show); the
-   account names go in the chip's tooltip (lineTitle). Order / SL / TP lines still name theirs. */
-function lineText(g, last, tick) {
+   account names go in the chip's tooltip (lineTitle). Order / SL / TP lines still name theirs. `named` (2026-10-26): the
+   chart shows 2+ accounts, so a one-account position names its account too ("LONG 1 · +$20 · …047"). */
+function lineText(g, last, tick, named = false) {
   if (g.kind === 'order') return [lineLabel(g), whoText(g)].join(' · ');
   if (g.kind === 'position') {
     const many = new Set(g.legs.map((l) => l.who)).size > 1;
-    return [lineLabel(g), usd(linePnl(g, last)), many ? whoText(g) : null].filter(Boolean).join(' · ');
+    return [lineLabel(g), usd(linePnl(g, last)), many || named ? whoText(g) : null].filter(Boolean).join(' · ');
   }
   return [lineLabel(g), usd(linePnl(g, last)), exitTicks(g, tick), whoText(g)].filter(Boolean).join(' · ');
 }

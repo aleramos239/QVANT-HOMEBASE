@@ -318,6 +318,8 @@ class Overlay {
     const Dc = window.HBDeskClient, root = this.root;
     // every account's lines; any tradable desk account's are editable (HBTradeUI.lineMode), not only this chart's
     const groups = T.linesFor(Dc.state, root, window.HBTradeUI.editableIds(this.cell));
+    // 2+ accounts on this chart (ticked, or with lines here): every chip names its account (HBTrade.lineText `named`)
+    this.named = window.HBTradeUI.tradeOf(this.cell).accounts.length > 1 || new Set(groups.flatMap((g) => g.legs.map((l) => l.account))).size > 1;
     const busy = window.HBTradeUI.busy();
     const L = window.HBOrderPanel && window.HBOrderPanel.look ? window.HBOrderPanel.look() : { style: 0, width: 1, shade: 12 };
     const seen = new Set();
@@ -401,7 +403,7 @@ class Overlay {
 
   paint(it) {
     const Dc = window.HBDeskClient, q = Dc.quotes[this.root];
-    it.chip.text.textContent = T.lineText(it.g, q ? q.last : null, this.cell.tick);
+    it.chip.text.textContent = T.lineText(it.g, q ? q.last : null, this.cell.tick, !!this.named);
     it.chip.style.setProperty('--c', T.lineColor(it.g, this.cell.P));
     it.chip.classList.toggle('paper', !!it.g.paper);   // a PAPER account's line (Task 2): its colour comes via --c
   }

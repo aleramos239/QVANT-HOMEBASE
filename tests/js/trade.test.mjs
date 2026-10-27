@@ -305,6 +305,15 @@ test('lines no account may manage (desk down / off, replay): every account\'s li
   assert.deepEqual(T.linesFor(STATE, 'ES', []).map((g) => T.lineText(g, 6490)), ['SHORT 1 · +$500']);
 });
 
+test('5.3 lineText named: with 2+ accounts on the chart a one-account position names its account; nothing else changes', () => {
+  const [es] = T.linesFor(STATE, 'ES', []);
+  assert.equal(T.lineText(es, 6490), 'SHORT 1 · +$500', 'one account on the chart: unchanged');
+  assert.equal(T.lineText(es, 6490, 0, true), `SHORT 1 · +$500 · ${es.legs[0].who}`);
+  const lines = T.linesFor(STATE, 'NQ', []);
+  assert.deepEqual(lines.map((g) => T.lineText(g, 30910, 0, true)), lines.map((g) => T.lineText(g, 30910)),
+    'a merged position and every order / SL / TP already name theirs');
+});
+
 test('lineAccounts: every account the desk lists as tradable -- ticked on a chart or not; never an unlisted one', () => {
   const st = { accounts: [acct('sim041', 'SIM0000041', 'demo'), acct('live099', 'FAKELIVE099', 'live'),
     acct('sim047', 'SIM0000047', 'demo', { tradable: false }), acct('paper', 'PAPER', 'paper', { tradable: true })] };

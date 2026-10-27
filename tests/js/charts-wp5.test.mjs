@@ -56,3 +56,9 @@ test('5.9 Charts does not load the lens glass; the Lab still does, and the skin 
   assert.match(rd('backtest.html'), /<script src="\/static\/hb-glass\.js\?v=\d+"><\/script>/);
   assert.match(rd('apple/charts.js'), /const unlens = \(\) =>/);
 });
+
+test('5.3 the chart lines pass "2+ accounts here" into the chip text', () => {
+  const TL = rd('charts/tradelines.js');
+  assert.match(TL, /this\.named = window\.HBTradeUI\.tradeOf\(this\.cell\)\.accounts\.length > 1 \|\| new Set\(groups\.flatMap/);
+  assert.match(TL, /T\.lineText\(it\.g, q \? q\.last : null, this\.cell\.tick, !!this\.named\)/);
+});
