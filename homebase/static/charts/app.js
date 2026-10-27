@@ -2609,6 +2609,7 @@ function limitTexts(s, busyAt) {
     rec: live && rec && rec.buffered >= busyAt ? `rec ${buffered}` : '',
     title: live ? [`Market data ${s.md || ''} · ${md}/180 chart requests this hour`, rec ? `recorder ${buffered} ticks not written yet` : '']
       .filter(Boolean).join(' · ') : '',
+    recTitle: live && rec ? `Recorder: ${buffered} ticks buffered, not written yet` : '',
   };
 }
 function showStatus(s) {
@@ -2628,9 +2629,9 @@ function showStatus(s) {
   budget.textContent = lim.md;
   $('#sbMode').title = lim.title;
   budget.title = s.mode === 'live' ? `Chart requests this hour on the md login (limit 180) · ${s.clients ?? 0} page(s)` : '';
-  const recEl = $('#sbRec'), buffered = rec ? rec.buffered.toLocaleString('en-US') : '';
+  const recEl = $('#sbRec');
   recEl.textContent = lim.rec;   // W1: shortened; the tooltip says it in full
-  recEl.title = s.mode === 'live' && rec ? `Recorder: ${buffered} ticks buffered, not written yet` : '';
+  recEl.title = lim.recTitle;
   recEl.classList.toggle('warn', !!(rec && rec.buffered >= C.REC_BUSY));
   statusLine = feed.textContent;
   for (const c of cells) c.setToday(s.data && s.data.today);   // today's hours still short of their ticks: a light band

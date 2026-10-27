@@ -109,7 +109,8 @@ test('5.8 the status bar shows "md" and "rec" only near their limit; the Live to
   assert.equal(limitTexts(live(149, 0), 5000).md, '');
   assert.equal(limitTexts(live(150, 0), 5000).md, 'md 150/180', 'near the md limit it shows');
   assert.equal(limitTexts(live(12, 5000), 5000).rec, 'rec 5,000', 'at the recorder\'s amber line it shows');
-  assert.deepEqual({ ...limitTexts({ mode: 'replay', budget_hour: 170, recorder: { buffered: 9000 } }, 5000) }, { md: '', rec: '', title: '' });
+  assert.equal(calm.recTitle, 'Recorder: 1,234 ticks buffered, not written yet', 'the rec tooltip, worked out once');
+  assert.deepEqual({ ...limitTexts({ mode: 'replay', budget_hour: 170, recorder: { buffered: 9000 } }, 5000) }, { md: '', rec: '', title: '', recTitle: '' });
   assert.equal(limitTexts(live(undefined, null), 5000).title, 'Market data live · 0/180 chart requests this hour');
 });
 
