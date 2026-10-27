@@ -195,15 +195,21 @@
      run on the unseen days, and the prop sim of its build run and of that run. `res` = {unseen, prop: {build, unseen}};
      undefined while the first answer is on its way. Saved runs only: a strategy with no run on the unseen days says so. ---- */
   var RES_WAIT = "Reading…";
-  var NO_UNSEEN = "Not run on the unseen days yet. It starts by itself.";
+  var NO_UNSEEN = "Not run on the test days yet. It starts by itself.";
   // A Desk straddle (nq930, gc_nfp): its tester twin is read by hand, so nothing starts by itself and a changed Desk setting says so.
-  var NO_UNSEEN_MANUAL = "Not run on the unseen days at the Desk's setting. Run its tester twin from the Lab.";
-  var RUNNING_UNSEEN = "Reading the unseen days now. This shows here when it is done.";
-  var FAILED_UNSEEN = "The unseen-days run did not finish. Run it again from the Lab.";
+  var NO_UNSEEN_MANUAL = "Not run on the test days at the Desk's setting. Run its tester twin from the Lab.";
+  var RUNNING_UNSEEN = "Reading the test days now. This shows here when it is done.";
+  var FAILED_UNSEEN = "The test-days run did not finish. Run it again from the Lab.";
   var NO_PROP = "No prop sim: its backtest run is not saved any more.";
   // A promoted strategy's build and unseen days are the 3:1 walk-forward of the strategy as set: its in-sample months (Build) and
-  // its out-of-sample months (Unseen), in blocks (owner, 2026-10-18).
-  var WF_TITLE = "Walk-forward 3:1 · build and unseen days";
+  // its out-of-sample months (Unseen), in blocks (owner, 2026-10-18). On screen (owner 2026-10-25: in- and out-of-sample are ONLY
+  // the 3:1 blocks): the 3:1's "In-sample" and "Test months"; a record from before the 3:1 (a Desk straddle's twin) is the
+  // "Old record", its build and test days. The numbers are the same either way.
+  var WF_TITLE = "3:1 in-sample / 3:1 test months";
+  var OLD_RECORD = "Old record (before 3:1)";
+  function heads(wf, both) {
+    return (wf ? ["In-sample", "Test months"] : ["In-sample", "Test days"]).concat(both ? ["Both"] : []);
+  }
   var WF_NOTES = {
     none: "The 3:1 walk-forward has not run yet. It starts by itself.",
     pending: "Running the 3:1 walk-forward over all the data now. This shows here when it is done.",
@@ -274,24 +280,24 @@
       var at = {};
       al.days.forEach(function (d, i) { at[d] = i; });
       return {
-        title: "Walk-forward 3:1 · build and unseen days, after costs",
-        label: "Unseen (dark) · Build (light) · Both (dashed)",
+        title: WF_TITLE + ", after costs",
+        label: "Test months (dark) · In-sample (light) · Both (dashed)",
         vals: c.vals.slice(), build: cb.vals.slice(), both: al.a.map(function (v, i) { return v + al.b[i]; }),
         total: c.vals[c.vals.length - 1],
         ends: [from || DASH, to || DASH],
         days: c.days.slice(),
-        notes: c.days.map(function (d) { var i = at[d]; return "Unseen " + money(al.a[i]) + " · Build " + money(al.b[i]) + " · Both " + money(al.a[i] + al.b[i]); }),
-        aria: "Running net P&L after costs: the walk-forward's unseen months and its build months, each on the days it traded",
+        notes: c.days.map(function (d) { var i = at[d]; return "Test months " + money(al.a[i]) + " · In-sample " + money(al.b[i]) + " · Both " + money(al.a[i] + al.b[i]); }),
+        aria: "Running net P&L after costs: the 3:1 test months and the in-sample months, each on the days it traded",
       };
     }
     return {
-      title: res.walkforward === true ? "Unseen days (walk-forward 3:1), after costs" : "Unseen days, after costs",
+      title: res.walkforward === true ? "3:1 test months, after costs" : OLD_RECORD + ": test days, after costs",
       label: "Running total",
       vals: c.vals.slice(),
       total: c.vals[c.vals.length - 1],
       ends: [from || DASH, to || DASH],
       days: c.days.map(function (d) { return /^\d{4}-\d\d-\d\d$/.test(text(d)) ? text(d) : ""; }),
-      aria: "Running net P&L after costs on the unseen days, by day",
+      aria: "Running net P&L after costs on the " + (res.walkforward === true ? "3:1 test months" : "old record's test days") + ", by day",
     };
   }
   // Trades a week on average: the run's trades over its weeks (the 3:1's months interleave: months x 52/12; else its start..end days / 7).
@@ -358,15 +364,15 @@
     }
     return {
       unseen: {
-        title: wf ? WF_TITLE : bu ? "Backtest · build and unseen days" : "Unseen days (OOS)",
-        head: bu ? (bo ? ["Build", "Unseen", "Both"] : ["Build", "Unseen"]) : null,
+        title: wf ? WF_TITLE : OLD_RECORD,
+        head: bu ? heads(wf, !!bo) : null,
         rows: rows,
         note: wait ? RES_WAIT : wf ? (u ? "" : WF_NOTES[res.unseen_state] || WF_NOTES.none)
           : u ? "" : res.unseen_state === "pending" ? RUNNING_UNSEEN : res.unseen_state === "failed" ? FAILED_UNSEEN : res.manual === true ? NO_UNSEEN_MANUAL : NO_UNSEEN,
       },
       prop: {
         title: "Prop sim" + (account ? " · " + account : ""),
-        head: po ? ["Build", "Unseen", "Both"] : ["Build", "Unseen"],
+        head: heads(wf, !!po),
         rows: b || pu ? PROP_ROWS.map(function (k, i) {
           var row = { k: k, build: cb[i], unseen: cu[i] };
           if (po) row.both = co[i];
@@ -437,12 +443,12 @@
       title: text(g.name), kind: kindLabel(kind), kindNote: kindOf(kind).note, note: GROUP_NOTE,
       lead: count + (count === 1 ? " strategy" : " strategies") + " · " + kindLabel(kind),
       empty: count === 0,
-      figs: { head: wf ? ["Build", "Unseen", "Both"] : ["Build", "Unseen"],
+      figs: { head: heads(wf, wf),
         rows: b || u ? GROUP_FIG_ROWS.map(function (k, i) { var r = { k: k, build: cb[i], unseen: cu[i] }; if (wf) r.both = cbo[i]; return r; }) : [], note: note },
-      days: { title: "Unseen days traded", rows: days },
+      days: { title: wf ? "3:1 test months: days traded" : OLD_RECORD + ": days traded", rows: days },
       prop: {
         title: "Prop sim" + (account ? " · " + account : ""),
-        head: wf ? ["Build", "Unseen", "Both"] : ["Build", "Unseen"],
+        head: heads(wf, wf),
         rows: pb || pu ? want.map(function (i) { var r = { k: PROP_ROWS[i], build: pcb[i], unseen: pcu[i] }; if (wf) r.both = pcbo[i]; return r; }) : [],
         note: wait ? RES_WAIT : NO_PROP_GROUP,
       },

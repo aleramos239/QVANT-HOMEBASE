@@ -271,11 +271,11 @@ test('the research blocks: the unseen days and the prop sim, every word escaped,
   vm.runInContext(`${LABVIEW.slice(LABVIEW.indexOf('function labResHtml('), LABVIEW.indexOf('function todayLabRow('))}
     globalThis.html = labResHtml("nq_orb", "lab_nq_orb"); globalThis.none = labResHtml("nq_other", hostile);`, ctx);
   assert.match(ctx.html, /^<div class="labres" data-for="lab_nq_orb">/);
-  assert.match(ctx.html, /<div class="figs labres-unseen" data-h="Unseen days \(OOS\)"><div class="f"><div class="k">Days<\/div><div class="v mono">Jul 2025 – Oct 2026<\/div><\/div>/);
+  assert.match(ctx.html, /<div class="figs labres-unseen" data-h="Old record \(before 3:1\)"><div class="f"><div class="k">Days<\/div><div class="v mono">Jul 2025 – Oct 2026<\/div><\/div>/);
   assert.match(ctx.html, /<div class="k">Net<\/div><div class="v mono">\+\$16,342<\/div>/);
   assert.match(ctx.html, /<div class="k">Realized RR<\/div><div class="v mono">1:2\.81<\/div>/);
   assert.match(ctx.html, /<div class="k">Sharpe<\/div><div class="v mono">0\.43<\/div>/);
-  assert.match(ctx.html, /<div class="f fh"><div class="k"><\/div><div class="v mono">Build<\/div><div class="v mono">Unseen<\/div><\/div>/);
+  assert.match(ctx.html, /<div class="f fh"><div class="k"><\/div><div class="v mono">In-sample<\/div><div class="v mono">Test days<\/div><\/div>/);
   assert.match(ctx.html, /<div class="k">Passes the eval<\/div><div class="v mono">41%<\/div><div class="v mono">—<\/div>/);
   assert.doesNotMatch(ctx.html + ctx.none, /<img/);
   assert.match(ctx.html, /Prop sim · &lt;img/);
@@ -1110,17 +1110,17 @@ test('final wave I1: windowNote is the Desk\'s note as it sends it, or nothing',
   assert.equal(D.windowNote(null), '');
 });
 
-test('results: a Desk straddle sends its build run too, so the block reads Build | Unseen at the Desk\'s setting', () => {
+test('results: a Desk straddle sends its build run too, so its old record reads In-sample | Test days at the Desk\'s setting', () => {
   const run = (net) => ({ id: 'r', range: { start: '2021-09-22', end: '2025-06-30' }, net, trades: 945, win_rate: 26.6, profit_factor: 0.97, max_drawdown: -17337, rr: 2.7, sharpe: -0.1 });
   const both = D.results({ build: run(-5850), unseen: { ...run(26322), range: { start: '2025-07-01', end: '2026-10-11' } }, manual: true, prop: {} });
-  assert.equal(both.unseen.title, 'Backtest · build and unseen days');
-  assert.deepEqual(both.unseen.head, ['Build', 'Unseen']);
+  assert.equal(both.unseen.title, 'Old record (before 3:1)');
+  assert.deepEqual(both.unseen.head, ['In-sample', 'Test days']);
   assert.deepEqual(both.unseen.rows.slice(0, 2).map((r) => [r.k, r.b, r.v]), [['Days', 'Sep 2021 – Jun 2025', 'Jul 2025 – Oct 2026'], ['Net', '−$5,850', '+$26,322']]);
   assert.equal(both.unseen.note, '');
   // no unseen run at this setting: the Build column stays, the Unseen one is dashes, and the note says why
   const only = D.results({ build: run(-5850), unseen: null, unseen_state: 'none', manual: true, prop: {} });
   assert.deepEqual(only.unseen.rows.map((r) => r.v), Array(9).fill('—'));
-  assert.equal(only.unseen.note, "Not run on the unseen days at the Desk's setting. Run its tester twin from the Lab.");
+  assert.equal(only.unseen.note, "Not run on the test days at the Desk's setting. Run its tester twin from the Lab.");
   assert.equal(D.results({ unseen: null, prop: {} }).unseen.head, null, 'a Lab strategy keeps its one column');
 });
 
@@ -1128,29 +1128,29 @@ test('results: the saved run on the unseen days and the prop sim of both runs, i
   const head = { account: 'LucidFlex 50K', eval_pass_p: 0.3688, bust_p: 0.6312, median_days_to_pass: 13, funded_payout_p: 0.3326, funded_expected_cheque: 602.3 };
   const unseen = { id: 'r', range: { start: '2025-07-01', end: '2026-10-11' }, net: 16341.5, trades: 305, win_rate: 66.2, profit_factor: 1.183, max_drawdown: -12397, rr: 2.814, rr_label: '1:2.81', sharpe: 0.431 };
   const full = D.results({ unseen, prop: { build: { ...head, eval_pass_p: 0.41 }, unseen: head } });
-  assert.equal(full.unseen.title, 'Unseen days (OOS)');
+  assert.equal(full.unseen.title, 'Old record (before 3:1)');
   assert.deepEqual(full.unseen.rows.map((r) => [r.k, r.v]), [['Days', 'Jul 2025 – Oct 2026'], ['Net', '+$16,342'], ['Win rate', '66%'],
     ['Realized RR', '1:2.81'], ['Trades', '305'], ['Trades / week', '4.6'], ['Profit factor', '1.18'], ['Deepest drawdown', '−$12,397'], ['Sharpe', '0.43']]);
   assert.equal(full.unseen.note, '');
   // an older saved run has no label: the ratio is written the same way; no figures at all -> dashes
   assert.deepEqual(D.results({ unseen: { range: {}, rr: 0.5 }, prop: {} }).unseen.rows.slice(3, 4).concat(D.results({ unseen: { range: {}, rr: 0.5 }, prop: {} }).unseen.rows.slice(-1)).map((r) => r.v), ['1:0.50', '—']);
   assert.equal(full.prop.title, 'Prop sim · LucidFlex 50K');
-  assert.deepEqual(full.prop.head, ['Build', 'Unseen']);
+  assert.deepEqual(full.prop.head, ['In-sample', 'Test days']);
   assert.deepEqual(full.prop.rows.map((r) => [r.k, r.build, r.unseen]), [['Passes the eval', '41%', '37%'], ['Busts the eval', '63%', '63%'],
     ['Days to pass', '13', '13'], ['Gets a payout', '33%', '33%'], ['Expected cheque', '$602', '$602']]);
   // no run saved on the unseen days: it says so, and that column is dashes
   const build = D.results({ unseen: null, prop: { build: head, unseen: null } });
   assert.deepEqual(build.unseen.rows, []);
-  assert.equal(build.unseen.note, 'Not run on the unseen days yet. It starts by itself.');
+  assert.equal(build.unseen.note, 'Not run on the test days yet. It starts by itself.');
   const going = D.results({ unseen: null, unseen_state: 'pending', prop: { build: head, unseen: null } });
-  assert.equal(going.unseen.note, 'Reading the unseen days now. This shows here when it is done.');
+  assert.equal(going.unseen.note, 'Reading the test days now. This shows here when it is done.');
   assert.deepEqual(going.unseen.rows, []);
   assert.equal(D.results({ unseen: null, unseen_state: 'failed', prop: { build: head, unseen: null } }).unseen.note,
-    'The unseen-days run did not finish. Run it again from the Lab.');
+    'The test-days run did not finish. Run it again from the Lab.');
   assert.equal(D.results({ unseen, unseen_state: 'done', prop: { build: head, unseen: head } }).unseen.note, '', 'a result needs no note');
   // a Desk straddle (nq930, gc_nfp) is read by hand: nothing "starts by itself", and a changed Desk setting says why the run is gone
   assert.equal(D.results({ unseen: null, unseen_state: 'none', manual: true, prop: { build: head, unseen: null } }).unseen.note,
-    "Not run on the unseen days at the Desk's setting. Run its tester twin from the Lab.");
+    "Not run on the test days at the Desk's setting. Run its tester twin from the Lab.");
   assert.deepEqual(build.prop.rows.map((r) => r.unseen), ['—', '—', '—', '—', '—']);
   // the build run is gone: no prop sim to show
   const none = D.results({ unseen: null, prop: { build: null, unseen: null } });
@@ -1167,7 +1167,7 @@ test('results: the saved run on the unseen days and the prop sim of both runs, i
 
 test('curve: the unseen run\'s running total, or nothing', () => {
   const c = D.curve({ curve: { days: ['2025-07-01', '2025-07-02', '2026-10-09'], vals: [100, -40, 3249.5] } });
-  assert.deepEqual([c.title, c.vals, c.total, c.ends], ['Unseen days, after costs', [100, -40, 3249.5], 3249.5, ['Jul 2025', 'Oct 2026']]);
+  assert.deepEqual([c.title, c.vals, c.total, c.ends], ['Old record (before 3:1): test days, after costs', [100, -40, 3249.5], 3249.5, ['Jul 2025', 'Oct 2026']]);
   for (const bad of [undefined, null, {}, { curve: null }, { curve: { days: ['2025-07-01'], vals: [1] } },
     { curve: { days: ['2025-07-01', '2025-07-02'], vals: [1] } }, { curve: { days: ['2025-07-01', '2025-07-02'], vals: [1, 'x'] } }]) {
     assert.equal(D.curve(bad), null);
@@ -1200,18 +1200,21 @@ test('a group page: the combined figures, the prop rows that fit its kind, and t
   assert.equal(fu.empty, true);
 });
 
-test('a 3:1 group page (owner 2026-10-25): Build, Unseen and Both columns, and three curve lines', () => {
+test('a 3:1 group page (owner 2026-10-25): In-sample, Test months and Both columns, and three curve lines', () => {
   const side = (net, days, vals) => ({ net, trades: 2, win_rate: 50, profit_factor: 1.2, max_drawdown: -100, days: days.length,
     best_day: 1, worst_day: -1, together_days: 0, curve: { days, vals } });
   const res = { walkforward: true, members: [], left_out: [],
     build: side(300, ['2022-01-03', '2022-01-04'], [100, 300]), unseen: side(200, ['2022-04-04', '2022-04-05'], [250, 200]),
     both: side(500, ['2022-01-03', '2022-01-04', '2022-04-04', '2022-04-05'], [100, 300, 550, 500]), prop: { build: null, unseen: null, both: null } };
   const p = D.groupPage({ id: 'g4', name: 'apex 300k', kind: 'together', members: ['lab_a'] }, res);
-  assert.deepEqual(p.figs.head, ['Build', 'Unseen', 'Both']);
+  assert.deepEqual(p.figs.head, ['In-sample', 'Test months', 'Both']);
+  assert.deepEqual(p.prop.head, ['In-sample', 'Test months', 'Both']);
+  assert.equal(p.days.title, '3:1 test months: days traded');
   assert.deepEqual([p.figs.rows[0].build, p.figs.rows[0].unseen, p.figs.rows[0].both], ['+$300', '+$200', '+$500']);
-  assert.equal(p.curve.title, 'Walk-forward 3:1 · build and unseen days, after costs');
+  assert.equal(p.curve.title, '3:1 in-sample / 3:1 test months, after costs');
+  assert.equal(p.curve.label, 'Test months (dark) · In-sample (light) · Both (dashed)');
   assert.ok(Array.isArray(p.curve.build) && Array.isArray(p.curve.both) && p.curve.vals.length > 0);
-  assert.deepEqual(D.groupPage({ id: 'g1', name: 'old', kind: 'together', members: [] }, { ...res, walkforward: false }).figs.head, ['Build', 'Unseen']);
+  assert.deepEqual(D.groupPage({ id: 'g1', name: 'old', kind: 'together', members: [] }, { ...res, walkforward: false }).figs.head, ['In-sample', 'Test days']);
 });
 
 test('a group page before its first answer says so, and a hostile name or sentence is escaped', () => {
@@ -1250,8 +1253,8 @@ test('build and unseen days are the 3:1 walk-forward of the strategy as set: two
   const run = (net, start, end) => ({ range: { start, end }, net, trades: 41, win_rate: 48.8, profit_factor: 1.31, max_drawdown: -2100, rr: 3, sharpe: 0.5 });
   const done = D.results({ walkforward: true, build: run(4000, '2021-10-01', '2026-07-31'), unseen: run(1234.5, '2022-01-01', '2026-08-31'),
     unseen_state: 'done', prop: {} });
-  assert.equal(done.unseen.title, 'Walk-forward 3:1 · build and unseen days');
-  assert.deepEqual(done.unseen.head, ['Build', 'Unseen']);
+  assert.equal(done.unseen.title, '3:1 in-sample / 3:1 test months');
+  assert.deepEqual(done.unseen.head, ['In-sample', 'Test months']);
   assert.deepEqual([done.unseen.rows[0].k, done.unseen.rows[0].b, done.unseen.rows[0].v], ['Net', '+$4,000', '+$1,235']);   // no Days row: the months interleave
   assert.deepEqual(done.unseen.rows.slice(1, 3).map((r) => r.k), ['Win rate', 'Realized RR']);           // RR right under the win rate
   assert.equal(done.unseen.rows.some((r) => r.k === 'Max drawdown') && !done.unseen.rows.some((r) => r.k === 'Deepest drawdown'), true);
@@ -1259,7 +1262,7 @@ test('build and unseen days are the 3:1 walk-forward of the strategy as set: two
   assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'pending', prop: {} }).unseen.note, /^Running the 3:1 walk-forward/);
   assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'changed', prop: {} }).unseen.note, /Promote it again/);
   assert.equal(D.curve({ walkforward: true, curve: { days: ['2022-01-03', '2022-01-04'], vals: [300, 200] } }).title,
-    'Unseen days (walk-forward 3:1), after costs');
+    '3:1 test months, after costs');
 });
 
 test('the 3:1 curve: each line on its own traded days, never flat on a day it did not trade (owner 2026-10-23)', () => {
@@ -1270,9 +1273,29 @@ test('the 3:1 curve: each line on its own traded days, never flat on a day it di
   assert.deepEqual(c.build, [20, 60]);
   assert.deepEqual(c.both, [20, 120, 160, 210]);                          // a day either side traded
   assert.equal(c.total, 150);
-  assert.equal(c.notes[0], 'Unseen $100 · Build $20 · Both $120');
-  assert.equal(c.notes[1], 'Unseen $150 · Build $60 · Both $210');
+  assert.equal(c.notes[0], 'Test months $100 · In-sample $20 · Both $120');
+  assert.equal(c.notes[1], 'Test months $150 · In-sample $60 · Both $210');
   assert.equal(D.curve({ walkforward: true, curve: { days: ['2022-01-04', '2022-01-06'], vals: [100, 150] } }).build, undefined);
+});
+
+test('3.1 the card says 3:1 in-sample / 3:1 test months, or Old record (before 3:1); never Build, Unseen or OOS, and the numbers stay', () => {
+  const run = (net) => ({ range: { start: '2021-10-01', end: '2026-08-31' }, months: 45, net, trades: 41, win_rate: 48.8, profit_factor: 1.31, max_drawdown: -2100, rr: 3, sharpe: 0.5 });
+  const head = { account: 'LucidPro 50K', eval_pass_p: 0.48, bust_p: 0.52, median_days_to_pass: 3, funded_payout_p: 0.2, funded_expected_cheque: 300 };
+  const curve = { days: ['2022-01-03', '2022-01-04'], vals: [100, 250] };
+  const wf = { walkforward: true, build: { ...run(4000), curve }, unseen: { ...run(1234.5), curve }, both: run(5234.5), unseen_state: 'done',
+    curve, curve_build: curve, prop: { build: head, unseen: head, both: head } };
+  const old = { build: run(-5850), unseen: run(26322), manual: true, curve, prop: { build: head, unseen: head } };
+  const shown = (v) => JSON.stringify([v.unseen.title, v.unseen.head, v.unseen.note, v.prop.head]);
+  const said = (c) => JSON.stringify([c.title, c.label, c.notes, c.aria]);      // the words of a curve, not its data keys
+  const g = D.groupPage({ id: 'g', name: 'G', kind: 'together', members: [] }, wf);
+  const words = [shown(D.results(wf)), shown(D.results(old)), shown(D.results({ unseen: null, prop: {} })),
+    said(D.curve(wf)), said(D.curve(old)), JSON.stringify([g.figs.head, g.days.title, g.prop.head]), said(g.curve)];
+  for (const w of words) assert.doesNotMatch(w, /Build|Unseen|unseen|OOS|\bIS\b|\bcell/, w);
+  assert.equal(D.results(wf).unseen.title, '3:1 in-sample / 3:1 test months');
+  assert.equal(D.results(old).unseen.title, 'Old record (before 3:1)');
+  // the numbers under the new words are the same ones
+  const net = (v) => v.unseen.rows.find((x) => x.k === 'Net');
+  assert.deepEqual([net(D.results(wf)).full, net(D.results(old)).b, net(D.results(old)).v], [['+$4,000', '+$1,235', '+$5,235'], '−$5,850', '+$26,322']);
 });
 
 test('Trades / week: trades over the weeks of its months (3:1) or of its start..end days; dashes without either', () => {
@@ -1289,15 +1312,15 @@ test('results: the 3:1 card adds Both (Build + Unseen as one run) as a third col
   const head = { account: 'LucidPro 50K', eval_pass_p: 0.48, bust_p: 0.52, median_days_to_pass: 3, funded_payout_p: 0.2, funded_expected_cheque: 300 };
   const r = D.results({ walkforward: true, build: run(118301, -59267, 45), unseen: run(50643, -5865, 15), both: run(168944, -61000, 60),
     prop: { build: head, unseen: head, both: { ...head, eval_pass_p: 0.45 } } });
-  assert.deepEqual(r.unseen.head, ['Build', 'Unseen', 'Both']);
+  assert.deepEqual(r.unseen.head, ['In-sample', 'Test months', 'Both']);
   const net = r.unseen.rows.find((x) => x.k === 'Net'), dd = r.unseen.rows.find((x) => x.k === 'Max drawdown');
   assert.deepEqual([net.b, net.v, net.o], ['+$118k', '+$50.6k', '+$169k']);
   assert.deepEqual(net.full, ['+$118,301', '+$50,643', '+$168,944']);
   assert.deepEqual([dd.b, dd.v, dd.o], ['−$59.3k', '−$5.9k', '−$61.0k']);
-  assert.deepEqual(r.prop.head, ['Build', 'Unseen', 'Both']);
+  assert.deepEqual(r.prop.head, ['In-sample', 'Test months', 'Both']);
   assert.equal(r.prop.rows[0].both, '45%');
   // no Both from the server (an older chart service): the two columns as before
   const two = D.results({ walkforward: true, build: run(1, -1, 45), unseen: run(1, -1, 15), prop: { build: head, unseen: head } });
-  assert.deepEqual([two.unseen.head, two.prop.head], [['Build', 'Unseen'], ['Build', 'Unseen']]);
+  assert.deepEqual([two.unseen.head, two.prop.head], [['In-sample', 'Test months'], ['In-sample', 'Test months']]);
   assert.equal('o' in two.unseen.rows[0] || 'both' in two.prop.rows[0], false);
 });
