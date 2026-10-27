@@ -150,12 +150,10 @@ day state, journal).
 Both apps are viewers. The trading runs in the launchd services. Closing a
 window changes nothing.
 
-- `deploy/macapp/build_app.sh` builds the classic viewer (tabs Desk / Charts /
-  Backtest) as `~/Applications/Homebase.app`.
-- `deploy/macapp/build_app_apple.sh` builds the newer viewer (tabs Desk /
-  Charts / Lab). With no argument it builds `~/Applications/Homebase Next.app`.
-  With `--as-homebase` it installs as `Homebase.app` and keeps the classic one
-  as `Homebase Classic.app`.
+- `deploy/macapp/build_app_apple.sh --mac` builds the viewer (tabs Desk /
+  Charts / Lab) as `~/Applications/Homebase.app`. `--vps [root@host]` builds
+  `~/Applications/HOMEBASE VPS.app`, the server's Desk. `--out <path.app>`
+  makes a test build elsewhere that shares nothing with the installed app.
 
 ## Run
 

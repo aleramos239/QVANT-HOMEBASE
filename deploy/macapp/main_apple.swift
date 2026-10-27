@@ -1,25 +1,20 @@
-// Homebase.app (built by build_app_apple.sh --as-homebase; "Homebase Next.app" when built beside it) — the same VIEWER
-// as the classic one (the trading process is the launchd service; closing this
-// window changes nothing about execution), with an Apple-style window and the new design delivered as a SKIN.
+// Homebase.app (built by build_app_apple.sh --mac) — a VIEWER: the trading process is the launchd service; closing this
+// window changes nothing about execution. An Apple-style window, with the new design delivered as a SKIN.
 //
-// What differs from main.swift (the classic viewer, which is left exactly as it is):
 //  * The window has no title bar of its own: the page's toolbar IS the window's toolbar, and the traffic lights
 //    sit inside it (full-size content view). The window carries an EMPTY unified NSToolbar, which is what gives
 //    it macOS 26's toolbar-window shape (26 pt corners) and makes the system place the traffic lights itself.
 //    The toolbar's height and the lights' position are READ FROM THE SYSTEM at launch, never hard-coded.
-//    Proven with real HID events (HB_DEBUG_REAL, 2026-10-02): a click on a page button inside the strip
-//    arrives as one mousedown/mouseup/click, and a press-drag on the empty strip moves the window by exactly
-//    the pointer's travel. HB_NO_TOOLBAR=1 falls back to repositioning the lights by hand (16 pt corners).
 //  * The page follows the window's appearance (View > Appearance: Match System / Light / Dark).
 //  * The new design is a skin: /static/apple/manifest.json on the desk names, per tab, an optional start page
-//    and the stylesheets / scripts to inject at document start. The classic pages are served unchanged, so the
-//    classic app shows them exactly as before. No manifest, a broken one, or a file that does not load = this
-//    app behaves like the classic one (its own title bar, no injection): all of the skin or none of it.
+//    and the stylesheets / scripts to inject at document start. The plain pages are served unchanged. No
+//    manifest, a broken one, or a file that does not load = this app shows the plain pages (its own title bar,
+//    no injection): all of the skin or none of it.
 //  * A mousedown on the page's toolbar asks for a window drag through a message handler (a web view swallows
 //    the mouse, so the page has to ask); a double-click there does what the system setting says.
-//  * View menu: Desk / Charts / Lab (⌘1/⌘2/⌘3). Design samples open in their own window, marked "not live".
+//  * View menu: Desk / Charts / Lab (⌘1/⌘2/⌘3).
 //
-// Link handling is the classic viewer's (opus review, three-tabs): a navigation to one of the three tabs' own
+// Link handling (opus review, three-tabs): a navigation to one of the three tabs' own
 // origins switches to that tab; anything else opens in the default browser. A tab never leaves its own origin.
 //
 // Debug (never set in the installed app): HB_DEBUG_DIR=<dir> makes the app load the tabs named in
@@ -30,7 +25,9 @@
 // HOMEBASE VPS (build_app_apple.sh --vps, compiled with -D VPS; the owner, 2026-10-18): the same viewer, seeing the
 // SERVER's Homebase. The pages build their links and API calls as <same host>:8850 / :8852, so a port tunnel cannot
 // do it: this app starts an SSH SOCKS proxy to the server (Info.plist HomebaseVPSHost) and sends every page and its own
-// fetches through it, so localhost:8850 / :8852 in this app are the server's. A red "VPS" badge marks every page.
+// fetches through it, so localhost:8850 / :8852 in this app are the server's. Every page gets window.HB_MACHINE = 'server'
+// (the Mac app: 'mac'); the page's toolbar chip shows it. While the proxy comes up a small window says "Connecting to the
+// Chicago server…"; a page that does not load is covered by a plain "not reachable" line until a retry gets through.
 import Cocoa
 import WebKit
 #if VPS
@@ -70,7 +67,6 @@ struct TabSkin {
 
 struct Skin {
     var tabs: [Tab: TabSkin]
-    var samples: [(title: String, path: String)]
 }
 
 /// Where this macOS puts the traffic lights in a window with a unified toolbar, and how tall that toolbar is.
@@ -136,6 +132,13 @@ func jsString(_ s: String) -> String {
     return String(t.dropFirst().dropLast())     // ["..."] -> "..."
 }
 
+/// Which machine's Homebase this app shows: window.HB_MACHINE on every page ('server' = the Chicago VPS, 'mac' = this Mac).
+#if VPS
+let machine = "server"
+#else
+let machine = "mac"
+#endif
+
 func origin(of url: URL) -> URL {
     var c = URLComponents()
     c.scheme = url.scheme; c.host = url.host; c.port = url.port
@@ -147,13 +150,10 @@ let vpsHost = (Bundle.main.object(forInfoDictionaryKey: "HomebaseVPSHost") as? S
 let vpsPort: UInt16 = 1081            // not server-window.sh's 1080: this app owns its proxy
 let vpsProxy = ProxyConfiguration(socksv5Proxy: .hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: vpsPort)!))
 var vpsTunnel: Process?
-let vpsBadgeJS = """
-(() => { if (document.getElementById('hb-vps-badge')) return; const b = document.createElement('div'); b.id = 'hb-vps-badge';
-b.textContent = 'VPS'; b.style.cssText = 'position:fixed;right:12px;bottom:10px;z-index:2147483647;pointer-events:none;' +
-'background:#d93025;color:#fff;font:600 11px/1 -apple-system,system-ui,sans-serif;letter-spacing:.06em;padding:4px 8px;border-radius:999px';
-document.documentElement.appendChild(b);
-// Desk only on the VPS (owner, 2026-10-26): no page switcher, no "Open in the Lab" / "Show on chart" buttons
-const st = document.createElement('style'); st.textContent = '#pgSw,button[onclick*="InLab("]{display:none!important}';
+// Desk only on the VPS (owner, 2026-10-26): no page switcher, no "Open in the Lab" / "Show on chart" buttons. No pill: the
+// machine is the page's own toolbar chip (window.HB_MACHINE = 'server'); with no skin, the title bar says the app's name.
+let vpsDeskOnlyJS = """
+(() => { const st = document.createElement('style'); st.textContent = '#pgSw,button[onclick*="InLab("]{display:none!important}';
 document.documentElement.appendChild(st); })();
 """
 
@@ -181,16 +181,17 @@ func vpsEnsureTunnel() {
 }
 #endif
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler,
+                   NSMenuItemValidation {
     var window: NSWindow!
     var webViews: [Tab: WKWebView] = [:]
     var currentTab: Tab = .desk
     var skin: Skin?
     var chrome = Chrome(toolbarHeight: 52, buttonX: [20, 40, 60], buttonSize: NSSize(width: 14, height: 16), measured: false)
-    var sampleWindows: [NSWindow] = []
     var lastMouseDown: NSEvent?
-    var relayouting = false
-    var systemToolbar = false
+    var notice: (box: NSBox, label: NSTextField)?     // over the tabs while the current tab's page does not load
+    var down: Set<Tab> = []                            // the tabs whose last load failed (retrying)
+    var connecting: NSWindow?                          // VPS: "Connecting to the Chicago server…" until the window opens
 
     private let lastTabKey = "HomebaseLastTab"
     private let appName = (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? "Homebase"
@@ -206,13 +207,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         #if VPS
         // macOS 26 dark icon style darkens the bundle icon; a set image is shown as drawn (white, black house)
         if let p = Bundle.main.path(forResource: "HomebaseVPS", ofType: "icns") { NSApp.applicationIconImage = NSImage(contentsOfFile: p) }
-        vpsEnsureTunnel()
         WKWebsiteDataStore.default().proxyConfigurations = [vpsProxy]     // before any web view exists
-        Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in   // a dropped link comes back by itself
-            DispatchQueue.global().async { vpsEnsureTunnel() }
+        // the proxy comes up (up to 10 s) and the skin loads through it off the main thread; a small window says so meanwhile
+        buildMenu()     // ⌘Q works while it waits (built again, skinned or not, when the window opens)
+        let wait = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 140), styleMask: [.titled, .closable],
+                            backing: .buffered, defer: false)
+        wait.title = appName
+        wait.isReleasedWhenClosed = false
+        _ = addNotice(to: wait.contentView!, "Connecting to the Chicago server…")
+        wait.center()
+        wait.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        connecting = wait
+        DispatchQueue.global().async {
+            vpsEnsureTunnel()
+            let s = self.loadSkin()
+            DispatchQueue.main.async {
+                Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in   // a dropped link comes back by itself
+                    DispatchQueue.global().async { vpsEnsureTunnel() }
+                }
+                self.skin = s
+                self.openWindow()
+            }
         }
-        #endif
+        #else
         skin = loadSkin()
+        openWindow()
+        #endif
+    }
+
+    private func openWindow() {
         if skinned { chrome = measureChrome() }
         if env("HB_DEBUG_APPEARANCE") == "dark" { NSApp.appearance = NSAppearance(named: .darkAqua) }
         else if env("HB_DEBUG_APPEARANCE") == "light" { NSApp.appearance = NSAppearance(named: .aqua) }
@@ -232,15 +256,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             win.titlebarAppearsTransparent = true
             win.titleVisibility = .hidden
             win.isMovableByWindowBackground = false
-            if env("HB_NO_TOOLBAR") == nil {
-                // an empty unified toolbar: macOS 26's toolbar-window shape (26 pt corners), lights placed by the system
-                let tb = NSToolbar(identifier: "hb.main")
-                tb.displayMode = .iconOnly
-                win.toolbar = tb
-                win.toolbarStyle = .unified
-                win.titlebarSeparatorStyle = .none
-                systemToolbar = true
-            }
+            // an empty unified toolbar: macOS 26's toolbar-window shape (26 pt corners), lights placed by the system
+            let tb = NSToolbar(identifier: "hb.main")
+            tb.displayMode = .iconOnly
+            win.toolbar = tb
+            win.toolbarStyle = .unified
+            win.titlebarSeparatorStyle = .none
         }
         if debugDir != nil {
             if env("HB_DEBUG_OFFSCREEN") != nil { win.setFrameOrigin(NSPoint(x: -30000, y: -30000)) } else { win.center() }
@@ -249,6 +270,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             win.setFrameAutosaveName(skinned ? "HomebaseNextMain" : "HomebaseNextClassic")
         }
         window = win
+        notice = addNotice(to: win.contentView!, "")
+        notice?.box.isHidden = true
 
         NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] e in self?.lastMouseDown = e; return e }
         let nc = NotificationCenter.default
@@ -277,7 +300,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             guard let self = self else { return }
             self.showTab(startTab)
             self.window.makeKeyAndOrderFront(nil)
-            self.layoutTrafficLights()
+            self.connecting?.close()      // after the window is up: closing the last window quits
+            self.connecting = nil
         }
 
         NSApp.setActivationPolicy(.regular)
@@ -285,6 +309,81 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { true }
+
+    /// A plain sentence in the middle of a filled view: what the window shows instead of a blank page.
+    private func addNotice(to view: NSView, _ text: String) -> (box: NSBox, label: NSTextField) {
+        let box = NSBox(frame: view.bounds)
+        box.boxType = .custom
+        box.titlePosition = .noTitle
+        box.borderWidth = 0
+        box.fillColor = .windowBackgroundColor
+        box.autoresizingMask = [.width, .height]
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.alignment = .center
+        label.font = .systemFont(ofSize: 15)
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+        box.contentView!.addSubview(label)
+        NSLayoutConstraint.activate([label.centerXAnchor.constraint(equalTo: box.centerXAnchor),
+                                     label.centerYAnchor.constraint(equalTo: box.centerYAnchor),
+                                     label.widthAnchor.constraint(lessThanOrEqualToConstant: 480)])
+        view.addSubview(box)
+        return (box, label)
+    }
+
+    /// The current tab's page did not load: say so over it, plainly, until a retry gets through.
+    private func showNotice() {
+        guard let n = notice else { return }
+        n.box.isHidden = !down.contains(currentTab)
+        if n.box.isHidden { return }
+        #if VPS
+        n.label.stringValue = "The Chicago server is not reachable.\nTrying again…"
+        #else
+        n.label.stringValue = (currentTab == .desk ? "The Desk is not running on this Mac." : "Charts and the Lab are not running on this Mac.") + "\nTrying again…"
+        #endif
+        window.contentView!.addSubview(n.box, positioned: .above, relativeTo: nil)    // over the web views (added later)
+    }
+
+    // ---------------------------------------------------------------- unsaved Lab code: ⌘R, ⌘W, ⌘Q ask first
+    // A web view shows no beforeunload prompt, so the Lab's own guard never fires in the app: the app asks the Lab page
+    // (its window.hbHasUnsaved) and, when a script is edited and not saved, asks the owner natively.
+    private var leaving = false     // yes was said once: the quit that follows ⌘W does not ask again
+
+    private func askIfLabUnsaved(_ verb: String, _ go: @escaping (Bool) -> Void) {
+        guard !leaving, let lab = webViews[.lab] else { go(true); return }
+        var answered = false
+        let answer: (Bool?) -> Void = { dirty in      // nil: the page did not answer in time
+            if answered { return }
+            answered = true
+            if dirty == false { go(true); return }
+            let a = NSAlert()
+            a.messageText = dirty == true ? "A Lab script is not saved" : "The Lab did not answer"
+            a.informativeText = dirty == true ? "\(verb) anyway and lose the changes?" : "A Lab script may not be saved. \(verb) anyway?"
+            a.addButton(withTitle: "Cancel")
+            a.addButton(withTitle: verb).hasDestructiveAction = true
+            go(a.runModal() == .alertSecondButtonReturn)
+        }
+        lab.evaluateJavaScript("window.hbHasUnsaved?.() === true") { r, _ in answer((r as? Bool) == true) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { answer(nil) }    // a busy page never holds the app
+    }
+
+    func applicationShouldTerminate(_ s: NSApplication) -> NSApplication.TerminateReply {
+        if leaving || webViews[.lab] == nil { return .terminateNow }
+        askIfLabUnsaved("Quit") { [weak self] ok in
+            self?.leaving = ok
+            NSApp.reply(toApplicationShouldTerminate: ok)
+        }
+        return .terminateLater
+    }
+
+    // ⌘W and the close button: closing the window quits the app
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if leaving || webViews[.lab] == nil { return true }
+        askIfLabUnsaved("Close") { [weak self] ok in
+            if ok { self?.leaving = true; sender.close() }
+        }
+        return false
+    }
 
     #if VPS
     func applicationWillTerminate(_ n: Notification) { vpsTunnel?.terminate() }
@@ -300,9 +399,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let tabs = root["tabs"] as? [String: Any] else { return nil }
         let shared = root["shared"] as? [String: Any] ?? [:]
+        #if VPS
+        let shown: [Tab] = [.desk]      // the VPS app is the Desk only: a Charts/Lab file that fails cannot unskin it
+        #else
+        let shown = Tab.allCases
+        #endif
         // every file of every tab fetched first (one chain per server, the servers side by side), then read below in order
         var urls: [URL] = []
-        for tab in Tab.allCases {
+        for tab in shown {
             guard let t = tabs[tab.key] as? [String: Any] else { return nil }
             let base = origin(of: tab.baseURL)
             var paths: [String] = (shared["css"] as? [String] ?? []) + (t["css"] as? [String] ?? [])
@@ -321,7 +425,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             return out.joined(separator: "\n")
         }
         var result: [Tab: TabSkin] = [:]
-        for tab in Tab.allCases {
+        for tab in shown {
             guard let t = tabs[tab.key] as? [String: Any] else { return nil }
             let base = origin(of: tab.baseURL)
             let cssPaths = (shared["css"] as? [String] ?? []) + (t["css"] as? [String] ?? [])
@@ -331,11 +435,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             if let s = start, let u = URL(string: s, relativeTo: base), got(u) == nil { start = nil; return nil }
             result[tab] = TabSkin(startPath: start, css: css, js: js)
         }
-        var samples: [(String, String)] = []
-        for s in root["samples"] as? [[String: Any]] ?? [] {
-            if let t = s["title"] as? String, let u = s["url"] as? String { samples.append((t, u)) }
-        }
-        return Skin(tabs: result, samples: samples)
+        return Skin(tabs: result)
     }
 
     /// Ask the system, not a constant: a hidden window with a unified toolbar tells us the toolbar's height and
@@ -363,8 +463,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             }
         }
         // the corner radius AppKit gives a toolbar window (a private, read-only getter: asked, never set)
-        var radius: CGFloat = env("HB_NO_TOOLBAR") == nil ? 26 : 16
-        if env("HB_NO_TOOLBAR") == nil, ref.responds(to: Selector(("_cornerRadius"))),
+        var radius: CGFloat = 26
+        if ref.responds(to: Selector(("_cornerRadius"))),
            let r = (ref.value(forKey: "_cornerRadius") as? NSNumber)?.doubleValue, r >= 6, r <= 40 { radius = CGFloat(r) }
         ref.toolbar = nil
         ref.close()
@@ -375,36 +475,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         return c
     }
 
-    /// Put the traffic lights where the system puts them for a toolbar of this height. AppKit lays the title bar
-    /// out again on resize, key changes and full screen, so this is re-applied each time.
-    private func layoutTrafficLights() {
-        guard skinned, !systemToolbar, let win = window, !relayouting, !win.styleMask.contains(.fullScreen),
-              let close = win.standardWindowButton(.closeButton),
-              let titlebar = close.superview, let container = titlebar.superview else { return }
-        relayouting = true
-        defer { relayouting = false }
-        let h = chrome.toolbarHeight
-        var cf = container.frame
-        cf.size.height = h
-        cf.origin.y = win.frame.height - h
-        if container.frame != cf { container.frame = cf }
-        let kinds: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
-        for (i, kind) in kinds.enumerated() {
-            guard let b = win.standardWindowButton(kind) else { continue }
-            let o = NSPoint(x: chrome.buttonX[i], y: ((h - b.frame.height) / 2).rounded())
-            if b.frame.origin != o { b.setFrameOrigin(o) }
-        }
-    }
-
     /// Full screen has no traffic lights, and the (empty, native) toolbar would sit opaque over the page's own toolbar:
     /// the tabs and buttons were hidden under it. The page draws that band itself, so the native one steps aside
     /// while the window is full screen and comes back when it leaves.
-    func windowWillEnterFullScreen(_ n: Notification) { if systemToolbar { window.toolbar?.isVisible = false } }
-    func windowDidExitFullScreen(_ n: Notification) { if systemToolbar { window.toolbar?.isVisible = true } }
+    func windowWillEnterFullScreen(_ n: Notification) { if skinned { window.toolbar?.isVisible = false } }
+    func windowDidExitFullScreen(_ n: Notification) { if skinned { window.toolbar?.isVisible = true } }
 
     @objc private func windowChanged(_ n: Notification) {
-        layoutTrafficLights()
-        DispatchQueue.main.async { [weak self] in self?.layoutTrafficLights() }
         guard skinned else { return }
         let full = window.styleMask.contains(.fullScreen)
         let key = window.isKeyWindow
@@ -439,8 +516,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         """
     }
 
+    /// Every load and every ⌘R (removeAllUserScripts wipes them all): the machine first, skinned or not -- the page's
+    /// machine chip and its words read window.HB_MACHINE -- and the VPS app's Desk-only style.
     private func installScripts(_ controller: WKUserContentController, tab: Tab) {
         controller.removeAllUserScripts()
+        controller.addUserScript(WKUserScript(source: "window.HB_MACHINE='\(machine)';", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        #if VPS
+        controller.addUserScript(WKUserScript(source: vpsDeskOnlyJS, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        #endif
         guard let s = skin?.tabs[tab] else { return }
         controller.addUserScript(WKUserScript(source: startScript(for: tab), injectionTime: .atDocumentStart, forMainFrameOnly: true))
         if !s.js.isEmpty {
@@ -455,14 +538,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     }
 
     // ---------------------------------------------------------------- tabs: lazy web views on one content view
-    private func webView(for tab: Tab) -> WKWebView {
-        if let existing = webViews[tab] { return existing }
+    /// `fragment`: a link's #part (the Lab's "On the Desk" is <desk>/#lab=<name>): set on an open tab, kept on a new one.
+    private func webView(for tab: Tab, fragment: String? = nil) -> WKWebView {
+        if let existing = webViews[tab] {
+            if let f = fragment { existing.evaluateJavaScript("location.hash=\(jsString("#" + f))", completionHandler: nil) }
+            return existing
+        }
         let config = WKWebViewConfiguration()
         config.userContentController.add(self, name: "hb")
         installScripts(config.userContentController, tab: tab)
-        #if VPS
-        config.userContentController.addUserScript(WKUserScript(source: vpsBadgeJS, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        #endif
         let wv = WKWebView(frame: window.contentView!.bounds, configuration: config)
         wv.autoresizingMask = [.width, .height]
         wv.navigationDelegate = self
@@ -475,7 +559,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         wv.isHidden = true
         window.contentView!.addSubview(wv)
         webViews[tab] = wv
-        wv.load(URLRequest(url: startURL(for: tab)))
+        var start = URLComponents(url: startURL(for: tab), resolvingAgainstBaseURL: true)
+        if let f = fragment { start?.fragment = f }
+        wv.load(URLRequest(url: start?.url ?? startURL(for: tab)))
         return wv
     }
 
@@ -483,16 +569,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         webViews.first(where: { $0.value === webView })?.key
     }
 
-    func showTab(_ tab: Tab) {
+    func showTab(_ tab: Tab, fragment: String? = nil) {
         #if VPS
         if tab != .desk { return }      // the VPS app is the Desk only (owner, 2026-10-26); Charts and Lab live on the Mac
         #endif
-        let target = webView(for: tab)   // creates + starts loading on first visit
+        let target = webView(for: tab, fragment: fragment)   // creates + starts loading on first visit
         for (t, v) in webViews { v.isHidden = (t != tab) }
         currentTab = tab
         if debugDir == nil { UserDefaults.standard.set(tab.rawValue, forKey: lastTabKey) }
         window.makeFirstResponder(target)
-        layoutTrafficLights()
+        showNotice()
     }
 
     // ---------------------------------------------------------------- the page asks for the window
@@ -500,7 +586,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         guard let body = m.body as? [String: Any], let op = body["op"] as? String else { return }
         switch op {
         case "drag":
-            if debugDir != nil { debugDragRequests += 1; if env("HB_DEBUG_REAL") == nil { return } }
+            if debugDir != nil { debugDragRequests += 1; return }
             if let e = lastMouseDown, e.window === window, ProcessInfo.processInfo.systemUptime - e.timestamp < 0.6 {
                 window.performDrag(with: e)
             }
@@ -511,8 +597,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             case "None": break
             default: window.performZoom(nil)
             }
-        case "tab":
-            if let k = body["tab"] as? String, let t = Tab.allCases.first(where: { $0.key == k }) { showTab(t) }
         default: break
         }
     }
@@ -532,13 +616,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         for item in sender.menu?.items ?? [] { item.state = item === sender ? .on : .off }
     }
 
+    /// Charts has no sidebar: its Toggle Sidebar is greyed out there. Before the window opens (VPS: "Connecting…")
+    /// every item of ours is greyed out (Reload, Desk): they need the window. Quit and Hide are the app's own.
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        window != nil
+            && !(item.action == #selector(pageCommand(_:)) && item.representedObject as? String == "sidebar" && currentTab == .charts)
+    }
+
     /// A View-menu command the page carries out (toggle the sidebar / the inspector): the page owns its layout.
     @objc private func pageCommand(_ sender: NSMenuItem) {
         guard let name = sender.representedObject as? String, let wv = webViews[currentTab] else { return }
         wv.evaluateJavaScript("window.HBApple&&HBApple.command&&HBApple.command(\(jsString(name)))", completionHandler: nil)
     }
 
-    // ---------------------------------------------------------------- link interception (the classic viewer's rule)
+    // ---------------------------------------------------------------- link interception
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard navigationAction.targetFrame?.isMainFrame == true,
@@ -549,7 +640,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         if let target = tabFor(url: url) {
             if target != sourceTab {
                 decisionHandler(.cancel)
-                showTab(target)
+                showTab(target, fragment: target == .desk ? url.fragment(percentEncoded: false) : nil)   // the Desk opens the Lab strategy the link names
             } else {
                 decisionHandler(.allow)
             }
@@ -566,6 +657,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             if let target = tabFor(url: url) { showTab(target) } else { openExternal(url) }
         }
         return nil
+    }
+
+    // the page's alert() and confirm(): native panels (without them a web view drops alert and answers confirm "no")
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping () -> Void) {
+        let a = NSAlert()
+        a.messageText = message
+        a.runModal()
+        completionHandler()
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping (Bool) -> Void) {
+        let a = NSAlert()
+        a.messageText = message
+        a.addButton(withTitle: "OK")
+        a.addButton(withTitle: "Cancel")
+        completionHandler(a.runModal() == .alertFirstButtonReturn)
     }
 
     /// http/https only: a page this viewer merely navigated to must never launch a local file or another app.
@@ -587,10 +696,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     }
 
     // service mid-restart? retry until that tab's page answers -- per tab, so one tab's outage never touches another's
-    func webView(_ w: WKWebView, didFail n: WKNavigation!, withError e: Error) { retry(w) }
-    func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError e: Error) { retry(w) }
-    private func retry(_ w: WKWebView) {
+    func webView(_ w: WKWebView, didFail n: WKNavigation!, withError e: Error) { retry(w, e) }
+    func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError e: Error) { retry(w, e) }
+    private func retry(_ w: WKWebView, _ e: Error) {
         guard let tab = tab(for: w) else { return }
+        let err = e as NSError      // a cancelled load (another one took its place) is not a page that is down
+        if !(err.domain == NSURLErrorDomain && err.code == NSURLErrorCancelled) && !(err.domain == "WebKitErrorDomain" && err.code == 102) {
+            down.insert(tab)
+            showNotice()
+        }
         if debugDir != nil { debugLog.append("load failed: \(tab.key)") }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self, weak w] in
             guard let self = self else { return }
@@ -599,24 +713,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     }
 
     func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
+        if let t = tab(for: w) { down.remove(t) }
+        showNotice()
         windowChanged(Notification(name: NSWindow.didBecomeKeyNotification))
         guard debugDir != nil, let tab = tab(for: w), debugQueue.first == tab else { return }
-        if env("HB_DEBUG_ROUTED") != nil { NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil) }
         let wait = Double(env("HB_DEBUG_WAIT") ?? "4") ?? 4
         DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in self?.debugCapture(tab) }
     }
 
     // ⌘R: the skin's files and the CURRENT tab's page, both from the server, never from the cache
     @objc func reloadPage() {
-        let was = skinned
-        skin = loadSkin()
-        if skinned != was {
-            // the window's own style depends on whether there is a skin: say so instead of half-switching
+        if currentTab != .lab { reloadNow(); return }    // only the current tab's page is reloaded
+        askIfLabUnsaved("Reload") { [weak self] ok in if ok { self?.reloadNow() } }
+    }
+
+    private func reloadNow() {
+        // the window's own style depends on whether there is a skin: never half-switch. A failed reload (a service
+        // restarting) keeps the design already loaded; a design back after an unskinned launch waits for a reopen.
+        let old = skin, fresh = loadSkin()
+        skin = old == nil ? nil : fresh ?? old
+        if (old == nil) != (fresh == nil) {
             let a = NSAlert()
-            a.messageText = skinned ? "The new design is available again" : "The new design could not be loaded"
-            a.informativeText = "Quit and reopen \(appName) to switch."
+            a.messageText = fresh == nil ? "The new design could not be reloaded" : "The new design is available again"
+            a.informativeText = fresh == nil ? "The one already loaded is kept." : "Quit and reopen \(appName) to switch."
             a.runModal()
-            skin = was ? skin : nil
         }
         for (t, v) in webViews { installScripts(v.configuration.userContentController, tab: t) }
         webViews[currentTab]?.reloadFromOrigin()
@@ -624,32 +744,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
 
     @objc private func selectTabFromMenu(_ sender: NSMenuItem) {
         if let tab = Tab(rawValue: sender.tag) { showTab(tab) }
-    }
-
-    @objc private func openClassic() {
-        // installed as "Homebase", the old viewer is kept as "Homebase Classic"; beside "Homebase Next" it is "Homebase"
-        let apps = NSHomeDirectory() + "/Applications/"
-        for name in ["Homebase Classic.app", "Homebase.app"] where apps + name != Bundle.main.bundlePath && FileManager.default.fileExists(atPath: apps + name) {
-            NSWorkspace.shared.open(URL(fileURLWithPath: apps + name))
-            return
-        }
-    }
-
-    // ---------------------------------------------------------------- design samples: their own window, never a tab
-    @objc private func openSample(_ sender: NSMenuItem) {
-        guard let s = skin?.samples, sender.tag < s.count,
-              let url = URL(string: s[sender.tag].path, relativeTo: origin(of: Tab.desk.baseURL)) else { return }
-        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 900),
-                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        win.title = "Sample (not live): " + s[sender.tag].title
-        win.isReleasedWhenClosed = false
-        let wv = WKWebView(frame: win.contentView!.bounds, configuration: WKWebViewConfiguration())
-        wv.autoresizingMask = [.width, .height]
-        win.contentView!.addSubview(wv)
-        wv.load(URLRequest(url: url.absoluteURL))
-        win.center()
-        win.makeKeyAndOrderFront(nil)
-        sampleWindows.append(win)
     }
 
     private func buildMenu() {
@@ -661,9 +755,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         let reload = NSMenuItem(title: "Reload", action: #selector(reloadPage), keyEquivalent: "r")
         reload.target = self
         appMenu.addItem(reload)
-        let classic = NSMenuItem(title: "Open Classic Homebase", action: #selector(openClassic), keyEquivalent: "")
-        classic.target = self
-        appMenu.addItem(classic)
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "Hide \(appName)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(withTitle: "Quit \(appName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -692,19 +783,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             item.target = self
             item.tag = tab.rawValue
             viewMenu.addItem(item)
-        }
-        if let samples = skin?.samples, !samples.isEmpty {
-            viewMenu.addItem(NSMenuItem.separator())
-            let sItem = NSMenuItem(title: "Design Samples", action: nil, keyEquivalent: "")
-            let sMenu = NSMenu(title: "Design Samples")
-            for (i, s) in samples.enumerated() {
-                let it = NSMenuItem(title: s.title, action: #selector(openSample(_:)), keyEquivalent: "")
-                it.target = self
-                it.tag = i
-                sMenu.addItem(it)
-            }
-            sItem.submenu = sMenu
-            viewMenu.addItem(sItem)
         }
         if skinned {
             viewMenu.addItem(NSMenuItem.separator())
@@ -773,19 +851,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
                     if type == .leftMouseDown { wv.mouseDown(with: ev) } else { wv.mouseUp(with: ev) }
                 }
             }
-            // ...and the same through AppKit's own routing (NSApp.sendEvent -> NSWindow -> hit test), 40% across
-            if env("HB_DEBUG_ROUTED") != nil {
-                self.debugLog.append("key=\(self.window.isKeyWindow) active=\(NSApp.isActive) visible=\(self.window.isVisible)")
-                // a control point in the content first (must arrive), then the toolbar strip
-                for q in [NSPoint(x: self.window.frame.width * 0.6, y: self.window.frame.height - 300), NSPoint(x: self.window.frame.width * 0.4, y: p.y)] {
-                    for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-                        if let ev = NSEvent.mouseEvent(with: type, location: q, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                                                       windowNumber: self.window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1) {
-                            NSApp.sendEvent(ev)
-                        }
-                    }
-                }
-            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 let probe = """
                 JSON.stringify({ua:navigator.userAgent,inner:[innerWidth,innerHeight],dpr:devicePixelRatio,cls:document.documentElement.className,
@@ -830,83 +895,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
                 }
             }
         }
-        let afterJS: () -> Void = { [weak self] in
-            if env("HB_DEBUG_REAL") != nil { self?.realEventTest(wv) { finish() } } else { finish() }
-        }
         if let path = env("HB_DEBUG_JS"), let js = try? String(contentsOfFile: path, encoding: .utf8) {
             wv.evaluateJavaScript(js) { _, _ in
-                DispatchQueue.main.asyncAfter(deadline: .now() + (Double(env("HB_DEBUG_JSWAIT") ?? "1.5") ?? 1.5)) { afterJS() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + (Double(env("HB_DEBUG_JSWAIT") ?? "1.5") ?? 1.5)) { finish() }
             }
         } else {
-            afterJS()
-        }
-    }
-
-    // ---------------------------------------------------------------- debug: REAL mouse events (HB_DEBUG_REAL)
-    // Posts genuine HID mouse events (the same path a hand on the trackpad takes, WindowServer included) at this
-    // window only: every event is preceded by a check that the topmost window under the point is THIS window, and
-    // the run stops if it is not. The pointer is put back where it was. Used once, on a throwaway page, to prove
-    // that a click in the toolbar strip reaches the page and that a drag there moves the window.
-    private func realEventTest(_ wv: WKWebView, done: @escaping () -> Void) {
-        NSApp.activate(ignoringOtherApps: true)
-        window.orderFrontRegardless()
-        window.makeKey()
-        let screenH = NSScreen.screens.first?.frame.height ?? 0
-        let home = CGEvent(source: nil)?.location ?? .zero
-        let src = CGEventSource(stateID: .hidSystemState)
-        func mine(_ p: NSPoint) -> Bool { NSWindow.windowNumber(at: p, belowWindowWithWindowNumber: 0) == window.windowNumber }
-        func post(_ type: CGEventType, _ p: NSPoint) -> Bool {
-            guard mine(p) else { debugLog.append("ABORT: another window is on top at \(Int(p.x)),\(Int(p.y))"); return false }
-            CGEvent(mouseEventSource: src, mouseType: type, mouseCursorPosition: CGPoint(x: p.x, y: screenH - p.y), mouseButton: .left)?.post(tap: .cghidEventTap)
-            return true
-        }
-        func after(_ t: Double, _ f: @escaping () -> Void) { DispatchQueue.main.asyncAfter(deadline: .now() + t, execute: f) }
-        let finishUp: () -> Void = {
-            CGWarpMouseCursorPosition(home)
-            after(0.4) { done() }
-        }
-        after(0.8) { [self] in
-            debugLog.append("real: key=\(window.isKeyWindow) active=\(NSApp.isActive) frame=\(window.frame)")
-            wv.evaluateJavaScript("(function(){var b=document.querySelector('[data-hb-realtest]');if(!b)return null;var r=b.getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2];})()") { [self] v, _ in
-                let f = window.frame
-                // 1. a click on a page button that sits in the toolbar strip
-                var steps: [(Double, () -> Bool)] = []
-                if let a = v as? [Double], a.count == 2 {
-                    let b = NSPoint(x: f.minX + a[0], y: f.maxY - a[1])
-                    steps.append((0.05, { post(.mouseMoved, b) }))
-                    steps.append((0.25, { post(.leftMouseDown, b) }))
-                    steps.append((0.08, { post(.leftMouseUp, b) }))
-                } else { debugLog.append("real: no [data-hb-realtest] button") }
-                // 2. a press-drag-release on the empty part of the strip: the window should move by the same amount
-                let s0 = NSPoint(x: f.minX + f.width * 0.62, y: f.maxY - chrome.toolbarHeight / 2)
-                steps.append((0.5, { post(.mouseMoved, s0) }))
-                steps.append((0.25, { post(.leftMouseDown, s0) }))
-                for i in 1...12 {
-                    let q = NSPoint(x: s0.x + CGFloat(i) * 5, y: s0.y - CGFloat(i) * 3)
-                    steps.append((0.03, {
-                        // while a window drag is in flight the window follows the pointer, so the point stays inside it
-                        CGEvent(mouseEventSource: src, mouseType: .leftMouseDragged, mouseCursorPosition: CGPoint(x: q.x, y: screenH - q.y), mouseButton: .left)?.post(tap: .cghidEventTap)
-                        return true
-                    }))
-                }
-                let s1 = NSPoint(x: s0.x + 60, y: s0.y - 36)
-                steps.append((0.15, {
-                    CGEvent(mouseEventSource: src, mouseType: .leftMouseUp, mouseCursorPosition: CGPoint(x: s1.x, y: screenH - s1.y), mouseButton: .left)?.post(tap: .cghidEventTap)
-                    return true
-                }))
-                func run(_ i: Int) {
-                    if i >= steps.count {
-                        after(0.6) { [self] in
-                            let g = window.frame
-                            debugLog.append("real: window moved by \(Int(g.minX - f.minX)),\(Int(g.minY - f.minY)) (asked 60,-36)")
-                            finishUp()
-                        }
-                        return
-                    }
-                    after(steps[i].0) { if steps[i].1() { run(i + 1) } else { finishUp() } }
-                }
-                run(0)
-            }
+            finish()
         }
     }
 }
