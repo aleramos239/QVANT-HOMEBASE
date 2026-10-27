@@ -11,7 +11,7 @@ const fresh = () => M.builtins(M.createRegistry());
 const noop = () => {};
 
 test('no drawings and no indicators: Reset, Copy price, Settings, each in its own section', () => {
-  assert.deepEqual(M.SECTIONS, ['view', 'copy', 'trading', 'remove', 'settings']);
+  assert.deepEqual(M.SECTIONS, ['view', 'copy', 'trading', 'remove', 'settings', 'last']);   // 'last': Reverse (2026-10-26)
   assert.deepEqual(texts(fresh().items(CTX)), ['Reset chart view', '—', 'Copy price 30,878.00', '—', 'Settings…']);
 });
 

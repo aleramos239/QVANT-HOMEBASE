@@ -80,3 +80,20 @@ test('5.2 the account spot\'s chips open this chart\'s Settings › Trading and 
   assert.doesNotMatch(body, /toggleAccount|setCellTrade|placeOrder|send\(/, 'a chip never ticks an account or sends');
   assert.match(rd('charts/app.js'), /^function chartSettings\(c = cur\(\), tab = null\)/m);
 });
+
+test('5.5 Fill quality: its tab shows only while the desk runs one of its bots; the code and its tab stay', () => {
+  const PANEL = rd('charts/panel.js');
+  assert.match(PANEL, /addTab\(\{ id: 'fillq', label: 'Fill quality', render: renderFillQuality \}\)/, 'still registered');
+  const run = (state, active = 'fillq', open = true) => {
+    const tabs = [{ id: 'positions', btn: { hidden: false } }, { id: 'fillq', btn: { hidden: false } }];
+    const ctx = vm.createContext({ tabs, state, renders: 0, bars: 0, isOpen: open, activeId: active });
+    vm.runInContext(`const BOT_KEYS = ['nq930']; const D = () => ({ state });
+      function renderTabsBar() { bars++; } function renderActive() { renders++; }
+      ${lift(PANEL, 'fillqLive')}${lift(PANEL, 'paintFillq')} paintFillq();`, ctx);
+    return { hidden: tabs[1].btn.hidden, active: ctx.activeId, renders: ctx.renders };
+  };
+  assert.deepEqual(run({ bot: { strategies: {} } }), { hidden: true, active: 'positions', renders: 1 }, 'no bot: hidden, the panel moves off it');
+  assert.deepEqual(run(null), { hidden: true, active: 'positions', renders: 1 }, 'no desk yet: hidden');
+  assert.deepEqual(run({ bot: { strategies: { gc_nfpcpi: {} } } }, 'positions'), { hidden: true, active: 'positions', renders: 0 });
+  assert.deepEqual(run({ bot: { strategies: { nq930: {} } } }), { hidden: false, active: 'fillq', renders: 0 }, 'its bot runs: shown');
+});

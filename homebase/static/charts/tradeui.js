@@ -574,11 +574,12 @@ function registerChartMenuTrading() {
           run: () => placeOrder({ cell: ctx.cell, root: ctx.root, side, type, price, qty }) });
       }
     }
-    out.push({ text: `Cancel all orders (${ctx.root})`, run: () => symbolAction(ctx.cell, 'cancel-symbol', ctx.root) },
-      flatten,
-      { text: `Reverse ${ctx.root}`, run: () => symbolAction(ctx.cell, 'reverse', ctx.root) });
+    out.push({ text: `Cancel all orders (${ctx.root})`, run: () => symbolAction(ctx.cell, 'cancel-symbol', ctx.root) }, flatten);
     return out;
   });
+  // Reverse (2026-10-26, O14: kept): the same gate and the same confirm as before, moved to the bottom of the menu
+  window.HBChartMenu.register('last', (ctx) => (effectiveMode(ctx.cell).mode !== 'on' || flatBusy() || busy() ? []
+    : [{ text: `Reverse ${ctx.root}`, run: () => symbolAction(ctx.cell, 'reverse', ctx.root) }]));
 }
 
 /* ---- a replay's end (fix round 1, Important 2) ----

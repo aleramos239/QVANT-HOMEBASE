@@ -51,7 +51,9 @@ const page = {
   setDialogClose() {}, closeDialog() {}, deskUrl: () => 'http://127.0.0.1:8850/', dialogOpen: () => false,
 };
 
-global.window = { HBTrade: T, HBReplay: R, HBDeskClient: desk, HBIcons: {}, HBChartMenu: { register() {} } };
+const CM = require('../../homebase/static/charts/chartmenu.js');
+const MENU = CM.builtins(CM.createRegistry());   // the real chart menu registry: tradeui registers its rows into it
+global.window = { HBTrade: T, HBReplay: R, HBDeskClient: desk, HBIcons: {}, HBChartMenu: MENU };
 global.document = { getElementById: () => null, createElement: (t) => new El(t), activeElement: null };
 require('../../homebase/static/charts/tradeui.js');
 require('../../homebase/static/charts/replayui.js');
@@ -671,4 +673,23 @@ test('fast-paper: the order in flight names its button ("sending") from the clic
     unsub();
     Object.assign(desk.prefs, { oneClickChart: undefined, oneClickPanel: undefined });
   }
+});
+
+test('5.5 the chart menu: Reverse is the last row, behind its own divider after Settings, and it still always asks first', async () => {
+  reset();
+  const c = chart(['sim041']);
+  const ctx = { cell: c, root: 'NQ', price: null, tick: 0.25, nDrawings: 0, nIndicators: 0 };
+  const rows = MENU.items(ctx).map((x) => (x.sep ? '—' : x.text));
+  assert.deepEqual(rows, ['Reset chart view', '—', 'Cancel all orders (NQ)', 'Flatten NQ', '—', 'Settings…', '—', 'Reverse NQ']);
+  const rev = MENU.items(ctx).find((x) => x.text === 'Reverse NQ');
+  assert.equal(rev.section, 'last');
+  rev.run(ctx);
+  await flush();
+  assert.equal(desk.sent.length, 0, 'one-click on: Reverse still opens its confirm and sends nothing yet');
+  assert.equal(dialogs.length, 1);
+  clickPrimary('Reverse');
+  await flush();
+  assert.deepEqual(desk.sent.map((x) => [x.action, x.body.accounts, x.body.root]), [['reverse', ['sim041'], 'NQ']]);
+  // not tradable here (no accounts): no trading rows at all, Reverse included
+  assert.deepEqual(MENU.items({ ...ctx, cell: chart([]) }).map((x) => (x.sep ? '—' : x.text)), ['Reset chart view', '—', 'Settings…']);
 });

@@ -20,8 +20,9 @@
 const Cat = (typeof window !== 'undefined' && window.HBCatalog) || (typeof require === 'function' ? require('./catalog.js') : null);
 
 /* The menu's sections, top to bottom, with a divider between two that have items. 'trading' stays empty until
-   the chart-trading build registers its items. */
-const SECTIONS = ['view', 'copy', 'trading', 'remove', 'settings'];
+   the chart-trading build registers its items. 'last' (2026-10-26): the riskiest row, Reverse, at the very bottom
+   behind its own divider. */
+const SECTIONS = ['view', 'copy', 'trading', 'remove', 'settings', 'last'];
 const SEP = Object.freeze({ sep: true });
 
 function roundTick(p, tick) { return tick > 0 ? +(Math.round(p / tick) * tick).toFixed(Cat.decimals(tick)) : p; }
