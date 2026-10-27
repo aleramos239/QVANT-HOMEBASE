@@ -696,6 +696,7 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .tl-be:hover:not(:disabled) { background: var(--hover); }
 .tl-chip.bot .tl-text { background: var(--panel); color: var(--c); cursor: default; }
 .tl-chip.ghost { pointer-events: none; opacity: .92; }
+.tl-chip.gone { opacity: .6; }   /* 5.12: the desk said its order is not working (display only) */
 .tl-chip.ghost.bad .tl-text { background: var(--panel); color: var(--c); text-decoration: line-through; }   /* refused (marketable, or the position already has that exit): won't send */
 
 /* ---- the chart's algo (Task 3): the legend badge -- bot icon, name, state pill, today's P&L, Kill ---- */

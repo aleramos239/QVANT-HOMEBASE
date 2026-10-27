@@ -1894,3 +1894,24 @@ test('splitOrder: the partial take profit as two brackets with the same stop', (
   assert.equal(T.splitOrder({ ...b, tp_price: undefined }, { qty: 1, tp: 30920 }), null, 'no TP: nothing to split');
   assert.match(T.splitNote(b, { qty: 1, tp: 30920 }, 0.25), /1 at TP1 30,920\.00 · 2 at TP 30,940\.00/);
 });
+
+/* WP5 5.12 (2026-10-27): a line the desk said is "not working": its keys, the grey, display only. */
+test('5.12 notWorkingKeys / lineGone / lineColor: the refused order\'s line greys; nothing else reads it', () => {
+  const nw = (action, body, data) => T.notWorkingKeys(action, body, data);
+  const body = { client_id: 'c', account: 'sim041', order_id: '7', price: 1 };
+  assert.deepEqual(nw('modify', body, { results: { sim041: { ok: false, error: 'order 7 is not working on SIM0000041' } } }),
+    { gone: ['sim041:7'], ok: [] });
+  assert.deepEqual(nw('cancel', body, { results: { sim041: { ok: true, order_id: '7' } } }), { gone: [], ok: ['sim041:7'] });
+  assert.deepEqual(nw('modify', body, { results: { sim041: { ok: false, error: 'too fast' } } }), { gone: [], ok: [] });
+  for (const [a, b, d] of [['order', body, { results: { sim041: { ok: false, error: 'order 7 is not working on X' } } }],
+    ['modify', null, { results: {} }], ['modify', { account: 'sim041' }, { results: {} }], ['modify', body, null], ['modify', body, { detail: 'x' }]]) {
+    assert.deepEqual(nw(a, b, d), { gone: [], ok: [] });
+  }
+  const g = { kind: 'sl', side: 'Sell', legs: [{ account: 'sim041', order_id: '7' }, { account: 'sim099', order_id: '8' }] };
+  assert.equal(T.lineGone(g, new Set(['sim041:7'])), false, 'one leg still working: not grey');
+  assert.equal(T.lineGone(g, new Set(['sim041:7', 'sim099:8'])), true);
+  assert.equal(T.lineGone({ kind: 'position', legs: [{ account: 'sim041', order_id: '7' }] }, new Set(['sim041:7'])), false, 'a position never');
+  const P = { up: 'U', down: 'D', accent: 'A', text2: 'G', paper: 'P' };
+  assert.equal(T.lineColor({ ...g, gone: true }, P), 'G');
+  assert.equal(T.lineColor(g, P), 'D', 'unmarked: its own colour');
+});

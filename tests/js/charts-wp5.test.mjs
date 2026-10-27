@@ -139,3 +139,11 @@ test('5.11 the tab menu: Close leads, Delete is last behind a divider and still 
   assert.ok(del.indexOf("method: 'DELETE'") > del.indexOf('del.onclick'), 'the DELETE is sent only from the dialog\'s Delete button');
   assert.doesNotMatch(close, /fetch|DELETE/, 'closing a tab never touches the server copy');
 });
+
+test('5.12 the chart lines read the desk\'s marks for display only: grey, "not working" on the chip, every click path as before', () => {
+  const TL = rd('charts/tradelines.js');
+  assert.match(TL, /g\.gone = T\.lineGone\(g, gone\);/);
+  assert.match(TL, /\(it\.g\.gone \? ' · not working' : ''\)/);
+  assert.doesNotMatch(TL, /gone[^\n]*(onclick|onpointerdown|disabled)/, 'the mark never touches a click, a drag or the ×');
+  assert.match(rd('charts/charts.css'), /\.tl-chip\.gone \{ opacity: \.6; \}/);
+});

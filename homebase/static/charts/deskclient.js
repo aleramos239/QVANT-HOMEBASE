@@ -20,6 +20,7 @@ const ours = new Set();   // order ids this page placed: their fills get a toast
 const UNCLAIMED_MAX = 50;
 const unclaimed = [];
 const CLAIMS = ['order', 'flatten', 'reverse'];   // answers naming an order this page just SENT: only they claim
+const gone = new Set();   // 5.12: `account:order_id` the desk said is not working (HBTrade.notWorkingKeys): display only
 let queued = null;
 
 function loadPrefs() { try { return T.parsePrefs(localStorage.getItem(T.PREFS_KEY)); } catch (_) { return T.parsePrefs(null); } }
@@ -94,7 +95,18 @@ async function send(action, body) {
     if (CLAIMS.includes(action)) claim(String(r.order_id)); else ours.add(String(r.order_id));
   }
   for (const t of T.resultToasts(action, status, data, desk.state)) toast(t.tone, t.text);
+  const nw = T.notWorkingKeys(action, body, data);   // 5.12: the refused order's line greys -- nothing else changes
+  for (const k of nw.ok) gone.delete(k);
+  for (const k of nw.gone) gone.add(k);
+  if (nw.gone.length) emit('lines');
   return data;
+}
+/* The marks still worth showing: an order the desk no longer lists has no line, so its mark goes. */
+function notWorking() {
+  const listed = new Set();
+  for (const a of (desk.state && desk.state.accounts) || []) for (const o of a.orders || []) listed.add(`${a.id}:${o.order_id}`);
+  for (const k of gone) if (!listed.has(k)) gone.delete(k);
+  return gone;
 }
 
 /* ---- a bot's past runs: cached 60 s per strategy; fetched again on a new (ET) day, or as soon as the bot view shows
@@ -182,7 +194,7 @@ function merged() { return T.withPaper(desk.state, window.HBPaperClient ? window
 
 window.HBDeskClient = {
   get state() { return merged(); }, get down() { return desk.down; }, quotes: desk.quotes,
-  get prefs() { return desk.prefs; }, setPrefs, on, onAnyFill, onMessage, send, toast, botHistory,
+  get prefs() { return desk.prefs; }, setPrefs, on, onAnyFill, onMessage, send, toast, botHistory, notWorking,
   mode: (cellTrade) => T.tradeMode({ state: merged(), down: desk.down }, cellTrade),   // ONE chart's mode, from its own {accounts}
   gate: () => T.deskGate(desk),                        // the desk-level half alone (null: up and on)
   bookChanged: () => emit('account'),                  // the PAPER account changed (app.js, on a /ws paperbook push)

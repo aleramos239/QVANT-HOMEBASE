@@ -129,3 +129,45 @@ test('a burst of more than TOAST_MAX toasts in one synchronous tick evicts each 
   const evictedText = [...calls.keys()].map((el) => el.children[0].textContent).sort();
   assert.deepEqual(evictedText, ['msg 0', 'msg 1', 'msg 2']);
 });
+
+/* WP5 5.12 (2026-10-27): a modify / cancel the desk refused with "order … is not working" marks that order (its line
+   greys, display only); the request itself is the same; the mark goes once the desk stops listing the order, or once a
+   later send on it is accepted. */
+test('5.12 a "not working" refusal marks the order; the request is unchanged; the mark goes with the order', async () => {
+  const sentReq = [];
+  const root = new El('div'), answers = [];
+  const window = { HBTrade: T, HBIcons: { x: '' } };
+  const ctx = vm.createContext({
+    window, console, setTimeout: () => 0, requestAnimationFrame: () => 0,
+    document: { getElementById: (id) => (id === 'toastRoot' ? root : null), createElement: (t) => new El(t) },
+    fetch: (url, init) => { sentReq.push([url, init.method, JSON.parse(init.body)]); return new Promise((resolve) => answers.push(resolve)); },
+  });
+  vm.runInContext(SPRING_SRC, ctx);
+  vm.runInContext(SRC, ctx);
+  const D = window.HBDeskClient;
+  const state = (orders) => ({ type: 'desk', event: 'state',
+    data: { enabled: true, bot: {}, accounts: [{ id: 'sim041', label: 'SIM0000041', env: 'demo', orders }] } });
+  const answer = (r) => answers.shift()({ status: 200, json: async () => ({ results: { sim041: r } }) });
+  D.onMessage(state([{ order_id: '7', type: 'Stop' }]));
+  const body = { client_id: 'c1', account: 'sim041', order_id: '7', price: 29990 };
+  const p = D.send('modify', body);
+  answer({ ok: false, order_id: null, error: 'order 7 is not working on SIM0000041' });
+  await p;
+  assert.deepEqual(sentReq, [['/api/desk/modify', 'POST', body]], 'the same request as before');
+  assert.deepEqual([...D.notWorking()], ['sim041:7']);
+  const q = D.send('modify', { ...body, client_id: 'c2' });   // a later try the desk accepts: the mark goes
+  answer({ ok: true, order_id: '7', error: null });
+  await q;
+  assert.deepEqual([...D.notWorking()], []);
+  const r = D.send('cancel', { client_id: 'c3', account: 'sim041', order_id: '7' });
+  answer({ ok: false, order_id: null, error: 'order 7 is not working on SIM0000041' });
+  await r;
+  assert.deepEqual([...D.notWorking()], ['sim041:7']);
+  D.onMessage(state([]));                                      // the desk's list caught up: no order, no line, no mark
+  assert.deepEqual([...D.notWorking()], []);
+  const other = D.send('modify', { ...body, client_id: 'c4' });   // another refusal reason marks nothing
+  answer({ ok: false, order_id: null, error: 'Stop Limit orders can\'t be moved — cancel and place again' });
+  await other;
+  D.onMessage(state([{ order_id: '7', type: 'Stop' }]));
+  assert.deepEqual([...D.notWorking()], []);
+});

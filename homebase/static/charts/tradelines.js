@@ -345,9 +345,10 @@ class Overlay {
     this.named = window.HBTradeUI.tradeOf(this.cell).accounts.length > 1 || new Set(groups.flatMap((g) => g.legs.map((l) => l.account))).size > 1;
     const busy = window.HBTradeUI.busy();
     const L = window.HBOrderPanel && window.HBOrderPanel.look ? window.HBOrderPanel.look() : { style: 0, width: 1, shade: 12 };
-    const seen = new Set();
+    const seen = new Set(), gone = Dc.notWorking ? Dc.notWorking() : new Set();
     for (const g of groups) {
       seen.add(g.key);
+      g.gone = T.lineGone(g, gone);   // 5.12: the desk said its order is not working: grey, and the chip says so
       if (this.dragging === g.key) continue;   // the key being dragged is skipped
       let it = this.items.get(g.key);
       if (!it) {
@@ -426,8 +427,10 @@ class Overlay {
 
   paint(it) {
     const Dc = window.HBDeskClient, q = Dc.quotes[this.root];
-    it.chip.text.textContent = T.lineText(it.g, q ? q.last : null, this.cell.tick, !!this.named);
+    it.chip.text.textContent = T.lineText(it.g, q ? q.last : null, this.cell.tick, !!this.named) + (it.g.gone ? ' · not working' : '');
     it.chip.style.setProperty('--c', T.lineColor(it.g, this.cell.P));
+    it.chip.classList.toggle('gone', !!it.g.gone);
+    if (it.g.gone) it.chip.title = 'The desk said this order is not working any more; the line goes when its list catches up';
     it.chip.classList.toggle('paper', !!it.g.paper);   // a PAPER account's line (Task 2): its colour comes via --c
   }
 

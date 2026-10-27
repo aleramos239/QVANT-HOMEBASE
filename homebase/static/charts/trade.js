@@ -767,6 +767,7 @@ function exitZones(groups, P) {
 function lineTitle(g) { return [...new Set(((g && g.legs) || []).map((l) => l.who))].join(', '); }
 const PAPER_COLOR = '#7E57C2';   // charts.css --paper (light); cell.js's palette carries the theme's own as P.paper
 function lineColor(g, P) {
+  if (g.gone) return P.text2 || '#787B86';   // 5.12: the desk said its order is not working -- grey (lineGone)
   if (g.paper) return P.paper || PAPER_COLOR;   // a PAPER line: the paper colour whatever its kind (its text says which)
   if (g.kind === 'position') return g.side === 'Buy' ? P.up : P.down;
   if (g.kind === 'sl') return P.down;
@@ -774,6 +775,23 @@ function lineColor(g, P) {
   return g.side === 'Buy' ? P.accent : P.down;
 }
 const withPrice = (g, price) => ({ ...g, price });
+/* 5.12 (2026-10-27): a modify / cancel the desk refused with "order … is not working on …" -- the keys
+   (`account:order_id`) it refused that way, and the ones it did act on (they lose the mark). Display only: the line
+   greys and its chip says so (lineGone); nothing is blocked or sent because of it. */
+function notWorkingKeys(action, body, data) {
+  const out = { gone: [], ok: [] };
+  if ((action !== 'modify' && action !== 'cancel') || !isObj(body) || body.order_id == null || !isObj(data) || !isObj(data.results)) return out;
+  for (const [id, r] of Object.entries(data.results)) {
+    const k = `${id}:${body.order_id}`;
+    if (r && r.ok) out.ok.push(k);
+    else if (r && / is not working /.test(String(r.error || ''))) out.gone.push(k);
+  }
+  return out;
+}
+/* An order line every one of whose orders the desk said is not working (`gone`: a Set of notWorkingKeys keys). */
+function lineGone(g, gone) {
+  return !!g && g.kind !== 'position' && g.legs.length > 0 && g.legs.every((l) => gone.has(`${l.account}:${l.order_id}`));
+}
 
 /* ---- dragging a position's chip places an exit (2026-09-27, the desk's `exits` action) ----
    Pressing an editable position's chip (not its ×) and dragging it vertically draws a ghost exit line; which one is
@@ -1710,7 +1728,7 @@ function routeSend(action, body, send) {
 
 const api = { PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
-  lineText, lineTitle, lineColor, exitZones, beStop, beArmStep, trailStop, trailStep, splitOrder, splitNote, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
+  lineText, lineTitle, lineColor, notWorkingKeys, lineGone, exitZones, beStop, beArmStep, trailStop, trailStep, splitOrder, splitNote, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, etDateOf, pastRunMarkers, pastRunFlags,
   algoFillMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
