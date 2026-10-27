@@ -17,18 +17,11 @@ import json
 from pathlib import Path
 
 from .. import ticks as T
+from .store import _stamp
 
 KIND = {"lost": "lost", "vendor_gap": "lost", "filling": "filling"}     # a hole's class -> the band the page draws:
                                                                         # grey (nobody has it) or amber (the broker does)
 WATCH_STALE_S = 3 * 3600        # a watchdog reading this old is not now (the job has stopped finishing runs)
-
-
-def _stamp(p: Path) -> tuple | None:
-    try:
-        st = p.stat()
-    except OSError:
-        return None
-    return st.st_size, st.st_mtime_ns
 
 
 def _load(p: Path) -> dict:

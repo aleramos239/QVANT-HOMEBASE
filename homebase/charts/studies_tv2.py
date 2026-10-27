@@ -14,7 +14,7 @@ import math
 from bisect import bisect_right
 from itertools import accumulate
 
-from .studies_ta import _Study
+from .studies_ta import _mean, _Study, _true_range as _tr
 
 
 # ---- Pine's building blocks, as pure functions on immutable state ----
@@ -24,10 +24,6 @@ def _push(w, x, n):
 
 def _full(w, n):
     return len(w) == n and None not in w
-
-
-def _mean(w):
-    return sum(w) / len(w)
 
 
 def _sd(w):
@@ -71,11 +67,6 @@ def _delay(q, x, k):
     """x as it was k bars ago (a plot with offset = k, read under this bar); None before k bars."""
     q = _push(q, x, k + 1)
     return q, (q[0] if len(q) == k + 1 else None)
-
-
-def _tr(bar, pc):
-    """ta.tr(true): high - low on the first bar."""
-    return bar.h - bar.l if pc is None else max(bar.h - bar.l, abs(bar.h - pc), abs(bar.l - pc))
 
 
 def _rsi(st, x, n):
