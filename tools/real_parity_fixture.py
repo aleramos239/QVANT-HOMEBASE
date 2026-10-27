@@ -73,6 +73,8 @@ def cases():
         ("t 2.675 rounds down (binary)", {"is": table(dict(good, t_stat=2.675)), "lock": lock, "oos": None}, 1, False),
         ("t 2.0 prints 2.0", {"is": table(dict(good, t_stat=2.0)), "lock": lock, "oos": None}, 2, False),
         ("a tiny negative t prints -0.0", {"is": table(dict(good, t_stat=-0.001)), "lock": lock, "oos": None}, 1, False),
+        ("t exactly -0.0 prints -0.0", {"is": table(dict(good, t_stat=-0.0)), "lock": lock, "oos": None}, 1, False),
+        ("t not on file, all else passes, test months won", {"is": table(dict(good, t_stat=None)), "lock": lock, "oos": done()}, 1, False),
         ("0 tries counts as 1", {"is": table(good), "lock": lock, "oos": None}, 0, False),
         ("good t but a losing box", {"is": table(dict(good, net=-0.4)), "lock": lock, "oos": None}, 1, False),
         ("losing box, winning test months = the other way", {"is": table(dict(good, net=-120.0)), "lock": lock, "oos": done()}, 1, False),

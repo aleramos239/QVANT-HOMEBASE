@@ -28,7 +28,7 @@ const pct0 = (v) => `${f0(v * 100)}%`;    // f"{v:.0%}" (Python multiplies by 10
 const g = (v) => String(Number(v.toPrecision(6)));   // f"{v:g}" (shortcut: no exponent form, reached only past ~4 million tries)
 function round2(v) {                      // str(round(v, 2))
   const r = Number.isInteger(v * 8) && (v * 8) % 2 !== 0 ? evenInt(v * 100) / 100 : Number(v.toFixed(2));   // an exact tie is k/8, k odd
-  return Number.isInteger(r) ? `${r < 0 || Object.is(r, -0) ? '-' : ''}${Math.abs(r)}.0` : String(r);
+  return Number.isInteger(r) ? `${r < 0 || Object.is(r, -0) || Object.is(v, -0) ? '-' : ''}${Math.abs(r)}.0` : String(r);   // -0.0 stays -0.0, as in Python
 }
 const py = (v) => (v == null ? 'None' : String(v));
 
@@ -69,23 +69,30 @@ function verdict(ls, s, cut = false) {
   const bad = ls.find((x) => x.ok === false);
   if (bad) return { word: 'LUCK', why: bad.said };
   for (const x of ls) {
-    if (x.ok == null || (cut && x.line === 'luck')) return { word: 'NOT YET', why: `next, ${x.ok && cut ? 'a full count of tries' : NEXT[x.line]}` };
+    if (x.ok == null || (cut && x.line === 'luck')) return { word: 'NOT YET', why: x.gap || `next, ${x.ok && cut ? 'a full count of tries' : NEXT[x.line]}` };
   }
   return { word: 'REAL', why: 'all six lines pass' };
 }
 
-/* A saved fixed walk-forward result -> real.py's input. Years: the box's in-sample blocks that traded, summed by year. */
+/* A traded block's year, or "2022-23" for one that runs across New Year (a market whose blocks start in Nov or Dec, as 6E's) */
+function blockYear(b) {
+  const ms = (b.is || []).filter(Boolean).map(String), a = ms[0].slice(0, 4), z = ms[ms.length - 1].slice(0, 4);
+  return a === z ? a : `${a}-${z.slice(2)}`;
+}
+/* A saved fixed walk-forward result -> real.py's input. Years: the box's in-sample blocks that traded, summed by year. A block that
+   runs across New Year cannot be split by year here (its net is one number): `split`, and the Lab does not read the years line. */
 function years(blocks) {
   const by = new Map();
-  for (const b of blocks || []) if (b && b.trades > 0 && b.is && b.is[0]) { const y = String(b.is[0]).slice(0, 4); by.set(y, (by.get(y) || 0) + (b.net || 0)); }
+  for (const b of blocks || []) if (b && b.trades > 0 && b.is && b.is[0]) { const y = blockYear(b); by.set(y, (by.get(y) || 0) + (b.net || 0)); }
   const v = [...by.values()], sum = v.reduce((a, x) => a + x, 0);
-  return { years_n: v.length, years_green: v.filter((x) => x > 0).length, best_year_share: v.length && sum > 0 ? Math.max(...v) / sum : null };
+  return { years_n: v.length, years_green: v.filter((x) => x > 0).length, best_year_share: v.length && sum > 0 ? Math.max(...v) / sum : null,
+    split: [...by.keys()].some((y) => y.length > 4) };
 }
 /* The per-year row: [[year, net]] of the in-sample blocks that traded, summed over `cells` and divided by their count (one cell =
    that box; the whole table = the average box, never the best). */
 function perYear(cells) {
   const by = new Map(), n = (cells || []).length;
-  for (const c of cells || []) for (const b of (c && c.blocks) || []) if (b && b.trades > 0 && b.is && b.is[0]) { const y = String(b.is[0]).slice(0, 4); by.set(y, (by.get(y) || 0) + (b.net || 0)); }
+  for (const c of cells || []) for (const b of (c && c.blocks) || []) if (b && b.trades > 0 && b.is && b.is[0]) { const y = blockYear(b); by.set(y, (by.get(y) || 0) + (b.net || 0)); }
   return [...by.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([y, v]) => [y, v / n]);
 }
 function fromLab(res) {
@@ -103,13 +110,19 @@ function barText(tries, cut) {
   return `Luck test: needs ${g(bar)} or more (${n === 1 ? 'the first try' : `${T_BAR.toFixed(1)}, plus ${T_PER_TRY} for each of the ${n - 1} ${n === 2 ? 'try' : 'tries'} after the first`})`
     + (cut ? ` · tries ${n}+, count incomplete` : '');
 }
-/* The Lab's read of a saved result: the lines, with the two things the Lab cannot know said plainly (never looser than real.py):
-   worse fills is not run here; a t that is not saved leaves the luck line not read, unless the box lost (then it fails anyway). */
+/* The Lab's read of a saved result: the lines, with what the Lab cannot know said plainly. Worse fills is not run here. The
+   t-statistic is not saved in a 3:1 result (walkforward.is_numbers has none), so the luck line is not checked, unless the box lost
+   (then it fails, as in real.py). A block across New Year leaves the years line not checked. A line that is not checked is never a
+   PASS: the Lab never says REAL, and any line that fails still says LUCK or FAKE, as real.py does. */
 function labRead(res, tries, cut) {
   const s = fromLab(res), ls = lines(s, tries), box = s.is.find((r) => s.lock && r.box === s.lock.box);
   for (const x of ls) {
     if (x.line === 'worse fills' && x.ok == null) x.said = 'not run in the Lab';
-    if (x.line === 'luck' && box && box.t_stat == null && box.net > 0) { x.ok = null; x.said = 'not read: the t-statistic is not saved in the Lab'; }
+    if (x.line === 'luck' && box && box.t_stat == null && box.net > 0) {
+      x.ok = null; x.said = 'not checked in the Lab: the t-statistic is not saved with a 3:1 result';
+      x.gap = 'the luck line is not checked in the Lab (no saved t-statistic), so the Lab cannot say REAL';
+    }
+    if (x.line === 'years' && box && box.split) { x.ok = null; x.said = 'not checked in the Lab: a 3:1 block runs across New Year'; x.gap = 'the years line is not checked in the Lab (a block runs across New Year)'; }
   }
   const v = verdict(ls, s, cut), lk = ls.find((x) => x.line === 'luck');
   if (cut && lk && lk.ok) { lk.ok = null; lk.said += ' (not read: the tries count is incomplete)'; }   // a short count never shows PASS

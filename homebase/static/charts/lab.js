@@ -2623,8 +2623,8 @@ function perYearHtml(cells, what) {
 }
 function realHtml(rd, sid) {
   if (!rd) return '';
-  const t = triesOf(sid), tone = (ok) => (ok === true ? ['pass', 'PASS'] : ok === false ? ['fail', 'FAIL'] : ['wait', 'not run']);
-  return `<div class="rs-gh">Real or luck</div><div class="rs-group rl">${rd.lines.map((x) => { const [c, w] = tone(x.ok); return `<div class="rl-line ${c}"><b>${w}</b><span>${esc(x.line)}: ${esc(x.said)}</span></div>`; }).join('')}
+  const t = triesOf(sid), tone = (x) => (x.ok === true ? ['pass', 'PASS'] : x.ok === false ? ['fail', 'FAIL'] : ['wait', x.gap ? 'not checked' : 'not run']);
+  return `<div class="rs-gh">Real or luck</div><div class="rs-group rl">${rd.lines.map((x) => { const [c, w] = tone(x); return `<div class="rl-line ${c}"><b>${w}</b><span>${esc(x.line)}: ${esc(x.said)}</span></div>`; }).join('')}
     <div class="rl-verdict">${esc(rd.verdict.word)}: ${esc(rd.verdict.why)}</div>
     <div class="heat-note">${esc(t ? RL.barText(t.n, t.cut) : 'Luck test: tries not counted yet')}</div></div>`;
 }
