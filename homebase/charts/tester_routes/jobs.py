@@ -6,6 +6,8 @@ import threading
 from collections import OrderedDict
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 
 from ... import draftstore
 from ...backtest import propsim
@@ -158,9 +160,12 @@ def register(r: APIRouter, ctx) -> None:
                 raise HTTPException(400, "test_months: one of 1, 2, 3 (the 1:N walk-forward ratio)")
             n = int(test_months)
         try:
-            return wfs.result(wid, n)
+            res = wfs.result(wid, n)
         except ValueError as e:
             raise HTTPException(409, str(e)) from None
+        # FastAPI's own encoding (the same bytes), done here in the threadpool: an old result runs to 10 MB and froze the
+        # event loop that carries chart orders and fills while it was encoded there
+        return JSONResponse(jsonable_encoder(res))
 
     @r.get("/walkforward/{wid}/compare")
     def walkforward_compare(wid: str):
