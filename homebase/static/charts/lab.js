@@ -3025,11 +3025,13 @@ function deskGo() {
 function canon(v) { return JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [z]) => (a < z ? -1 : a > z ? 1 : 0))) : x)); }
 function setKey(f) { const x = X.body(f); return canon({ inputs: x.inputs, controls: x.controls || {}, qty: x.qty, commission: x.commission, slippage_ticks: x.slippage_ticks }); }
 /* The 3:1 record of the run being put on the Desk: the open one-box walk-forward (the strategy as set), only when it was opened for
-   the very settings the run was made with (its own record, not the form). A table box or other settings: none, and the dialog says so.
-   shortcut: the code is not compared (the record was matched to the code saved when it was opened). */
-function promoteRecord(f, r) {
+   the very settings the run was made with (its own record, not the form), and for a draft, a lock of the code saved now (the Desk
+   takes that code and refuses a run of other code). A table box, other settings or other code: none, and the dialog says so. */
+function promoteRecord(f, r, b) {
   const T = f && S.three[f.strategy], m = r.bundle && r.bundle.run;
   if (!T || !T.oos.result || !T.oos.set || !m) return null;
+  const lk = T.oos.result.lock;
+  if (b && b.kind === 'draft' && lk && lk.code !== shaNow(b.saved)) return null;      // '' until hashed: none (fail closed)
   const ran = setKey({ ...f, inputs: m.inputs || {}, controls: (m.controls && m.controls.rules) || {}, qty: m.qty, commission: m.commission, slippage_ticks: m.slippage_ticks });
   return ran === T.oos.set ? T.oos.result : null;
 }
@@ -3037,12 +3039,12 @@ function promoteRecord(f, r) {
 function promoteToDesk(b) {
   const r = S.run && S.run.key === b.key ? S.run : null;
   if (!r || !r.rid || !r.bundle || r.grid) return;      // a heat-map cell has no run of its own to promote
-  const f = formOf(b), sid = f ? f.strategy : '', w = sid && S.wf[sid], rd = realRead(promoteRecord(f, r), sid);
+  const f = formOf(b), sid = f ? f.strategy : '', w = sid && S.wf[sid], rd = realRead(promoteRecord(f, r, b), sid);
   const word = (x) => (x.ok === true ? 'PASS' : x.ok === false ? 'FAIL' : x.gap ? 'not checked' : 'not run');
   const tp = w && w.result && w.result.lock ? w.result.lock.cell : null;
   const d = dialog(`<h2>Put ${esc(b.name)} on the Desk?</h2>
-    ${rd ? `<p>The six lines of this run's own settings (its 3:1 record, as set):</p><p><b>${esc(rd.verdict.word)}</b>: ${esc(rd.verdict.why)}</p><div class="rl">${rd.lines.map((x) => `<div class="rl-line ${x.ok === true ? 'pass' : x.ok === false ? 'fail' : 'wait'}"><b>${word(x)}</b><span>${esc(x.line)}: ${esc(x.said)}</span></div>`).join('')}</div>`
-    : `<p>No 3:1 record of this run's own settings is open: the six lines are not read.</p>${tp != null ? `<p>Your pick in the in-sample table, box ${esc(X.boxNo(tp))}, is not matched to this run.</p>` : ''}`}
+    ${rd ? `<p>The six lines of this run's own settings (its in-sample months and test months, as set):</p><p><b>${esc(rd.verdict.word)}</b>: ${esc(rd.verdict.why)}</p><div class="rl">${rd.lines.map((x) => `<div class="rl-line ${x.ok === true ? 'pass' : x.ok === false ? 'fail' : 'wait'}"><b>${word(x)}</b><span>${esc(x.line)}: ${esc(x.said)}</span></div>`).join('')}</div>`
+    : `<p>No in-sample record of this run's own settings and code is open: the six lines are not read.</p>${tp != null ? `<p>Your pick in the in-sample table, box ${esc(X.boxNo(tp))}, is not matched to this run.</p>` : ''}`}
     <p>Lands OFF, no account.</p><p>Trade rules are not applied on the Desk.</p>
     <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">Put it on the Desk</button></div>`);
   d.addEventListener('click', (e) => {

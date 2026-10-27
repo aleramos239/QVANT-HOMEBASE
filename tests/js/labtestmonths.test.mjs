@@ -227,7 +227,7 @@ test('Put it on the Desk: the confirm shows the verdict and the six lines of the
   const ran = (inputs) => ({ run: { inputs, qty: 1, commission: 4, slippage_ticks: 1, range: { kind: 'wf_is' } } });
   const c = vm.createContext({ X, C, RL, esc: (t) => String(t == null ? '' : t), closeDialog() {}, paintRes() {}, paintLib() {}, log() {}, loadDesk: async () => {},
     S: { run: { key: 'd:x', rid: 'r1', bundle: ran({ len: 5 }) }, tries: {}, three: { draft_x: { oos: { result: res, set: '' } } }, wf: {} },
-    buf: () => null, formOf: () => f,
+    buf: () => null, formOf: () => f, shaNow: (code) => (code === 'saved code' ? 'sha1' : ''),
     dialog: (html) => { const d = { html, on: null, addEventListener(t, fn) { d.on = fn; } }; dialogs.push(d); return d; },
     send: async (m, url, body) => { sent.push([m, url, body]); return { ok: true, json: { ok: true } }; } });
   vm.runInContext(`${code}\nObject.assign(globalThis, { promoteToDesk, setKey });`, c);
@@ -237,7 +237,7 @@ test('Put it on the Desk: the confirm shows the verdict and the six lines of the
   c.promoteToDesk({ key: 'd:x', name: 'x' });
   const h = dialogs[0].html;
   assert.match(h, /Put x on the Desk\?/);
-  assert.match(h, /The six lines of this run's own settings/);
+  assert.match(h, /The six lines of this run's own settings \(its in-sample months and test months, as set\):/);
   assert.match(h, /<b>LUCK<\/b>: 1 of 2 boxes made money in-sample/);
   for (const ln of ['boxes', 'trades', 'luck', 'years', 'worse fills', 'test months']) assert.match(h, new RegExp(`<span>${ln}: `), ln);
   assert.match(h, /<b>FAIL<\/b><span>luck: t not saved in-sample/);                   // no t-statistic saved: it fails, as in real.py
@@ -254,13 +254,26 @@ test('Put it on the Desk: the confirm shows the verdict and the six lines of the
     c.S.run = { key: 'd:x', rid: 'r1', bundle }; c.S.three.draft_x.oos.set = set; c.S.wf.draft_x = { result: { lock: { cell: 4 } } };
     c.promoteToDesk({ key: 'd:x', name: 'x' });
     const o = dialogs.at(-1).html;
-    assert.match(o, /No 3:1 record of this run's own settings is open: the six lines are not read\./);
+    assert.match(o, /No in-sample record of this run's own settings and code is open: the six lines are not read\./);
     assert.match(o, /Your pick in the in-sample table, box #5, is not matched to this run\./);
     assert.ok(!/LUCK|PASS|FAIL/.test(o), o);
     assert.match(o, /Lands OFF, no account\./);
   }
   sent.length = 0; press('go'); await new Promise((r) => setImmediate(r));
   assert.deepEqual(JSON.parse(JSON.stringify(sent)), POST);
+  // a draft: the record's lock must be of the code saved now (the code the Desk takes); other code or not hashed yet: none
+  c.S.run = { key: 'd:x', rid: 'r1', bundle: ran({ len: 5 }) }; c.S.three.draft_x.oos.set = c.setKey(f); c.S.wf.draft_x = {};
+  for (const [code, shown] of [['sha1', true], ['other sha', false]]) {
+    c.S.three.draft_x.oos.result = { ...res, lock: { cell: 0, code } };
+    for (const saved of ['saved code', 'not hashed yet']) {
+      c.promoteToDesk({ key: 'd:x', name: 'x', kind: 'draft', saved });
+      const o = dialogs.at(-1).html, want = shown && saved === 'saved code';
+      assert.equal(/The six lines of this run's own settings/.test(o), want, `${code} ${saved}`);
+      assert.equal(/No in-sample record of this run's own settings and code is open/.test(o), !want, `${code} ${saved}`);
+    }
+  }
+  sent.length = 0; press('go'); await new Promise((r) => setImmediate(r));
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)), POST);                // the same request, whatever the dialog says
 });
 
 test('words (plan 4.10): a 3:1 run\'s All metrics says In-sample or Test months; the prop sim is not one of the six lines', () => {
