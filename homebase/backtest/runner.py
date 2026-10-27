@@ -25,6 +25,7 @@ page lists it.
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as dt
 import fcntl
 import json
@@ -39,7 +40,7 @@ import sys
 import threading
 import time
 from bisect import bisect_left
-from collections import deque
+from collections import OrderedDict, deque
 from pathlib import Path
 
 from .. import draftstore, strategies
@@ -82,6 +83,79 @@ def read_json(path: Path, default=None):
         return json.loads(path.read_text())
     except (OSError, ValueError):
         return default
+
+
+def _stamp(path: Path):
+    """(mtime_ns, size, inode) of a file, None when it is not there: write_json replaces a file, so a new one is a new inode."""
+    try:
+        s = path.stat()
+    except OSError:
+        return None
+    return s.st_mtime_ns, s.st_size, s.st_ino
+
+
+SETTLED_NS = 2_000_000_000          # an answer is kept only once its files are this old (2 s)
+
+
+def _settled(*stamps) -> bool:
+    """Every file is old enough that a later write moves its stamp, even on a filesystem whose clock ticks coarsely or reuses
+    inodes (Linux); None (no file) always is."""
+    now = time.time_ns()
+    return all(s is None or now - s[0] >= SETTLED_NS for s in stamps)
+
+
+# What the run listings read, kept per process and read again only when a file it came from changed (stamps taken BEFORE the
+# read; a file on disk that did not read is never kept). Module-level: the tests call same_done on a stand-in for the manager.
+LISTED = ("request.json", "status.json", "run.json")
+_REQS: dict = {}                    # run dir -> (stamp of its request.json, the request's strategy)
+_ROWS: dict = {}                    # run dir -> (stamps of LISTED, its runs_list row)
+SAME_KEEP = 16                      # same_done answers kept (each holds a stamp per run dir its scan read)
+_SAME: OrderedDict = OrderedDict()  # (runs dir, the request) -> (name and stamps of each dir the scan read, the answer)
+_LISTED_LOCK = threading.Lock()
+
+
+def _strategy_of(d: Path):
+    """The strategy run dir `d`'s request names (runs_list's filter)."""
+    stamp = _stamp(d / "request.json")
+    with _LISTED_LOCK:
+        hit = _REQS.get(str(d))
+    if hit is not None and hit[0] == stamp:
+        return hit[1]
+    got = read_json(d / "request.json", None)
+    sid = (got or {}).get("strategy")
+    if (got is not None or stamp is None) and _settled(stamp):
+        with _LISTED_LOCK:
+            _REQS[str(d)] = (stamp, sid)
+    return sid
+
+
+def _listed_row(d: Path) -> dict:
+    """The runs_list row of run dir `d`."""
+    stamp = tuple(_stamp(d / f) for f in LISTED)
+    with _LISTED_LOCK:
+        hit = _ROWS.get(str(d))
+    if hit is not None and hit[0] == stamp:
+        return copy.deepcopy(hit[1])
+    got = [read_json(d / f, None) for f in LISTED]
+    req, st, meta = (x or {} for x in got)
+    allc = ((meta.get("report") or {}).get("summary") or {}).get("all") or {}
+    row = {"id": d.name, "strategy": req.get("strategy"), "created": req.get("created"),
+           "status": st.get("status"), "range": req.get("range"),
+           "holdout": bool((req.get("range") or {}).get("holdout")), "trades": allc.get("trades"),
+           "net_profit": allc.get("net_profit")}
+    if all(x is not None for x, s in zip(got, stamp) if s is not None) and _settled(*stamp):
+        with _LISTED_LOCK:
+            _ROWS[str(d)] = (stamp, copy.deepcopy(row))
+    return row
+
+
+def _same_still(cands: list, seen: list, whole: bool) -> bool:
+    """The dirs a same_done scan read are still the first in line, their files unchanged (all of them, none added, when it
+    found nothing)."""
+    if len(cands) < len(seen) or (whole and len(cands) != len(seen)):
+        return False
+    return all(d.name == n and _stamp(d / "status.json") == a and _stamp(d / "request.json") == b
+               for d, (n, a, b) in zip(cands, seen))
 
 
 MAX_MARKS = 50_000          # ctx.mark records kept in plots.json (the newest: a mark is one small record)
@@ -561,16 +635,9 @@ class RunManager:
                         key=lambda p: p.name, reverse=True):
             if len(out) >= limit:
                 break
-            req = read_json(d / "request.json", {}) or {}
-            if strategy is not None and req.get("strategy") != strategy:
+            if strategy is not None and _strategy_of(d) != strategy:
                 continue
-            st = read_json(d / "status.json", {}) or {}
-            meta = read_json(d / "run.json", {}) or {}
-            allc = ((meta.get("report") or {}).get("summary") or {}).get("all") or {}
-            out.append({"id": d.name, "strategy": req.get("strategy"), "created": req.get("created"),
-                        "status": st.get("status"), "range": req.get("range"),
-                        "holdout": bool((req.get("range") or {}).get("holdout")), "trades": allc.get("trades"),
-                        "net_profit": allc.get("net_profit")})
+            out.append(_listed_row(d))
         return out
 
     def same_done(self, body) -> str | None:
@@ -578,13 +645,32 @@ class RunManager:
         None (the Lab shows it on opening a strategy instead of running it again, owner 2026-10-24)."""
         norm = lambda x: json.loads(json.dumps(x, default=str))  # noqa: E731
         want = norm(validate(body))
-        for d in sorted((p for p in self.runs.iterdir() if f"-{want['strategy']}-" in p.name), key=lambda p: p.name, reverse=True):
-            if (read_json(d / "status.json", {}) or {}).get("status") != "done":
+        cands = sorted((p for p in self.runs.iterdir() if f"-{want['strategy']}-" in p.name), key=lambda p: p.name, reverse=True)
+        key = (str(self.runs), json.dumps(want, sort_keys=True))
+        with _LISTED_LOCK:
+            hit = _SAME.get(key)
+        if hit is not None and _same_still(cands, hit[0], hit[1] is None):
+            return hit[1]
+        seen, found, clean = [], None, True
+        for d in cands:
+            stamps = (_stamp(d / "status.json"), _stamp(d / "request.json"))
+            seen.append((d.name, *stamps))
+            st = read_json(d / "status.json", None)
+            clean = clean and (st is not None or stamps[0] is None)
+            if (st or {}).get("status") != "done":
                 continue
-            got = read_json(d / "request.json", {}) or {}
-            if {k: v for k, v in got.items() if k not in ("id", "created")} == want:
-                return d.name
-        return None
+            got = read_json(d / "request.json", None)
+            clean = clean and (got is not None or stamps[1] is None)
+            if {k: v for k, v in (got or {}).items() if k not in ("id", "created")} == want:
+                found = d.name
+                break
+        if clean and _settled(*(s for _, a, b in seen for s in (a, b))):
+            with _LISTED_LOCK:
+                _SAME[key] = (seen, found)
+                _SAME.move_to_end(key)
+                while len(_SAME) > SAME_KEEP:
+                    _SAME.popitem(last=False)
+        return found
 
     def bundle(self, rid: str, plots: bool = True) -> dict:
         return read_bundle(self.dir(rid), plots)
