@@ -300,7 +300,7 @@ function page({ drafts, groups, refuse = {}, gone = [] }) {
     S: win.HBLab.state, setList(names) { list = list.filter((d) => names.includes(d.name)); },
     hold(name) { let release; gates[name] = new Promise((r) => { release = r; }); return release; },
     edit(name) { const b = win.HBLab.state.bufs.get(`d:${name}`); b.code = `${b.code}# an edit\n`; },
-    picks: () => [...win.HBLab.state.picks], lib, requests, made, flush, keydown, pointerdown, fire,
+    picks: () => [...win.HBLab.state.picks], unsaved: () => win.hbHasUnsaved(), lib, requests, made, flush, keydown, pointerdown, fire,
     clickRow(key, mods = {}) { fire('click', { target: lookup({ '[data-key]': row(key) }), shiftKey: !!mods.shift, metaKey: !!mods.meta, ctrlKey: !!mods.ctrl }); },
     clickMore(id, name, rowKey) { const dataset = { act: 'file', id, name, ...(rowKey ? { row: rowKey } : {}) };
       fire('click', { target: lookup({ '[data-act]': { dataset, getBoundingClientRect: () => ({ left: 5, right: 25, top: 5, bottom: 25 }) } }) }); },
@@ -591,4 +591,15 @@ test('another strategy still running: "X is still running. Stop it?" -- Keep it 
   assert.ok(r.indexOf('stopAsk(prev') < r.indexOf("/cancel`)"));
   assert.match(r, /if \(opts\.stop !== prev\) return stopAsk\(prev, \(\) => run\(\{ \.\.\.opts, stop: prev \}\)\);/);
   assert.match(r, /send\('POST', `\/api\/tester\/run\/\$\{encodeURIComponent\(prev\.rid\)\}\/cancel`\)/);
+});
+
+test('window.hbHasUnsaved: true once a script is edited and not saved, for the app shell (plan 4.12)', async () => {
+  const p = page({ drafts: ['a'], groups: G });
+  await p.flush();
+  p.clickRow('d:a');
+  await p.flush();
+  assert.equal(p.unsaved(), false);
+  p.edit('a');
+  assert.equal(p.unsaved(), true);
+  assert.match(LAB_SRC, /addEventListener\('beforeunload', \(e\) => \{ if \(window\.hbHasUnsaved\(\)\) \{ e\.preventDefault\(\); e\.returnValue = ''; \} \}\)/);
 });

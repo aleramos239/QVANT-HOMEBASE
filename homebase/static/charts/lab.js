@@ -3218,7 +3218,8 @@ root.addEventListener('dragover', (e) => { if (!inChart(e) && [...(e.dataTransfe
 root.addEventListener('dragleave', (e) => { if (!root.contains(e.relatedTarget)) $('#edWrap')?.classList.remove('ed-drop'); });
 root.addEventListener('drop', (e) => { if (inChart(e)) return; const f = e.dataTransfer?.files?.[0]; $('#edWrap')?.classList.remove('ed-drop'); if (f) { e.preventDefault(); readFile(f); } });
 $('#labFile').addEventListener('change', (e) => { readFile(e.target.files[0]); e.target.value = ''; });
-window.addEventListener('beforeunload', (e) => { if ([...S.bufs.values()].some(isDirty)) { e.preventDefault(); e.returnValue = ''; } });
+window.hbHasUnsaved = () => [...S.bufs.values()].some(isDirty);     // for the app shell (plan 4.12): a script edited and not saved
+window.addEventListener('beforeunload', (e) => { if (window.hbHasUnsaved()) { e.preventDefault(); e.returnValue = ''; } });
 for (const x of document.querySelectorAll('#labPanels [data-panel]')) x.addEventListener('click', () => setPanel(x.dataset.panel));
 setInterval(() => { const b = buf(); if (b && b.savedAt && !isDirty(b)) paintHead(); }, 30000);
 
