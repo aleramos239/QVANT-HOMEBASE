@@ -28,6 +28,13 @@ html.hb-apple .bulb { width: 18px; height: 18px; border-radius: 0; opacity: 1; b
 html.hb-apple .bulb.ok { background: var(--a-label-2); }
 html.hb-apple .bulb.warn { background: var(--a-orange); -webkit-mask-image: var(--sf-shield-warn); mask-image: var(--sf-shield-warn); }
 html.hb-apple .bulb.bad { background: var(--a-red-text); -webkit-mask-image: var(--sf-shield-warn); mask-image: var(--sf-shield-warn); }
+/* readiness in words beside the shield (desk.js readyWord): "Ready", or how many checks need a look, in the shield's colour */
+html.hb-apple .hb-rd-col { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 1px; height: 36px; flex: none; }
+html.hb-apple .hb-ready-word { -webkit-appearance: none; appearance: none; border: 0; margin: 0; padding: 0; background: transparent; font: inherit; font-size: 13px; line-height: 16px;
+  font-weight: 510; color: var(--a-label); white-space: nowrap; cursor: default; }
+html.hb-apple .hb-ready-word[data-lvl=""] { color: var(--a-label-2); font-weight: 400; }
+html.hb-apple .hb-ready-word[data-lvl="warn"] { color: var(--a-orange); }
+html.hb-apple .hb-ready-word[data-lvl="bad"] { color: var(--a-red-text); }
 /* the pill keeps its fixed slot (nothing in the bar may move under a Kill hold); DISARMED is plain text, ARMED is solid red */
 html.hb-apple .pill-slot { display: flex; justify-content: flex-start; align-items: center; width: 84px; height: 18px; flex: none; }
 html.hb-apple #statusPill.pill { display: inline-block; border: 0; border-radius: 0; padding: 0; background: transparent; color: var(--a-label);
@@ -473,5 +480,7 @@ html.hb-apple .eq-tip i { font-style: normal; color: var(--a-label-2); }
 html.hb-apple .eq-tip em { font-style: normal; font-variant-numeric: tabular-nums; }
 html.hb-apple .eq-tip em.pos { color: var(--a-green, var(--a-label)); }
 html.hb-apple .eq-tip small { display: block; margin-top: 2px; font-size: 11px; color: var(--a-label-2); }
-/* the Desk's right-hand group (status, Disarm, Kill) is wide: below 1360 px the centred page switcher would sit under it, so it flows */
-@media (max-width: 1360px) { html.hb-apple .hb-tb-c { position: static; transform: none; flex: none; } }
+/* the Desk's right-hand group (status, readiness words, Disarm, Kill) is wide: below 1600 px the centred page switcher would sit under
+   it, so it flows; below 1180 px the readiness words go (the shield stays and opens the same checks), so the bar is as it was */
+@media (max-width: 1600px) { html.hb-apple .hb-tb-c { position: static; transform: none; flex: none; } }
+@media (max-width: 1180px) { html.hb-apple .hb-ready-word { display: none; } }

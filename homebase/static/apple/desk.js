@@ -33,9 +33,12 @@
     const stCol = el('div', { class: 'hb-st-col' });
     if (slot) stCol.append(slot);
     if (clock) stCol.append(clock);
+    // readiness in words beside the shield ("Ready" / "2 things need a look"), filled by sync(); a click opens the same System checks
+    const readyBtn = el('button', { class: 'hb-ready-word', type: 'button', text: 'Checking…', onclick: () => { if (typeof window.openChecks === 'function') window.openChecks(); } });
+    const rdCol = el('div', { class: 'hb-rd-col' }, readyBtn);
     const status = el('div', { class: 'hb-status hb-desk-status' });
     if (bulb) status.append(bulb);
-    status.append(stCol);
+    status.append(rdCol, stCol);
     tb.right.append(status);
     if (arm) { arm.classList.add('hb-tbtn', 'hb-text', 'hb-arm'); tb.right.append(arm); }
     if (kill) { kill.classList.add('hb-kill'); tb.right.append(kill); }
@@ -204,6 +207,14 @@
     // ONE machine value: the native shell's window.HB_MACHINE, else the desk's /api/status `machine`. Anything else: no chip,
     // never a guess from the address (the server's Desk can show as localhost through a tunnel).
     const machineWord = (st) => { const m = window.HB_MACHINE ?? (st && st.machine); return m === 'mac' ? 'This Mac' : m === 'server' ? 'Server · Chicago' : ''; };
+    // readiness as the page shows it: its own readinessShown(), the list openChecks() opens (bad or warn = needs a look). [level, words]
+    const readyWord = (st) => {
+      const r = st && typeof window.readinessShown === 'function' ? window.readinessShown(st.readiness, st) : null;
+      if (!r || !Array.isArray(r.checks)) return ['', 'Checking…'];
+      const probs = r.checks.filter((c) => c && (c.level === 'bad' || c.level === 'warn')), n = probs.length;
+      if (!n) return ['ok', 'Ready'];
+      return [probs.some((c) => c.level === 'bad') ? 'bad' : 'warn', n === 1 ? '1 thing needs a look' : n + ' things need a look'];
+    };
     /* ---- end toolbar words ---- */
 
     let syncing = false;
@@ -256,14 +267,12 @@
         }
         const mw = machineWord(st);
         if (machine.textContent !== mw) { machine.textContent = mw; machine.dataset.m = mw === 'This Mac' ? 'mac' : 'server'; machine.hidden = !mw; }
-        // readiness, in words (the bulb is the page's own verdict; the row opens the page's own System checks)
-        if (bulb) {
-          const lvl = bulb.classList.contains('bad') ? 'bad' : bulb.classList.contains('warn') ? 'warn' : bulb.classList.contains('ok') ? 'ok' : '';
-          const txt = lvl === 'ok' ? 'Ready to trade' : lvl === 'warn' ? 'Needs attention' : lvl === 'bad' ? 'Not ready' : 'Checking…';
-          if (sum.dataset.lvl !== lvl) sum.dataset.lvl = lvl;
-          const t = $('#hbReadyTxt');
-          if (t && t.textContent !== txt) t.textContent = txt;
-        }
+        // readiness, in words: the toolbar word and the inspector row say the same (both open the page's own System checks)
+        const [lvl, txt] = readyWord(st);
+        for (const n of [sum, readyBtn]) if (n.dataset.lvl !== lvl) n.dataset.lvl = lvl;
+        if (readyBtn.textContent !== txt) { readyBtn.textContent = txt; readyBtn.setAttribute('aria-label', 'Readiness: ' + txt); }
+        const t = $('#hbReadyTxt');
+        if (t && t.textContent !== txt) t.textContent = txt;
       } catch (_) { /* a repaint must never be broken by the skin */ }
       finally { syncing = false; }
     }

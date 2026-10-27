@@ -92,7 +92,7 @@ function toolbarWords(ctx = {}) {
   const i = DESK_SKIN.indexOf('/* ---- toolbar words'), j = DESK_SKIN.indexOf('/* ---- end toolbar words ---- */');
   assert.ok(i >= 0 && j > i, 'the toolbar words block');
   const c = vm.createContext({ window: {}, ...ctx });
-  vm.runInContext(DESK_SKIN.slice(i, j) + '\nglobalThis.W = { machineWord };', c);
+  vm.runInContext(DESK_SKIN.slice(i, j) + '\nglobalThis.W = { machineWord, readyWord };', c);
   return c.W;
 }
 
@@ -107,4 +107,19 @@ test('desk skin: the machine chip reads ONE value -- the shell\'s HB_MACHINE, el
   for (const [win, st] of [[{}, null], [{}, {}], [{}, undefined], [{ HB_MACHINE: 'vps' }, null], [{}, { machine: 'chicago' }]]) assert.equal(chip(win, st), '');
   assert.doesNotMatch(DESK_SKIN, /location\.(hostname|host)\b/, 'the skin never guesses the machine from the address');
   assert.match(DESK_SKIN, /el\('span', \{ class: 'hb-machine', hidden: true \}\)/, 'the chip starts hidden');
+});
+
+test('desk skin: readiness in words comes from the page\'s own readinessShown -- the list openChecks opens', () => {
+  const seen = [];
+  const shown = (r, st) => { seen.push([r, st]); return r && { ...r, checks: r.checks.map((c) => (c.label === 'nq930' ? { ...c, level: 'info' } : c)) }; };
+  const word = (st, fn = shown) => [...toolbarWords({ window: { readinessShown: fn } }).readyWord(st)];      // (out of the vm's realm)
+  assert.deepEqual(word(null), ['', 'Checking…'], 'no status yet');
+  assert.deepEqual(word({ readiness: null }), ['', 'Checking…']);
+  assert.deepEqual(word({ readiness: { checks: [] } }, null), ['', 'Checking…'], 'without the page helper: still checking, never "Ready"');
+  const st = { readiness: { checks: [{ label: 'feed', level: 'ok' }, { label: 'nq930', level: 'bad', detail: 'no signal arrived' }] } };
+  assert.deepEqual(word(st), ['ok', 'Ready'], 'a check the page shows as info does not count');
+  assert.equal(seen.at(-1)[0], st.readiness); assert.equal(seen.at(-1)[1], st);
+  assert.deepEqual(word({ readiness: { checks: [{ label: 'feed', level: 'warn' }] } }), ['warn', '1 thing needs a look']);
+  assert.deepEqual(word({ readiness: { checks: [{ label: 'a', level: 'warn' }, { label: 'b', level: 'bad' }, { label: 'c', level: 'info' }] } }), ['bad', '2 things need a look']);
+  assert.match(DESK_SKIN, /class: 'hb-ready-word'[^\n]*window\.openChecks\(\)/, 'the word opens the page\'s own System checks');
 });
