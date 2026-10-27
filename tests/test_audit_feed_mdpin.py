@@ -13,7 +13,7 @@ def test_a_pinned_machine_never_connects_on_the_other_login(monkeypatch):
     monkeypatch.setenv("HOMEBASE_CHARTS_MD_ONLY", "demo")
     seen = []
 
-    def tok(prefer_live, strict=False):
+    def tok(prefer_live, strict=False, account=None):
         seen.append(prefer_live)
         return "t", "live"                                    # only the live token is on disk
     monkeypatch.setattr(T, "md_token", tok)
