@@ -13,6 +13,16 @@ let DESK_STALE = false;   // true while refresh() is failing: ST is the last-kno
 let STALE_WHY = "";       // why it is stale, for the pill's tooltip
 const DEMO = new URLSearchParams(location.search).has("demo");
 
+/* ---- which machine this Desk runs on: ONE value, read at call time -- the native shell's window.HB_MACHINE, else
+   /api/status `machine` (ST). Unknown: null and no words. Never guessed from the address: the server's Desk can show as
+   localhost (server-window.sh, an ssh -L forward). apple/desk.js machineWord reads the same two, in the same order.
+   On 'server' the pages draw no "Open in the Lab" / "Show on chart": the Lab and Charts live on the Mac (owner, 2026-10-26). */
+function deskMachine() { return window.HB_MACHINE ?? (ST && ST.machine) ?? null; }
+function machineWords() {
+  const m = deskMachine();
+  return m === "server" ? "on the SERVER · Chicago" : m === "mac" ? "on this Mac" : "";
+}
+
 /* ---- algo manager: which algo cards show on the home page ----
    Display-only preference, per viewer, in localStorage. Missing/unreadable
    storage, or an algo that's tradable, has activity today, or needs a

@@ -56,7 +56,7 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
     switchBounced: () => false, render() {}, loadDeskLab() {}, refresh: async () => { refreshes.push(1); },
     fetch: async () => ({ ok: false }), setView() {},
   });
-  const code = SLICE('const esc = (v) =>', 'async function chartPost(') + SLICE('const stratLabel = ', 'const actStrat = ') + SLICE('const fmt = ', 'const usd = ') +
+  const code = SLICE('/* ---- which machine this Desk runs on', '/* ---- algo manager') + SLICE('const esc = (v) =>', 'async function chartPost(') + SLICE('const stratLabel = ', 'const actStrat = ') + SLICE('const fmt = ', 'const usd = ') +
     'const usd = (v) => v == null ? "—" : (v < 0 ? "-$" : "$") + fmt(Math.abs(v));\n' +
     SLICE('const killText = ', 'function killFailures(') + SLICE('const actErr = ', 'const actFail = ') + SLICE('const STEP_OK = ', 'const REFUSED_WHY') +
     SLICE('const SWITCH_AT = {};', 'function cfDone(') +
@@ -1105,4 +1105,21 @@ test('a built-in strategy page: Open in the Lab, Show on chart, Remove from Desk
   assert.match(HTML, /#builtin=/);
   const css = readFileSync(new URL('../../homebase/static/apple/desk.css', import.meta.url), 'utf8');
   assert.match(css, /\.hb-acts \{ position: sticky; bottom: -20px;/);
+});
+
+/* ---- WP1.18: one machine value (deskMachine, desk/core.js); the server's Desk has no Lab or Charts to open ---- */
+test('the server\'s Desk draws no "Open in the Lab" / "Show on chart"; this Mac and an unknown machine keep them', () => {
+  const cases = [[{ machine: 'server' }, false], [{ hb: 'server', machine: 'mac' }, false], [{ machine: 'mac' }, true], [{}, true]];
+  for (const [{ hb, machine }, shown] of cases) {
+    const t = load({ rows: [ROW(), ROW({ name: 'nq_gap', label: 'NQ Gap' })] });
+    t.ctx.ST.machine = machine;
+    t.ctx.window.HB_MACHINE = hb;
+    vm.runInContext('DESKRES = { nq930: { twin: "nq930_twin", unseen: { id: "r1" } } };', t.ctx);
+    const pages = { lab: t.view(), builtin: t.api.stratView('nq930'), labOnly: vm.runInContext('labView("nq_gap")', t.ctx) };
+    for (const [k, html] of Object.entries(pages)) {
+      assert.equal(/>Open in the Lab</.test(html), shown, `${k} with ${hb}/${machine}`);
+      assert.match(html, />Archive</, `${k}: the other actions stay`);
+    }
+    assert.equal(/>Show on chart</.test(pages.builtin), shown, `builtin with ${hb}/${machine}`);
+  }
 });

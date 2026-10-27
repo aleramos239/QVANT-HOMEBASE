@@ -196,13 +196,13 @@ def test_the_desk_serves_the_page_uncached_and_every_desk_script_it_names(tmp_pa
 # Each desk/*.js is cached by the browser under its ?v= (no cache-control on /static), so a changed file must get a new ?v=
 # or a fresh page can run with yesterday's code. Edited a desk file? Bump its ?v= in index.html, then its pin here (both).
 DESK_PINS = {
-    "desk/core.js": (1, "a30cddaf40be9288"),
+    "desk/core.js": (2, "c9e776b37ff75980"),
     "desk/topbar.js": (1, "e5e2bdd22c0b1724"),
     "desk/activity.js": (1, "3e658602440279d7"),
     "desk/views.js": (1, "528026221c807278"),
     "desk/groups.js": (1, "67632f20ce311dc5"),
-    "desk/strategy.js": (1, "ed733055c36fa617"),
-    "desk/labdesk.js": (1, "09ca74d99f09711a"),
+    "desk/strategy.js": (2, "48e303566eb466af"),
+    "desk/labdesk.js": (2, "f2df8adef513f954"),
     "desk/demo.js": (1, "80281fdd8c66654c"),
     "desk/book.js": (1, "fbeb323fd3fc4e00"),
     "desk/settings.js": (1, "428b206bb8e6f8ec"),
