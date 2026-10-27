@@ -406,7 +406,7 @@ def test_paperbook_imports_nothing_that_can_reach_a_broker():
     for node in ast.walk(ast.parse(src)):
         if isinstance(node, ast.ImportFrom):
             base = ".".join(x for x in (pkg[node.level], node.module or "") if x)
-            direct += [f"{base}.{a.name}" if node.module is None else base for a in node.names]
+            direct += [base] + [f"{base}.{a.name}" for a in node.names]       # `from ..desk import trading` is homebase.desk.trading
         elif isinstance(node, ast.Import):
             direct += [a.name for a in node.names]
     assert [m for m in direct if any(m == f or m.startswith(f + ".") for f in FORBIDDEN)] == [], direct
