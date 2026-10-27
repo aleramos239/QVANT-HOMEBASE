@@ -10,10 +10,10 @@ from pathlib import Path
 import pytest
 
 from homebase import config as desk_config
-from homebase import timer
+from homebase.desk import timer
 from homebase.backtest.engine import Costs, run_session, to_tick
 from homebase.backtest.tape import Tape, et_ns
-from homebase.engine import Engine
+from homebase.desk.engine import Engine
 from homebase.gate import trend_gate
 from homebase.strategies import REGISTRY, catalog, get
 from homebase.strategies.gc_nfpcpi import GCNfpCpi, calendar

@@ -14,7 +14,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from homebase import desk_api, engine as engine_mod, labdesk as labdesk_mod
+from homebase.desk import desk_api, engine as engine_mod, labdesk as labdesk_mod
 from homebase.labrun import host, match, store
 from homebase.labrun.deskside import desk_id
 from tests.desk_page_util import desk_page

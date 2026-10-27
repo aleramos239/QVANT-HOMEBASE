@@ -5,7 +5,8 @@ import datetime as dt
 import json
 from types import SimpleNamespace
 
-from homebase import contracts, ticks as T
+from homebase import contracts
+from homebase.data import ticks as T
 from homebase.charts.session import et_wall_s, is_rth, session_date, session_range_ms
 from homebase.charts.tick import BUY, SELL, SideClassifier, Tick, from_row
 from tests.charts_util import ET, session_ms

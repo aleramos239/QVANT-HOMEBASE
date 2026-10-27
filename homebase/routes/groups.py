@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException, Request
 
-from ..engine_groups import GroupError, GroupMissing
+from ..desk.engine_groups import GroupError, GroupMissing
 
 
 def register(app, *, engine) -> None:

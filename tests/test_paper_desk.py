@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 import homebase.config as config_mod
 from homebase.broker.paper import PaperAdapter
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
-from homebase.engine import Engine
+from homebase.desk.engine import Engine
 from homebase.server import build_adapter, create_app
 from tests.test_broker_paper import Service, adapter, run
 from tests.test_engine import Clock, FakeAdapter
@@ -136,9 +136,9 @@ def test_the_kill_path_flattens_several_paper_accounts_side_by_side(tmp_path):
 @pytest.fixture()
 def desk(tmp_path, monkeypatch):
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.engine.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.desk.engine.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.secrets_store.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.store.secrets_store.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     svc = Service(accounts=2)
 

@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from homebase.engine import Engine
+from homebase.desk.engine import Engine
 from tests.test_adapter_caches import CID, ME, OTHER, broker, push, working
 from tests.test_engine import Clock, mkcfg
 from tests.test_tradovate import fill_push, mkadapter, run

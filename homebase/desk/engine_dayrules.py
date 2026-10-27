@@ -10,9 +10,9 @@ import json
 import sys
 from typing import Optional
 
-from .broker.base import BrokerAdapter
-from .config import StrategyCfg, assignments
-from .contracts import point_value
+from ..broker.base import BrokerAdapter
+from ..config import StrategyCfg, assignments
+from ..contracts import point_value
 from .dayrules import LOCK_LOCK, LOCK_TAKE, DayBook, DayRules, merge_rules, standing, take_level
 from .daystate import DayState
 
@@ -103,7 +103,7 @@ class DayRulesMixin:
             if self.rules_for(account).target_take and profit is not None and prop.get("rules") \
                     and prop.get("mode", "eval") == "eval":
                 try:
-                    from .backtest.propsim import load_rules
+                    from ..backtest.propsim import load_rules
                     r = load_rules(str(prop["rules"]))
                     b.target_level = take_level(r["eval_target"], profit, largest, days,
                                                 min_days=int(r.get("eval_min_days") or 1),

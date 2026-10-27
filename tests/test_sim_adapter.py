@@ -13,7 +13,7 @@ import pytest
 from homebase.backtest.engine import Costs
 from homebase.backtest.tape import ET
 from homebase.broker.base import BrokerAdapter, OrderRequest
-from homebase.engine import TERMINAL, WORKING
+from homebase.desk.engine import TERMINAL, WORKING
 from homebase.labrun.shadowfills import ShadowFills
 from tests.test_broker_paper import run
 from tools.sim_adapter import Faults, SimAdapter

@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 
-from homebase import ticks as T
+from homebase.data import ticks as T
 from homebase.charts.history import History
 from homebase.charts.known import Known
 from homebase.charts.store import TickStore

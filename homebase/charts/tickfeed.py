@@ -46,7 +46,7 @@ import time
 from typing import Awaitable, Callable, Optional
 
 from .. import symbols
-from .. import ticks as T
+from ..data import ticks as T
 from ..core import atomic
 from . import MD_ENV
 from .session import ET, session_date

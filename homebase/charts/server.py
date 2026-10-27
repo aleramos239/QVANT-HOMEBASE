@@ -28,7 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.websockets import WebSocketClose
 
 from .. import netguard, symbols
-from .. import ticks as T
+from ..data import ticks as T
 from ..contracts import tick_size as contract_tick_size
 from ..paths import state_dir
 from . import DEFAULT_ROOTS, DEPTH_RECORD_ROOTS

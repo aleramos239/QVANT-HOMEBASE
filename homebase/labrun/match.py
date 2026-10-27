@@ -22,7 +22,7 @@ import sys
 import time
 from pathlib import Path
 
-from .. import tickarchive
+from ..data import tickarchive
 from ..backtest import drafthost, runner, sandbox
 from ..backtest.slots import Slots
 from ..backtest.tape import TapeStore, et_ns

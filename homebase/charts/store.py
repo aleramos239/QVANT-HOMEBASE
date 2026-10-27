@@ -32,7 +32,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .. import paths
-from .. import tickarchive as TA
+from ..data import tickarchive as TA
 from .tick import SideClassifier, Tick
 
 ARCHIVE = paths.ticks_archive()

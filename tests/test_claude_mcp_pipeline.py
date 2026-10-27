@@ -24,7 +24,8 @@ from pathlib import Path
 
 import pytest
 
-from homebase import arsenal, ideastore, paths
+from homebase.store import arsenal, ideastore
+from homebase import paths
 from homebase.claude_mcp import blueprint_tools, pipeline_tools, protocol, tools
 from homebase.claude_mcp.client import Client, ToolError
 

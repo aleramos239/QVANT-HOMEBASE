@@ -18,7 +18,7 @@ import time
 import zlib
 from pathlib import Path
 
-from .. import ticks as T
+from ..data import ticks as T
 from ..core import atomic
 from .session import session_date, split_by_session
 from .store import ARCHIVE, LIVE_SUFFIX, gaps_path, read_table

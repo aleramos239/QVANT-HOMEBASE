@@ -15,7 +15,8 @@ from array import array
 
 import pytest
 
-from homebase import draftstore, strategies
+from homebase.store import draftstore
+from homebase import strategies
 from homebase.backtest import drafthost, sandbox
 from homebase.backtest.engine import Costs, run_session
 from homebase.backtest.tape import Tape, et_ns

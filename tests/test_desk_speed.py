@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from homebase import equity
-from homebase.bothistory import JournalCache
+from homebase.desk import equity
+from homebase.desk.bothistory import JournalCache
 from tests.test_server import _write_journal, client  # noqa: F401  (the desk app over fakes, its state in tmp_path)
 
 

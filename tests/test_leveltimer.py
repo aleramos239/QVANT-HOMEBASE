@@ -12,13 +12,13 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from homebase import leveltimer
-from homebase.atrbars import et_ms
+from homebase.desk import leveltimer
+from homebase.data.atrbars import et_ms
 from homebase.config import AccountCfg, AppCfg
 from tests.levels_util import strategy_cfg
-from homebase.engine import Engine
-from homebase.leveltimer import LevelTimer
-from homebase.levels import straddle_geometry
+from homebase.desk.engine import Engine
+from homebase.desk.leveltimer import LevelTimer
+from homebase.desk.levels import straddle_geometry
 from homebase.broker.base import FillEvent
 from tests.test_atrbars import FIRE_NYAM, FIRE_ORB, FIRE_PM, day_minutes, ref_atr
 from tests.test_engine import FakeAdapter

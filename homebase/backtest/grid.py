@@ -41,7 +41,8 @@ import time
 from collections import deque
 from pathlib import Path
 
-from .. import draftstore, strategies
+from ..store import draftstore
+from .. import strategies
 from ..core import atomic
 from . import controls as ctlmod, drafthost, runner
 from .discipline import WF_OOS_ONLY, parse_range

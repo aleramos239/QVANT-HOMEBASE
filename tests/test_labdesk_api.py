@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import homebase.config as config_mod
-from homebase import desk_api
+from homebase.desk import desk_api
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
 from homebase.labrun import store
 from homebase.server import create_app
@@ -31,12 +31,12 @@ TRADE_ROUTES = [("get", "/api/trade/state"), ("get", "/api/trade/stream"), ("pos
 @pytest.fixture()
 def paths(tmp_path, monkeypatch):
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.engine.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.desk.engine.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.secrets_store.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.store.secrets_store.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     # the real clock would pause the chart views at 09:29:50-09:30:30 ET: never flake then
-    monkeypatch.setattr("homebase.trading.ChartDesk._views_paused", lambda self: False)
+    monkeypatch.setattr("homebase.desk.trading.ChartDesk._views_paused", lambda self: False)
     return tmp_path
 
 
@@ -338,7 +338,7 @@ def test_flatten_and_turn_off_ends_the_day_before_anything_else(client):        
 
 
 def test_a_switch_off_stops_the_day_before_the_store_is_written_even_when_the_write_fails(client):   # m3
-    from homebase.labdesk import NOT_SAVED, Refused
+    from homebase.desk.labdesk import NOT_SAVED, Refused
     client.post("/api/lab/intent", headers=client.H, json=event(client, [entry()]))
     order = calls_of(client)
     ld = client.app.state.labdesk

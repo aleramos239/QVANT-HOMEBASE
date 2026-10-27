@@ -6,10 +6,10 @@ import datetime as dt
 
 import pytest
 
-from homebase.atrbars import MIN_MS, TickBars, et_ms
+from homebase.data.atrbars import MIN_MS, TickBars, et_ms
 from tests.levels_util import strategy_cfg
-from homebase.dayrules import DayBook, DayRules
-from homebase.levels import (Geometry, account_leg, compute_geometry, is_early_close_skip, orb_geometry,
+from homebase.desk.dayrules import DayBook, DayRules
+from homebase.desk.levels import (Geometry, account_leg, compute_geometry, is_early_close_skip, orb_geometry,
                              straddle_geometry)
 from tests.test_atrbars import FIRE_NYAM, FIRE_ORB, day_minutes, fed
 
@@ -46,7 +46,7 @@ def test_leg_stop_is_the_testers_stop_to_the_tick():
     _Sim._fill)."""
     import random
     from homebase.backtest.engine import to_tick
-    from homebase.levels import leg_stop
+    from homebase.desk.levels import leg_stop
     rnd, seen = random.Random(7), set()
     for _ in range(20000):
         anchor = round(rnd.uniform(10000, 30000) * 4) / 4 + rnd.choice([0, 0, 0.1])

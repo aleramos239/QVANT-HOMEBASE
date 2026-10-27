@@ -8,7 +8,7 @@ import math
 import pytest
 
 from homebase.backtest.propsim import load_rules
-from homebase.risk import (DayBook, DayRules, ceil_to_tick, merge_rules, size_for_profit, standing,
+from homebase.desk.risk import (DayBook, DayRules, ceil_to_tick, merge_rules, size_for_profit, standing,
                            take_level, take_points)
 
 TICK, PV, FEE = 0.25, 20.0, 4.0

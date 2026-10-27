@@ -11,10 +11,10 @@ import datetime as dt
 import hashlib
 import json
 
-from homebase import labdesk
+from homebase.desk import labdesk
 from homebase.config import AccountCfg, AppCfg
-from homebase.engine import Engine
-from homebase.labdesk import LabDesk, Refused
+from homebase.desk.engine import Engine
+from homebase.desk.labdesk import LabDesk, Refused
 from homebase.labrun import store
 from homebase.labrun.deskside import desk_id
 from tests.test_broker_paper import Service, adapter, run

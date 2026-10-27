@@ -7,8 +7,8 @@ import json
 from homebase import symbols
 from homebase.broker.base import OrderResult
 from homebase.config import AccountCfg, AppCfg, ChartTradingCfg, StrategyCfg
-from homebase.engine import Engine
-from homebase.trading import ChartDesk
+from homebase.desk.engine import Engine
+from homebase.desk.trading import ChartDesk
 from tests.test_engine import Clock, FakeAdapter
 
 NQC = symbols.resolve_contract("NQ")

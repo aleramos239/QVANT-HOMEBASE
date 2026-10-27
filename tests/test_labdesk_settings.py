@@ -8,7 +8,8 @@ import datetime as dt
 
 import pytest
 
-from homebase import draftstore, labcfg
+from homebase.store import draftstore
+from homebase.desk import labcfg
 from homebase.labrun import store
 from tests.test_server_lab import (FLATTEN_FIRST, LAB, NOT_ON_DESK, ET, client, journal, no_lab_in_config, open_round,  # noqa: F401
                                    paths, rec, status)

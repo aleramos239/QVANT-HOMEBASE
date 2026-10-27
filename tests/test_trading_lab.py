@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from homebase.config import StrategyCfg
-from homebase.trading import ChartDesk, Refused
+from homebase.desk.trading import ChartDesk, Refused
 from tests.labdesk_util import DATE, LAB, entry, mkdesk, send
 from tests.test_engine import run
 from tests.test_engine_lab import fill_entry, fill_exit

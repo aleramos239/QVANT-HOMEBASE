@@ -37,25 +37,26 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import bothistory, equity
+from .desk import bothistory, equity
 from . import config as config_mod
-from . import secrets_store
+from .store import secrets_store
 from .broker.base import AccountNotOnLogin, BrokerAdapter, OrderRequest
 from .broker.login_budget import LoginBudget, LoginDeferred, is_rate_limited
 from .broker.paper import BASE_URL as PAPER_URL, PaperAdapter
 from .broker.tradovate import RENEW_EARLY_FROM, RENEW_EARLY_UNTIL, TradovateAdapter
-from .engine import Engine, _hhmm
-from .feed import MarketFeed
-from .marketdata import TradovateMD
-from .rules import RULES
-from .metrics import live_metrics, strategy_live_detail
+from .desk.engine import Engine, _hhmm
+from .data.feed import MarketFeed
+from .data.marketdata import TradovateMD
+from .desk.rules import RULES
+from .desk.metrics import live_metrics, strategy_live_detail
 from .paths import state_dir
-from .leveltimer import LevelTimer
-from .timer import SelfTimer, fire_clock, fire_said, fire_time, miss_why, off_anchor, schedule
-from . import desk_api, routes
-from . import inactive as inactive_mod
-from . import labdesk as labdesk_mod
-from .trading import ChartDesk
+from .desk.leveltimer import LevelTimer
+from .desk.timer import SelfTimer, fire_clock, fire_said, fire_time, miss_why, off_anchor, schedule
+from .desk import desk_api
+from . import routes
+from .desk import inactive as inactive_mod
+from .desk import labdesk as labdesk_mod
+from .desk.trading import ChartDesk
 from .desk_app import background as background_mod, barsfeed, brokers
 # every name this module had before the split stays importable from here (homebase.server stays the desk's front door);
 # the constants are copies: to change one for the desk, set it in its homebase.desk_app module

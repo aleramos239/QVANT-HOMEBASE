@@ -3,7 +3,7 @@ starts a new run and the row says which round it was; a round is not the 09:30 f
 latency_ms. With no `lab_round` line in the journal the output is what it always was. Pure."""
 from __future__ import annotations
 
-from homebase.bothistory import runs
+from homebase.desk.bothistory import runs
 from tests.test_bothistory import TODAY, ms, placed, rec
 
 LAB = "lab_pp"

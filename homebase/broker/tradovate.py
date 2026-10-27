@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 
 from .. import symbols
 from ..paths import state_dir as _default_state_dir
-from ..secrets_store import get_credentials
+from ..store.secrets_store import get_credentials
 from .base import (AccountNotOnLogin, BrokerAdapter, FillCallback, FillEvent,
                    OrderRequest, OrderResult)
 from .tradovate_auth import TradovateAuth

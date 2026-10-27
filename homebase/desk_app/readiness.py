@@ -4,9 +4,9 @@ Moved verbatim from homebase/server.py; homebase.server re-exports compute_readi
 from __future__ import annotations
 
 from .. import config as config_mod
-from .. import inactive as inactive_mod
-from .. import labdesk as labdesk_mod
-from ..timer import fire_clock, fire_said, fire_time, miss_why, off_anchor, schedule
+from ..desk import inactive as inactive_mod
+from ..desk import labdesk as labdesk_mod
+from ..desk.timer import fire_clock, fire_said, fire_time, miss_why, off_anchor, schedule
 from .barsfeed import feed_window
 
 READINESS_FROM = (9, 25)

@@ -13,11 +13,11 @@ from collections import deque
 
 import pytest
 
-from homebase import engine as engine_mod
-from homebase import labcfg, labdesk, trading
+from homebase.desk import engine as engine_mod
+from homebase.desk import labcfg, labdesk, trading
 from homebase.config import StrategyCfg
-from homebase.engine import DayState, Engine
-from homebase.labdesk import LabDesk, Refused, parse_event
+from homebase.desk.engine import DayState, Engine
+from homebase.desk.labdesk import LabDesk, Refused, parse_event
 from homebase.labrun import door, host, store
 from homebase.server import compute_readiness
 from tests.labdesk_util import DATE, LAB, LIMITS, MARK, body, entry, journal, mkdesk, now_ms, pair, rec, send

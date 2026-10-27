@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException, Request
 
-from .. import labdesk as labdesk_mod
+from ..desk import labdesk as labdesk_mod
 
 
 def register(app, *, labdesk) -> None:

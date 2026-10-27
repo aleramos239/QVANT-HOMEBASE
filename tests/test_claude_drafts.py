@@ -12,7 +12,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from homebase import draftstore, strategies
+from homebase.store import draftstore
+from homebase import strategies
 from homebase.backtest import grid, runner, slots, walkforward
 from homebase.charts.server import create_app
 from tests.backtest_util import D1, nq_archive
@@ -227,12 +228,12 @@ def test_source_route_serves_builtins_and_draft_text_without_running_it(tmp_path
 
 # ---------------------------------------------------------------- the desk can never load one
 
-DESK_MODULES = ["homebase/server.py", "homebase/engine.py", "homebase/engine_lab.py", "homebase/daystate.py",
-                "homebase/engine_groups.py", "homebase/engine_rotation.py", "homebase/engine_dayrules.py",
-                "homebase/engine_kill.py",
-                "homebase/equity.py", "homebase/trading.py", "homebase/timer.py",
-                "homebase/config.py", "homebase/rules.py", "homebase/desk_api.py", "homebase/feed.py",
-                "homebase/gate.py", "homebase/risk.py", "homebase/review.py", "homebase/metrics.py",
+DESK_MODULES = ["homebase/server.py", "homebase/desk/engine.py", "homebase/desk/engine_lab.py", "homebase/desk/daystate.py",
+                "homebase/desk/engine_groups.py", "homebase/desk/engine_rotation.py", "homebase/desk/engine_dayrules.py",
+                "homebase/desk/engine_kill.py",
+                "homebase/desk/equity.py", "homebase/desk/trading.py", "homebase/desk/timer.py",
+                "homebase/config.py", "homebase/desk/rules.py", "homebase/desk/desk_api.py", "homebase/data/feed.py",
+                "homebase/gate.py", "homebase/desk/risk.py", "homebase/desk/review.py", "homebase/desk/metrics.py",
                 "homebase/charts/desk.py", "homebase/charts/paper.py", "homebase/charts/paperbook.py",
                 "homebase/routes/__init__.py", "homebase/routes/accounts.py", "homebase/routes/control.py",
                 "homebase/routes/lab.py", "homebase/routes/records.py", "homebase/routes/status.py",
@@ -249,10 +250,10 @@ def test_importing_the_desk_never_loads_a_draft(sentinel):
     """The desk process (homebase.server) imported in a clean interpreter with a draft on disk: no draft
     code runs, no draft module is loaded, and neither draft helper is even imported."""
     write_template()
-    code = ("import sys, homebase.server, homebase.engine, homebase.trading, homebase.rules\n"
+    code = ("import sys, homebase.server, homebase.desk.engine, homebase.desk.trading, homebase.desk.rules\n"
             "bad = [m for m in sys.modules if m.startswith('homebase_draft_') or m in "
-            "('homebase.draftstore', 'homebase.backtest.drafthost', 'homebase.backtest.sandbox')]\n"
-            "from homebase.rules import RULES\n"
+            "('homebase.store.draftstore', 'homebase.backtest.drafthost', 'homebase.backtest.sandbox')]\n"
+            "from homebase.desk.rules import RULES\n"
             "assert not bad, bad\nassert not any(k.startswith('draft_') for k in RULES), RULES\nprint('ok')\n")
     p = subprocess.run([sys.executable, "-c", code], cwd=REPO, capture_output=True, text=True, timeout=120)
     assert p.returncode == 0 and p.stdout.strip() == "ok", p.stderr

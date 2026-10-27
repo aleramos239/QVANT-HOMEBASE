@@ -178,7 +178,7 @@ def test_the_desk_serves_the_page_uncached_and_every_desk_script_it_names(tmp_pa
     import homebase.config as config_mod
     from homebase.config import AppCfg
     from homebase.server import create_app
-    for target in ("homebase.paths.state_dir", "homebase.engine.state_dir", "homebase.server.state_dir", "homebase.secrets_store.state_dir"):
+    for target in ("homebase.paths.state_dir", "homebase.desk.engine.state_dir", "homebase.server.state_dir", "homebase.store.secrets_store.state_dir"):
         monkeypatch.setattr(target, lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     with TestClient(create_app(AppCfg(), {}, background=False), base_url="http://127.0.0.1:8850") as c:

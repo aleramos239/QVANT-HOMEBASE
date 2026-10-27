@@ -8,7 +8,7 @@ import asyncio
 
 from homebase.broker.base import FillEvent, OrderResult
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
-from homebase.engine import Engine
+from homebase.desk.engine import Engine
 from tests.test_engine import ALERT, Clock, FakeAdapter
 
 RATE_LIMITED = "failed: status=429 data=None"       # as tradovate_ws.request words it

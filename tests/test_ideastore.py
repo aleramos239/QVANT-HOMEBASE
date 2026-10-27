@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from homebase import draftstore, ideastore
+from homebase.store import draftstore, ideastore
 
 NAME = "nq_orb_pre"
 SID = "draft_nq_orb_pre"

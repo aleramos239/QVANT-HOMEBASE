@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from homebase import draftstore
+from homebase.store import draftstore
 from homebase.backtest import sandbox
 from homebase.backtest.engine import Costs, run_session
 from homebase.backtest.tape import ARCHIVE, CACHE, OverlayTapeStore, Tape, TapeStore, effective_session_window, et_ns

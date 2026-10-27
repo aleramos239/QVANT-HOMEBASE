@@ -9,8 +9,8 @@ import json
 import sys
 from typing import Optional
 
-from .config import StrategyCfg, assignments
-from .core import atomic
+from ..config import StrategyCfg, assignments
+from ..core import atomic
 from .engine_lab import LAB_ACCOUNT_STOPPED, LAB_NOT_CONNECTED, LAB_SLOT_BUSY
 
 ROTATION_NONE = "No booked account could take this trade."

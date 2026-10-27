@@ -11,9 +11,9 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
-from homebase.engine import Engine
-from homebase.marketdata import TRADE_HISTORY, TradovateMD
-from homebase.timer import FIRE_LATE_MAX_S, SelfTimer
+from homebase.desk.engine import Engine
+from homebase.data.marketdata import TRADE_HISTORY, TradovateMD
+from homebase.desk.timer import FIRE_LATE_MAX_S, SelfTimer
 from tests.test_engine import Clock, FakeAdapter
 
 FIX = json.loads((Path(__file__).parent / "fixture_gate_nq2024.json").read_text())
@@ -160,7 +160,7 @@ def test_timer_gates_stages_and_fires_dry_run(tmp_path):
 
 def test_timer_skips_chop_day(tmp_path, monkeypatch):
     timer, engine, md, clock = mk(tmp_path)
-    monkeypatch.setattr("homebase.timer.trend_gate", lambda bars: (False, 12.0))
+    monkeypatch.setattr("homebase.desk.timer.trend_gate", lambda bars: (False, 12.0))
     _drive_to_fire(timer, clock)
     st = timer.status()["strategies"]["nq930"]
     assert st["stage"] == "skipped"
@@ -169,7 +169,7 @@ def test_timer_skips_chop_day(tmp_path, monkeypatch):
 
 def test_timer_refuses_unknown_gate(tmp_path, monkeypatch):
     timer, engine, md, clock = mk(tmp_path)
-    monkeypatch.setattr("homebase.timer.trend_gate", lambda bars: (None, None))
+    monkeypatch.setattr("homebase.desk.timer.trend_gate", lambda bars: (None, None))
     _drive_to_fire(timer, clock)
     assert timer.status()["strategies"]["nq930"]["stage"] == "error"
     assert not any(e["event"] == "dry_run" for e in events(tmp_path))
@@ -788,7 +788,7 @@ def test_the_md_anchor_is_the_last_trade_received_before_the_open(tmp_path, monk
     """TradovateMD.last(before=): the latest trade from a push RECEIVED strictly before the
     cutoff (the research's "last print before 09:30:00.000"), whenever it is asked -- by the
     local receive clock; the push's own `timestamp` is kept, raw, for the journal only."""
-    import homebase.marketdata as md_mod
+    import homebase.data.marketdata as md_mod
     monkeypatch.setattr(md_mod, "state_dir", lambda: tmp_path)
     m = TradovateMD("k", "demo", token_provider=lambda: "tok")
     m._cid_sym.update({3267315: "NQZ6", 4706811: "YMZ6"})
@@ -827,7 +827,7 @@ def test_the_md_anchor_is_the_last_trade_received_before_the_open(tmp_path, monk
 
 
 def test_a_pushes_timestamp_parses_only_as_iso_with_a_zone_or_epoch_ms():
-    from homebase.marketdata import _stamp
+    from homebase.data.marketdata import _stamp
     t = et(9, 29, 59, 950000).timestamp()
     for v in ("2026-09-14T13:29:59.950Z", "2026-09-14T13:29:59.950z", " 2026-09-14T13:29:59.950Z ",
               "2026-09-14T13:29:59.95+00:00", "2026-09-14T09:29:59.950-04:00",
@@ -1155,7 +1155,7 @@ def test_the_window_closing_on_an_account_wait_says_so(tmp_path):
 def test_a_late_fire_never_goes_out_on_a_quote_older_than_current_max_age(tmp_path):
     """R2: a stalled tick at 09:30:12 found a trade received 09:29:59.9 (12.1 s old) and
     fired on it. The late anchor must be at most CURRENT_MAX_AGE_S old: it waits."""
-    from homebase.timer import CURRENT_MAX_AGE_S
+    from homebase.desk.timer import CURRENT_MAX_AGE_S
     assert CURRENT_MAX_AGE_S == 1.5
     timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD())
     at(clock, 9, 21); run(timer.tick())
@@ -1173,7 +1173,7 @@ def test_a_late_fire_never_goes_out_on_a_quote_older_than_current_max_age(tmp_pa
 
 @pytest.mark.parametrize("age_s, fires_pre_open", [(4.9, True), (5.1, False)])
 def test_a_pre_open_trade_older_than_pre_open_max_age_means_a_dead_feed(tmp_path, age_s, fires_pre_open):
-    from homebase.timer import PRE_OPEN_MAX_AGE_S
+    from homebase.desk.timer import PRE_OPEN_MAX_AGE_S
     assert PRE_OPEN_MAX_AGE_S == 5.0
     timer, engine, md, clock = mk(tmp_path, md=TapeMD())
     at(clock, 9, 21); run(timer.tick())
@@ -1245,7 +1245,7 @@ def test_a_rebuilt_md_socket_is_subscribed_to_every_staged_symbol(tmp_path):
 
 
 def test_tradovate_md_without_a_token_refuses_rather_than_log_in(tmp_path, monkeypatch):
-    import homebase.marketdata as md_mod
+    import homebase.data.marketdata as md_mod
     monkeypatch.setattr(md_mod, "state_dir", lambda: tmp_path)
     monkeypatch.setattr(md_mod, "get_credentials", lambda key: pytest.fail("read the password"))
     m = TradovateMD("k", "demo", token_provider=lambda: "")
@@ -1291,7 +1291,7 @@ def test_the_restart_journal_read_runs_off_the_event_loop(tmp_path, monkeypatch)
         seen.append(getattr(fn, "__name__", fn))
         return await real(fn, *a, **k)
 
-    monkeypatch.setattr("homebase.timer.asyncio.to_thread", spy)
+    monkeypatch.setattr("homebase.desk.timer.asyncio.to_thread", spy)
     timer, engine, md, clock = mk(tmp_path, md=TapeMD(snapshot={"NQ": 24619.0}))
     at(clock, 9, 31); run(timer.tick())
     assert seen == ["_read_decided"]
@@ -1299,7 +1299,7 @@ def test_the_restart_journal_read_runs_off_the_event_loop(tmp_path, monkeypatch)
 
 # --- final review, A: one down account never holds the whole book past ACCOUNT_WAIT_MAX_S ---
 def test_a_down_account_holds_a_late_fire_45_s_then_the_ready_ones_place(tmp_path):
-    from homebase.timer import ACCOUNT_WAIT_MAX_S
+    from homebase.desk.timer import ACCOUNT_WAIT_MAX_S
     assert ACCOUNT_WAIT_MAX_S == 45.0
     timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD(snapshot={"NQ": 24520.0}))
     engine.cfg.accounts.update(a=AccountCfg(keyring_key="k", account_name="A"),
@@ -1328,8 +1328,8 @@ def test_a_down_account_holds_a_late_fire_45_s_then_the_ready_ones_place(tmp_pat
 
 # --- final review, B: a "placing" a crash left behind never pins the day -------------------
 def test_a_placing_left_by_a_crash_turns_into_an_error_to_check_and_never_fires_again(tmp_path):
-    from homebase.engine import PLACING_UNKNOWN
-    from homebase.trading import ChartDesk
+    from homebase.desk.engine import PLACING_UNKNOWN
+    from homebase.desk.trading import ChartDesk
     timer, engine, md, clock = mk(tmp_path, armed=True)
     engine._state("nq930", "main").status = "placing"            # the acks never came: the desk died
     engine._save()

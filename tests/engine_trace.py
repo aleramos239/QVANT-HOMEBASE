@@ -56,7 +56,7 @@ def _subs(c):
 
 
 def pytest_collection_finish(session):
-    from homebase import engine as engine_mod
+    from homebase.desk import engine as engine_mod
     from homebase.broker.base import BrokerAdapter
     api = [n for n, f in vars(BrokerAdapter).items() if callable(f) and not n.startswith("__")]
     for c in [BrokerAdapter, *_subs(BrokerAdapter)]:

@@ -144,9 +144,9 @@ class _Stop(Exception):
 def desk(tmp_path, monkeypatch):
     """Two entries on ONE Apex user: `dead` (closed at Apex) and `live` (the 9:30 one)."""
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.engine.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.desk.engine.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.secrets_store.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.store.secrets_store.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     cfg = AppCfg(armed=True,
                  accounts={"dead": AccountCfg(keyring_key=KEY, account_name="APEX-049"),

@@ -292,10 +292,10 @@ def test_the_store_keeps_the_drafts_name_rule_without_importing_the_draft_helper
     import subprocess
     import sys
 
-    from homebase import draftstore
+    from homebase.store import draftstore
     assert store.NAME_RE.pattern == draftstore.NAME_RE.pattern and store.NAME_RE.flags == draftstore.NAME_RE.flags
-    code = ("import sys, homebase.labrun.store, homebase.labcfg, homebase.labdesk\n"
-            "bad = sorted(m for m in sys.modules if m == 'homebase.draftstore' or m.startswith('homebase.backtest'))\n"
+    code = ("import sys, homebase.labrun.store, homebase.desk.labcfg, homebase.desk.labdesk\n"
+            "bad = sorted(m for m in sys.modules if m == 'homebase.store.draftstore' or m.startswith('homebase.backtest'))\n"
             "print(bad); sys.exit(1 if bad else 0)\n")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, out.stdout + out.stderr

@@ -35,7 +35,7 @@ from homebase.charts.studies import make, split_timeframe
 from homebase.charts.studies_tv2 import CUMULATIVE_WARM, WARM
 from homebase.contracts import price_root, spec_for, tick_size
 from homebase.paths import repo_root
-from homebase.ticks import session_complete
+from homebase.data.ticks import session_complete
 
 ENV = "HOMEBASE_TVPARITY_DIR"
 TFS = (60, 300, 900, 3600, 86400)

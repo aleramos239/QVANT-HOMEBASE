@@ -19,9 +19,9 @@ from homebase.broker.base import FillEvent
 from homebase.broker.tradovate import renewal_due
 from homebase.config import AccountCfg, AppCfg
 from homebase.contracts import point_value
-from homebase.engine import Engine
+from homebase.desk.engine import Engine
 from homebase.server import compute_readiness
-from homebase.timer import (DONE_T, FIRE_T, GATE_T, STAGE_T, SelfTimer, fire_clock, fire_time,
+from homebase.desk.timer import (DONE_T, FIRE_T, GATE_T, STAGE_T, SelfTimer, fire_clock, fire_time,
                             schedule)
 from tests.test_engine import Clock, FakeAdapter, run
 from tests.test_timer import ET, FakeMD, at as _at, events

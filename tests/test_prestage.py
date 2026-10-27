@@ -9,9 +9,9 @@ import datetime as dt
 import time
 
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
-from homebase.engine import Engine
+from homebase.desk.engine import Engine
 from homebase.server import compute_readiness
-from homebase.timer import SelfTimer
+from homebase.desk.timer import SelfTimer
 from tests.test_engine import Clock, FakeAdapter
 from tests.test_timer import FakeMD, _drive_to_fire, events, run
 
@@ -121,7 +121,7 @@ def test_an_unreadable_position_fires_as_before(tmp_path):
 
 
 def test_a_hung_position_read_times_out_and_fires_as_before(tmp_path, monkeypatch):
-    monkeypatch.setattr("homebase.timer.PRESTAGE_READ_S", 0.05)
+    monkeypatch.setattr("homebase.desk.timer.PRESTAGE_READ_S", 0.05)
     timer, engine, clock = mk2(tmp_path, {"a1": 0, "a2": 0}, adapter_cls=HangingAdapter)
     _drive_to_fire(timer, clock)
     ev = events(tmp_path)

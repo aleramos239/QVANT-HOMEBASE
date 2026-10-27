@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from homebase.trading import TIFS, TYPES, parse_order
+from homebase.desk.trading import TIFS, TYPES, parse_order
 from tests.trading_util import NQC, journal, mkdesk, quote, run
 
 BASE = {"client_id": "c", "accounts": ["a1"], "root": "NQ", "side": "Buy", "qty": 1}

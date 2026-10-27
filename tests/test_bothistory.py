@@ -7,7 +7,7 @@ import os
 
 import pytest
 
-from homebase.bothistory import JournalCache, parse_lines, runs
+from homebase.desk.bothistory import JournalCache, parse_lines, runs
 
 TODAY = "2026-09-18"      # a Friday
 
@@ -240,7 +240,7 @@ def test_a_kill_request_alone_marks_the_day_killed():
 
 
 def test_days_are_1_to_400_default_120():
-    from homebase.bothistory import parse_days
+    from homebase.desk.bothistory import parse_days
     assert (parse_days(None), parse_days("7"), parse_days(400), parse_days("1")) == (120, 7, 400, 1)
     for bad in (0, 401, "0", "401", "abc", "7.5", "", True, 7.0, [7]):
         with pytest.raises(ValueError, match="days: a whole number 1-400"):

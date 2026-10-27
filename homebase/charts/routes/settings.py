@@ -7,7 +7,7 @@ from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
 from ... import netguard
-from ... import ticks as T
+from ...data import ticks as T
 from ..paperbook import DESK_ORIGINS, _cors, desk_origin_refusal
 from ..settings_store import CLOCK_CHOICES, MD_CHOICES, md_only
 from ..tickfeed import SwitchInProgress

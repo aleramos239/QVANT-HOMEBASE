@@ -12,7 +12,8 @@ import json
 import time
 from pathlib import Path
 
-from . import datawatch, paths, tickcoverage
+from . import datawatch, tickcoverage
+from .. import paths
 from . import ticks as T
 
 

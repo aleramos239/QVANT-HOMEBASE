@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import pytest
 
-from homebase import contracts, draftstore, labcfg
+from homebase import contracts
+from homebase.store import draftstore
+from homebase.desk import labcfg
 from homebase.backtest import drafthost
 from homebase.backtest.engine import Costs, run_session
 from homebase.charts import paperbook as pb

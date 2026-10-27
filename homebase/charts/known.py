@@ -16,7 +16,7 @@ import datetime as dt
 import json
 from pathlib import Path
 
-from .. import ticks as T
+from ..data import ticks as T
 from .store import _stamp
 
 KIND = {"lost": "lost", "vendor_gap": "lost", "filling": "filling"}     # a hole's class -> the band the page draws:

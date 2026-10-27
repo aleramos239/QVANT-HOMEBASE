@@ -8,7 +8,7 @@ import re
 import pytest
 
 from homebase.broker.base import BrokerAdapter, OrderResult
-from homebase.trading import exit_levels, parse_exits, Refused
+from homebase.desk.trading import exit_levels, parse_exits, Refused
 from tests.trading_util import NQC, journal, mkdesk, quote, run
 
 

@@ -43,7 +43,8 @@ from bisect import bisect_left
 from collections import OrderedDict, deque
 from pathlib import Path
 
-from .. import draftstore, qos, strategies
+from ..store import draftstore
+from .. import qos, strategies
 from ..strategies.base import wants
 from ..contracts import commission_rt
 from ..core.clock import utc_iso as _now

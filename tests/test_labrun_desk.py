@@ -1356,7 +1356,8 @@ def test_the_default_key_file_is_the_desks_own_in_the_checkouts_state_folder(mon
     ran = []
     monkeypatch.setattr(host, "run", lambda charts, at=None, **kw: ran.append(kw))
     assert cli.main(["--root", str(tmp_path), "--desk", "http://127.0.0.1:8850"]) == 0
-    from homebase import desk_api, paths
+    from homebase.desk import desk_api
+    from homebase import paths
     assert ran[0]["desk_key"] == paths.state_dir() / desk_api.LAB_KEY_FILE
 
 

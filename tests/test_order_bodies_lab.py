@@ -16,10 +16,10 @@ import json
 
 import pytest
 
-from homebase import labcfg
+from homebase.desk import labcfg
 from homebase.broker.base import OrderRequest
 from homebase.config import AccountCfg, AppCfg
-from homebase.engine import Engine, LabLeg
+from homebase.desk.engine import Engine, LabLeg
 from tests.test_engine import Clock, FakeAdapter
 from tests.test_order_bodies_pinned import assert_bytes, mkadapter
 

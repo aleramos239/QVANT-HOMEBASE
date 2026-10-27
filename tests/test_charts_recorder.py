@@ -8,7 +8,7 @@ import json
 import os
 import time
 
-from homebase import ticks as T
+from homebase.data import ticks as T
 from homebase.charts import recorder as recorder_module
 from homebase.charts.recorder import LiveRecorder, refill
 from homebase.charts.store import TickStore, read_table

@@ -13,7 +13,7 @@ import asyncio
 import datetime as dt
 
 from homebase import symbols
-from homebase import ticks as T
+from homebase.data import ticks as T
 from homebase.charts.session import ET
 from homebase.charts.tickfeed import BACKOFF_S, HEALTHY_S, RETRY_REFUSED_S, Refused, TickFeed
 

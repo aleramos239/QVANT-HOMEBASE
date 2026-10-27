@@ -11,10 +11,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 import homebase.config as config_mod
-from homebase import labdesk
+from homebase.desk import labdesk
 from homebase.config import AccountCfg, AppCfg
-from homebase.engine import Engine
-from homebase.labdesk import LabDesk
+from homebase.desk.engine import Engine
+from homebase.desk.labdesk import LabDesk
 from homebase.labrun import store
 from homebase.server import create_app
 from tests.labdesk_util import DATE, LAB, LIMITS, MARK, Stepper, entry, pair, rec
@@ -198,11 +198,11 @@ def test_a_silent_runner_loses_its_resting_entry_and_a_position_keeps_its_stop(t
 @pytest.fixture()
 def desk(tmp_path, monkeypatch):
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.engine.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.desk.engine.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
-    monkeypatch.setattr("homebase.secrets_store.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.store.secrets_store.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
-    monkeypatch.setattr("homebase.trading.ChartDesk._views_paused", lambda self: False)
+    monkeypatch.setattr("homebase.desk.trading.ChartDesk._views_paused", lambda self: False)
     svc = Service()
     store.put(rec())
     listing = httpx.AsyncClient(transport=httpx.MockTransport(

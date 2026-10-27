@@ -6,10 +6,10 @@ import datetime as dt
 import json
 import os
 
-from homebase import datawatch as W
-from homebase import tickarchive as A
-from homebase import ticks as T
-from homebase import tickjob as J
+from homebase.data import datawatch as W
+from homebase.data import tickarchive as A
+from homebase.data import ticks as T
+from homebase.data import tickjob as J
 from tests.test_ticks import _minute_ticks, _write_live
 
 ET = T.ET

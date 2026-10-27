@@ -6,10 +6,10 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
-from homebase import labdesk
+from homebase.desk import labdesk
 from homebase.config import AccountCfg, AppCfg
-from homebase.engine import Engine
-from homebase.labdesk import LabDesk
+from homebase.desk.engine import Engine
+from homebase.desk.labdesk import LabDesk
 from homebase.labrun import store
 from tests.test_engine import Clock, run
 from tests.test_engine_lab import LabAdapter, quick

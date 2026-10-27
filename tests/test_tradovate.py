@@ -309,7 +309,7 @@ def test_engine_and_adapter_move_the_brackets_on_the_wire(tmp_path):
     """Real engine + real adapter, fake wire. Today's 9:30 replayed: the buy
     stop 30231.5 fills 1 tick worse at 30231.75 — on the wire the sell stop is
     cancelled and the SL/TP are re-priced 5/15 points from the FILL."""
-    from homebase.engine import Engine
+    from homebase.desk.engine import Engine
     from tests.test_engine import Clock, mkcfg
 
     ids = iter([(663695020149, 663695020150, 663695020151),
@@ -470,6 +470,7 @@ def test_the_dead_helpers_removed_2026_10_04_are_named_nowhere_in_the_code():
                 if p.suffix in (".py", ".js", ".mjs", ".html") and p != Path(__file__).resolve():
                     hits += [f"{p.relative_to(root)}: {m}" for m in word.findall(p.read_text(errors="replace"))]
     assert hits == []
-    from homebase import risk, symbols
+    from homebase.desk import risk
+    from homebase import symbols
     assert risk.take_points and risk.DayBook                    # the daily rules are still re-exported
     assert symbols.resolve_contract("NQZ6") == "NQZ6" and symbols.front_month("NQ").startswith("NQ")

@@ -12,7 +12,8 @@ from typing import Callable
 
 from fastapi import APIRouter, HTTPException, Request
 
-from ... import draftstore, strategies
+from ...store import draftstore
+from ... import strategies
 from ...backtest import drafthost
 from ...backtest.runner import read_json
 from ...labrun import store

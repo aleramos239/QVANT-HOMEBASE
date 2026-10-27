@@ -9,7 +9,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from homebase import draftstore
+from homebase.store import draftstore
 from homebase.backtest import sandbox, slots
 from homebase.charts import deskresults, lab_templates, tester_api
 from homebase.labrun import door, store

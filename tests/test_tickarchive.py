@@ -10,8 +10,8 @@ import json
 
 import pytest
 
-from homebase import tickarchive as A
-from homebase import ticks as T
+from homebase.data import tickarchive as A
+from homebase.data import ticks as T
 from homebase.charts import store
 
 ET = T.ET

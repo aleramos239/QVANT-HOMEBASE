@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from homebase import labcfg, labdesk
+from homebase.desk import labcfg, labdesk
 from homebase.backtest.engine import Costs, run_session
 from homebase.labrun import deskside, host
 from tests.labdesk_util import LAB, mkdesk

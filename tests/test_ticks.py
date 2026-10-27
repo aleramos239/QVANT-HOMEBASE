@@ -7,7 +7,7 @@ import datetime as dt
 import gzip
 import json
 
-from homebase import ticks as T
+from homebase.data import ticks as T
 from homebase.symbols import front_month
 
 ET = T.ET

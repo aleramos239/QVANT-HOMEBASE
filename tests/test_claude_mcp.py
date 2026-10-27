@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from homebase import draftstore
+from homebase.store import draftstore
 from homebase.claude_mcp import protocol, tools
 from homebase.claude_mcp.client import Client, ToolError
 
@@ -490,8 +490,8 @@ def test_the_package_only_ever_reaches_known_safe_routes():
             assert ok, (name, path)
     imports = set(re.findall(r"^\s*(?:from|import)\s+([\w.]+)", "\n".join(src.values()), re.M))
     homebase_imports = {i for i in imports if i.startswith(("homebase", ".."))}
-    assert homebase_imports <= {"..", "homebase.claude_mcp"}, homebase_imports     # draftstore, paths via `..`
-    assert "from .. import draftstore" in src["tools.py"]
+    assert homebase_imports <= {"..", "..store", "homebase.claude_mcp"}, homebase_imports     # paths via `..`, draftstore via `..store`
+    assert "from ..store import draftstore" in src["tools.py"]
     assert "from .. import paths" in src["desk_tools.py"]
 
 

@@ -248,9 +248,9 @@ def test_paper_py_imports_no_broker_desk_or_trading_module():
     # and nothing on the order path arrives transitively either (fresh interpreter)
     out = subprocess.run([sys.executable, "-c",
                           "import sys, homebase.charts.paper as p; "
-                          "print([m for m in sys.modules for f in ('homebase.trading', 'homebase.desk_api', "
-                          "'homebase.engine', 'homebase.timer', 'homebase.charts.desk', 'homebase.broker.tradovate', "
-                          "'homebase.risk', 'homebase.server') if m == f])"],
+                          "print([m for m in sys.modules for f in ('homebase.desk.trading', 'homebase.desk.desk_api', "
+                          "'homebase.desk.engine', 'homebase.desk.timer', 'homebase.charts.desk', 'homebase.broker.tradovate', "
+                          "'homebase.desk.risk', 'homebase.server') if m == f])"],
                          capture_output=True, text=True, cwd=Path(__file__).resolve().parent.parent, timeout=60)
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == "[]"

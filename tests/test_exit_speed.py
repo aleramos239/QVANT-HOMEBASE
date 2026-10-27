@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 
 import homebase.config as config_mod
-from homebase.engine import EXIT_CONCURRENCY
+from homebase.desk.engine import EXIT_CONCURRENCY
 from homebase.server import create_app
 from tests.exits_util import (RATE_LIMITED, Wire, exit_cfg, go_live, mkadapters, mkexits)
 from tests.test_engine import Clock
@@ -94,7 +94,7 @@ def trouble(ads) -> None:
 def later(monkeypatch, seconds: float) -> None:
     """`seconds` later on the engine's wall clock (the clock's flat retries after 5 s)."""
     now = time.time() + seconds
-    monkeypatch.setattr("homebase.engine.time", SimpleNamespace(
+    monkeypatch.setattr("homebase.desk.engine.time", SimpleNamespace(
         time=lambda: now, perf_counter=time.perf_counter, monotonic=time.monotonic))
 
 
@@ -102,7 +102,7 @@ def later(monkeypatch, seconds: float) -> None:
 def kill_desk(tmp_path, monkeypatch):
     """build(n, ...) -> (the /api/kill endpoint, engine, adapters, wire): the desk app over the fake
     broker, `n` accounts live long 3 NQ."""
-    for mod in ("homebase.paths", "homebase.engine", "homebase.server", "homebase.secrets_store"):
+    for mod in ("homebase.paths", "homebase.desk.engine", "homebase.server", "homebase.store.secrets_store"):
         monkeypatch.setattr(f"{mod}.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
 

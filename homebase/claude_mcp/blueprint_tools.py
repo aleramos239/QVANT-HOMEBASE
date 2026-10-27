@@ -58,7 +58,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .. import draftstore, ideastore, paths, qos
+from ..store import draftstore, ideastore
+from .. import paths, qos
 from .client import ToolError
 
 ENV_BP, ENV_PYTHON = "HOMEBASE_BP", "HOMEBASE_BP_PYTHON"
