@@ -464,14 +464,11 @@ function todayRow(name, s) {
     <div class="rp mono${sh ? " dim" : p < 0 ? " neg" : p > 0 ? " pos" : ""}"${sh ? ` title="${esc(sh.title)}"` : ""}>${usdS(sh ? sh.net : p)}</div>${sw}</div>`;
 }
 
-let ISSUE_LVL = "warn";
-function todayFoot(issues) {
+let ISSUE_LVL = "warn";      // the sidebar's Activity row reads it
+/* One line under Readiness: how many accounts are connected. The things that need a look are the bulb's and the Readiness
+   row's (openChecks); the last event is the sidebar's Activity row -- neither is repeated here. */
+function todayFoot() {
   const accts = Object.values(ST.accounts || {}), up = accts.filter(a => a.connected).length;
-  const last = journalNews(ST.journal)[0], lt = last && last.et ? hbClock(String(last.et).slice(11, 16)) : null;
-  const out = [];
-  if (issues) out.push(`<button class="foot-b warn" onclick="openChecks()"><i class="dot${ISSUE_LVL === "bad" ? " bad" : ""}"></i>${issues === 1 ? "1 thing needs" : issues + " things need"} a look <u>›</u></button>`);
-  out.push(`<button class="foot-b" onclick="openAccts()">${up} of ${accts.length} accounts connected <u>›</u></button>`);
-  if (lt) out.push(`<button class="foot-b" onclick="setView('activity')">Last event ${esc(lt)} <u>›</u></button>`);
-  return out.join("");
+  return `<button class="foot-b" onclick="openAccts()">${up} of ${accts.length} accounts connected <u>›</u></button>`;
 }
 

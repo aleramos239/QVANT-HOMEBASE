@@ -724,7 +724,7 @@ test('I7 / N2 the feed and the "Last event" time leave out only the Lab\'s named
   const shown = t.api.journalShown(t.ctx.ST.journal);
   assert.deepEqual(shown.map((r) => r.event), ['lab_added', 'lab_store_owned', 'strategy_toggled', 'lab_refused', 'lab_something_new']);
   assert.match(t.side(), /Last event 10:00/);           // final wave: a strategy arriving on the Desk is a line
-  assert.match(t.api.todayFoot(0), /Last event 10:00/);
+  assert.doesNotMatch(t.api.todayFoot(0), /Last event/, 'WP1.11: the last event is the sidebar\'s Activity row only');
   // a journal with no Lab line is returned as it is
   const none = [{ event: 'armed_toggled' }, null, 'x'];
   assert.deepEqual(plain(t.api.journalShown(none)), plain(none));
@@ -1202,4 +1202,16 @@ test('1.10: no read in the demo or while the page is hidden, and a refused read 
   assert.doesNotThrow(() => t.api.todayRow('nq930', t.ctx.ST.strategies.nq930));
   await tick();
   assert.doesNotMatch(t.api.todayRow('nq930', t.ctx.ST.strategies.nq930), /Last signal/);
+});
+
+// ---- WP1.11: the Today foot is one line, the accounts connected; no "things need a look", no "Last event" ----------------
+test('1.11: the foot says only how many accounts are connected, and opens the accounts', () => {
+  const t = load({ accounts: { ...ACCOUNTS, a3: { label: 'Off', env: 'demo', connected: false } },
+    journal: [{ ts: 1, et: '2026-10-10T09:59:00-0400', event: 'strategy_toggled', strategy: 'nq930', enabled: true }] });
+  for (const issues of [0, 1, 3]) {
+    assert.equal(t.api.todayFoot(issues), '<button class="foot-b" onclick="openAccts()">2 of 3 accounts connected <u>›</u></button>');
+  }
+  t.ctx.api.renderMain(['nq930', 'lab_nq_orb'], 2);
+  assert.doesNotMatch(t.els.todayFoot.innerHTML, /need a look|Last event|openChecks/);
+  assert.match(t.side(), /Last event 09:59/, 'the sidebar\'s Activity row keeps the last event');
 });
