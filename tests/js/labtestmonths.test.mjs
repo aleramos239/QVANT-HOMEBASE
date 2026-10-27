@@ -99,3 +99,31 @@ test('the test months of the strategy as set: the same ask, which says it locks 
   assert.deepEqual(p.did, ['oosGo']);
   assert.match(LAB, /Run the test months \(the owner clicked it in the Lab\)/);     // OOS_SAID stays
 });
+
+test('Put it on the Desk: the confirm shows the verdict, the six lines, lands OFF and no Trade rules; Not yet sends nothing (plan 4.7)', async () => {
+  const RL = require('../../homebase/static/charts/reallines.js');
+  const a = LAB.indexOf('function promoteToDesk'), code = LAB.slice(LAB.indexOf('const curSid'), LAB.indexOf('function wfFixedHtml'))
+    + LAB.slice(a, LAB.indexOf('function deskOffDialog', a));
+  const sent = [], dialogs = [];
+  const res = { cells: [{ i: 0, is: { net: 900, trades: 250 }, blocks: [] }, { i: 1, is: { net: -50, trades: 40 }, blocks: [] }], lock: { cell: 0 }, oos: null };
+  const c = vm.createContext({ X, C, RL, esc: (t) => String(t == null ? '' : t), closeDialog() {}, paintRes() {}, paintLib() {}, log() {}, loadDesk: async () => {},
+    S: { run: { key: 'd:x', rid: 'r1', bundle: {} }, tries: {}, three: { draft_x: { oos: { result: res } } }, wf: {} },
+    buf: () => null, formOf: () => ({ strategy: 'draft_x' }),
+    dialog: (html) => { const d = { html, on: null, addEventListener(t, f) { d.on = f; } }; dialogs.push(d); return d; },
+    send: async (m, url, body) => { sent.push([m, url, body]); return { ok: true, json: { ok: true } }; } });
+  vm.runInContext(`${code}\nglobalThis.promoteToDesk = promoteToDesk;`, c);
+  const press = (x) => dialogs.at(-1).on({ target: { closest: () => ({ dataset: { x } }) } });
+  c.promoteToDesk({ key: 'd:x', name: 'x' });
+  const h = dialogs[0].html;
+  assert.match(h, /Put x on the Desk\?/);
+  assert.match(h, /<b>LUCK<\/b>: 1 of 2 boxes made money in-sample/);
+  for (const ln of ['boxes', 'trades', 'luck', 'years', 'worse fills', 'test months']) assert.match(h, new RegExp(`<span>${ln}: `), ln);
+  assert.match(h, /Lands OFF, no account\./);
+  assert.match(h, /Trade rules are not applied on the Desk\./);
+  press('cancel');
+  assert.deepEqual(sent, []);
+  c.promoteToDesk({ key: 'd:x', name: 'x' });
+  press('go');
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)), [['POST', '/api/tester/desklab/promote', { name: 'x', run_id: 'r1' }]]);   // the same request as before
+});

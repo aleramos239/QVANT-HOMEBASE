@@ -2953,9 +2953,27 @@ function deskGo() {
   }
   if (st.action === 'promote') promoteToDesk(b);
 }
-async function promoteToDesk(b) {
+/* Put it on the Desk: first what the six lines say of it (plan 4.7), then the same request as before; Not yet sends nothing.
+   The lines are read from its open 3:1 walk-forward, the picked one first. */
+function promoteToDesk(b) {
   const r = S.run && S.run.key === b.key ? S.run : null;
   if (!r || !r.rid || !r.bundle || r.grid) return;      // a heat-map cell has no run of its own to promote
+  const f = formOf(b), sid = f ? f.strategy : '', T = sid && S.three[sid], w = sid && S.wf[sid];
+  const got = [T && T.oos.result, w && w.result].filter(Boolean), rd = realRead(got.find((x) => x.lock) || got[0] || null, sid);
+  const word = (ok) => (ok === true ? 'PASS' : ok === false ? 'FAIL' : 'not run');
+  const d = dialog(`<h2>Put ${esc(b.name)} on the Desk?</h2>
+    ${rd ? `<p><b>${esc(rd.verdict.word)}</b>: ${esc(rd.verdict.why)}</p><div class="rl">${rd.lines.map((x) => `<div class="rl-line ${x.ok === true ? 'pass' : x.ok === false ? 'fail' : 'wait'}"><b>${word(x.ok)}</b><span>${esc(x.line)}: ${esc(x.said)}</span></div>`).join('')}</div>`
+    : '<p>No 3:1 walk-forward of it is open: the six lines are not read.</p>'}
+    <p>Lands OFF, no account.</p><p>Trade rules are not applied on the Desk.</p>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">Put it on the Desk</button></div>`);
+  d.addEventListener('click', (e) => {
+    const x = e.target.closest('[data-x]');
+    if (!x) return;
+    closeDialog();
+    if (x.dataset.x === 'go') promoteGo(b, r);
+  });
+}
+async function promoteGo(b, r) {
   S.deskBusy = true; S.deskErr = ''; paintRes();
   const a = await send('POST', '/api/tester/desklab/promote', { name: b.name, run_id: r.rid });
   S.deskBusy = false;
