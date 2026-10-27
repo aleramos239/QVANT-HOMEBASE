@@ -580,7 +580,9 @@ function mount(box, host) {
     const key = JSON.stringify([choices, cur]);
     if (algoKey === key) return;
     algoKey = key;
-    algoSel.classList.toggle('none', choices.length <= 1);   // 5.8: only "None" -- charts.css hides the row and its caption
+    // 5.8: only "None" and no algo set -- charts.css hides the row and its caption; a set algo the list lacks (one
+    // confirmed on another root) keeps the row, so it can be seen and cleared
+    algoSel.classList.toggle('none', choices.length <= 1 && !cur);
     algoSel.replaceChildren(...choices.map((c) => { const o = mk('option', '', c.text); o.value = c.value; return o; }));
     algoSel.value = cur;
   }

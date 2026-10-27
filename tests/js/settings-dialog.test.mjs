@@ -331,6 +331,12 @@ test('5.8 Trading tab: the Algo row hides (with its caption) while "None" is all
   cell.cfg.root = 'NQ';                                      // nq930 trades NQ: there is one to pick
   const nq = openTrading(cell).box.querySelector('.set-algo');
   assert.equal(nq.classList.contains('none'), false);
+  cell.cfg.root = 'ES';                                      // an algo still set (nq930, confirmed on NQ): the row stays,
+  cell.cfg.algo = 'nq930';                                   // so it can be seen and cleared
+  const kept = openTrading(cell).box.querySelector('.set-algo');
+  assert.equal(kept.classList.contains('none'), false);
+  kept.value = ''; kept.onchange();
+  assert.equal(cell.cfg.algo, null, 'clearing it still works');
   assert.match(readFileSync(new URL('../../homebase/static/charts/charts.css', import.meta.url), 'utf8'),
     /\.set-row:has\(\.set-algo\.none\), \.set-cap:has\(\+ \.set-row \.set-algo\.none\) \{ display: none; \}/);
 });
