@@ -50,3 +50,9 @@ test('5.6 the Lab gear still opens the chart settings', async () => {
   els['#tbSettings'].onclick();
   assert.ok(calls.includes('chartSettings'));
 });
+
+test('5.9 Charts does not load the lens glass; the Lab still does, and the skin still takes the lens off', () => {
+  assert.doesNotMatch(rd('charts.html'), /hb-glass\.js/);
+  assert.match(rd('backtest.html'), /<script src="\/static\/hb-glass\.js\?v=\d+"><\/script>/);
+  assert.match(rd('apple/charts.js'), /const unlens = \(\) =>/);
+});
