@@ -20,7 +20,10 @@ const ours = new Set();   // order ids this page placed: their fills get a toast
 const UNCLAIMED_MAX = 50;
 const unclaimed = [];
 const CLAIMS = ['order', 'flatten', 'reverse'];   // answers naming an order this page just SENT: only they claim
-const gone = new Set();   // 5.12: `account:order_id` the desk said is not working (HBTrade.notWorkingKeys): display only
+/* 5.12: `account:order_id` the desk said is not working (HBTrade.notWorkingKeys): display only, for the gap until the
+   desk's next word on that account -- the refusal and the desk's list read the same view, so that word is the truth
+   (still listed: working again; gone: no line). Desk answers only: a PAPER refusal never marks. */
+const gone = new Set();
 let queued = null;
 
 function loadPrefs() { try { return T.parsePrefs(localStorage.getItem(T.PREFS_KEY)); } catch (_) { return T.parsePrefs(null); } }
@@ -50,13 +53,14 @@ function onMessage(m) {
     emit('quote');
     return;
   }
-  if (m.down !== undefined) { desk.state = null; desk.down = m.down; emit('state'); return; }
+  if (m.down !== undefined) { desk.state = null; desk.down = m.down; gone.clear(); emit('state'); return; }
   const d = m.data;
-  if (m.event === 'state') { desk.state = d; desk.down = null; }
+  if (m.event === 'state') { desk.state = d; desk.down = null; gone.clear(); }
   else if (!desk.state) return;
   else if (m.event === 'account') {
     const list = desk.state.accounts || (desk.state.accounts = []), i = list.findIndex((a) => a.id === d.id);
     if (i >= 0) list[i] = d; else list.push(d);
+    for (const k of gone) if (k.startsWith(`${d.id}:`)) gone.delete(k);
   } else if (m.event === 'bot') desk.state.bot = d;
   else if (m.event === 'fill') {
     if (d && d.fill) for (const fn of [...anyFills]) { try { fn(d); } catch (e) { console.error(e); } }
@@ -101,13 +105,7 @@ async function send(action, body) {
   if (nw.gone.length) emit('lines');
   return data;
 }
-/* The marks still worth showing: an order the desk no longer lists has no line, so its mark goes. */
-function notWorking() {
-  const listed = new Set();
-  for (const a of (desk.state && desk.state.accounts) || []) for (const o of a.orders || []) listed.add(`${a.id}:${o.order_id}`);
-  for (const k of gone) if (!listed.has(k)) gone.delete(k);
-  return gone;
-}
+function notWorking() { return gone; }
 
 /* ---- a bot's past runs: cached 60 s per strategy; fetched again on a new (ET) day, or as soon as the bot view shows
    an exit fill, a skip or a kill (HBTrade.historySig). The desk answers 503 from 09:29:00 to 09:30:30 ET (no journal

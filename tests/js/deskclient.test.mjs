@@ -131,8 +131,9 @@ test('a burst of more than TOAST_MAX toasts in one synchronous tick evicts each 
 });
 
 /* WP5 5.12 (2026-10-27): a modify / cancel the desk refused with "order … is not working" marks that order (its line
-   greys, display only); the request itself is the same; the mark goes once the desk stops listing the order, or once a
-   later send on it is accepted. */
+   greys, display only); the request itself is the same; the mark lasts until the desk's next word on that account
+   (its list is the same view the refusal read: still listed = working again, gone = no line), or a later send on it
+   is accepted. */
 test('5.12 a "not working" refusal marks the order; the request is unchanged; the mark goes with the order', async () => {
   const sentReq = [];
   const root = new El('div'), answers = [];
@@ -152,7 +153,8 @@ test('5.12 a "not working" refusal marks the order; the request is unchanged; th
   const body = { client_id: 'c1', account: 'sim041', order_id: '7', price: 29990 };
   const p = D.send('modify', body);
   answer({ ok: false, order_id: null, error: 'order 7 is not working on SIM0000041' });
-  await p;
+  assert.deepEqual(await p, { results: { sim041: { ok: false, order_id: null, error: 'order 7 is not working on SIM0000041' } } },
+    'send answers what the desk answered, as before');
   assert.deepEqual(sentReq, [['/api/desk/modify', 'POST', body]], 'the same request as before');
   assert.deepEqual([...D.notWorking()], ['sim041:7']);
   const q = D.send('modify', { ...body, client_id: 'c2' });   // a later try the desk accepts: the mark goes
@@ -170,4 +172,21 @@ test('5.12 a "not working" refusal marks the order; the request is unchanged; th
   await other;
   D.onMessage(state([{ order_id: '7', type: 'Stop' }]));
   assert.deepEqual([...D.notWorking()], []);
+  const refuse = async () => {
+    const x = D.send('modify', { ...body, client_id: `c${sentReq.length + 1}` });
+    answer({ ok: false, order_id: null, error: 'order 7 is not working on SIM0000041' });
+    await x;
+    assert.deepEqual([...D.notWorking()], ['sim041:7']);
+  };
+  await refuse();
+  D.onMessage(state([{ order_id: '7', type: 'Stop' }]));        // the desk's next word still lists it: working, no mark
+  assert.deepEqual([...D.notWorking()], []);
+  await refuse();
+  D.onMessage({ type: 'desk', event: 'account', data: { id: 'sim099', orders: [] } });   // another account's word: kept
+  assert.deepEqual([...D.notWorking()], ['sim041:7']);
+  D.onMessage({ type: 'desk', event: 'account', data: { id: 'sim041', label: 'SIM0000041', env: 'demo', orders: [{ order_id: '7', type: 'Stop' }] } });
+  assert.deepEqual([...D.notWorking()], [], 'its own account\'s word decides');
+  await refuse();
+  D.onMessage({ down: 'chart service unreachable' });
+  assert.deepEqual([...D.notWorking()], [], 'the desk down: no lines, no marks');
 });
