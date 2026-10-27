@@ -36,6 +36,7 @@ CACHE_VERSION = 2
 DAY_S = 86400          # a session fits inside one day: its bars of this size or longer are one bar
 COARSE_MIN = 300        # time bars this coarse (a whole number of minutes) are also kept per session on disk
 SUB_KEPT = (30,)        # time bars finer than a minute also kept per session on disk: built from the ticks, not from minutes (owner 2026-10-26)
+                        # tick / volume / range bars are kept per session on disk too (.tick500.pkl ...), used only while their source is untouched
 MEMO_CELLS = 4_000_000  # what the memo may hold across sessions, in cells (a bar, plus each footprint level -- counted for
                         # fp and again for fpn --, tape order, big print, sweep and bubble it carries; ~250 B each in Python
                         # at most, so ~1 GB). A weight, not a count: a daily or weekly chart keeps one bar a session, so its
@@ -84,6 +85,12 @@ class History:
         incomplete archive has two: a repair landing in either one must rebuild the cache)."""
         ns = f.path.stat().st_mtime_ns
         return max(ns, f.merge_with.stat().st_mtime_ns) if f.merge_with else ns
+
+    @staticmethod
+    def _exact(f) -> tuple:
+        """(path, size, mtime_ns) of each file a session's ticks come from: equal only while they are untouched."""
+        return tuple((str(p), st.st_size, st.st_mtime_ns) for p in (f.path, f.merge_with) if p is not None
+                     for st in (p.stat(),))
 
     def cached(self, root: str, d: dt.date) -> bool:
         """Is session d's 1-minute cache built and current (no older than its tick file)? True with no file."""
@@ -161,15 +168,34 @@ class History:
         if f is None:
             return []
         cp = self._cache_file(root, d, f)
-        cp = cp.with_name(cp.name.replace(".m1.pkl", f".t{spec.size}.pkl"))
-        src_ns = None
+        cp = cp.with_name(cp.name.replace(".m1.pkl", f".t{spec.size}.pkl" if spec.kind == "time"
+                                          else f".{spec.kind}{spec.size}.pkl"))
+        # tick / volume / range bars were rebuilt from the ticks on every read: their file is used only while each source
+        # file is exactly as it was built from (a repair copied in with an OLDER mtime must still rebuild them)
+        exact = spec.kind != "time"
+        src_ns = stamp = None
         try:
             src_ns = self._src_ns(f)                        # the source BEFORE its ticks are read
-            if cp.stat().st_mtime_ns >= src_ns:
+            if exact:
+                stamp = self._exact(f)
+                with open(cp, "rb") as fh:
+                    kept = pickle.load(fh)
+                if type(kept) is tuple and kept[0] == stamp:
+                    return kept[1]
+            elif cp.stat().st_mtime_ns >= src_ns:
                 with open(cp, "rb") as fh:
                     return pickle.load(fh)
         except (OSError, pickle.UnpicklingError, EOFError):
             pass
+        if exact:
+            out = self._from_ticks(root, spec, d)
+            g = self.store.pick(root, d) if stamp is not None else None
+            try:                                            # kept only if the same files, untouched, were the ones read
+                if g is not None and self._exact(g) == stamp:
+                    self._keep(cp, (stamp, out), src_ns)
+            except OSError:
+                pass
+            return out
         if spec.size < 60:
             out = self._from_ticks(root, spec, d)           # a sub-minute bar cannot be resampled from minutes
         elif spec.size > DAY_S:
@@ -193,7 +219,8 @@ class History:
                 return hit
             gen = self._gen
         self.watch(root, d)                                 # the files BEFORE their ticks are read
-        if (spec.from_minutes and spec.size >= COARSE_MIN) or (spec.kind == "time" and spec.size in SUB_KEPT):
+        if (spec.from_minutes and spec.size >= COARSE_MIN) or (spec.kind == "time" and spec.size in SUB_KEPT) \
+                or spec.kind != "time":
             out = self._coarse(root, spec, d)
         elif spec.from_minutes:
             out = resample(self.minutes(root, d), spec)
