@@ -2,6 +2,7 @@
 import datetime as dt
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -60,6 +61,19 @@ def test_a_failed_replace_leaves_the_old_file_whole(tmp_path, monkeypatch):
     monkeypatch.setattr(os, "replace", boom)
     with pytest.raises(OSError):
         atomic.write_text(p, "new")
+    assert p.read_text() == "old"
+
+
+def test_a_plain_write_goes_through_path_write_text_so_a_torn_write_is_testable(tmp_path, monkeypatch):
+    p = tmp_path / "a.json"
+    p.write_text("old")
+
+    def torn(self, data, *a, **k):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(Path, "write_text", torn)
+    with pytest.raises(OSError):
+        atomic.write_text(p, "new")
+    monkeypatch.undo()
     assert p.read_text() == "old"
 
 
