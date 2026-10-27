@@ -5,7 +5,8 @@
 #                                                            first: the script refuses while it runs.
 #   build_app_apple.sh --vps [root@host] [--out <path.app>]  "~/Applications/HOMEBASE VPS.app": the same viewer seeing the
 #                                                            SERVER's Homebase through its own SSH SOCKS proxy (-D VPS; host
-#                                                            default $HOMEBASE_SERVER, else root@144.202.51.163).
+#                                                            default $HOMEBASE_SERVER, else root@144.202.51.163). Quit it
+#                                                            first: the script refuses while it runs.
 #   --out <path.app>   a test build there, with its own bundle id: it shares no saved settings with the installed app.
 #
 # The skin itself (homebase/static/apple/) is served by the desk and chart services, so rebuilding the app is only
@@ -31,8 +32,13 @@ if [ "${1:-}" = --out ]; then
 elif [ $# -gt 0 ]; then
   echo "unknown argument: $1" >&2; exit 2
 fi
-if [ "$APP" = "$APPS/Homebase.app" ] && pgrep -x "$EXE" >/dev/null; then
-  echo "Homebase is running: quit it first (nothing was changed)." >&2; exit 1
+case "$APP" in   # an installed app is never replaced while it runs (a test build elsewhere with --out may go ahead)
+  "$APPS/Homebase.app") RUN=Homebase ;;
+  "$APPS/HOMEBASE VPS.app") RUN=HomebaseVPS ;;
+  *) RUN="" ;;
+esac
+if [ -n "$RUN" ] && pgrep -x "$RUN" >/dev/null; then
+  echo "$(basename "$APP" .app) is running: quit it first (nothing was changed)." >&2; exit 1
 fi
 
 BUILD="$(mktemp -d)/$(basename "$APP")"
