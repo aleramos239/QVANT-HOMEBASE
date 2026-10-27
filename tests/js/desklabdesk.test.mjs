@@ -318,6 +318,16 @@ test('F: a strategy that sizes each trade itself: the Setup Size row says what t
   assert.equal(setupRow(t.view(), 'Size'), '3 contracts an account', 'not own size: as before');
 });
 
+test('G: an account the Desk does not list counts as LIVE: changing a setting of an ON strategy booked there asks first', async () => {
+  const ghost = load({ book: { lab_nq_orb: [{ account: 'gone', qty: 1 }] } });
+  await ghost.api.setLabSetting('lab_nq_orb', 'stop_atr', 2);
+  assert.equal(ghost.confirms.length, 1, 'fail closed: unknown = LIVE');
+  assert.match(ghost.confirms[0].body, /is ON with 1 LIVE account/);
+  const demo = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  await demo.api.setLabSetting('lab_nq_orb', 'stop_atr', 2);
+  assert.equal(demo.confirms.length, 0, 'a listed demo account does not ask');
+});
+
 test('WP1.14 the built-in page has the Setup too: its contracts, when it fires, flat time and days, shown only', () => {
   const t = load({ book: { nq930: [{ account: 'a2', qty: 3 }] } });
   t.ctx.ST.strategies.nq930.cfg.fire_et = '09:30:00';
