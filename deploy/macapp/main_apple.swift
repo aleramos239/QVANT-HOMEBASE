@@ -688,15 +688,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     }
 
     private func reloadNow() {
-        let was = skinned
-        skin = loadSkin()
-        if skinned != was {
-            // the window's own style depends on whether there is a skin: say so instead of half-switching
+        // the window's own style depends on whether there is a skin: never half-switch. A failed reload (a service
+        // restarting) keeps the design already loaded; a design back after an unskinned launch waits for a reopen.
+        let old = skin, fresh = loadSkin()
+        skin = old == nil ? nil : fresh ?? old
+        if (old == nil) != (fresh == nil) {
             let a = NSAlert()
-            a.messageText = skinned ? "The new design is available again" : "The new design could not be loaded"
-            a.informativeText = "Quit and reopen \(appName) to switch."
+            a.messageText = fresh == nil ? "The new design could not be reloaded" : "The new design is available again"
+            a.informativeText = fresh == nil ? "The one already loaded is kept." : "Quit and reopen \(appName) to switch."
             a.runModal()
-            skin = was ? skin : nil
         }
         for (t, v) in webViews { installScripts(v.configuration.userContentController, tab: t) }
         webViews[currentTab]?.reloadFromOrigin()
