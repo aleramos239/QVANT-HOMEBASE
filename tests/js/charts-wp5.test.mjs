@@ -117,3 +117,25 @@ test('5.8 the desk\'s "max …/order, …/position" part is gone from both statu
   assert.doesNotMatch(rd('charts/tradeui.js'), /sbDeskLim|s\.limits/);
   assert.doesNotMatch(rd('charts/trade.js'), /max_order_qty/);
 });
+
+test('5.11 the tab menu: Close leads, Delete is last behind a divider and still asks first; Close never deletes', () => {
+  const calls = [];
+  const item = (text, k, run) => ({ text, run, classList: { add() {} } });
+  const m = { items: [], append(...a) { this.items.push(...a); }, focus() {} };
+  const ctx = vm.createContext({
+    openMenu: () => m, menuItem: item, mk: (t, cls) => ({ sep: cls === 'menu-sep' }), placeMenu() {}, closeMenu() {},
+    closeTab: (n) => calls.push(['close', n]), renameTab: (n) => calls.push(['rename', n]),
+    duplicateTab: (n) => calls.push(['duplicate', n]), deleteLayoutTab: (n) => calls.push(['delete-confirm', n]),
+  });
+  vm.runInContext(`${lift(APP, 'tabContextMenu')} globalThis.run = tabContextMenu;`, ctx);
+  ctx.run('HTF', { x: 0, y: 0 });
+  assert.deepEqual(m.items.map((i) => (i.sep ? '—' : i.text)), ['Close', 'Rename', 'Duplicate', '—', 'Delete layout…']);
+  m.items[0].run();
+  assert.deepEqual(calls, [['close', 'HTF']], 'Close only closes the tab');
+  m.items[4].run();
+  assert.deepEqual(calls.at(-1), ['delete-confirm', 'HTF'], 'Delete goes through its confirm dialog');
+  const del = lift(APP, 'deleteLayoutTab'), close = lift(APP, 'closeTab');
+  assert.match(del, /openDialog\('Delete layout'/);
+  assert.ok(del.indexOf("method: 'DELETE'") > del.indexOf('del.onclick'), 'the DELETE is sent only from the dialog\'s Delete button');
+  assert.doesNotMatch(close, /fetch|DELETE/, 'closing a tab never touches the server copy');
+});

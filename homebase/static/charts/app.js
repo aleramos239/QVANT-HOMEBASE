@@ -1048,10 +1048,11 @@ function tabContextMenu(name, at) {
   const m = openMenu(null, 'menu-tabctx', { at });
   const del = menuItem('Delete layout…', '', () => { closeMenu(); deleteLayoutTab(name); });
   del.classList.add('menu-i-danger');
+  // 5.11 (2026-10-27): Close (the strip only) leads, so it never sits next to Delete (the server copy, confirmed, last)
   m.append(
+    menuItem('Close', '', () => { closeMenu(); closeTab(name); }),
     menuItem('Rename', '', () => { closeMenu(); renameTab(name); }),
     menuItem('Duplicate', '', () => { closeMenu(); duplicateTab(name); }),
-    menuItem('Close', '', () => { closeMenu(); closeTab(name); }),
     mk('div', 'menu-sep'),
     del,
   );
