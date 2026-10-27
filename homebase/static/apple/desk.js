@@ -158,16 +158,12 @@
       if (c.shadow) rows.push(row('Mode', 'Shadow (journal only)'));
       const edit = c.kind !== 'bars' && c.rr > 0;
       const sig = JSON.stringify([name, edit, rows.map((r) => r.textContent)]);
-      const had = [rrCtl.input, rrCtl.btn, rrCtl.sl].includes(D.activeElement) ? D.activeElement : null;
+      const had = [rrCtl.input, rrCtl.btn, rrCtl.sl, rrCtl.slBtn].includes(D.activeElement) ? D.activeElement : null;
       if (setupBox._sig !== sig) { setupBox._sig = sig; setupBox.replaceChildren(...rows, ...(edit ? [rrCtl.slRow, rrCtl.row, rrCtl.err] : [])); }
       if (had && had.isConnected && D.activeElement !== had) had.focus();      // a rebuild must not take the field from the owner
-      if (rrCtl.name !== name) { rrCtl.name = name; rrCtl.dirty = false; rrCtl.err.hidden = true; }
+      if (rrCtl.name !== name) { rrCtl.name = name; rrCtl.dirty = false; rrCtl.err.hidden = true; rrCtl.slCur = null; }
       if (edit && !rrCtl.dirty && D.activeElement !== rrCtl.input) rrCtl.input.value = String(+c.rr);
-      if (edit && !rrCtl.sl.disabled) {      // the Desk's stop, so a refused pick goes back to what it is
-        const cur = String(+c.sl_pts);      // a stop set elsewhere (not 5 or 10) still shows as it is
-        if (![...rrCtl.sl.options].some((o) => o.value === cur)) rrCtl.sl.append(el('option', { value: cur, text: cur + ' pts' }));
-        rrCtl.sl.value = cur;
-      }
+      if (edit && !rrCtl.sl.disabled) rrCtl.follow(String(+c.sl_pts));      // the Desk's stop (one set elsewhere, not 5 or 10, shows as it is)
     }
     // the RR field of a straddle with a target multiple: ONE node set for the whole page, so a repaint never wipes what is typed
     // (the rows' signature leaves it out). The write itself is the page's own setStratRr(), which says why a refusal came.
@@ -188,19 +184,38 @@
         if (!why) rrCtl.dirty = false;
       } finally { rrCtl.btn.disabled = false; }
     }
-    // the stop: 5 or 10 points (owner 2026-10-18); a pick saves at once, the RR stays, the target follows (sl x rr)
+    // the stop: 5 or 10 points (owner 2026-10-18). A pick waits for its Set, which names the change ("Set 5 pt → 10 pt"); the RR
+    // stays, the target follows (sl x rr)
     rrCtl.sl = el('select', { class: 'hb-field', 'aria-label': 'Stop (points)' },
       el('option', { value: '5', text: '5 pts' }), el('option', { value: '10', text: '10 pts' }));
-    rrCtl.slRow = el('div', { class: 'hb-row' }, el('span', { class: 'hb-row-k', text: 'Stop' }), rrCtl.sl);
-    rrCtl.sl.addEventListener('change', async () => {
+    rrCtl.slBtn = el('button', { class: 'hb-btn', type: 'button', hidden: true });
+    rrCtl.slRow = el('div', { class: 'hb-row' }, el('span', { class: 'hb-row-k', text: 'Stop' }), rrCtl.sl, rrCtl.slBtn);
+    rrCtl.slCur = null;      // the Desk's stop as setup() last saw it (null: not seen yet for this strategy)
+    const slShow = () => {      // the Set button, only while the pick differs from the Desk's stop
+      const pick = rrCtl.sl.value, on = rrCtl.slCur != null && pick !== rrCtl.slCur;
+      if (on) rrCtl.slBtn.textContent = 'Set ' + rrCtl.slCur + ' pt → ' + pick + ' pt';
+      rrCtl.slBtn.hidden = !on;
+    };
+    // each repaint: a pick waiting for its Set stays; otherwise the menu follows the Desk
+    rrCtl.follow = (cur) => {
+      if (![...rrCtl.sl.options].some((o) => o.value === cur)) rrCtl.sl.append(el('option', { value: cur, text: cur + ' pts' }));
+      const pending = rrCtl.slCur != null && rrCtl.sl.value !== rrCtl.slCur;
+      rrCtl.slCur = cur;
+      if (!pending) rrCtl.sl.value = cur;
+      slShow();
+    };
+    rrCtl.sl.addEventListener('change', () => { rrCtl.err.hidden = true; slShow(); });
+    rrCtl.slBtn.addEventListener('click', async () => {
       const name = rrCtl.name, v = parseFloat(rrCtl.sl.value);
       if (!(v > 0) || typeof window.setStratRr !== 'function') return;
-      rrCtl.sl.disabled = true;
+      rrCtl.sl.disabled = rrCtl.slBtn.disabled = true;
       try {
         const why = await window.setStratRr(name, null, v);
         if (rrCtl.name !== name) return;
         rrCtl.err.textContent = why || ''; rrCtl.err.hidden = !why;
-      } finally { rrCtl.sl.disabled = false; }
+        if (why) rrCtl.sl.value = rrCtl.slCur;      // a refused pick goes back to the Desk's stop
+        else rrCtl.slCur = rrCtl.sl.value;      // saved: the Desk's stop now (the page's refresh confirms it)
+      } finally { rrCtl.sl.disabled = rrCtl.slBtn.disabled = false; slShow(); }
     });
     rrCtl.input.addEventListener('input', () => { rrCtl.dirty = true; rrCtl.err.hidden = true; });
     rrCtl.input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.repeat) setRr(); });

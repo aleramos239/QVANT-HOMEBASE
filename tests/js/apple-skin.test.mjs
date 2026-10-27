@@ -137,3 +137,51 @@ test('desk skin: the chart-trading chip shows whenever the switch is ON, armed o
   for (const armed of [true, false]) assert.equal(words({ armed, status: armed ? 'armed' : 'disarmed', chart_trading: on, accounts: acc }), 'Chart trading ON · 2 live accounts');
   assert.match(DESK_SKIN, /el\('span', \{ class: 'hb-ct-chip', hidden: true/, 'the chip starts hidden');
 });
+
+// the straddle's RR field and stop menu (desk.js rrCtl), run on small fake nodes: what a pick and a Set send
+function rrControls(setStratRr) {
+  const i = DESK_SKIN.indexOf('    const rrCtl = {'), j = DESK_SKIN.indexOf("rrCtl.btn.addEventListener('click', setRr);");
+  assert.ok(i >= 0 && j > i, 'the RR controls block');
+  const el = (tag, attrs = {}, ...kids) => {
+    const on = {};
+    const n = { tag, hidden: !!attrs.hidden, disabled: false, textContent: attrs.text || '', value: attrs.value || '', options: [], children: kids,
+      addEventListener: (t, f) => { (on[t] = on[t] || []).push(f); }, fire: async (t, e = {}) => { for (const f of on[t] || []) await f(e); },
+      append: (...k) => { n.children.push(...k); if (tag === 'select') n.options.push(...k); } };
+    if (tag === 'select') { n.options = [...kids]; n.value = kids[0].value; }
+    return n;
+  };
+  const c = vm.createContext({ el, window: { setStratRr } });
+  vm.runInContext(DESK_SKIN.slice(i, j + "rrCtl.btn.addEventListener('click', setRr);".length) + '\nglobalThis.R = rrCtl;', c);
+  return c.R;
+}
+
+test('desk skin: the stop menu no longer saves on change -- a Set button names the change and sends the same call', async () => {
+  const calls = [];
+  let answer = '';
+  const R = rrControls(async (...a) => { calls.push(a); return answer; });
+  R.name = 'nq930';
+  R.follow('5');      // the Desk's stop, as setup() sees it
+  assert.equal(R.sl.value, '5'); assert.equal(R.slBtn.hidden, true, 'nothing to set');
+  R.sl.value = '10'; await R.sl.fire('change');
+  assert.deepEqual(calls, [], 'a pick alone sends nothing');
+  assert.equal(R.slBtn.hidden, false); assert.equal(R.slBtn.textContent, 'Set 5 pt → 10 pt');
+  R.follow('5');      // a repaint while the pick waits keeps it
+  assert.equal(R.sl.value, '10'); assert.equal(R.slBtn.hidden, false);
+  await R.slBtn.fire('click');
+  assert.deepEqual(calls.map((a) => [...a]), [['nq930', null, 10]], 'the same setStratRr(name, null, stop) as before');
+  assert.equal(R.slBtn.hidden, true, 'saved: nothing left to set'); assert.equal(R.err.hidden, true);
+  R.follow('10');
+  assert.equal(R.sl.value, '10'); assert.equal(R.slBtn.hidden, true);
+  // picking the Desk's own stop again hides the button; a refusal says why and goes back to the Desk's stop
+  R.sl.value = '5'; await R.sl.fire('change'); R.sl.value = '10'; await R.sl.fire('change');
+  assert.equal(R.slBtn.hidden, true);
+  answer = 'the desk is armed';
+  R.sl.value = '5'; await R.sl.fire('change'); await R.slBtn.fire('click');
+  assert.deepEqual([...calls[1]], ['nq930', null, 5]);
+  assert.equal(R.err.hidden, false); assert.equal(R.err.textContent, 'the desk is armed');
+  assert.equal(R.sl.value, '10'); assert.equal(R.slBtn.hidden, true);
+  // a stop set elsewhere (not 5 or 10) shows as it is; the RR field's Set is unchanged: setStratRr(name, rr)
+  R.follow('7.5'); assert.equal(R.sl.value, '7.5');
+  R.input.value = '2'; await R.btn.fire('click');
+  assert.deepEqual([...calls[2]], ['nq930', 2]);
+});
