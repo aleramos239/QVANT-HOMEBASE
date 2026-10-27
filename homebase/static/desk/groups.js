@@ -231,7 +231,7 @@ function cycleBody(id) {
 }
 /* The card's Save (no `extra`) asks first ONLY while the cycle is ON on a LIVE account and the change sizes up (risk or Most
    goes up) or ticks a LIVE account in. Lowering, unticking and every demo/paper-only cycle save at once. The switch
-   (setCycle, with `extra`) keeps its own questions. */
+   (setCycle, with `extra`) keeps its own questions and never saves a draft. */
 async function saveCycle(id, extra) {
   const body = {...cycleBody(id), ...(extra || {})};
   const cyc = ((ST && ST.groups) || {})[id] || null;
@@ -245,7 +245,7 @@ async function saveCycle(id, extra) {
   let r, err = null;
   try { r = await post("/api/groups", body); } catch (e) { err = e || new Error("no answer"); }
   const why = DEMO ? null : answerWhy(r, err);
-  if (why === "") delete CYC_DRAFT[id];             // saved: the card shows the desk's values again
+  if (why === "" && !(extra && "accounts" in extra)) delete CYC_DRAFT[id];   // saved: the card shows the desk's values again
   refresh();
   if (DEMO) return false;
   if (why) toast(`Account cycle NOT changed — ${why}.`, 8000);
@@ -254,16 +254,21 @@ async function saveCycle(id, extra) {
 const toggleCycle = (id) => setCycle(id, !(((ST && ST.groups) || {})[id] || {}).on);
 async function setCycle(id, on) {
   if (switchBounced("cycle:" + id)) return;
-  const b = cycleBody(id);
+  /* A draft (typed or ticked, not saved) never rides on the switch: ON waits for Save; OFF sends the desk's own values and
+     the draft stays for its Save button. */
+  const cyc = ((ST && ST.groups) || {})[id] || null;
+  const saved = cyc && cycleDiff(cyc, cycleBody(id)).parts.length ? {accounts: cyc.accounts || [], risk_usd: cyc.risk_usd, max_minis: cyc.max_minis} : null;
+  if (saved && on) { toast("Save or undo your changes first, then switch the cycle on.", 6000); refresh(); return; }
+  const b = {...cycleBody(id), ...saved};
   const copies = on ? [] : cycleCopies(b.members);
   if (copies.length && !await confirmDlg(`Stop the account cycle?`,
       `${copies.length} strateg${copies.length === 1 ? "y" : "ies"} then send each trade to EVERY account booked${cycleLive(copies)}.`, "Stop the cycle", true)) { refresh(); return; }
   if (on) {
     const live = b.accounts.filter(a => !isDemoAcct(a)).length;
     if (!await confirmDlg(`Start the account cycle?`, `${b.members.length} strateg${b.members.length === 1 ? "y" : "ies"} take turns across ${b.accounts.length} account${b.accounts.length === 1 ? "" : "s"}${live ? ` (${live} LIVE)` : ""}` +
-        (b.risk_usd > 0 ? `, each trade sized to $${b.risk_usd.toLocaleString("en-US")} at risk.` : ", each at its own size."), "Start", false)) { refresh(); return; }
+        (b.risk_usd > 0 ? `, each trade sized to $${b.risk_usd.toLocaleString("en-US")} at risk, at most ${b.max_minis} full contracts.` : ", each at its own size."), "Start", false)) { refresh(); return; }
   }
-  if (await saveCycle(id, {on})) toast(on ? "Account cycle ON: one account a trade." : "Account cycle OFF.");
+  if (await saveCycle(id, {...saved, on})) toast(on ? "Account cycle ON: one account a trade." : "Account cycle OFF.");
 }
 async function deleteGroup(id) {
   const g = groupOf(id);

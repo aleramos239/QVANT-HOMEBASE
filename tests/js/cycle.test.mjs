@@ -254,8 +254,34 @@ test('1.2: a saved change clears the draft; a refused one keeps it', async () =>
 });
 
 test('1.2: the switch keeps its own questions; saveCycle never adds one on ON/OFF', async () => {
-  const { c, asked, sent } = ctx({ cyc: LIVE_ON, live: true, risk: '5000' });
+  const { c, asked, sent } = ctx({ cyc: LIVE_ON, live: true });
   await c.setCycle('g1', false);                          // OFF: no copies booked -> no question at all
   assert.equal(asked.length, 0);
-  assert.equal(JSON.stringify(sent[0][1]), OLD_BODY(5000, 17, ['a']).replace(/}$/, ',"on":false}'));
+  assert.equal(JSON.stringify(sent[0][1]), OLD_BODY(1000, 17, ['a']).replace(/}$/, ',"on":false}'));
+});
+
+test('1.2: OFF with a draft sends the desk\'s own values, not the draft, and keeps the draft', async () => {
+  const { c, asked, sent } = ctx({ cyc: LIVE_ON, live: true, risk: '5000', minis: '40', ticked: ['a', 'b'] });
+  c.cycleEdit('g1');
+  await c.setCycle('g1', false);
+  assert.equal(asked.length, 0);
+  assert.equal(JSON.stringify(sent[0][1]), OLD_BODY(1000, 17, ['a']).replace(/}$/, ',"on":false}'));
+  assert.equal(c.draft().g1.risk, '5000');
+});
+
+test('1.2: ON with a draft (Most 17 → 40) sends nothing and says Save first; the draft stays', async () => {
+  const { c, asked, sent, toasts } = ctx({ cyc: { ...LIVE_ON, on: false }, live: true, minis: '40' });
+  c.cycleEdit('g1');
+  await c.setCycle('g1', true);
+  assert.equal(sent.length, 0);
+  assert.equal(asked.length, 0);
+  assert.match(toasts[0], /Save or undo your changes first/);
+  assert.equal(c.draft().g1.minis, '40');
+});
+
+test('1.2: a new cycle\'s Start question names Most too', async () => {
+  const { c, asked, sent } = ctx({ live: true, minis: '40' });
+  await c.setCycle('g1', true);
+  assert.match(asked[0], /\$1,000 at risk, at most 40 full contracts/);
+  assert.equal(sent[0][1].max_minis, 40);
 });
