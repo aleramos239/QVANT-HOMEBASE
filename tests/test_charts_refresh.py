@@ -12,7 +12,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from homebase import qos
 from homebase.charts import refresh as R
 
 UTC = dt.timezone.utc
@@ -69,7 +68,7 @@ def test_a_click_runs_the_tick_job_and_nothing_bought(tmp_path):
     m.start()
     st = wait_final(m)
     assert st["status"] == "done"
-    assert calls == [qos.utility(["py", "-m", "homebase.ticks", "--full"])]     # no --fill-from-massive, ever
+    assert calls == [["py", "-m", "homebase.ticks", "--full"]]                  # no --fill-from-massive, ever
     assert [x["state"] for x in st["steps"]] == ["done"]
     assert "Massive" not in json.dumps(st)
 

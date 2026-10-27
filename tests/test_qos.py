@@ -16,6 +16,7 @@ from homebase import qos
 
 REPO = Path(__file__).resolve().parent.parent
 PREFIX = [qos.TASKPOLICY, "-c", "utility"]
+PY = sys.executable
 REAL = pytest.mark.skipif(not (sys.platform == "darwin" and os.access(qos.TASKPOLICY, os.X_OK)), reason="macOS only")
 
 
@@ -31,9 +32,18 @@ def want(argv: list, darwin: bool) -> list:
 
 
 def test_utility_prefixes_on_macos_only(darwin):
-    argv = ["py", "-m", "x"]
+    argv = [PY, "-m", "x"]
     out = qos.utility(argv)
-    assert out == want(argv, darwin) and out is not argv and argv == ["py", "-m", "x"]
+    assert out == want(argv, darwin) and out is not argv and argv == [PY, "-m", "x"]
+
+
+def test_a_program_that_cannot_run_is_left_as_it_is(darwin, tmp_path):
+    """Popen must raise the same FileNotFoundError / PermissionError as before: taskpolicy would exit 66 instead."""
+    plain = tmp_path / "plain"
+    plain.write_text("")
+    for argv in (["/nowhere/python3", "-V"], [str(plain)], [str(tmp_path)], ["py", "-V"], ["./py"], []):
+        out = qos.utility(argv)
+        assert out == argv and out is not argv
 
 
 def test_no_taskpolicy_no_prefix(monkeypatch):
@@ -51,21 +61,21 @@ def test_every_batch_child_is_clamped(darwin, tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", lambda argv, **kw: seen.append(argv) or SimpleNamespace())
 
     with open(tmp_path / "slot", "w") as slot:                        # a built-in strategy's backtest
-        proc = runner.launch(tmp_path, "py", tmp_path / "a", tmp_path / "c", slot, ("--no-lock",))
+        proc = runner.launch(tmp_path, PY, tmp_path / "a", tmp_path / "c", slot, ("--no-lock",))
         runner.finish_proc(proc)
         fd = str(slot.fileno())
-    assert seen.pop() == want(["py", "-m", "homebase.backtest.runner", "exec", str(tmp_path), "--no-lock", "--archive",
+    assert seen.pop() == want([PY, "-m", "homebase.backtest.runner", "exec", str(tmp_path), "--no-lock", "--archive",
                                str(tmp_path / "a"), "--cache", str(tmp_path / "c"), "--slot-fd", fd], darwin)
 
     paper.spawn_backtest(tmp_path / "paper")
     assert seen.pop() == want([sys.executable, "-m", "homebase.charts.paper", "backtest", "--folder",
                                str(tmp_path / "paper")], darwin)
 
-    m = export.ExportManager(tmp_path / "ex", archive=tmp_path / "t", depth_base=tmp_path / "d", python="py",
+    m = export.ExportManager(tmp_path / "ex", archive=tmp_path / "t", depth_base=tmp_path / "d", python=PY,
                              out_dir=tmp_path / "out")
     (tmp_path / "job").mkdir()
     m._launch(tmp_path / "job").hb_log.close()
-    assert seen.pop() == want(["py", "-m", "homebase.charts.export", "exec", str(tmp_path / "job"), "--archive",
+    assert seen.pop() == want([PY, "-m", "homebase.charts.export", "exec", str(tmp_path / "job"), "--archive",
                                str(tmp_path / "t"), "--depth-base", str(tmp_path / "d"), "--out-dir",
                                str(tmp_path / "out")], darwin)
 
@@ -105,6 +115,16 @@ def test_a_clamped_child_is_the_same_process_with_its_fds_output_and_exit_code(t
         os.close(r)
         os.close(w)
     assert subprocess.run(qos.utility([sys.executable, "-c", "raise SystemExit(3)"])).returncode == 3
+
+
+@REAL
+def test_a_missing_program_still_raises_as_before(tmp_path):
+    plain = tmp_path / "plain"
+    plain.write_text("")
+    with pytest.raises(FileNotFoundError):
+        subprocess.Popen(qos.utility(["/nowhere/python3", "-V"]))
+    with pytest.raises(PermissionError):
+        subprocess.Popen(qos.utility([str(plain)]))
 
 
 @pytest.mark.parametrize("label", ["com.ramosquant.homebase", "com.ramosquant.homebase-charts",

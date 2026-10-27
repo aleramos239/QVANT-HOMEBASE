@@ -13,7 +13,12 @@ DARWIN = sys.platform == "darwin"
 
 def utility(argv: list) -> list:
     """argv as a command clamped to the utility QoS. taskpolicy execs the program: the same pid (stop, kill and
-    process groups work as before), the same open fds, stdout/stderr and exit code."""
-    if DARWIN and os.access(TASKPOLICY, os.X_OK):
+    process groups work as before), the same open fds, stdout/stderr and exit code. Only for a program that is
+    there and executable: a missing one is left to Popen, which raises the same OSError as before (taskpolicy
+    would start, print "posix_spawn: ..." and exit 66 instead)."""
+    # shortcut: a bare name (PATH lookup) is left unclamped; every caller passes an absolute python or sandbox-exec
+    prog = str(argv[0]) if argv else ""
+    if (DARWIN and os.access(TASKPOLICY, os.X_OK) and os.path.isabs(prog) and os.path.isfile(prog)
+            and os.access(prog, os.X_OK)):
         return [TASKPOLICY, "-c", "utility", *argv]
     return list(argv)
