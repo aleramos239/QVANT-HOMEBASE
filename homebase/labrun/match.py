@@ -61,7 +61,8 @@ def _differs(a: dict, b: dict, tick: float) -> tuple[str, str, str] | None:
     """The first field two trades disagree on, in the order the owner reads a trade: (field, desk, backtest)."""
     far = TICKS * tick + EPS
     checks = (("side", a["side"], b["side"], a["side"] != b["side"], str),
-              ("size", a["qty"], b["qty"], a["qty"] != b["qty"], str),
+              # a size the account cycle set (its dollars at risk) is the Desk's, not the strategy's: not compared
+              ("size", a["qty"], b["qty"], a["qty"] != b["qty"] and not a.get("any_size"), str),
               ("entry time", a["entry_ns"], b["entry_ns"], abs(a["entry_ns"] - b["entry_ns"]) > TIME_NS, _hms),
               ("entry price", a["entry_price"], b["entry_price"], abs(a["entry_price"] - b["entry_price"]) > far,
                lambda v: _px(v, tick)),
@@ -94,7 +95,8 @@ def from_summary(trades: list[dict], date) -> list[dict]:
     """A day summary's trade rows (HH:MM:SS to the second) as the engine's rows: for a day read back from its file."""
     d = date if isinstance(date, dt.date) else dt.date.fromisoformat(date)
     return [{"side": t["side"], "qty": t["qty"], "entry_ns": et_ns(d, t["entry_t"]), "entry_price": t["entry_px"],
-             "exit_ns": et_ns(d, t["exit_t"]), "exit_price": t["exit_px"], "exit_reason": t["reason"]} for t in trades]
+             "exit_ns": et_ns(d, t["exit_t"]), "exit_price": t["exit_px"], "exit_reason": t["reason"],
+             **({"any_size": True} if t.get("any_size") is True else {})} for t in trades]
 
 
 def retry(verdict: dict) -> bool:

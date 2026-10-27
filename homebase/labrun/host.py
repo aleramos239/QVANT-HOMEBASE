@@ -949,7 +949,8 @@ class StrategyDay:
         """The day summary (contracts.md). `match` is the daily match's verdict, set by the runner; a stopped day
         says it was not checked. `rebuilt` is there (true) only for a day made by catch-up."""
         trades = [{"side": t["side"], "qty": t["qty"], "entry_t": _hms(t["entry_ns"]), "entry_px": t["entry_price"],
-                   "exit_t": _hms(t["exit_ns"]), "exit_px": t["exit_price"], "reason": t["exit_reason"], "net": t["net"]}
+                   "exit_t": _hms(t["exit_ns"]), "exit_px": t["exit_price"], "reason": t["exit_reason"], "net": t["net"],
+                   **({"any_size": True} if t.get("any_size") is True else {})}
                   for t in self.trades()]
         why = self.why
         if why is None and self.state in ACTIVE:

@@ -314,6 +314,10 @@ class DeskSide:
         return next((a for a in self.accounts if a in have), None)
 
     def _lead_rows(self) -> list:
+        """The rounds the day's trades are read from: the lead account's -- or, for a strategy that takes turns over its
+        accounts (each trade on one account), every account's, in entry order."""
+        if self._snap is not None and self._snap.get("turns") is True:
+            return sorted(self._rows(), key=lambda r: r.get("entry_ms") if _num(r.get("entry_ms")) else float("inf"))
         lead = self.lead()
         return [r for r in self._rows() if r.get("account") == lead] if lead is not None else []
 
@@ -330,13 +334,14 @@ class DeskSide:
         the day summary and the daily match read). A round that never filled is not a trade; one still open is not a
         trade yet. `net` is the Desk's own figure for the round."""
         out = []
+        any_size = self._snap is not None and self._snap.get("cycle_sized") is True     # the account cycle sized it
         for r in self._lead_rows():
             if r.get("status") == "done" and self._entered(r) and self._priced(r):
                 out.append({"side": SIDE[r["entry_side"]], "qty": r["entry_qty"],
                             "entry_ns": int(r["entry_ms"]) * 1_000_000, "entry_price": r["entry_fill"],
                             "exit_ns": int(r["exit_ms"]) * 1_000_000, "exit_price": r["exit_fill"],
                             "exit_reason": r.get("exit_reason") if isinstance(r.get("exit_reason"), str) else "exit",
-                            "net": r["pnl"] if _num(r.get("pnl")) else 0.0})
+                            "net": r["pnl"] if _num(r.get("pnl")) else 0.0, **({"any_size": True} if any_size else {})})
         return out
 
     def unpriced(self) -> int:

@@ -246,6 +246,20 @@ def test_the_lead_is_the_first_booked_account_that_has_a_round_today():
     assert s.lead() == "a9"
 
 
+def test_a_strategy_that_takes_turns_has_every_accounts_trades_in_entry_order_and_a_cycle_size_is_marked():
+    s = side(accounts=("a1", "a2", "a3"))
+    rows = [rnd("a2", entry_ms=1_709_660_000_000, exit_ms=1_709_661_000_000, pnl=-50.0),
+            rnd("a1", entry_ms=1_709_649_000_000, exit_ms=1_709_650_000_000, qty=3),
+            rnd("a3", status="placed", entry_ms=None, exit_ms=None)]           # an order that never filled: no trade
+    s.take(snap(rounds=rows, turns=True))
+    assert [(t["net"], t["qty"]) for t in s.trades()] == [(200.0, 3), (-50.0, 1)]
+    assert not any("any_size" in t for t in s.trades())                    # Take turns alone keeps the size compared
+    s.take(snap(rounds=rows, turns=True, cycle_sized=True))
+    assert all(t["any_size"] is True for t in s.trades())
+    s.take(snap(rounds=rows))                                              # no turns: the lead account only, as before
+    assert [t["net"] for t in s.trades()] == [200.0]
+
+
 def test_a_carried_row_is_an_old_block_never_a_trade_and_never_makes_the_lead():
     s = side(accounts=("a1", "a2"))
     s.take(snap(rounds=[rnd("a1", carried=True, date="2024-03-04"), rnd("a2")]))
