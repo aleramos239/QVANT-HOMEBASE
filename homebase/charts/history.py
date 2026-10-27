@@ -21,6 +21,7 @@ import datetime as dt
 import os
 import pickle
 import threading
+import time
 from glob import escape as glob_escape
 from collections import OrderedDict
 from pathlib import Path
@@ -37,6 +38,7 @@ DAY_S = 86400          # a session fits inside one day: its bars of this size or
 COARSE_MIN = 300        # time bars this coarse (a whole number of minutes) are also kept per session on disk
 SUB_KEPT = (30,)        # time bars finer than a minute also kept per session on disk: built from the ticks, not from minutes (owner 2026-10-26)
                         # tick / volume / range bars are kept per session on disk too (.tick500.pkl ...), used only while their source is untouched
+SETTLED_NS = 2_000_000_000  # a kept tick / volume / range file is written only once its sources are this old (2 s)
 MEMO_CELLS = 4_000_000  # what the memo may hold across sessions, in cells (a bar, plus each footprint level -- counted for
                         # fp and again for fpn --, tape order, big print, sweep and bubble it carries; ~250 B each in Python
                         # at most, so ~1 GB). A weight, not a count: a daily or weekly chart keeps one bar a session, so its
@@ -88,8 +90,8 @@ class History:
 
     @staticmethod
     def _exact(f) -> tuple:
-        """(path, size, mtime_ns) of each file a session's ticks come from: equal only while they are untouched."""
-        return tuple((str(p), st.st_size, st.st_mtime_ns) for p in (f.path, f.merge_with) if p is not None
+        """(path, size, mtime_ns, inode) of each file a session's ticks come from: equal only while they are untouched."""
+        return tuple((str(p), st.st_size, st.st_mtime_ns, st.st_ino) for p in (f.path, f.merge_with) if p is not None
                      for st in (p.stat(),))
 
     def cached(self, root: str, d: dt.date) -> bool:
@@ -174,6 +176,7 @@ class History:
         # file is exactly as it was built from (a repair copied in with an OLDER mtime must still rebuild them)
         exact = spec.kind != "time"
         src_ns = stamp = None
+        now = time.time_ns()                                # the clock BEFORE the stamps (the 2 s settled rule)
         try:
             src_ns = self._src_ns(f)                        # the source BEFORE its ticks are read
             if exact:
@@ -190,8 +193,8 @@ class History:
         if exact:
             out = self._from_ticks(root, spec, d)
             g = self.store.pick(root, d) if stamp is not None else None
-            try:                                            # kept only if the same files, untouched, were the ones read
-                if g is not None and self._exact(g) == stamp:
+            try:                                            # kept only if the same files, untouched and 2 s old, were the ones read
+                if g is not None and self._exact(g) == stamp and all(now - s[2] >= SETTLED_NS for s in stamp):
                     self._keep(cp, (stamp, out), src_ns)
             except OSError:
                 pass

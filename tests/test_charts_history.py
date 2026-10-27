@@ -243,7 +243,9 @@ def test_bars_finer_than_5_minutes_are_not_kept_except_30s(tmp_path):
 
 
 def test_tick_volume_and_range_bars_are_kept_per_session_and_read_back_equal(tmp_path):
-    h, store, _ = setup(tmp_path)
+    h, store, src = setup(tmp_path)
+    old = time.time() - 60
+    os.utime(src, (old, old))                              # kept only once the source is 2 s old
     ticks = store.load("NQ", D).ticks
     specs = {"tick50": BarSpec("tick", 50), "volume40": BarSpec("volume", 40), "range4": BarSpec("range", 4)}
     first = {}
@@ -266,7 +268,7 @@ def test_tick_volume_and_range_files_rebuild_when_a_repair_lands_with_an_older_m
     its writer's OLDER mtime (shutil.copy2 / rsync -a), in the archive or in the incomplete archive beside a live
     file, must still give the repaired bars."""
     base = tmp_path / "ticks"
-    t1 = time.time()
+    t1 = time.time() - 60                                  # settled: a source younger than 2 s is never kept
 
     def put(path, n, px):
         write_gz(path, rows(session_ms(D, 9, 30), [px + 0.25 * (i % 9) for i in range(n)], step_ms=7_000, first_id=1 + px))
@@ -291,6 +293,7 @@ def test_tick_volume_and_range_files_rebuild_when_a_repair_lands_with_an_older_m
     live.unlink()
     arch.unlink()
     write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 9, 30), [200.0 + i % 5 for i in range(400)]))
+    os.utime(arch, (t1, t1))
     for spec in specs:                                     # the complete archive: built, then repaired with an older mtime
         assert [_k(b) for b in History(store, cache_dir=tmp_path / "cache").bars("NQ", spec, D)] == want(spec)
     write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 9, 30), [300.0 + i % 7 for i in range(500)]))
@@ -298,6 +301,30 @@ def test_tick_volume_and_range_files_rebuild_when_a_repair_lands_with_an_older_m
     for spec in specs:
         got = History(store, cache_dir=tmp_path / "cache").bars("NQ", spec, D)
         assert [_k(b) for b in got] == want(spec) and got[0].o == 300.0, spec.key
+
+
+def test_a_kept_tick_bar_file_needs_its_source_2s_old_and_a_new_inode_rebuilds_it(tmp_path):
+    """The file-stamp rule (finding 2026-10-26): the stamp is (mtime, size, inode), and a file is kept only when every
+    source was 2 s old at a clock read taken before the stat."""
+    h, store, src = setup(tmp_path)
+    spec = BarSpec("tick", 50)
+    first = h.bars("NQ", spec, D)
+    assert not list((tmp_path / "cache").glob("*.tick50.pkl")), "a source younger than 2 s is not kept"
+    old = time.time() - 60
+    os.utime(src, (old, old))
+    assert History(store, cache_dir=tmp_path / "cache").bars("NQ", spec, D) == first
+    assert list((tmp_path / "cache").glob("*.tick50.pkl"))
+    st = src.stat()
+    other = src.with_name("other.tmp")
+    other.write_bytes(src.read_bytes())                    # another file: same bytes, size and mtime, a new inode
+    os.utime(other, ns=(st.st_mtime_ns, st.st_mtime_ns))
+    os.replace(other, src)
+    assert (src.stat().st_size, src.stat().st_mtime_ns) == (st.st_size, st.st_mtime_ns) and src.stat().st_ino != st.st_ino
+    reads = []
+    load = store.load
+    store.load = lambda *a: reads.append(a) or load(*a)
+    assert History(store, cache_dir=tmp_path / "cache").bars("NQ", spec, D) == first
+    assert reads, "a new inode is a new file: built again from its ticks"
 
 
 def test_the_memo_is_weighed_by_what_its_bars_hold_not_by_sessions_or_bars(tmp_path):
