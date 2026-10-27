@@ -1766,6 +1766,35 @@ def test_a_round_caught_placing_by_a_restart_is_never_clean(tmp_path):
     assert (chk["account"], chk["round"], chk["reason"]) == ("a1", 1, PLACING_UNKNOWN)
 
 
+def test_a_check_block_of_today_is_cleared_by_hand_on_a_flat_account(tmp_path):
+    """The owner can clear today's "check it" round at once, not only after the midnight roll."""
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+
+    async def never(req):
+        await asyncio.sleep(3600)
+
+    ad.place_bracket = never
+
+    async def cut_off():
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(eng.lab_enter(LAB, [leg()], {"a1": 1}, max_rounds=3), 0.02)
+
+    run(cut_off())
+    del ad.place_bracket
+    eng2 = restart(eng, tmp_path)
+    go(eng2, leg(iid=2))
+    (r,) = eng2.lab_rounds(LAB)
+    assert r["check"] is True and r["carried"] is False
+    ad.net = 1
+    assert run(eng2.lab_clear_block(LAB, "a1")) == {"ok": False, "reason": "The account already holds NQ. Check it."}
+    ad.net = 0
+    out = run(eng2.lab_clear_block(LAB, "a1"))
+    assert out["ok"] is True and out["cleared"] == [eng2._today()]
+    assert eng2.lab_rounds(LAB) == [] and eng2.lab_open(LAB) == []
+    assert go(eng2, leg(iid=3))["accounts"]["a1"]["ok"] is True
+
+
 @pytest.mark.parametrize("damage", ["missing", "garbage", "not_a_dict", "rows_not_dicts"])
 def test_rounds_whose_extras_are_lost_are_not_clean(tmp_path, damage):
     eng, ads, _ = mk(tmp_path)

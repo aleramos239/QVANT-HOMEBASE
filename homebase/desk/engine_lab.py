@@ -744,7 +744,7 @@ class LabMixin:
 
         def blocks() -> list:
             return [(k, s) for k, s in self.states.items() if s.strategy == name and s.account == account
-                    and s.date == self._today() and self._lab_carried(s)]
+                    and s.date == self._today() and (self._lab_carried(s) or self._lab_x(s).get("check"))]
 
         if not blocks():
             return {"ok": False, "reason": LAB_NO_BLOCK}
@@ -754,7 +754,10 @@ class LabMixin:
         ad = self.adapters.get(account)
         working = []
         for k, st in blocks():
-            for i in (self._lab_x(st).get("carry") or {}).get("orders") or []:
+            x = self._lab_x(st)
+            known = (x.get("carry") or {}).get("orders") or [i for i in (
+                st.upper_id, st.lower_id, st.up_sl_id, st.up_tp_id, st.dn_sl_id, st.dn_tp_id) if i]
+            for i in known:
                 try:
                     status = await ad.get_order_status(i)
                 except Exception:  # noqa: BLE001 -- an order that does not read does not stop a clear by hand
@@ -768,7 +771,7 @@ class LabMixin:
             x = self._lab_mem().pop(k, None) or {}
             del self.states[k]
             self.__dict__.get("_lab_tries", {}).pop(f"carry:{k}", None)
-            date = (x.get("carry") or {}).get("date")
+            date = (x.get("carry") or {}).get("date") or st.date
             cleared.append(date)
             self.journal("lab_carry_cleared", strategy=name, account=account, round=x.get("round"), date=date,
                          why="by hand")
@@ -842,7 +845,7 @@ class LabMixin:
                         "entry_fill": st.entry_fill, "exit_qty": st.exit_qty,
                         "exit_fill": st.exit_fill, "exit_reason": st.exit_reason, "sl": sl, "tp": tp,
                         "pnl": st.pnl, "net": self._net_pnl(st, cfg, st.pnl),       # net: after the fee, as booked
-                        "clean": self._lab_clean(st), "entry_ms": x.get("entry_ms"),
+                        "clean": self._lab_clean(st), "check": bool(x.get("check")), "entry_ms": x.get("entry_ms"),
                         "exit_ms": x.get("exit_ms"), "why": x.get("why") or (st.note or None if st.status == "error" else None),
                         "cancelled": list(x.get("cancelled") or []), "closing": x.get("closing"),
                         "placed_ms": x.get("placed_ms"),

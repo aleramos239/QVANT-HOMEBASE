@@ -137,8 +137,8 @@ function labDeskView(name, s) {
   const limits = DeskLab.limitsRows(lab.limits).map(x => `<div class="feed-row"><span class="h">${esc(x.k)}</span><span class="t net">${esc(x.v)}</span></div>`).join("");
   const winNote = DeskLab.windowNote(s);          // its window runs past the flat time: a note, never a refusal
   const split = DeskLab.splitRounds(lab.rounds), who = (a) => acctShort(a);
-  const trades = split.today.map(r => DeskLab.roundLine(r, who(r.account))).map(x =>
-    `<div class="feed-row"><span class="h${x.bad ? " warn" : ""}">${esc(x.text)}</span>${x.net == null ? "" : `<span class="t net">${esc(usdS(x.net))}</span>`}</div>` +
+  const trades = split.today.map(r => ({r, x: DeskLab.roundLine(r, who(r.account))})).map(({r, x}) =>
+    `<div class="feed-row"><span class="h${x.bad ? " warn" : ""}">${esc(x.text)}</span>${x.net == null ? "" : `<span class="t net">${esc(usdS(x.net))}</span>`}${r.check === true ? `<button class="btn btn-outline btn-sm" onclick="clearLabBlock(${jsArg(name)}, ${jsArg(r.account)})"${labClearing(name, r.account) ? " disabled" : ""}>${esc(DeskLab.CLEAR)}</button>` : ""}</div>` +
     (x.detail ? `<div class="feed-row"><span class="h warn">${esc(x.detail)}</span></div>` : ""));
   const refused = (Array.isArray(lab.refused) ? lab.refused : []).map(x => DeskLab.refusedLine(x, x && x.account ? who(x.account) : "")).map(x =>
     `<div class="feed-row"><span class="t">${esc(x.t)}</span><span class="h warn">${esc(x.text)}</span></div>` +
