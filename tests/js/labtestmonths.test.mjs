@@ -126,6 +126,23 @@ test('a yes runs only what it asked about: another strategy opened, or other dat
   assert.match(q.logs.join(' '), /Nothing ran: another strategy is open now\./);
 });
 
+test('dates changed while a dated Run got ready (the check, then a save) send nothing: the check read the dates of the click', async () => {
+  const form = (range) => ({ strategy: 'draft_x', inputs: {}, range, qty: 1, commission: 4, slippage_ticks: 1, prop_rules: null, controls: {} });
+  const p = lab({ real: true, runs: [LAYOUT()] }), D = { ...NQ_DRAFT, code: 'x', saved: 'x' };
+  p.c.cur = D;
+  p.c.forms = { 'd:x': form({ id: 'custom', start: '2022-02-01', end: '2022-04-30', wf: null }) };      // in-sample: no ask
+  p.c.validateNow = async () => { p.c.forms['d:x'] = form({ id: 'custom', start: '2022-01-03', end: '2022-01-31', wf: null }); return { ok: true }; };
+  await p.c.run(); await flush();
+  assert.ok(!p.sent.some((x) => x.startsWith('POST ')), p.sent.join(', '));
+  assert.match(p.logs.join(' '), /Nothing ran: the dates changed while it got ready\./);
+  // the same dates all the way: it runs, once
+  const q = lab({ real: true, runs: [LAYOUT()] });
+  q.c.cur = D;
+  q.c.forms = { 'd:x': form({ id: 'custom', start: '2022-02-01', end: '2022-04-30', wf: null }) };
+  await q.c.run(); await flush();
+  assert.deepEqual(q.sent.filter((x) => x.startsWith('POST ')), ['POST /api/tester/run']);
+});
+
 test('after a pick: one ask says the reads and the try; Not yet sends nothing, a yes runs what ran before', async () => {
   const runs = [LAYOUT(),
     { strategy: 'draft_x', status: 'done', range: { kind: 'custom', start: '2022-01-01', end: '2022-01-31' } }];

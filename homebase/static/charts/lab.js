@@ -238,6 +238,9 @@ async function run(opts = {}) {
   const nb = buf(), f = nb ? formOf(nb) : null;
   if (!f || !nb || nb !== b) { release(me); paintRes(); paintHead(); return; }      // another strategy was opened meanwhile
   if (!tag && f.range.wf) { release(me); paintRes(); paintHead(); return; }        // never the plain all-data run for a 3:1 form
+  if (!tag && JSON.stringify(f.range) !== JSON.stringify((wf0 || {}).range)) {     // the test-month check above read the dates of the click
+    release(me); log('Nothing ran: the dates changed while it got ready. Run it again.'); paintRes(); paintHead(); return;
+  }
   me.key = nb.key; me.strategy = f.strategy; me.name = nb.kind === 'builtin' ? nb.id : nb.name;
   if (S.cur !== nb.key) S.cur = nb.key;
   const pr = X.problems(f, { ...metaOf(nb), id: f.strategy });
