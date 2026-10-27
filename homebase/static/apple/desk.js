@@ -33,9 +33,16 @@
     const stCol = el('div', { class: 'hb-st-col' });
     if (slot) stCol.append(slot);
     if (clock) stCol.append(clock);
+    // readiness in words beside the shield ("Ready" / "2 things need a look"), filled by sync(); a click opens the same System checks
+    const readyBtn = el('button', { class: 'hb-ready-word', type: 'button', text: 'Checking…', onclick: () => { if (typeof window.openChecks === 'function') window.openChecks(); } });
+    // under it, chart trading when it is ON, armed or not (Disarm does not stop the chart page's orders); filled by sync(). Two
+    // lengths: a narrow window shows the short one ("Chart ON · 5 live"), never without the count
+    const ctLong = el('span', { class: 'hb-ct-long' }), ctShort = el('span', { class: 'hb-ct-short' });
+    const ctChip = el('span', { class: 'hb-ct-chip', hidden: true, title: 'The chart page can place orders, even when Disarmed. Its switch is in Settings.' }, ctLong, ctShort);
+    // one fixed-width column (desk.css), so a word or the chip coming or going never moves Arm or Kill
+    const rdCol = el('div', { class: 'hb-rd-col' }, el('div', { class: 'hb-rd-top' }, bulb, readyBtn), ctChip);
     const status = el('div', { class: 'hb-status hb-desk-status' });
-    if (bulb) status.append(bulb);
-    status.append(stCol);
+    status.append(rdCol, stCol);
     tb.right.append(status);
     if (arm) { arm.classList.add('hb-tbtn', 'hb-text', 'hb-arm'); tb.right.append(arm); }
     if (kill) { kill.classList.add('hb-kill'); tb.right.append(kill); }
@@ -44,6 +51,11 @@
       settings.replaceChildren(sf('gear'));
       tb.insp.prepend(el('div', { class: 'hb-platter' }, settings));
     }
+    // which machine this window is, in the fixed corner by the gear (never clipped); filled by sync(), hidden while unknown. Two
+    // lengths: a narrow window shows the short one ("Server")
+    const mLong = el('span', { class: 'hb-m-long' }), mShort = el('span', { class: 'hb-m-short' });
+    const machine = el('span', { class: 'hb-machine', hidden: true }, mLong, mShort);
+    tb.insp.prepend(machine);
     const old = $('.inset-topbar');
     if (old) old.hidden = true;
 
@@ -65,8 +77,8 @@
     const figsBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbFigs' });
     let figsSec = null;      // hidden when it has nothing: a Lab strategy's backtest is its 3:1 block below (owner 2026-10-18)
     const figsH = el('div', { class: 'hb-isec-h', text: 'Live results' });      // "Backtest" for a Lab one
-    // a Lab strategy's research (the page's own .labres blocks): its saved run on the unseen days, and the prop sim
-    const unseenH = el('div', { class: 'hb-isec-h', text: 'Unseen days (OOS)' }), unseenBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbUnseen' });
+    // a Lab strategy's research (the page's own .labres blocks): its saved run (3:1 test months, or the old record), and the prop sim
+    const unseenH = el('div', { class: 'hb-isec-h' }), unseenBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbUnseen' });
     const propH = el('div', { class: 'hb-isec-h', text: 'Prop sim' }), propBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbProp' });
     const unseenSec = el('section', { class: 'hb-isec' }, unseenH, unseenBox), propSec = el('section', { class: 'hb-isec' }, propH, propBox);
     unseenSec.hidden = propSec.hidden = true;
@@ -89,6 +101,8 @@
     /* ---- after each repaint of the page: which view, the title, the inspector's borrowed nodes ---- */
     const vToday = $('#viewToday'), vStrat = $('#viewStrat'), vAct = $('#viewActivity');
     const status_ = () => { try { return ST; } catch (_) { return null; } };          // the page's own state (read only)
+    const stale_ = () => { try { return DESK_STALE === true; } catch (_) { return false; } };      // the page's: ST is the last-known state
+    const staleWhy_ = () => { try { return String(STALE_WHY || ''); } catch (_) { return ''; } };      // and the page's reason why
     const archived = () => { try { return VIEW && VIEW.k === 'archive'; } catch (_) { return false; } };      // the Archive list: no strategy in the inspector
     const viewOf = () => (vStrat && !vStrat.hidden && !archived()) ? 'strat' : (vAct && !vAct.hidden) ? 'activity' : 'today';
     const fmtN = (v) => (v == null || v === '' ? '—' : String(+v === Math.round(+v) ? Math.round(+v) : +v));
@@ -149,16 +163,12 @@
       if (c.shadow) rows.push(row('Mode', 'Shadow (journal only)'));
       const edit = c.kind !== 'bars' && c.rr > 0;
       const sig = JSON.stringify([name, edit, rows.map((r) => r.textContent)]);
-      const had = [rrCtl.input, rrCtl.btn, rrCtl.sl].includes(D.activeElement) ? D.activeElement : null;
+      const had = [rrCtl.input, rrCtl.btn, rrCtl.sl, rrCtl.slBtn].includes(D.activeElement) ? D.activeElement : null;
       if (setupBox._sig !== sig) { setupBox._sig = sig; setupBox.replaceChildren(...rows, ...(edit ? [rrCtl.slRow, rrCtl.row, rrCtl.err] : [])); }
       if (had && had.isConnected && D.activeElement !== had) had.focus();      // a rebuild must not take the field from the owner
-      if (rrCtl.name !== name) { rrCtl.name = name; rrCtl.dirty = false; rrCtl.err.hidden = true; }
+      if (rrCtl.name !== name) { rrCtl.name = name; rrCtl.dirty = false; rrCtl.err.hidden = true; rrCtl.slCur = null; }
       if (edit && !rrCtl.dirty && D.activeElement !== rrCtl.input) rrCtl.input.value = String(+c.rr);
-      if (edit && !rrCtl.sl.disabled) {      // the Desk's stop, so a refused pick goes back to what it is
-        const cur = String(+c.sl_pts);      // a stop set elsewhere (not 5 or 10) still shows as it is
-        if (![...rrCtl.sl.options].some((o) => o.value === cur)) rrCtl.sl.append(el('option', { value: cur, text: cur + ' pts' }));
-        rrCtl.sl.value = cur;
-      }
+      if (edit && !rrCtl.sl.disabled) rrCtl.follow(String(+c.sl_pts));      // the Desk's stop (one set elsewhere, not 5 or 10, shows as it is)
     }
     // the RR field of a straddle with a target multiple: ONE node set for the whole page, so a repaint never wipes what is typed
     // (the rows' signature leaves it out). The write itself is the page's own setStratRr(), which says why a refusal came.
@@ -179,29 +189,119 @@
         if (!why) rrCtl.dirty = false;
       } finally { rrCtl.btn.disabled = false; }
     }
-    // the stop: 5 or 10 points (owner 2026-10-18); a pick saves at once, the RR stays, the target follows (sl x rr)
+    // the stop: 5 or 10 points (owner 2026-10-18). A pick waits for its Set, which names the change ("Set 5 pt → 10 pt"); the RR
+    // stays, the target follows (sl x rr)
     rrCtl.sl = el('select', { class: 'hb-field', 'aria-label': 'Stop (points)' },
       el('option', { value: '5', text: '5 pts' }), el('option', { value: '10', text: '10 pts' }));
-    rrCtl.slRow = el('div', { class: 'hb-row' }, el('span', { class: 'hb-row-k', text: 'Stop' }), rrCtl.sl);
-    rrCtl.sl.addEventListener('change', async () => {
+    rrCtl.slBtn = el('button', { class: 'hb-btn', type: 'button', hidden: true });
+    rrCtl.slRow = el('div', { class: 'hb-row' }, el('span', { class: 'hb-row-k', text: 'Stop' }), rrCtl.sl, rrCtl.slBtn);
+    rrCtl.slCur = null;      // the Desk's stop as setup() last saw it (null: not seen yet for this strategy)
+    const slShow = () => {      // the Set button, only while the pick differs from the Desk's stop
+      const pick = rrCtl.sl.value, on = rrCtl.slCur != null && pick !== rrCtl.slCur;
+      if (on) rrCtl.slBtn.textContent = 'Set ' + rrCtl.slCur + ' pts → ' + pick + ' pts';      // the menu's own unit word
+      rrCtl.slBtn.hidden = !on;
+    };
+    // each repaint: a pick waiting for its Set stays; otherwise the menu follows the Desk
+    rrCtl.follow = (cur) => {
+      if (![...rrCtl.sl.options].some((o) => o.value === cur)) rrCtl.sl.append(el('option', { value: cur, text: cur + ' pts' }));
+      const pending = rrCtl.slCur != null && rrCtl.sl.value !== rrCtl.slCur;
+      rrCtl.slCur = cur;
+      if (!pending) rrCtl.sl.value = cur;
+      slShow();
+    };
+    rrCtl.sl.addEventListener('change', () => { rrCtl.err.hidden = true; slShow(); });
+    rrCtl.slBtn.addEventListener('click', async () => {
       const name = rrCtl.name, v = parseFloat(rrCtl.sl.value);
       if (!(v > 0) || typeof window.setStratRr !== 'function') return;
-      rrCtl.sl.disabled = true;
+      const kb = D.activeElement === rrCtl.slBtn;      // reached by keyboard: the focus goes back to the menu once the button hides
+      rrCtl.sl.disabled = rrCtl.slBtn.disabled = true;
       try {
         const why = await window.setStratRr(name, null, v);
         if (rrCtl.name !== name) return;
         rrCtl.err.textContent = why || ''; rrCtl.err.hidden = !why;
-      } finally { rrCtl.sl.disabled = false; }
+        if (why) rrCtl.sl.value = rrCtl.slCur;      // a refused pick goes back to the Desk's stop
+        else rrCtl.slCur = rrCtl.sl.value;      // saved: the Desk's stop now (the page's refresh confirms it)
+      } finally {
+        rrCtl.sl.disabled = rrCtl.slBtn.disabled = false; slShow();
+        if (kb && rrCtl.slBtn.hidden && rrCtl.sl.isConnected) rrCtl.sl.focus();
+      }
     });
     rrCtl.input.addEventListener('input', () => { rrCtl.dirty = true; rrCtl.err.hidden = true; });
     rrCtl.input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.repeat) setRr(); });
     rrCtl.btn.addEventListener('click', setRr);
+
+    /* ---- toolbar words (plain functions of what the page already holds) ---- */
+    // ONE machine value: the native shell's window.HB_MACHINE, else the desk's /api/status `machine`. Anything else: no chip,
+    // never a guess from the address (the server's Desk can show as localhost through a tunnel). `short`: a narrow window's words
+    const machineWord = (st, short) => { const m = window.HB_MACHINE ?? (st && st.machine); return m === 'mac' ? 'This Mac' : m === 'server' ? (short ? 'Server' : 'Server · Chicago') : ''; };
+    // readiness as the page shows it: its own readinessShown(), the list openChecks() opens (bad or warn = needs a look). [level, words]
+    // While the page's state is old (`stale`: its DESK_STALE) the last answer is not current, never a stale "Ready": "Desk not
+    // answering", or "Updates paused" when only an open menu or size edit holds the page (`why`: its STALE_WHY says so).
+    const readyWord = (st, stale, why) => {
+      if (stale) return /^updates pause/.test(why || '') ? ['', 'Updates paused'] : ['bad', 'Desk not answering'];
+      const r = st && typeof window.readinessShown === 'function' ? window.readinessShown(st.readiness, st) : null;
+      if (!r || !Array.isArray(r.checks)) return ['', 'Checking…'];
+      const probs = r.checks.filter((c) => c && (c.level === 'bad' || c.level === 'warn')), n = probs.length;
+      if (!n) return ['ok', 'Ready'];
+      return [probs.some((c) => c.level === 'bad') ? 'bad' : 'warn', n === 1 ? '1 thing needs a look' : n + ' things need a look'];
+    };
+    // chart trading as the desk has it (its chart_trading switch), whatever the Arm state; live = the accounts the page tags LIVE (env
+    // "live"). `short`: the words a narrow window keeps -- the count stays
+    const chartWords = (st, short) => {
+      const ct = st && st.chart_trading;
+      if (!ct || !ct.enabled) return '';
+      const n = Object.values(st.accounts || {}).filter((a) => a && a.env === 'live').length;
+      if (short) return 'Chart ON' + (n ? ' · ' + n + ' live' : '');
+      return 'Chart trading ON' + (n ? ' · ' + n + ' live account' + (n === 1 ? '' : 's') : '');
+    };
+    // a strategy's research record, read only: a group's by its id, a Desk Lab strategy's by its Lab name, the rest by the view's name
+    // (the keys the page's groupView / labResHtml read)
+    const recordOf = (grp, dl, name) => { try { return (grp ? DESKGRES[grp.id] : DESKRES[dl ? dl.lab.name : name]) || null; } catch (_) { return null; } };
+    // the research block's heading, by the record's own route flag (walkforward: the 3:1 blocks), never the retired route's words;
+    // an old-route record with no run at all is no record: "Results" over the page's own note
+    const isObj = (o) => !!o && typeof o === 'object';
+    const researchWord = (rec, withInSample) => !isObj(rec) ? 'Results'
+      : rec.walkforward === true ? (withInSample ? '3:1 in-sample · test months' : '3:1 test months')
+      : isObj(rec.unseen) || isObj(rec.build) ? 'Old record (before 3:1)' : 'Results';
+    // the words written: the machine chip, readiness (the toolbar's word and the inspector's row), chart trading. Their own try,
+    // first in every sync(), so a view that throws never freezes them; the pill's own repaint runs only this (the page's renderMaster
+    // runs even while an open menu holds the cards under FREEZE: the content and the inspector's views are left as they are)
+    function words() {
+      try {
+        const st = status_();
+        const mw = machineWord(st);
+        if (mLong.textContent !== mw) {
+          mLong.textContent = machine.title = mw; mShort.textContent = machineWord(st, true);
+          machine.dataset.m = mw === 'This Mac' ? 'mac' : 'server'; machine.hidden = !mw;
+        }
+        // beside the shield: how many checks need a look (or that the state is old)
+        const stale = stale_(), [wl, wt] = readyWord(st, stale, staleWhy_());
+        if (readyBtn.dataset.lvl !== wl) readyBtn.dataset.lvl = wl;
+        if (readyBtn.textContent !== wt) { readyBtn.textContent = wt; readyBtn.setAttribute('aria-label', 'Readiness: ' + wt); }
+        // the inspector's row, in words (the bulb is the page's own verdict; the row opens the page's own System checks); while the
+        // state is old, the toolbar's words -- one answer on screen
+        if (bulb) {
+          const lvl = bulb.classList.contains('bad') ? 'bad' : bulb.classList.contains('warn') ? 'warn' : bulb.classList.contains('ok') ? 'ok' : '';
+          const txt = lvl === 'ok' ? 'Ready to trade' : lvl === 'warn' ? 'Needs attention' : lvl === 'bad' ? 'Not ready' : 'Checking…';
+          const k = stale ? wl : lvl, w = stale ? wt : txt;
+          if (sum.dataset.lvl !== k) sum.dataset.lvl = k;
+          const t = $('#hbReadyTxt');
+          if (t && t.textContent !== w) t.textContent = w;
+        }
+        const cw = chartWords(st), cs = chartWords(st, true);
+        if (ctLong.textContent !== cw) ctLong.textContent = cw;
+        if (ctShort.textContent !== cs) ctShort.textContent = cs;
+        if (ctChip.hidden !== !cw) ctChip.hidden = !cw;
+      } catch (_) { /* a repaint must never be broken by the skin */ }
+    }
+    /* ---- end toolbar words ---- */
 
     let syncing = false;
     function sync() {
       if (syncing) return;
       syncing = true;
       try {
+        words();
         const v = viewOf();
         if (H.getAttribute('data-hb-view') !== v) H.setAttribute('data-hb-view', v);
         const st = status_();
@@ -220,17 +320,17 @@
           const t = $('.sd-title', vStrat), sd = $('.sd-state b', vStrat);
           let name = '';
           try { name = (VIEW && VIEW.name) || ''; } catch (_) {}
+          const l = labbed(), dl = deskLabbed(name);
+          const grp = groupped();
           const res = $(':scope > .labres', vStrat);
           if (res) {
             const u = $('.labres-unseen', res), p = $('.labres-prop', res);
-            if (u) { unseenH.textContent = u.dataset.h || ''; unseenBox.replaceChildren(u); }
+            if (u) { unseenH.textContent = researchWord(recordOf(grp, dl, name), !!$('.fh', u)); unseenBox.replaceChildren(u); }
             if (p) { propH.textContent = p.dataset.h || ''; propBox.replaceChildren(p); }
             unseenSec.dataset.for = res.dataset.for || '';
             res.remove();
           }
           unseenSec.hidden = propSec.hidden = !name || unseenSec.dataset.for !== name;      // never one strategy's research under another
-          const l = labbed(), dl = deskLabbed(name);
-          const grp = groupped();
           figsH.textContent = grp ? (figs && figs.dataset.h) || 'Combined' : l || dl ? 'Backtest' : 'Live results';
           if (grp) setupGroup(grp); else if (l) setupLab(l); else if (dl) setupDeskLab(name, dl); else setup(name);
           tb.title(t ? t.textContent : 'Strategy', sd ? sd.textContent : '');
@@ -245,14 +345,6 @@
           }
           tb.title('Today', date);
         }
-        // readiness, in words (the bulb is the page's own verdict; the row opens the page's own System checks)
-        if (bulb) {
-          const lvl = bulb.classList.contains('bad') ? 'bad' : bulb.classList.contains('warn') ? 'warn' : bulb.classList.contains('ok') ? 'ok' : '';
-          const txt = lvl === 'ok' ? 'Ready to trade' : lvl === 'warn' ? 'Needs attention' : lvl === 'bad' ? 'Not ready' : 'Checking…';
-          if (sum.dataset.lvl !== lvl) sum.dataset.lvl = lvl;
-          const t = $('#hbReadyTxt');
-          if (t && t.textContent !== txt) t.textContent = txt;
-        }
       } catch (_) { /* a repaint must never be broken by the skin */ }
       finally { syncing = false; }
     }
@@ -261,6 +353,8 @@
     if (vStrat) mo.observe(vStrat, { childList: true });
     if (side) mo.observe(side, { childList: true });                  // the page repaints the sidebar on every refresh
     if (bulb) mo.observe(bulb, { attributes: true, attributeFilter: ['class'] });
+    const pill = $('#statusPill');      // its class gains "stale" when the desk stops answering (the page's renderMaster)
+    if (pill) new MutationObserver(words).observe(pill, { attributes: true, attributeFilter: ['class'] });
     sync();
 
     /* ---- appearance: follow the window; the page's own toggle does the switch ---- */

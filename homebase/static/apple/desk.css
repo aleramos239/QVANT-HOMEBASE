@@ -28,6 +28,21 @@ html.hb-apple .bulb { width: 18px; height: 18px; border-radius: 0; opacity: 1; b
 html.hb-apple .bulb.ok { background: var(--a-label-2); }
 html.hb-apple .bulb.warn { background: var(--a-orange); -webkit-mask-image: var(--sf-shield-warn); mask-image: var(--sf-shield-warn); }
 html.hb-apple .bulb.bad { background: var(--a-red-text); -webkit-mask-image: var(--sf-shield-warn); mask-image: var(--sf-shield-warn); }
+/* readiness in words beside the shield (desk.js readyWord): "Ready", or how many checks need a look, in the shield's colour; under
+   them, chart trading. ONE column of fixed width, right-aligned (its spare room merges with the bar's): a word or the chip coming
+   or going never moves Arm or Kill, even in a bar too narrow to hold everything. 192 holds "12 things need a look" beside the shield
+   and "Chart trading ON · 12 live accounts" (anything longer spills left, into the bar's free room); narrower, see this file's foot */
+html.hb-apple .hb-rd-col { display: flex; flex-direction: column; justify-content: center; align-items: flex-end; gap: 1px; width: 192px; height: 36px; flex: none; }
+html.hb-apple .hb-rd-top { display: flex; align-items: center; gap: 6px; height: 18px; }
+html.hb-apple .hb-ready-word { -webkit-appearance: none; appearance: none; border: 0; margin: 0; padding: 0; background: transparent; font: inherit; font-size: 13px; line-height: 16px;
+  font-weight: 510; color: var(--a-label); white-space: nowrap; cursor: default; }
+html.hb-apple .hb-ready-word[data-lvl=""] { color: var(--a-label-2); font-weight: 400; }
+html.hb-apple .hb-ready-word[data-lvl="warn"] { color: var(--a-orange); }
+html.hb-apple .hb-ready-word[data-lvl="bad"] { color: var(--a-red-text); }
+/* chart trading ON (desk.js chartWords), under the readiness word, armed or not: orange, never red (red is ARMED) */
+html.hb-apple .hb-ct-chip { display: inline-flex; align-items: center; height: 17px; padding: 0 7px; border-radius: var(--hb-bubble-r); white-space: nowrap; box-sizing: border-box;
+  font-size: 10px; line-height: 13px; font-weight: 590; background: color-mix(in srgb, var(--a-orange) 16%, transparent); color: var(--a-orange); }
+html.hb-apple .hb-ct-short { display: none; }
 /* the pill keeps its fixed slot (nothing in the bar may move under a Kill hold); DISARMED is plain text, ARMED is solid red */
 html.hb-apple .pill-slot { display: flex; justify-content: flex-start; align-items: center; width: 84px; height: 18px; flex: none; }
 html.hb-apple #statusPill.pill { display: inline-block; border: 0; border-radius: 0; padding: 0; background: transparent; color: var(--a-label);
@@ -54,6 +69,16 @@ html.hb-apple #killBtn .hold-ring { width: 15px; height: 15px; }
 html.hb-apple #killBtn .hold-track { stroke: rgb(255 255 255 / .38); }
 html.hb-apple #killBtn .hold-fill { stroke: #fff; }
 html.hb-apple #settingsBtn { border: 0; background: transparent; width: 40px; height: 36px; padding: 0; transform: none; }
+/* which machine this window is (desk.js machineWord): grey "This Mac", blue "Server · Chicago"; nothing while unknown */
+html.hb-apple .hb-machine { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: var(--hb-bubble-r);
+  font-size: 11px; line-height: 14px; font-weight: 590; white-space: nowrap; background: var(--a-fill); color: var(--a-label-2); }
+html.hb-apple .hb-machine[data-m="server"] { background: color-mix(in srgb, #007aff 15%, transparent); color: #0062cc; }
+html.hb-apple[data-theme="dark"] .hb-machine[data-m="server"] { background: color-mix(in srgb, #0a84ff 22%, transparent); color: #64b0ff; }
+html.hb-apple .hb-m-short { display: none; }
+/* the chip always holds the room of its widest words, shown or not: with the inspector shut the gear corner sizes to its items, so a
+   chip that appeared (or changed words) would slide Arm and Kill left under a Kill hold */
+html.hb-apple .hb-machine { width: 116px; box-sizing: border-box; justify-content: center; overflow: hidden; text-overflow: ellipsis; }
+html.hb-apple .hb-machine[hidden] { display: inline-flex !important; visibility: hidden; }
 html.hb-apple #themeToggle { display: none; }
 /* the page's preview-mode banner: a quiet capsule at the foot, never over the toolbar */
 html.hb-apple #demoBanner { position: fixed !important; top: auto !important; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 46 !important; padding: 4px 12px !important; border-radius: 11px;
@@ -61,9 +86,9 @@ html.hb-apple #demoBanner { position: fixed !important; top: auto !important; bo
 @media (max-width: 1120px) { html.hb-apple:not(.hb-insp-off) .hb-title span { display: none; } }
 /* a narrow window: the bar sheds, widest luxury first, so Arm and Kill never slide under the gear (they are fixed-width and
    cannot shrink). In order: the page title, the clock under the ARMED pill, the page switch's padding, the spare gaps. */
-@media (max-width: 1000px) { html.hb-apple .hb-tb .hb-tb-l { display: none; } html.hb-apple .hb-tb-main { padding-left: 8px; gap: 8px; } }
+@media (max-width: 1020px) { html.hb-apple .hb-tb .hb-tb-l { display: none; } html.hb-apple .hb-tb-main { padding-left: 8px; gap: 8px; } }
 @media (max-width: 940px) { html.hb-apple .hb-st-col .clock { display: none; } html.hb-apple .hb-st-col, html.hb-apple .pill-slot { width: auto; } }
-@media (max-width: 880px) { html.hb-apple #pgSw.hb-seg > a { min-width: 0; padding: 0 8px; } html.hb-apple .hb-tb-insp { gap: 4px; padding: 0 6px; } }
+@media (max-width: 880px) { html.hb-apple .hb-tb-insp { gap: 4px; padding: 0 6px; } }
 
 /* ---- sidebar: the page's own rows as a source list --------------------------------------------------------- */
 html.hb-apple .hb-side .nav, html.hb-apple .hb-side .item { -webkit-appearance: none; appearance: none; border: 0; background: transparent; display: flex; align-items: center; gap: 0;
@@ -91,6 +116,10 @@ html.hb-apple .hb-side .item[onclick^="setView('activity')"] .sd { --ico: var(--
 html.hb-apple .hb-side .item .it { flex: 1 1 auto; min-width: 0; display: block; line-height: 16px; }
 html.hb-apple .hb-side .item .it b { display: block; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 html.hb-apple .hb-side .item .it small { display: none; }
+/* but the Activity row keeps its second line: how many things need a look (or "Every alert, order and fill") */
+html.hb-apple .hb-side .item[onclick^="setView('activity')"] { height: auto; min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
+html.hb-apple .hb-side .item[onclick^="setView('activity')"] .it small { display: block; font-size: 11px; line-height: 14px; color: var(--a-label-pane-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 html.hb-apple .hb-side .item .ir { flex: none; margin-left: 8px; font-family: var(--a-font); font-size: 11px; line-height: 14px; font-weight: 510; color: var(--a-label-pane-2); font-variant-numeric: tabular-nums; }
 html.hb-apple .hb-side .item .ir:empty { display: none; }
 /* a strategy with no P&L yet shows its state there instead (the row's own title) */
@@ -468,5 +497,19 @@ html.hb-apple .eq-tip i { font-style: normal; color: var(--a-label-2); }
 html.hb-apple .eq-tip em { font-style: normal; font-variant-numeric: tabular-nums; }
 html.hb-apple .eq-tip em.pos { color: var(--a-green, var(--a-label)); }
 html.hb-apple .eq-tip small { display: block; margin-top: 2px; font-size: 11px; color: var(--a-label-2); }
-/* the Desk's right-hand group (status, Disarm, Kill) is wide: below 1360 px the centred page switcher would sit under it, so it flows */
-@media (max-width: 1360px) { html.hb-apple .hb-tb-c { position: static; transform: none; flex: none; } }
+/* the Desk's right-hand group (the readiness column, the armed state, Arm, Kill; 468 px) is wide. Everything below is added up for the
+   widest machine chip at every window width from 980 px, either pane open or shut (apple-skin.test.mjs "the toolbar fits"), so Arm
+   and Kill never reach the gear corner's chip, gear or inspector button. Where the centred page switcher would sit under the group,
+   it flows -- below 1740 px with the inspector open, below 1640 px with it shut (the gear corner then holds only its own items). At
+   1200 px and under the column gives way: the readiness word goes (the shield stays and opens the same checks), the chip shortens
+   to "Chart ON · 5 live" (never without its count, never hidden while chart trading is ON), the machine chip to "Server", and the
+   page switch loses its padding */
+@media (max-width: 1740px) { html.hb-apple:not(.hb-insp-off) .hb-tb-c { position: static; transform: none; flex: none; } }
+@media (max-width: 1640px) { html.hb-apple .hb-tb-c { position: static; transform: none; flex: none; } }
+@media (max-width: 1200px) {
+  html.hb-apple .hb-rd-col { width: 104px; }
+  html.hb-apple .hb-ready-word, html.hb-apple .hb-ct-long, html.hb-apple .hb-m-long { display: none; }
+  html.hb-apple .hb-ct-short, html.hb-apple .hb-m-short { display: inline; }
+  html.hb-apple .hb-machine { width: 72px; }
+  html.hb-apple #pgSw.hb-seg > a { min-width: 0; padding: 0 8px; }
+}
