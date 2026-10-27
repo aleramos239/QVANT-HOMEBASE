@@ -59,3 +59,30 @@ def test_not_done_is_still_409_and_unknown_still_404(tmp_path):
     assert c.get("/api/tester/walkforward/w/result").status_code == 409
     assert c.get("/api/tester/walkforward/nope/result").status_code == 404
     assert c.get("/api/tester/walkforward/w/result", params={"test_months": "4"}).status_code == 400
+
+
+def test_a_finished_result_is_served_from_its_bytes_until_one_of_its_files_changes(tmp_path):
+    c, wfs = client(tmp_path)
+    first = c.get("/api/tester/walkforward/w/result")
+    again = c.get("/api/tester/walkforward/w/result")
+    assert wfs.calls == 1                       # the second one never read or encoded it again
+    assert again.content == first.content and sorted(again.headers.items()) == sorted(first.headers.items())
+    (tmp_path / "lock.json").write_text('{"cell": 1}')          # the owner's pick: a file it is read from
+    c.get("/api/tester/walkforward/w/result")
+    assert wfs.calls == 2
+    (tmp_path / "result.json").write_text(json.dumps({**PAYLOAD, "lock": {"cell": 1}}))
+    assert c.get("/api/tester/walkforward/w/result").json()["lock"] == {"cell": 1} and wfs.calls == 3
+    c.get("/api/tester/walkforward/w/result", params={"test_months": "1"})   # another key: read once more
+    assert wfs.calls == 4
+
+
+def test_a_test_month_read_under_way_and_a_refusal_are_never_kept(tmp_path):
+    c, wfs = client(tmp_path)
+    (tmp_path / "oos-claim.json").write_text("{}")             # claimed, no oos.json yet: its progress moves
+    c.get("/api/tester/walkforward/w/result"), c.get("/api/tester/walkforward/w/result")
+    assert wfs.calls == 2
+    (tmp_path / "oos.json").write_text('{"state": "done"}')    # the read on file: kept from here on
+    c.get("/api/tester/walkforward/w/result"), c.get("/api/tester/walkforward/w/result")
+    assert wfs.calls == 3
+    (tmp_path / "result.json").write_text(json.dumps({"not_done": True}))
+    assert [c.get("/api/tester/walkforward/w/result").status_code for _ in range(2)] == [409, 409] and wfs.calls == 5

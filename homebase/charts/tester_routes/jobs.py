@@ -17,6 +17,22 @@ from ...backtest import walkforward
 
 
 MC_CACHE = 64            # Monte Carlo results kept per service (review I3)
+WF_RESULT_CACHE = 64 << 20      # bytes of finished walk-forward results kept per service (an old one runs to 10 MB)
+# every file WalkForwardManager.result reads (and oos_view, for a fixed job's test months)
+WF_RESULT_FILES = ("grid.json", "result.json", "result-1.json", "result-2.json", "result-3.json", walkforward.LOCK,
+                   walkforward.CLAIM, walkforward.OOS, "oos-job.json")
+
+
+def wf_stamp(d) -> tuple:
+    """The stamps of the files a walk-forward's result is read from (write_json replaces a file: a new inode)."""
+    out = []
+    for f in WF_RESULT_FILES:
+        try:
+            s = (d / f).stat()
+            out.append((s.st_mtime_ns, s.st_size, s.st_ino))
+        except FileNotFoundError:
+            out.append(None)
+    return tuple(out)
 
 
 def register(r: APIRouter, ctx) -> None:
@@ -151,21 +167,39 @@ def register(r: APIRouter, ctx) -> None:
         known_wf(wid)
         return wfs.status(wid)
 
+    wf_bytes: OrderedDict = OrderedDict()       # (wid, test_months) -> (wf_stamp, the response body)
+    wf_bytes_lock = threading.Lock()
+    claim_at, oos_at = WF_RESULT_FILES.index(walkforward.CLAIM), WF_RESULT_FILES.index(walkforward.OOS)
+
     @r.get("/walkforward/{wid}/result")
     def walkforward_result(wid: str, test_months: str | None = None):
-        known_wf(wid)
+        d = known_wf(wid)
         n = None
         if test_months is not None:
             if test_months not in ("1", "2", "3"):
                 raise HTTPException(400, "test_months: one of 1, 2, 3 (the 1:N walk-forward ratio)")
             n = int(test_months)
+        stamp = wf_stamp(d)
+        with wf_bytes_lock:
+            hit = wf_bytes.get((wid, n))
+            if hit is not None and hit[0] == stamp:
+                wf_bytes.move_to_end((wid, n))
+                return Response(hit[1], media_type="application/json")     # JSONResponse's own headers
         try:
             res = wfs.result(wid, n)
         except ValueError as e:
             raise HTTPException(409, str(e)) from None
         # FastAPI's own encoding (the same bytes), done here in the threadpool: an old result runs to 10 MB and froze the
         # event loop that carries chart orders and fills while it was encoded there
-        return JSONResponse(jsonable_encoder(res))
+        out = JSONResponse(jsonable_encoder(res))
+        # kept only when no file changed while it was read, and no test-month read is under way (its progress moves)
+        if wf_stamp(d) == stamp and (stamp[claim_at] is None or stamp[oos_at] is not None):
+            with wf_bytes_lock:
+                wf_bytes[(wid, n)] = (stamp, out.body)
+                wf_bytes.move_to_end((wid, n))
+                while wf_bytes and sum(len(b) for _, b in wf_bytes.values()) > WF_RESULT_CACHE:
+                    wf_bytes.popitem(last=False)
+        return out
 
     @r.get("/walkforward/{wid}/compare")
     def walkforward_compare(wid: str):
