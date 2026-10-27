@@ -33,13 +33,16 @@ function renderSide(names, hiddenCount, issues) {
   }).join("");
   const rank = (a) => a.env === "live" ? 0 : a.env === "paper" ? 2 : 1;
   const accts = Object.entries(ST.accounts || {}).sort((a, b) => rank(a[1]) - rank(b[1]));
-  const shown = SIDE_ALL ? accts : accts.slice(0, 12);
+  const inTrade = (a) => Array.isArray(a.open_positions) && a.open_positions.length > 0;
+  const shown = SIDE_ALL ? accts : accts.filter(([, a], i) => i < 12 || inTrade(a));     // one in a trade is never under the cut
+  const envTag = (a) => a.env === "live" ? '<span class="tag-live">LIVE</span>' : a.env === "paper" ? '<span class="tag-paper" style="margin-left:6px">PAPER</span>'
+    : '<span class="tag" style="margin-left:6px">DEMO</span>';
   const shortId = (t) => { t = String(t); return /^[A-Za-z0-9]{12,}$/.test(t) ? t.slice(0, 4) + " ··" + t.slice(-4) : t; };
   const acctRows = shown.map(([id, a]) => `<button class="item one" onclick="openAccts(${jsArg(id)})" title="${esc((a.label || id) + " · " + (a.env === "live" ? "Live" : a.env === "paper" ? "Paper" : "Demo") + (a.connected ? "" : " · offline"))}">
-      <i class="sd ${a.connected ? "ok" : "warn"}"></i><span class="it"><b>${esc(shortId(a.label || id))}${a.env === "live" ? '<span class="tag-live">Live</span>' : ""}${a.connected ? "" : '<span class="tag">offline</span>'}</b></span>
+      <i class="sd ${a.connected ? "ok" : "warn"}"></i><span class="it"><b>${esc(shortId(a.label || id))}${envTag(a)}${a.connected ? "" : '<span class="tag">offline</span>'}</b>${tradeWords(a) ? `<small>${esc(tradeWords(a))}</small>` : ""}</span>
       <span class="ir mono${a.connected ? "" : " dim"}">${a.connected && a.balance != null ? "$" + fmt(a.balance, 0) : ""}</span></button>`).join("");
-  const more = accts.length > 12
-    ? `<button class="side-more" onclick="SIDE_ALL=!SIDE_ALL;render()">${SIDE_ALL ? "Show fewer" : `Show ${accts.length - 12} more`}</button>` : "";
+  const more = (SIDE_ALL ? accts.length > 12 : shown.length < accts.length)
+    ? `<button class="side-more" onclick="SIDE_ALL=!SIDE_ALL;render()">${SIDE_ALL ? "Show fewer" : `Show ${accts.length - shown.length} more`}</button>` : "";
   const last = journalNews(ST.journal)[0];
   $("#side").innerHTML = `
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
@@ -248,8 +251,7 @@ function labView(name) {
     ${labCurveHtml(w.name)}
     ${labResHtml(w.name, w.name)}
     ${notes.length ? `<div class="sec"><h2>On an account the Desk would refuse:</h2><div class="agroup feed static">${notes.join("")}</div></div>` : ""}
-    <div class="sec"><h2>Accounts</h2><button class="btn btn-quiet noarrow btn-sm" disabled title="${esc(DeskLab.ACCOUNTS_CAPTION)}">+ Assign an account</button>
-      <div class="mcap">${esc(DeskLab.ACCOUNTS_CAPTION)}</div></div>
+    <div class="sec"><h2>Accounts</h2><div class="mcap">${esc(DeskLab.ACCOUNTS_CAPTION)}</div></div>
     <div class="sd-actions">${deskMachine() === "server" ? "" : `<button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(w.name)})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>`}
       <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Off the Desk and kept. Restore it from Archive any time.">Archive</button>
       <button class="btn btn-outline btn-sm" onclick="removeDeskLab(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Takes it off the Desk. Its history is kept.">Remove from Desk</button></div>`;
@@ -274,7 +276,7 @@ function stratView(name) {
   const figs = lv && lv.trades
     ? `<div class="figs">${money}${fig("Win rate", lv.win_rate + "%")}${fig("Trades", lv.trades)}${fig("Avg per trade", usd(lv.avg_trade), "Before fees, per trade")}${fig("Avg slip", (lv.avg_slip_pts ?? "—") + " pts")}</div>`
     : `<div class="eq-empty">No live trades yet.</div>`;
-  const links = `<div class="qlinks">${s.research && s.research.rows ? `<button class="btn btn-quiet btn-sm" onclick="openRes('${name}')">Backtest metrics</button>` : ""}
+  const links = `<div class="qlinks">${s.research && s.research.rows ? `<button class="btn btn-quiet btn-sm" onclick="openRes('${name}')">Old backtest (before 3:1)</button>` : ""}
     <button class="btn btn-quiet btn-sm" onclick="openLive('${name}')">Live calendar</button>${actBtn("s:" + name)}</div>`;
   const accts = ST.accounts || {}, asg = (ST.book && ST.book[name]) || [];
   const rows = asg.map(a => acctRow(a.account, {qty: a.qty, strategy: name})).join("");
@@ -297,9 +299,11 @@ function stratView(name) {
     <div class="sd-top"><div><h1 class="sd-title">${esc(stratLabel(name))}</h1><div class="sp mono">${esc(specOf(c, name))}</div></div>${sw}</div>
     <div class="sd-state"><b>${esc(state)}</b>${p != null ? ` · today ${usdS(p)}` : ""}</div>
     <div class="sd-note">${esc(execTxt)}</div>
+    ${setupHtml(name, s)}
     ${eqChart(name)}${figs}${links}
     ${twin ? labCurveHtml(name) + labResHtml(name, name) : ""}
     <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div><div class="mcap acct-note">An account's balance and its green or red figure are the whole account: every strategy and every manual trade on it, not this strategy alone.</div>` : ""}${rotationHtml(name)}${addForm}</div>
+    ${deskChangesHtml("s:" + name)}
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat('${name}')" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       ${twin && deskMachine() !== "server" ? `<button class="btn btn-outline btn-sm" onclick="openBuiltinInLab(${jsArg(name)})" title="The Lab page, on this strategy's tester twin (it follows the Desk's setting)">Open in the Lab</button>
       <button class="btn btn-outline btn-sm" onclick="openBuiltinInLab(${jsArg(name)}, true)"${hasRun ? "" : " disabled"} title="Its twin's run on the unseen days, on the chart, trade by trade">Show on chart</button>` : ""}
@@ -308,3 +312,30 @@ function stratView(name) {
     ${hide.locked ? `<div class="mcap">Remove from Desk: ${esc(hide.reason)}. Switch it off first.</div>` : ""}`;
 }
 
+/* WP1.14 The Setup summary at the top of a strategy's page: the whole setup in one place, read only. The window and the days are
+   shown, never edited here (editing them would change what it trades). Red lines first: what still stops it trading. */
+function setupHtml(name, s) {
+  const c = s.cfg || {}, lab = c.kind === "lab" ? (s.lab || {}) : null, book = (ST.book && ST.book[name]) || [], accts = ST.accounts || {};
+  const envOf = (id) => (accts[id] || {}).env, word = (e) => e === "live" ? "LIVE" : e === "demo" || e === "paper" ? e : "";
+  const red = [...(lab && DeskLab.accountsLock(s).caption === DeskLab.LIMITS_CAPTION ? ["Limits needed first"] : []),
+    ...(ST.armed ? [] : ["Desk not armed"])];
+  const cyc = Object.values(ST.groups || {}).find(g => (g.members || []).includes(name));
+  const dg = cyc ? null : DESKGROUPS.groups.find(g => g.members.includes(name));
+  const qs = [...new Set(book.map(a => +a.qty || 1))], whole = (v) => usd(v).replace(/\.00$/, "");
+  const n = (e) => book.filter(a => envOf(a.account) === e).length;
+  const rows = [
+    ["Accounts", book.map(a => `${acctShort(a.account)} ${word(envOf(a.account))} ×${+a.qty || 1}`.replace("  ", " ")).join(" · ") || "none yet"],
+    ["LIVE / paper", book.length ? [["LIVE", n("live")], ["demo", n("demo")], ["paper", n("paper")]].filter(x => x[1]).map(x => `${x[0]} on ${x[1]}`).join(" · ") || "—"
+      : lab ? "no account: it runs in shadow" : "no account"],
+    ["Size", lab && cyc && cyc.on && cyc.risk_usd > 0 ? `${whole(cyc.risk_usd)} at risk a trade (the ${cyc.name} group sizes it)`
+      : qs.length === 1 ? `${qs[0]} contract${qs[0] === 1 ? "" : "s"} an account` : qs.length ? `${Math.min(...qs)}-${Math.max(...qs)} contracts an account` : "—"],
+    ...(lab && lab.limits ? [["Limits", DeskLab.limitsRows(lab.limits).map(x => `${x.k} ${x.v}`).join(" · ")]] : []),
+    ["Window", lab ? specOf(c, name) : [c.kind === "bars" ? `${c.bar_minutes}-minute bars` : c.fire_et ? `fires ${String(c.fire_et).slice(0, 5)} ET` : "",
+      c.flat_et ? `flat by ${c.flat_et} ET` : "", (c.only_dates || []).length ? `only on ${c.only_dates.length} set day${c.only_dates.length === 1 ? "" : "s"}` : "every weekday"]
+      .filter(Boolean).join(" · ")],
+    ["Group", cyc ? `${cyc.name} (account cycle ${cyc.on ? "ON" : "OFF"}${cyc.on && cyc.next ? `, next ${acctShort(cyc.next)}` : ""})` : dg ? dg.name : "none"],
+    ...(machineWords() ? [["Machine", machineWords().replace(/^on /, "")]] : []),
+  ];
+  return `<div class="sec setup"><h2>Setup</h2>${red.map(t => `<div class="mcap warn">${esc(t)}</div>`).join("")}
+    <div class="agroup feed static">${rows.map(([k, v]) => `<div class="feed-row"><span class="t">${esc(k)}</span><span class="h">${esc(v)}</span></div>`).join("")}</div></div>`;
+}

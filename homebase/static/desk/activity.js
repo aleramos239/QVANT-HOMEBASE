@@ -1,6 +1,6 @@
 /* ---- activity log (W4): what happened, in plain words ----
-   One sentence per journal row -- "Connected APEX…048 (login)", "Chart-trading limits set to
-   50 / 100", "NQ930 bought 3 @ 30,726.50 on …049" -- instead of `event key=value`. The raw line
+   One sentence per journal row -- "Connected APEX…048 (login)", "Chart trading turned ON",
+   "NQ930 bought 3 @ 30,726.50 on …049" -- instead of `event key=value`. The raw line
    stays one step away: the row's tooltip, a click on the row, or Raw in the section head for
    every row. An event this table doesn't know still reads as words, and a row it can't read
    falls back to them too -- never blank, never a crash. Text is escaped (it is the broker's own
@@ -69,13 +69,12 @@ const ACTIVITY = {
   },
   chart_trading_set: (r, prev) => {
     if (r.cause) return [`Chart trading switched OFF by ${r.cause === "kill" ? "Kill everything" : r.cause}`, "warn"];
-    const lim = `${r.max_order_qty} / ${r.max_position_qty}`;
     const flip = !!prev && prev.enabled !== undefined && !!prev.enabled !== !!r.enabled;
     const limits = !!prev && prev.max_order_qty != null &&
       (prev.max_order_qty !== r.max_order_qty || prev.max_position_qty !== r.max_position_qty);
     if (flip && !limits) return [`Chart trading turned ${r.enabled ? "ON" : "OFF"}`];
-    if (limits && !flip) return [`Chart-trading limits set to ${lim}`];
-    return [`Chart trading ${r.enabled ? "ON" : "OFF"} · limits ${lim}`];
+    if (limits && !flip) return [`Chart trading size limits set to ${r.max_order_qty} an order, ${r.max_position_qty} held (no longer used)`];  // old lines only
+    return [`Chart trading ${r.enabled ? "ON" : "OFF"}`];
   },
   broker_connected: (r) => [`Connected ${acctShort(r.account)}${r.mode ? ` (${r.mode})` : ""}`],
   reconnect_fell_back_to_login: (r) => [`${acctShort(r.account)}: reconnect failed, logging in again — ${actErr(r.error)}`, "warn"],
@@ -371,3 +370,119 @@ $("#feedRawBtn").addEventListener("click", () => {
   renderActivity(FEED_ROWS);
 });
 
+
+/* ---- Changes (7 days) (WP1.15) ----
+   What was changed on a strategy (who "s:<id>") or a group (who "g:<id>") in the last 7 days, old → new in words, from the Desk's
+   journal (GET /api/journal, days=7). "Put back" calls the same setter the control that made the change calls, so it asks exactly
+   when that control asks. It shows only while the change is still in force and its old value is known, and never on a group's
+   line. Any page can show it: deskChangesHtml(who) (the group page: deskChangesHtml("g:" + id)).
+   shortcut: one read of the newest 2000 lines of those 7 days; a strategy that writes more than that shows only their changes. */
+let CHG = {};                                       // who -> {rows (the change lines, newest first) | null, at, busy}
+const CHG_EVENTS = ["lab_limits_set", "lab_settings_set", "strategy_rr_changed", "book_updated", "group_set"];
+async function loadDeskChanges(who, force) {
+  const c = CHG[who] || (CHG[who] = {rows: null, at: 0, busy: false});
+  if (DEMO || c.busy || (!force && Date.now() - c.at < 60000)) return;      // at most once a minute
+  c.busy = true;
+  try {
+    const r = await fetch(`/api/journal?days=7&limit=2000&${who.startsWith("g:") ? "group" : "strategy"}=${encodeURIComponent(who.slice(2))}`);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json(), rows = (Array.isArray(j && j.events) ? j.events : []).filter(e => e && CHG_EVENTS.includes(e.event));
+    const changed = JSON.stringify(rows) !== JSON.stringify(c.rows);
+    c.rows = rows;
+    if (changed && ST && !FREEZE) render();
+  } catch (_) { /* the Desk does not answer: keep what is shown */ }
+  finally { c.at = Date.now(); c.busy = false; }
+}
+const chgSay = (v) => v === true ? "on" : v === false ? "off" : v == null || v === "" ? "none" : String(v);
+const chgSameBook = (a, b) => JSON.stringify((a || []).map(x => [x.account, +x.qty]).sort()) === JSON.stringify((b || []).map(x => [x.account, +x.qty]).sort());
+const chgTell = (why) => { if (why && why !== "Not changed.") toast(why, 8000); };
+/* The book as it was -> what was booked back: one account at a time, through the same control as by hand (pickAsg adds an account,
+   editQty's ask and body change a qty in place -- the list order is the take-turns order; lowering and taking off never ask). */
+async function putBackBook(name, old) {
+  const cur = (ST.book && ST.book[name]) || [];
+  const off = cur.filter(a => !old.some(b => b.account === a.account)), back = old.filter(b => !chgSameBook([b], cur.filter(a => a.account === b.account)));
+  if (off.length + back.length !== 1) return;
+  if (off.length) return removeAsg(name, off[0].account);
+  const b = back[0], a = cur.find(x => x.account === b.account);
+  if (!a) return pickAsg(name, b.account, b.qty);
+  if (b.qty > a.qty && !isDemoAcct(b.account) && !await confirmDlg(
+      `Book ${stratLabel(name)} on ${acctShort(b.account)} LIVE, qty ${a.qty} → ${b.qty}?`,
+      liveBookingNote(name, b.account) + bookMachine(), "Book live", false)) { refresh(); return; }
+  return setBook(name, cur.map(x => x.account === b.account ? {account: b.account, qty: b.qty} : x));
+}
+/* One journal line -> {text, back} (back: what Put back does, or null), or null when the line changed nothing. `prior`: the line
+   before it of the same kind (the old value of a book or a group, which their lines do not carry). */
+const CHG_WORDS = {
+  lab_limits_set: (r, prior, s) => {
+    const now = DeskLab.limitsRows(r.limits), was = r.previous ? DeskLab.limitsRows(r.previous) : null, lab = s.lab || {};
+    if (!was) return {text: "Limits set: " + now.map(x => `${x.k} ${x.v}`).join(" · ")};
+    const diff = now.map((x, i) => [x, was[i]]).filter(([x, y]) => x.v !== y.v).map(([x, y]) => `${x.k} ${y.v} → ${x.v}`);
+    const still = !!lab.limits && ["max_trades_day", "max_qty", "max_risk_usd", "last_entry_et", "flat_et"].every(k => lab.limits[k] == r.limits[k]);
+    // Put back: the Limits dialog opens with the old values and its own Save runs (its checks, its ask when loosening)
+    return diff.length ? {text: "Limits: " + diff.join(" · "), back: still && !lab.read_only
+      ? () => { openLabLimits(r.strategy, r.previous); if (LAB_LIM.name === r.strategy) return saveLabLimits(); } : null} : null;
+  },
+  lab_settings_set: (r, prior, s) => {
+    const lab = s.lab || {}, set = r.settings || {}, was = r.previous || {}, keys = Object.keys(set);
+    const what = (k) => (lab.labels && lab.labels[k]) || k.replace(/_/g, " ");
+    const k = keys[0], known = keys.length === 1 && k in was;
+    return keys.length ? {text: keys.map(k => k in was ? `${what(k)} ${chgSay(was[k])} → ${chgSay(set[k])}` : `${what(k)} set to ${chgSay(set[k])}`).join(" · "),
+      back: known && (lab.params || {})[k] === set[k] && !lab.read_only ? async () => chgTell(await setLabSetting(r.strategy, k, was[k], {from: set[k]})) : null} : null;
+  },
+  strategy_rr_changed: (r, prior, s) => {
+    const p = r.previous, c = s.cfg || {}, tgt = (o) => +o.rr > 0 ? `1:${o.rr}` : `${o.tp_pts} pts`;
+    if (!p) return {text: `Stop ${r.sl_pts} pts, target ${tgt(r)}`};
+    const sl = p.sl_pts !== r.sl_pts, rr = p.rr !== r.rr, still = c.sl_pts === r.sl_pts && c.rr === r.rr;
+    const parts = [...(sl ? [`Stop ${p.sl_pts} → ${r.sl_pts} pts`] : []), ...(tgt(p) !== tgt(r) ? [`Target ${tgt(p)} → ${tgt(r)}`] : [])];
+    return parts.length ? {text: parts.join(" · "), back: !still || sl === rr ? null      // one of the two, as the controls change them
+      : sl ? async () => chgTell(await setStratRr(r.strategy, null, p.sl_pts)) : +p.rr >= 0.25 ? async () => chgTell(await setStratRr(r.strategy, p.rr)) : null} : null;
+  },
+  book_updated: (r, prior) => {
+    const now = r.assignments || [], A = (a) => acctShort(a.account);
+    if (!prior) return {text: "Accounts: " + (now.map(a => `${A(a)} ×${a.qty}`).join(" · ") || "none")};
+    const old = prior.assignments || [], q = (l, a) => (l.find(b => b.account === a.account) || {}).qty;
+    const parts = [...now.filter(a => q(old, a) == null).map(a => `${A(a)} added ×${a.qty}`), ...old.filter(b => q(now, b) == null).map(b => `${A(b)} taken off`),
+      ...now.filter(a => q(old, a) != null && q(old, a) !== a.qty).map(a => `${A(a)} qty ${q(old, a)} → ${a.qty}`)];
+    return parts.length ? {text: parts.join(" · "), back: parts.length === 1 && chgSameBook((ST.book || {})[r.strategy], now) ? () => putBackBook(r.strategy, old) : null} : null;
+  },
+  group_set: (r, prior) => {
+    const money = (v) => +v > 0 ? usd(v).replace(/\.00$/, "") + " at risk a trade" : "each at its own size";
+    if (!prior) return {text: `Account cycle ${r.on ? "ON" : "OFF"} · ${money(r.risk_usd)}`};
+    const list = (k, word) => [...(r[k] || []).filter(x => !(prior[k] || []).includes(x)).map(x => `${word(x)} added`),
+      ...(prior[k] || []).filter(x => !(r[k] || []).includes(x)).map(x => `${word(x)} taken out`)];
+    const parts = [...(r.on !== prior.on ? [`Account cycle ${prior.on ? "ON" : "OFF"} → ${r.on ? "ON" : "OFF"}`] : []),
+      ...(r.risk_usd !== prior.risk_usd ? [`Size ${money(prior.risk_usd)} → ${money(r.risk_usd)}`] : []),
+      ...(r.max_minis !== prior.max_minis ? [`Most minis ${prior.max_minis} → ${r.max_minis}`] : []),
+      ...list("accounts", acctShort), ...list("members", stratLabel)];
+    // no Put back: the cycle's setters read the card's typed fields, so a draft would ride along unasked; the card is on the same page
+    return parts.length ? {text: parts.join(" · ")} : null;
+  },
+};
+function deskChangeList(who) {
+  const rows = (CHG[who] || {}).rows || [], s = (((ST && ST.strategies) || {})[who.slice(2)]) || {}, out = [];
+  rows.forEach((r, i) => {
+    const prior = rows.slice(i + 1).find(o => o.event === r.event && (r.event === "group_set" ? o.group === r.group : o.strategy === r.strategy));
+    let x = null;
+    try { x = CHG_WORDS[r.event](r, prior, s); } catch (_) { /* a line this cannot read is left out */ }
+    if (x) out.push({key: `${r.ts}|${r.et}|${r.event}`, et: String(r.et || ""), text: x.text, back: x.back || null});
+  });
+  return out;
+}
+function deskChangesHtml(who) {
+  if (DEMO) return "";
+  loadDeskChanges(who);
+  if (!CHG[who] || !CHG[who].rows) return "";                  // not read yet
+  const list = deskChangeList(who), today = String((ST && ST.et_now) || "").slice(0, 10);
+  const when = (et) => (et.slice(0, 10) === today ? "" : actDay(et.slice(0, 10)).split(",")[0] + " ") + hbClock(et.slice(11, 16));
+  return `<div class="sec"><h2>Changes (7 days)</h2>${list.length ? `<div class="agroup feed static">${list.map(x =>
+    `<div class="feed-row"><span class="t">${esc(when(x.et))}</span><span class="h">${esc(x.text)}</span>${x.back
+      ? `<button class="btn btn-quiet btn-sm" style="margin-left:auto" onclick="putBackChange(${jsArg(who)}, ${jsArg(x.key)})">Put back</button>` : ""}</div>`).join("")}</div>`
+    : `<div class="eq-empty">No changes in the last 7 days.</div>`}</div>`;
+}
+async function putBackChange(who, key) {
+  const x = deskChangeList(who).find(y => y.key === key);      // read again at the click: only a change still in force
+  if (!x || !x.back) return;
+  await x.back();
+  loadDeskChanges(who, true);
+}
+/* ---- end of Changes (7 days) ---- */

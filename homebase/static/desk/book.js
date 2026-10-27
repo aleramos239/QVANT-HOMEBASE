@@ -1,21 +1,28 @@
 /* ---- account row (rendered inside strategy cards) ---- */
+/* "in a trade 1 · 2 working": the broker's count of open positions and of resting orders; "" when neither. */
+function tradeWords(a) {
+  const n = Array.isArray(a && a.open_positions) ? a.open_positions.length : 0, w = Number(a && a.working_orders) || 0;
+  return [n ? "in a trade " + n : "", w ? w + " working" : ""].filter(Boolean).join(" · ");
+}
+const DEMO_TAG = '<span class="tag" title="A demo account — the broker\'s practice money">DEMO</span>';
 function acctRow(id, extra) {
   const a = (ST.accounts || {})[id] || {label: id};
   const pnl = a.realized_pnl;
   const err = (!a.connected && a.error)
     ? `<span class="kvi neg" style="font-size:11px;text-align:left;min-width:0">${esc(String(a.error).slice(0, 46))}…</span>` : "";
   return `<div class="acct">
-    <span class="dot ${a.connected ? "on" : "off"}"></span>
+    <span class="dot ${a.connected ? "on" : "off"}" data-ro="dot"></span>
     <span class="nm">${esc(a.label)}</span>
     ${a.env === "live" ? '<span class="tag-live" title="A live account — real money">LIVE</span>' : ""}
     ${a.env === "paper" ? '<span class="tag-paper" title="A paper account — simulated fills on the live prints, no money">PAPER</span>' : ""}
+    ${a.env === "demo" ? DEMO_TAG : ""}
     ${extra.qty ? (extra.strategy && !extra.locked
       ? `<span class="strats qty-edit" title="Click to change size"
            onclick="editQty(event,'${extra.strategy}',${jsArg(id)},${extra.qty})">×${extra.qty}</span>`
       : `<span class="strats">×${extra.qty}</span>`) : ""}
     ${err}<span class="spacer"></span>
-    <span class="kvi">${usd(a.balance)}</span>
-    <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}">${pnl > 0 ? "+" : ""}${usd(pnl)}</span>
+    <span class="kvi" data-ro="bal">${usd(a.balance)}</span>
+    <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}" data-ro="pnl">${pnl > 0 ? "+" : ""}${usd(pnl)}</span>
     <button class="btn btn-outline btn-sm" onclick="openCal(${jsArg(a.account || a.label)})">Calendar</button>
     ${extra.strategy ? `<button class="x"${extra.locked ? " disabled" : ""} style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
       ${extra.locked ? "" : `onclick="removeAsg('${extra.strategy}',${jsArg(id)})" `}title="Unassign">&times;</button>` : ""}
@@ -27,7 +34,7 @@ async function setBook(strategy, assignments) {
   const lab = ((ST.strategies || {})[strategy] || {cfg: {}}).cfg.kind === "lab", before = lab ? ((ST.book && ST.book[strategy]) || []) : [];
   const r = await post("/api/book", {strategy, assignments});
   if (lab) {      // a promoted Lab strategy: the Desk's own sentence, no prefix; an account added mid-session starts once it has no open trade
-    if (!r.ok) toast(DeskLab.refusalText(r), 5000);
+    if (!r.ok) toast(unbookRefusal(strategy, before, assignments, r) || DeskLab.refusalText(r), 8000);
     else if (DeskLab.bookedNext(ST.strategies[strategy], before, assignments)) toast(DeskLab.BOOKED_NEXT, 5000);
     else if (DeskLab.bookedJoins(ST.strategies[strategy], before, assignments)) toast(DeskLab.BOOKED_JOINS, 5000);
     refresh();
@@ -63,6 +70,16 @@ async function setRotation(name, on) {
   const why = answerWhy(r, err);
   if (why) toast(`${N}: take turns NOT changed — ${why}.`, 8000);
   else toast(on ? `${N} takes turns: one account a trade.` : `${N}: every account takes every trade.`);
+}
+/* Unbooking one account of a Lab strategy that is in a trade there: the Desk refuses ("Flatten it first."); say which account
+   and what it holds, in words. null: not that refusal. */
+function unbookRefusal(strategy, before, after, r) {
+  const gone = before.filter(a => !after.some(b => b.account === a.account));
+  if (gone.length !== 1 || !r || r.detail !== "Flatten it first.") return null;
+  const s = (ST.strategies || {})[strategy] || {}, id = gone[0].account;
+  const trade = ((s.lab && s.lab.rounds) || []).find(x => x && x.account === id && ["placing", "placed", "live"].includes(x.status));
+  const holds = trade && trade.qty ? `holds ${trade.qty} ${(s.cfg && s.cfg.symbol) || ""}`.trim() : "is in a trade";
+  return `${acctShort(id)} ${holds} for ${stratLabel(strategy)}: flatten it or wait for the exit first. It stays booked.`;
 }
 function removeAsg(strategy, account) {
   const cur = (ST.book[strategy] || []).filter(a => a.account !== account);
@@ -133,12 +150,14 @@ function liveBookingNote(strategy, account) {
   return `It will trade real money ${when}.` +
     (idle.length ? ` Right now ${idle.join(" and ")}, so nothing is placed until that changes.` : "") + acct;
 }
+const bookMachine = () => machineWords() ? ` It runs ${machineWords()}.` : "";     // the one machine reader (core.js)
 async function pickAsg(strategy, account, qty) {
   FREEZE = false;
   closeAsgMenus(false);
+  const was = ((ST.book[strategy] || []).find(a => a.account === account) || {}).qty;
   if (!isDemoAcct(account) && !await confirmDlg(
-      `Book ${stratLabel(strategy)} on ${acctShort(account)} LIVE × ${qty}?`,
-      liveBookingNote(strategy, account), "Book live", false)) { refresh(); return; }
+      `Book ${stratLabel(strategy)} on ${acctShort(account)} LIVE, qty ${was ? was + " → " : ""}${qty}?`,
+      liveBookingNote(strategy, account) + bookMachine(), "Book live", false)) { refresh(); return; }
   const cur = (ST.book[strategy] || []).filter(a => a.account !== account);
   cur.push({account, qty});
   setBook(strategy, cur);
@@ -166,8 +185,8 @@ function editQty(ev, strategy, account, qty) {
           refresh(); return;
         }
         if (!await confirmDlg(
-            `Book ${stratLabel(strategy)} on ${acctShort(account)} LIVE × ${v} (now × ${qty})?`,
-            liveBookingNote(strategy, account), "Book live", false)) { refresh(); return; }
+            `Book ${stratLabel(strategy)} on ${acctShort(account)} LIVE, qty ${qty} → ${v}?`,
+            liveBookingNote(strategy, account) + bookMachine(), "Book live", false)) { refresh(); return; }
       }
       const cur = (ST.book[strategy] || []).map(a =>
         a.account === account ? {account, qty: v} : a);
@@ -347,7 +366,7 @@ function wizResult(r) {
     : nAdd ? "Added " + nAdd + (nAdd === 1 ? " account" : " accounts")
     : rows.every(x => x.status === "exists") ? "Already on the desk" : "Nothing was added";
   const sub = !rows.length ? (r && (r.detail || r.error)) || "The desk didn't answer — check it and try again."
-    : "None of them is booked to a strategy yet — book them from the portfolio when you're ready." +
+    : "None of them is booked to a strategy yet — book them on a strategy's page when you're ready." +
       (WIZ.env === "live" ? " These are LIVE accounts." : "");
   return {title, sub, html: rows.map(x => {
     const [text, cls] = (said[x.status] || said.failed)(x);

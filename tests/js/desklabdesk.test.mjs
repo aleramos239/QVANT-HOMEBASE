@@ -61,14 +61,15 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
     SLICE('const killText = ', 'function killFailures(') + SLICE('const actErr = ', 'const actFail = ') + SLICE('const STEP_OK = ', 'const REFUSED_WHY') +
     SLICE('const SWITCH_AT = {};', 'function cfDone(') +
     'function needsConfirm(kind, turningOn, opts) { return window.AlgoVisibility.switchNeedsConfirm(kind, turningOn, opts); }\n' +
-    SLICE('const labAct = ', 'let FEED_ROWS') +
+    SLICE('const labAct = ', 'let FEED_ROWS') + SLICE('/* ---- Changes (7 days) (WP1.15)', '/* ---- end of Changes') +
+    SLICE('const actDay = ', '/* Activity for one strategy or one group') +
     SLICE('/* ===== Desk views', 'function render() {') +
     SLICE('/* ---- account row (rendered inside strategy cards) ---- */', '/* ---- connect wizard ---- */') +
     SLICE('/* ---- strategy on/off + flatten ----', '/* ---- accounts popup ---- */') +
     `\nDESKLAB = { strategies: ${JSON.stringify(rows)}, runner: { alive: true } }; DESKLAB_OK = ${readOk};` +
     `\nVIEW = ${JSON.stringify(view)};` +
     '\nglobalThis.api = { renderSide, renderMain, labDeskView, stratView, stratState, stratDotCls, todayRow, specOf, setBook, pickAsg, liveBookingNote, toggleStrat,' +
-    ' flattenStrat, dayHeadline, dayTimeline, journalShown, todayFoot, openLabLimits, closeLabLimits, saveLabLimits, removeLabStrat, clearLabBlock, labRowsHtml, calView, shadowData, deleteLabStrat, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
+    ' setLabSetting, setStratRr, pickAsg, removeAsg, deskChangesHtml, deskChangeList, putBackChange, flattenStrat, dayHeadline, dayTimeline, journalShown, todayFoot, openLabLimits, closeLabLimits, saveLabLimits, removeLabStrat, clearLabBlock, labRowsHtml, calView, shadowData, deleteLabStrat, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
   vm.runInContext(code, ctx);
   return { ctx, api: ctx.api, els, el, posts, toasts, confirms, alerts, shown, hidden, refreshes,
     side: () => { ctx.api.renderSide(['nq930', 'lab_nq_orb'].filter((n) => ctx.ST.strategies[n]), 0, 0); return els.side.innerHTML; },
@@ -133,6 +134,207 @@ test('one row, never two: until the Desk knows it, the Step A row draws it; the 
   // and the chart service answering with nothing changes nothing on the Desk's own row
   const none = load({ rows: [] });
   assert.match(none.side(), /lab_nq_orb/);
+});
+
+// ---- WP1.15 Changes (7 days) -----------------------------------------------------------------------------------------------
+const changes = (t, rows, who = 's:lab_nq_orb') => vm.runInContext(`CHG[${JSON.stringify(who)}] = {rows: ${JSON.stringify(rows)}, at: Date.now(), busy: false}`, t.ctx);
+const chg = (event, over) => ({ ts: Math.random(), et: '2026-10-10T09:05:00', event, ...over });
+const LIM_OLD = { max_trades_day: 2, max_qty: 1, max_risk_usd: 300, last_entry_et: '11:00', flat_et: '15:55' };
+const LIM_NEW = { ...LIM_OLD, max_trades_day: 3, max_risk_usd: 450 };
+
+test('WP1.15 Changes (7 days): each row is old → new in words; no Put back when the old value is unknown', () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 2 }] } });
+  t.ctx.ST.strategies.lab_nq_orb.lab.limits = LIM_NEW;
+  changes(t, [
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 2 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }] }),
+    chg('lab_limits_set', { strategy: 'lab_nq_orb', limits: LIM_NEW, previous: LIM_OLD }),
+    chg('lab_limits_set', { strategy: 'lab_nq_orb', limits: LIM_OLD, previous: null }),
+  ]);
+  const list = t.api.deskChangeList('s:lab_nq_orb');
+  assert.deepEqual(plain(list.map((x) => [x.text, !!x.back])), [
+    ['APEX…048 added ×2', true],
+    ['Accounts: Lucid Eval #1 ×1', false],
+    ['Limits: Trades a day 2 → 3 · Most at risk per trade $300 → $450', true],
+    ['Limits set: Trades a day 2 · Most contracts per account 1 · Most at risk per trade $300 · No new trade after 11:00 ET · Flat by 15:55 ET', false],
+  ]);
+  const html = t.api.deskChangesHtml('s:lab_nq_orb');
+  assert.match(html, /<h2>Changes \(7 days\)<\/h2>/);
+  assert.equal((html.match(/>Put back</g) || []).length, 2);
+  assert.match(t.view(), /<h2>Changes \(7 days\)<\/h2>/, 'on the Lab strategy page');
+  changes(t, [], 's:nq930');
+  assert.match(t.ctx.api.stratView('nq930'), /<h2>Changes \(7 days\)<\/h2>[\s\S]*No changes in the last 7 days\./, 'and on the built-in page');
+});
+
+test('WP1.15 Put back limits: the Limits dialog\'s own Save, with the same body as typing the old values and pressing Save', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  t.ctx.ST.strategies.lab_nq_orb.lab.limits = LIM_NEW;
+  changes(t, [chg('lab_limits_set', { strategy: 'lab_nq_orb', limits: LIM_NEW, previous: LIM_OLD })]);
+  await t.api.putBackChange('s:lab_nq_orb', t.api.deskChangeList('s:lab_nq_orb')[0].key);
+  const byHand = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  byHand.ctx.ST.strategies.lab_nq_orb.lab.limits = LIM_NEW;
+  byHand.api.openLabLimits('lab_nq_orb');
+  Object.assign(byHand.el('llTrades'), { value: '2' }); Object.assign(byHand.el('llRisk'), { value: '300' });
+  await byHand.api.saveLabLimits();
+  assert.equal(t.posts.length, 1);
+  assert.deepEqual(t.posts, byHand.posts);
+  assert.deepEqual(t.posts[0], { url: '/api/lab-limits', body: { strategy: 'lab_nq_orb', limits: LIM_OLD } });
+  assert.equal(t.confirms.length, 0, 'tightening back never asks');
+});
+
+test('WP1.15 Put back a setting, the RR and the book: the same setter and body as the control; LIVE asks as the control asks', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }], nq930: [{ account: 'a1', qty: 3 }] } });
+  Object.assign(t.ctx.ST.strategies.lab_nq_orb.lab, { params: { stop_atr: 2 }, labels: { stop_atr: 'Stop (ATR)' } });
+  Object.assign(t.ctx.ST.strategies.nq930.cfg, { rr: 2, sl_pts: 5 });
+  changes(t, [chg('lab_settings_set', { strategy: 'lab_nq_orb', settings: { stop_atr: 2 }, previous: { stop_atr: 1.5 } }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] })]);
+  changes(t, [chg('strategy_rr_changed', { strategy: 'nq930', rr: 2, tp_pts: 10, sl_pts: 5, previous: { rr: 1.5, tp_pts: 7.5, sl_pts: 5 } }),
+    chg('book_updated', { strategy: 'nq930', assignments: [{ account: 'a1', qty: 3 }] }),
+    chg('book_updated', { strategy: 'nq930', assignments: [{ account: 'a1', qty: 4 }] })], 's:nq930');
+  const lab = t.api.deskChangeList('s:lab_nq_orb'), bi = t.api.deskChangeList('s:nq930');
+  assert.deepEqual(plain(lab.map((x) => x.text)), ['Stop (ATR) 1.5 → 2', 'APEX…048 taken off', 'Accounts: Lucid Eval #1 ×1 · APEX…048 ×1']);
+  assert.deepEqual(plain(bi.map((x) => x.text)), ['Target 1:1.5 → 1:2', 'Lucid Eval #1 qty 4 → 3', 'Accounts: Lucid Eval #1 ×4']);
+  for (const [who, x] of [['s:lab_nq_orb', lab[0]], ['s:lab_nq_orb', lab[1]], ['s:nq930', bi[0]], ['s:nq930', bi[1]]]) await t.api.putBackChange(who, x.key);
+  const byHand = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }], nq930: [{ account: 'a1', qty: 3 }] } });
+  await byHand.api.setLabSetting('lab_nq_orb', 'stop_atr', 1.5);
+  await byHand.api.pickAsg('lab_nq_orb', 'a2', 1);
+  await byHand.api.setStratRr('nq930', 1.5);
+  byHand.ctx.ST.book.nq930 = [{ account: 'a1', qty: 3 }];
+  await byHand.api.pickAsg('nq930', 'a1', 4);
+  assert.deepEqual(t.posts, byHand.posts);
+  assert.deepEqual(t.posts.map((p) => p.url), ['/api/lab-settings', '/api/book', '/api/strategy-rr', '/api/book']);
+  assert.deepEqual(t.confirms.map((c) => c.title), byHand.confirms.map((c) => c.title));
+  assert.deepEqual(t.confirms.map((c) => c.title), ['Book NQ ORB on APEX…048 LIVE, qty 1?'], 'a LIVE account booked back asks; a setting on a demo-only strategy, the RR and a demo qty do not');
+});
+
+test('WP1.15 putting back a lower qty or taking an account off never asks, even LIVE (as editQty and the × do)', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a2', qty: 3 }] } });
+  changes(t, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 3 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }] })]);
+  const [x] = t.api.deskChangeList('s:lab_nq_orb');
+  assert.equal(x.text, 'APEX…048 qty 1 → 3');
+  await t.api.putBackChange('s:lab_nq_orb', x.key);
+  assert.deepEqual(t.posts, [{ url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }] } }]);
+  assert.equal(t.confirms.length, 0);
+  t.ctx.ST.book.lab_nq_orb = [{ account: 'a2', qty: 3 }, { account: 'a1', qty: 1 }];
+  changes(t, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 3 }, { account: 'a1', qty: 1 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 3 }] })]);
+  await t.api.putBackChange('s:lab_nq_orb', t.api.deskChangeList('s:lab_nq_orb')[0].key);
+  assert.deepEqual(t.posts[1], { url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 3 }] } }, 'the × body');
+  assert.equal(t.confirms.length, 0);
+});
+
+test('WP1.15 putting back a LIVE qty raise keeps the account in its place (the take-turns order), as editQty does', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a2', qty: 1 }, { account: 'a1', qty: 1 }] } });
+  changes(t, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }, { account: 'a1', qty: 1 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 3 }, { account: 'a1', qty: 1 }] })]);
+  const [x] = t.api.deskChangeList('s:lab_nq_orb');
+  assert.equal(x.text, 'APEX…048 qty 3 → 1');
+  await t.api.putBackChange('s:lab_nq_orb', x.key);
+  assert.deepEqual(t.posts, [{ url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 3 }, { account: 'a1', qty: 1 }] } }]);
+  assert.deepEqual(t.confirms.map((c) => [c.title, c.action]), [['Book NQ ORB on APEX…048 LIVE, qty 1 → 3?', 'Book live']]);
+  const no = load({ book: { lab_nq_orb: [{ account: 'a2', qty: 1 }, { account: 'a1', qty: 1 }] }, confirm: false });
+  changes(no, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }, { account: 'a1', qty: 1 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 3 }, { account: 'a1', qty: 1 }] })]);
+  await no.api.putBackChange('s:lab_nq_orb', no.api.deskChangeList('s:lab_nq_orb')[0].key);
+  assert.deepEqual(no.posts, [], 'Cancel books nothing');
+});
+
+test('WP1.15 a change no longer in force, or any group row (even on its own page), has no Put back', () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 2 }] } });
+  t.ctx.ST.strategies.lab_nq_orb.lab.limits = LIM_OLD;
+  changes(t, [chg('lab_limits_set', { strategy: 'lab_nq_orb', limits: LIM_NEW, previous: LIM_OLD }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 3 }] })]);
+  assert.deepEqual(plain(t.api.deskChangeList('s:lab_nq_orb').map((x) => !!x.back)), [false, false, false]);
+  t.ctx.ST.groups = { g3: { name: 'apex', members: [], accounts: [], risk_usd: 750, max_minis: 17, on: true } };
+  changes(t, [chg('group_set', { group: 'g3', name: 'apex', members: [], accounts: [], risk_usd: 750, max_minis: 17, on: true }),
+    chg('group_set', { group: 'g3', name: 'apex', members: [], accounts: [], risk_usd: 500, max_minis: 17, on: true })], 'g:g3');
+  const g = t.api.deskChangeList('g:g3');
+  assert.deepEqual(plain(g.map((x) => [x.text, !!x.back])), [['Size $500 at risk a trade → $750 at risk a trade', false], ['Account cycle ON · $500 at risk a trade', false]]);
+  vm.runInContext('VIEW = {k: "group", name: "g3"}', t.ctx);
+  assert.deepEqual(plain(t.api.deskChangeList('g:g3').map((x) => !!x.back)), [false, false], 'on its own page too: the cycle card is the one place it changes');
+  assert.doesNotMatch(t.api.deskChangesHtml('g:g3'), /Put back/);
+  const urls = [];
+  t.ctx.fetch = async (u) => { urls.push(u); return { ok: false }; };
+  vm.runInContext('delete CHG["g:g3"]', t.ctx);
+  t.api.deskChangesHtml('g:g3');
+  assert.deepEqual(urls, ['/api/journal?days=7&limit=2000&group=g3'], 'a group reads its own lines');
+});
+
+test('WP1.15 an open page re-reads its changes at most once a minute', async () => {
+  const t = load(), urls = [];
+  t.ctx.fetch = async (u) => { urls.push(u); return { ok: true, json: async () => ({ events: [] }) }; };
+  t.api.deskChangesHtml('s:nq930');
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(urls, ['/api/journal?days=7&limit=2000&strategy=nq930']);
+  vm.runInContext('CHG["s:nq930"].at = Date.now() - 59000', t.ctx);
+  t.api.deskChangesHtml('s:nq930');
+  assert.equal(urls.length, 1, '59 s later: not yet');
+  vm.runInContext('CHG["s:nq930"].at = Date.now() - 61000', t.ctx);
+  t.api.deskChangesHtml('s:nq930');
+  assert.equal(urls.length, 2, 'a minute later: once more');
+});
+
+// ---- WP1.14 the Setup summary --------------------------------------------------------------------------------------------
+const setupOf = (html) => { const i = html.indexOf('<div class="sec setup">'); assert.ok(i >= 0, 'a Setup block'); return html.slice(i, html.indexOf('</div></div>', i) + 12); };
+const setupRow = (html, k) => (new RegExp(`<span class="t">${k}</span><span class="h">([^<]*)</span>`).exec(setupOf(html)) || [])[1];
+
+test('WP1.14 a Lab strategy\'s Setup: accounts, LIVE / paper, the group\'s $ risk, limits, window, group and machine in one place', () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 2 }] } });
+  t.ctx.ST.groups = { g3: { name: 'apex 300k', members: ['lab_nq_orb'], accounts: ['a2'], risk_usd: 500, max_minis: 3, on: true, next: 'a2' } };
+  t.ctx.ST.machine = 'server';
+  const html = t.view();
+  assert.equal(setupRow(html, 'Accounts'), 'Lucid Eval #1 demo ×1 · APEX…048 LIVE ×2');
+  assert.equal(setupRow(html, 'LIVE / paper'), 'LIVE on 1 · demo on 1');
+  assert.equal(setupRow(html, 'Size'), '$500 at risk a trade (the apex 300k group sizes it)');
+  assert.equal(setupRow(html, 'Limits'), 'Trades a day 2 · Most contracts per account 1 · Most at risk per trade $300 · No new trade after 11:00 ET · Flat by 15:55 ET');
+  assert.equal(setupRow(html, 'Window'), 'NQ · 09:25-16:00 ET · from the Lab', 'the Lab strategy\'s own spec line');
+  assert.equal(setupRow(html, 'Group'), 'apex 300k (account cycle ON, next APEX…048)');
+  assert.equal(setupRow(html, 'Machine'), 'the SERVER · Chicago');
+  assert.doesNotMatch(setupOf(html), /mcap warn/, 'nothing missing: no red line');
+  assert.doesNotMatch(setupOf(html), /<button|<input|onclick/, 'shown only: nothing here edits the window or anything else');
+});
+
+test('WP1.14 what still stops it is a red line at the top: "Limits needed first", "Desk not armed"', () => {
+  const t = load({ strategies: { lab_nq_orb: deskStrat({ limits: null }) } });
+  t.ctx.ST.armed = false;
+  const box = setupOf(t.view());
+  assert.match(box, /^<div class="sec setup"><h2>Setup<\/h2><div class="mcap warn">Limits needed first<\/div><div class="mcap warn">Desk not armed<\/div>/);
+  assert.equal(setupRow(t.view(), 'LIVE / paper'), 'no account: it runs in shadow');
+  assert.equal(setupRow(t.view(), 'Limits'), undefined);
+  assert.equal(setupRow(t.view(), 'Machine'), undefined, 'an unknown machine is not named');
+});
+
+test('WP1.14 the built-in page has the Setup too: its contracts, when it fires, flat time and days, shown only', () => {
+  const t = load({ book: { nq930: [{ account: 'a2', qty: 3 }] } });
+  t.ctx.ST.strategies.nq930.cfg.fire_et = '09:30:00';
+  const html = t.ctx.api.stratView('nq930');
+  assert.equal(setupRow(html, 'Accounts'), 'APEX…048 LIVE ×3');
+  assert.equal(setupRow(html, 'Size'), '3 contracts an account');
+  assert.equal(setupRow(html, 'Window'), 'fires 09:30 ET · flat by 15:55 ET · every weekday');
+  assert.equal(setupRow(html, 'Group'), 'none');
+  assert.doesNotMatch(setupOf(html), /Limits needed first|<button|<input/);
+});
+
+test('WP1.8 sidebar accounts: a LIVE / DEMO / PAPER tag on every row, what it holds, and one in a trade is never under the cut', () => {
+  const accounts = {};
+  for (let i = 1; i <= 14; i++) accounts['d' + i] = { label: 'Demo ' + i, env: 'demo', connected: true, balance: 1000 };
+  accounts.d14 = { ...accounts.d14, open_positions: [{ symbol: 'NQZ6', net: 1 }], working_orders: 1 };
+  accounts.p1 = { label: 'Paper 1', env: 'paper', connected: true, balance: 1000 };
+  accounts.l1 = { label: 'Live 1', env: 'live', connected: true, balance: 1000 };
+  const t = load({ accounts });
+  const side = t.side(), rows = [...side.matchAll(/onclick="openAccts\(([^)]*)\)"/g)].map((m) => m[1].replace(/&quot;|"/g, ''));
+  assert.deepEqual(rows, ['l1', 'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'd10', 'd11', 'd14'], 'the first 12 in their order, then the one in a trade');
+  assert.match(side, />Show 3 more</);
+  assert.match(side, /Live 1<span class="tag-live">LIVE<\/span>/);
+  assert.equal((side.match(/>DEMO</g) || []).length, 12);
+  assert.match(side, /<small>in a trade 1 · 1 working<\/small>/);
+  vm.runInContext("SIDE_ALL = true", t.ctx);
+  const all = t.side();
+  assert.match(all, /Paper 1<span class="tag-paper"[^>]*>PAPER</);
+  assert.match(all, />Show fewer</);
 });
 
 test('the Strategies count in a folded sidebar does not count the same strategy twice', () => {
@@ -216,10 +418,11 @@ test('with accounts: the other note, the account rows and the Desk\'s own + Assi
   assert.doesNotMatch(html, /Set the limits first/);
 });
 
-test('the picker is disabled with its caption until limits exist', () => {
+test('until limits exist the picker is one line that says so, not a dead button', () => {
   const t = load({ strategies: { lab_nq_orb: deskStrat({ limits: null }) } });
   const html = t.view();
-  assert.match(html, /<button class="btn btn-quiet noarrow btn-sm" disabled title="Set the limits first\. Then assign an account\.">\+ Assign an account<\/button><div class="mcap">Set the limits first\. Then assign an account\.<\/div>/);
+  assert.match(html, /<div class="mcap">Set the limits first\. Then assign an account\.<\/div>/);
+  assert.doesNotMatch(html, /\+ Assign an account/);
   assert.doesNotMatch(html, /toggleAsgMenu|pickAsg|amenu/);
   assert.match(html, /<span class="t net">—<\/span>/, 'the limits rows show a dash');
   assert.match(html, /Edit limits/);
@@ -231,7 +434,8 @@ test('read_only: "Another copy of the Desk is using the Lab strategies." and Lim
   assert.match(html, /<div class="sd-note">Another copy of the Desk is using the Lab strategies\.<\/div>/);
   assert.match(html, /openLabLimits\([^)]*\)" disabled>Edit limits/);
   assert.match(html, /removeLabStrat\([^)]*\)" disabled title/);
-  assert.match(html, /disabled title="Another copy of the Desk is using the Lab strategies\.">\+ Assign an account/);
+  assert.match(html, /<div class="mcap">Another copy of the Desk is using the Lab strategies\.<\/div>/);
+  assert.doesNotMatch(html, /\+ Assign an account/);
   assert.doesNotMatch(html, /toggleAsgMenu|pickAsg/);
   assert.match(html, /toggleStrat\(&quot;lab_nq_orb&quot;, false\)/, 'switching off is never refused');
   assert.doesNotMatch(html, /flattenStrat\([^)]*\)"[^>]*disabled/);
@@ -370,6 +574,22 @@ test('Flatten & turn off for a Lab strategy: its own confirm words, the existing
   assert.deepEqual(stuck.toasts, ['Flattened. Could not switch it off: try the switch again.']);
 });
 
+test('WP1.7: the ON confirm names the machine, the LIVE / demo accounts and the size; when it asks is unchanged', async () => {
+  const book = { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] };
+  const t = load({ book, strategies: { lab_nq_orb: deskStrat({ state: 'off' }, { enabled: false }) } });
+  t.ctx.ST.machine = 'server';
+  await t.api.toggleStrat('lab_nq_orb', true);
+  assert.equal(t.confirms[0].body, 'It will run on the SERVER · Chicago from the next signal. Its orders go to 1 LIVE account and 1 demo account, 1 contract each.');
+  assert.deepEqual(t.posts, [{ url: '/api/strategy', body: { strategy: 'lab_nq_orb', enabled: true } }]);
+  const b = load({ book: { nq930: [{ account: 'a2', qty: 3 }] }, strategies: { nq930: { ...nq930(), cfg: { ...nq930().cfg, enabled: false } } } });
+  await b.api.toggleStrat('nq930', true);
+  assert.equal(b.confirms[0].body, 'It will run from the next signal. Its orders go to 1 LIVE account, 3 contracts.', 'a built-in too; no machine known: none named');
+  const off = load({ book });
+  await off.api.toggleStrat('lab_nq_orb', false);
+  assert.deepEqual(off.confirms, [], 'OFF still never asks');
+  assert.match(off.view(), /title="ON: its orders go to 1 LIVE account and 1 demo account, 1 contract each"/, "the switch's title reads the page's accounts");
+});
+
 test('a strategy that is not from the Lab flattens and switches with the words it always had', async () => {
   const t = load({ answer: { ok: true, enabled: false, results: { a1: ['market Sell 1: ok'] } } });
   await t.api.flattenStrat('nq930');
@@ -415,7 +635,7 @@ test('booking a live account onto a Lab strategy: the Desk\'s own confirm, with 
   const t = load();
   await t.api.pickAsg('lab_nq_orb', 'a2', 1);
   assert.equal(t.confirms.length, 1);
-  assert.equal(t.confirms[0].title, 'Book NQ ORB on APEX…048 LIVE × 1?');
+  assert.equal(t.confirms[0].title, 'Book NQ ORB on APEX…048 LIVE, qty 1?');
   assert.equal(t.confirms[0].body, 'It will trade real money on its next order. Every entry carries a stop held at the broker. Account APEX2941870000048.');
   assert.equal(t.confirms[0].action, 'Book live');
   assert.deepEqual(t.posts, [{ url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }] } }]);
@@ -546,6 +766,71 @@ test('a second Save while one is out sends nothing more, and an answer that land
   release();
   await first;
   assert.equal(t.els.llNote.textContent, '', 'a closed dialog is not written to');
+});
+
+// ---- WP1.5: loosening a limit, or a setting, on an ON strategy with a LIVE account asks first; tightening saves at once ----
+const LIVE_BOOK = { lab_nq_orb: [{ account: 'a2', qty: 1 }] };       // a2 is LIVE
+test('WP1.5 saveLabLimits asks for 2 → 3 trades a day and not for 3 → 2; Cancel sends nothing; the body is unchanged', async () => {
+  const up = load({ book: LIVE_BOOK, answer: { ok: true } });
+  up.ctx.ST.machine = 'server';
+  up.api.openLabLimits('lab_nq_orb');
+  fill(up, { llTrades: '3' });
+  await up.api.saveLabLimits();
+  assert.equal(up.confirms.length, 1);
+  assert.equal(up.confirms[0].title, 'Loosen the limits of NQ ORB?');
+  assert.equal(up.confirms[0].body, 'Trades a day 2 → 3. NQ ORB is ON with 1 LIVE account on the SERVER · Chicago.');
+  assert.deepEqual(up.posts, [{ url: '/api/lab-limits', body: { strategy: 'lab_nq_orb', limits: { ...LIM, max_trades_day: 3 } } }]);
+  const down = load({ book: LIVE_BOOK, strategies: { lab_nq_orb: deskStrat({ limits: { ...LIM, max_trades_day: 3 } }) } });
+  down.api.openLabLimits('lab_nq_orb');
+  fill(down, { llTrades: '2' });
+  await down.api.saveLabLimits();
+  assert.deepEqual(down.confirms, [], 'tightening saves at once');
+  assert.deepEqual(down.posts, [{ url: '/api/lab-limits', body: { strategy: 'lab_nq_orb', limits: LIM } }]);
+  const no = load({ book: LIVE_BOOK, confirm: false });
+  no.api.openLabLimits('lab_nq_orb');
+  fill(no, { llFlat: '15:55', llLast: '11:30' });
+  await no.api.saveLabLimits();
+  assert.equal(no.confirms.length, 1, 'a later last entry is looser');
+  assert.deepEqual(no.posts, []);
+  assert.equal(no.els.llSave.disabled, false, 'it can be tried again');
+  for (const t of [load({ book: BOOKED0 }), load({ book: LIVE_BOOK, strategies: { lab_nq_orb: deskStrat({}, { enabled: false }) } })]) {
+    t.api.openLabLimits('lab_nq_orb');
+    fill(t, { llTrades: '5', llRisk: '900' });
+    await t.api.saveLabLimits();
+    assert.deepEqual(t.confirms, [], 'a demo account only, or switched OFF: no ask');
+    assert.equal(t.posts.length, 1);
+  }
+});
+
+test('WP1.5 the Save button lists old → new as the fields read', () => {
+  const t = load();
+  t.api.openLabLimits('lab_nq_orb');
+  assert.equal(t.els.llSave.textContent, 'Save limits');
+  fill(t, { llTrades: '3', llRisk: '450' });
+  t.els.llTrades.oninput();
+  assert.equal(t.els.llSave.textContent, 'Save: Trades a day 2 → 3 · At risk $300 → $450');
+  const none = load({ strategies: { lab_nq_orb: deskStrat({ limits: null }) } });
+  none.api.openLabLimits('lab_nq_orb');
+  fill(none, { llTrades: '3' });
+  none.els.llTrades.oninput();
+  assert.equal(none.els.llSave.textContent, 'Save limits', 'first limits: nothing to compare');
+});
+
+test('WP1.5 setLabSetting asks while ON with a LIVE account, naming old → new; the body is the same; no ask otherwise', async () => {
+  const t = load({ book: LIVE_BOOK, answer: { ok: true, changed: true } });
+  assert.equal(await t.api.setLabSetting('lab_nq_orb', 'open_min', 15, { from: 5 }), '');
+  assert.equal(t.confirms.length, 1);
+  assert.equal(t.confirms[0].title, 'Change NQ ORB: open min 5 → 15?');
+  assert.match(t.confirms[0].body, /^NQ ORB is ON with 1 LIVE account\. It trades with the new setting from its next session\.$/);
+  assert.deepEqual(t.posts, [{ url: '/api/lab-settings', body: { strategy: 'lab_nq_orb', settings: { open_min: 15 } } }]);
+  const no = load({ book: LIVE_BOOK, confirm: false });
+  assert.equal(await no.api.setLabSetting('lab_nq_orb', 'open_min', 15), 'Not changed.');
+  assert.equal(no.confirms[0].title, 'Change NQ ORB: open min to 15?', 'no `from`: still asks');
+  assert.deepEqual(no.posts, []);
+  const demo = load({ book: BOOKED0 });
+  await demo.api.setLabSetting('lab_nq_orb', 'open_min', 15, { from: 5 });
+  assert.deepEqual(demo.confirms, []);
+  assert.equal(demo.posts.length, 1);
 });
 
 test('Enter in a field saves, a held key does not; Escape closes through the page\'s one path', () => {

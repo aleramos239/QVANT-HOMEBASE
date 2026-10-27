@@ -162,13 +162,19 @@ async function reconnectAcct(id) {
    asks -- it only makes things safer, and it never touches an open position (the toast says so;
    Flatten does that). A SHADOW strategy never places an order, so switching it on asks nothing
    either. Same POST /api/strategy either way. */
+/* The ON confirm's words: the machine, how many LIVE / demo / paper accounts, the qty or the $ at risk (desklab.js); "" when it
+   cannot say (no account booked, or desklab.js did not load). */
+function switchAsk(name, book) {
+  try { return DeskLab.switchOnAsk(ST.strategies[name], book, ST.accounts, deskMachine()); } catch (_) { return ""; }
+}
 async function toggleStrat(name, enabled) {
   if (switchBounced("strategy:" + name)) return;    // a double-click is one flip
   const c = ((((ST && ST.strategies) || {})[name]) || {}).cfg || {};
   const lab = c.kind === "lab";       // a promoted Lab strategy: with no account booked it only runs in shadow, which asks nothing
+  const book = (ST.book && ST.book[name]) || [];
   if (needsConfirm("strategy", enabled, {shadow: !!c.shadow || (lab && !((ST.book && ST.book[name]) || []).length)}) && !await confirmDlg(
       "Turn ON " + stratLabel(name) + "?",
-      "It will run and execute on its assigned accounts from the next signal.",
+      switchAsk(name, book) || "It will run and execute on its assigned accounts from the next signal.",
       "Turn on", false)) { refresh(); return; }
   const N = stratLabel(name);
   let r, err = null;
@@ -181,8 +187,8 @@ async function toggleStrat(name, enabled) {
   else if (enabled) toast(lab ? DeskLab.refusalText(r, err) : `${N} NOT switched on — ${why}.`, 8000);          // the safe side
   else alertBar(`${N} NOT switched off — ${why}. It may still trade: switch it off again, or Kill.`);
 }
-/* A straddle's target as 1:rr of its stop (nq930). The desk refuses 09:20-09:35 ET and while the strategy has
-   orders or a position today. Returns "" when it landed, else the reason in words (the Desk skin shows it
+/* A straddle's target as 1:rr of its stop (nq930). The desk refuses it while the strategy has orders or a
+   position today. Returns "" when it landed, else the reason in words (the Desk skin shows it
    under the field). */
 async function setStratRr(name, rr, slPts) {      // rr null + slPts: change the stop only, the RR stays
   const N = stratLabel(name);
@@ -198,9 +204,17 @@ async function setStratRr(name, rr, slPts) {      // rr null + slPts: change the
   return killText(r && (r.detail || r.error)) || "the desk's answer was unreadable";
 }
 /* One adjustable setting of a Lab strategy (the Setup panel's controls, desklabset.js): "" when it was saved, else the sentence
-   saying why not. It takes effect from the strategy's next session. */
-async function setLabSetting(name, key, value) {
-  const N = stratLabel(name);
+   saying why not. It takes effect from the strategy's next session. `from` (optional): the value it replaces, for the words.
+   While the strategy is ON with a LIVE account it asks first: a setting changes what it trades. */
+async function setLabSetting(name, key, value, opts) {
+  const N = stratLabel(name), live = liveBooked(name);
+  if (live) {
+    const lab = ST.strategies[name].lab || {}, say = (v) => v === true ? "on" : v === false ? "off" : String(v);
+    const what = (lab.labels && lab.labels[key]) || String(key).replace(/_/g, " ");
+    const from = opts && opts.from != null ? say(opts.from) + " → " : "to ";
+    if (!await confirmDlg(`Change ${N}: ${what} ${from}${say(value)}?`, liveWords(N, live) + " It trades with the new setting from its next session.",
+        "Change it", false)) return "Not changed.";
+  }
   let r, err = null;
   try { r = await post("/api/lab-settings", {strategy: name, settings: {[key]: value}}); } catch (e) { err = e || new Error("no answer"); }
   refresh();
@@ -209,6 +223,14 @@ async function setLabSetting(name, key, value) {
   if (r && r.ok === true) { toast(r.changed === false ? `${N}: nothing changed.` : `${N} setting saved. It applies from its next session.`); return ""; }
   return killText(r && (r.detail || r.error)) || "the desk's answer was unreadable";
 }
+/* How many LIVE accounts an ON strategy has booked (an account the desk does not list counts as LIVE); 0 when it is OFF. A change
+   that loosens what it trades asks only then. */
+function liveBooked(name) {
+  const s = ((ST && ST.strategies) || {})[name];
+  if (!s || !s.cfg || s.cfg.enabled !== true) return 0;
+  return ((ST.book && ST.book[name]) || []).filter(a => !["demo", "paper"].includes((((ST.accounts || {})[a.account]) || {}).env)).length;
+}
+const liveWords = (N, n) => `${N} is ON with ${n} LIVE account${n === 1 ? "" : "s"}${machineWords() ? " " + machineWords() : ""}.`;
 /* Flatten & turn off believes only what the desk reports (second review): it answers ok:true
    whatever happened to the flatten itself, with each account's steps in `results` -- read them
    (stepFailures). A failed flatten, a refusal or a dropped / unreadable answer is the red alert:
@@ -243,20 +265,28 @@ async function flattenStrat(name) {
 /* ---- the account's day take (the group's) ----
    Closed net P&L of the day, in dollars: once a trade of ANY strategy booked here closes with the day at or above it, no new
    entry is taken on the account for the rest of the day (open trades run to their stop / target). 0 turns it off. */
-function dayTakeBox(id, a) {
+function dayState(a) {
   const d = (a && a.day) || {}, v = Number(d.day_lock) || 0;
-  const state = d.locked ? ` <span class="neg" title="No new entry on this account for the rest of the day">stopped for the day (${usd(d.closed_net)})</span>`
+  return d.locked ? ` <span class="neg" title="No new entry on this account for the rest of the day">stopped for the day (${usd(d.closed_net)})</span>`
     : (v ? ` <span class="mcap" title="The day's closed P&amp;L so far">${usd(d.closed_net || 0)} of ${usd(v)}</span>` : "");
+}
+function dayTakeBox(id, a) {
+  const d = (a && a.day) || {}, v = Number(d.day_lock) || 0, state = `<span data-ro="day">${dayState(a)}</span>`;
   return `<span class="mcap" title="Closed profit that ends the day for this account: no new entry after it, for any strategy. 0 = off">Day take $</span>
-    <input type="number" min="0" max="100000" step="50" value="${v}" style="width:72px" aria-label="Day take, dollars"
+    <input type="number" min="0" max="100000" step="50" value="${v || ""}" placeholder="OFF" style="width:72px" aria-label="Day take, dollars (0 = OFF)"
       onkeydown="if(event.key==='Enter')setDayTake(${jsArg(id)}, this.value)"><button class="btn btn-outline btn-sm"
       onclick="setDayTake(${jsArg(id)}, this.previousElementSibling.value)">Set</button>${state}`;
 }
 async function setDayTake(id, raw) {
   const v = Number(raw);
   if (raw === "" || !Number.isFinite(v) || v < 0 || v > 100000) return toast("The day take is a dollar amount from 0 (off) to 100000.", 5000);
+  const was = Number(((((ST && ST.accounts) || {})[id] || {}).day || {}).day_lock);
+  // OFF removes a stop: it asks, unless the take is already known to be off (an unknown take asks)
+  if (v === 0 && was !== 0 && !await confirmDlg(`Day take OFF for ${acctShort(id)}: nothing stops it today?`,
+      "No profit amount ends its day: every strategy booked on it keeps taking new trades.", "Turn it off", false)) return;
   const r = await post("/api/account-day-lock", {account: id, day_lock: v});
-  if (r && r.ok) toast(r.locked ? "Day take set. This account is stopped for the day." : (v ? "Day take set: " + usd(v) + "." : "Day take off."), 4000);
+  if (r && r.ok) toast(r.locked ? `Day take set: ${usd(v)}. ${acctShort(id)} has already made ${usd(r.closed_net || 0)} today, so it takes no new trade for the rest of the day. Open trades run to their stop or target.`
+    : (v ? "Day take set: " + usd(v) + "." : "Day take off."), r.locked ? 8000 : 4000);
   else toast((r && r.detail) || "Could not set the day take.", 5000);
   await refresh();
   if ($("#acctOverlay").classList.contains("open")) openAccts(id);   // the popup shows the new take at once
@@ -268,31 +298,58 @@ function openAccts(focus) {
   const ids = Object.keys(accts);
   $("#acctCount").textContent = ids.length ? ids.length + " connected login" +
     (ids.length > 1 ? "s" : "") : "";
-  const runningOn = (id) => Object.entries((ST && ST.book) || {})
-    .filter(([, rows]) => (rows || []).some(a => a.account === id))
-    .map(([n, rows]) => n + " ×" + rows.find(a => a.account === id).qty)
-    .join(" · ");
   $("#acctList2").innerHTML = ids.length
-    ? ids.map(id => {
-        const running = runningOn(id);
-        // replacer FUNCTIONS, never strings: a replacement string reads $&, $`, $$ … specially, and an
-        // account id is the broker's text -- "$`" in one used to splice the row into itself (second review)
-        return acctRow(id, {}).replace('<div class="acct">', () => `<div class="acct${id === focus ? " acct-focus" : ""}">`)
-          .replace('<span class="spacer"></span>',
-          () => `<span class="strats">${esc(running || "no strategy assigned")}</span><span class="spacer"></span>`)
-          .replace("</div>", () => `${dayTakeBox(id, accts[id])}<button class="btn btn-outline btn-sm" onclick="flattenAcct(${jsArg(id)})"${accts[id].connected ? "" : " disabled"}
-            title="Cancel every working order and close every position on this account">Flatten</button>
-            <button class="btn btn-outline btn-sm" onclick="reconnectAcct(${jsArg(id)})"
-            title="Rebuild this account's broker connection">Reconnect</button>
-            <button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
-            onclick="removeAcct(${jsArg(id)})" title="Remove this account">&times;</button></div>`);
-      }).join("")
+    ? `<div data-ro="reconnect">${ACCT_RC = reconnectAllHtml()}</div>` + ids.map(id => acctPopRow(id, id === focus)).join("")
     : `<div class="mcap" style="padding:14px 0">no accounts yet — add one to start</div>`;
   renderPaper();
   loadPaper();
   showOverlay("acctOverlay");
   const at = $("#acctList2 .acct-focus");
   if (at && at.scrollIntoView) at.scrollIntoView({block: "nearest"});
+}
+let ACCT_RC = "";                 // the "Reconnect all" the popup shows now
+const acctRunning = (id) => Object.entries((ST && ST.book) || {})
+  .filter(([, rows]) => (rows || []).some(a => a.account === id))
+  .map(([n, rows]) => n + " ×" + rows.find(a => a.account === id).qty)
+  .join(" · ");
+const acctsOffline = () => Object.keys((ST && ST.accounts) || {}).filter(id => !ST.accounts[id].connected);
+const reconnectAllHtml = () => acctsOffline().length ? `<div class="row-btns" style="justify-content:flex-start;margin:6px 0">
+  <button class="btn btn-outline btn-sm" onclick="reconnectOffline()" title="Rebuild the broker connection of every offline account, one at a time">Reconnect all (${acctsOffline().length} offline)</button></div>` : "";
+async function reconnectOffline() { for (const id of acctsOffline()) await reconnectAcct(id); }
+function acctPopRow(id, focused) {
+  const accts = (ST && ST.accounts) || {}, running = acctRunning(id);
+  // replacer FUNCTIONS, never strings: a replacement string reads $&, $`, $$ … specially, and an
+  // account id is the broker's text -- "$`" in one used to splice the row into itself (second review)
+  return acctRow(id, {}).replace('<div class="acct">', () => `<div class="acct${focused ? " acct-focus" : ""}" data-acct="${esc(id)}">`)
+          .replace('<span class="spacer"></span>',
+          () => `<span class="strats" data-ro="strats">${esc(running || "no strategy assigned")}</span><span class="mcap" data-ro="trade">${esc(tradeWords(accts[id]))}</span><span class="spacer"></span>`)
+          .replace("</div>", () => `${dayTakeBox(id, accts[id])}<button class="btn btn-outline btn-sm" onclick="flattenAcct(${jsArg(id)})"${accts[id].connected ? "" : " disabled"}
+            data-flat title="Cancel every working order and close every position on this account">Flatten</button>
+            <button class="btn btn-outline btn-sm" onclick="reconnectAcct(${jsArg(id)})"
+            title="Rebuild this account's broker connection">Reconnect</button>
+            <button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
+            onclick="removeAcct(${jsArg(id)})" title="Remove this account">&times;</button></div>`);
+}
+/* While the popup is open, each tick writes its read-only cells in place: the rows keep the order they opened in, no button
+   or field is rebuilt, and a row being typed in (its day take has focus) is left alone. A new account shows on the next open. */
+function tickAccts() {
+  const box = $("#acctList2"), accts = (ST && ST.accounts) || {};
+  const rc = box.querySelector('[data-ro="reconnect"]'), h = reconnectAllHtml();
+  if (rc && ACCT_RC !== h) { rc.innerHTML = h; ACCT_RC = h; }      // its button is rebuilt only when the count changes
+  for (const row of box.querySelectorAll(".acct[data-acct]")) {
+    const a = accts[row.getAttribute("data-acct")];
+    if (!a || row.contains(document.activeElement)) continue;
+    const cell = (k) => row.querySelector(`[data-ro="${k}"]`) || {}, pnl = a.realized_pnl;
+    cell("dot").className = "dot " + (a.connected ? "on" : "off");
+    cell("bal").textContent = usd(a.balance);
+    cell("pnl").className = "kvi " + (pnl > 0 ? "pos" : pnl < 0 ? "neg" : "");
+    cell("pnl").textContent = (pnl > 0 ? "+" : "") + usd(pnl);
+    cell("strats").textContent = acctRunning(row.getAttribute("data-acct")) || "no strategy assigned";
+    cell("trade").textContent = tradeWords(a);
+    cell("day").innerHTML = dayState(a);
+    const f = row.querySelector("[data-flat]");
+    if (f) f.disabled = !a.connected;
+  }
 }
 function closeAccts() { hideOverlay("acctOverlay"); }
 async function removeAcct(id) {

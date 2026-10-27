@@ -130,7 +130,7 @@ function labDeskView(name, s) {
   const accts = ST.accounts || {}, book = (ST.book && ST.book[name]) || [], row = labRowOf(s);
   const ro = DeskLab.readOnly(s), lock = DeskLab.accountsLock(s), shadow = DeskLab.inShadow(s, book);
   const sw = `<button class="switch" role="switch" aria-label="${esc(nm)} on or off" aria-checked="${on}"
-    title="${esc(DeskLab.deskSwitchTitle(s, book))}"
+    title="${esc(DeskLab.deskSwitchTitle(s, book, ST.accounts, deskMachine()))}"
     onclick="toggleStrat(${jsArg(name)}, ${!on})"></button>`;
   const sh = labShadowNet(name, s), stateNote = DeskLab.stateNote(s);
   const fig = (f) => `<div class="f"><div class="k">${esc(f.k)}</div><div class="v mono">${esc(f.v)}</div></div>`;
@@ -158,9 +158,8 @@ function labDeskView(name, s) {
     `<div class="feed-row"><span class="t">${esc(isDay(m.date) ? shortDay(m.date) : m.date)}</span><span class="h${m.ok === false ? " warn" : ""}">${esc(m.text)}</span>${m.rebuilt ? '<span class="t dim">rebuilt</span>' : ""}<span class="t net">${esc(usdS(m.net))}</span></div>`);
   const rows = book.map(a => acctRow(a.account, {qty: a.qty, strategy: name, locked: ro})).join("");
   const free = Object.keys(accts).filter(id => !book.some(a => a.account === id));
-  const cap = ro ? "" : lock.caption;
   const addForm = !Object.keys(accts).length ? `<div class="mcap">Add an account to run this strategy.</div>`
-    : lock.locked ? `<button class="btn btn-quiet noarrow btn-sm" disabled title="${esc(lock.caption)}">+ Assign an account</button>${cap ? `<div class="mcap">${esc(cap)}</div>` : ""}`
+    : lock.locked ? `<div class="mcap">${esc(lock.caption)}</div>`                // one line says how it gets accounts, no dead button
     : free.length ? `<div style="position:relative;display:inline-block;margin-top:10px">
         <button class="btn btn-quiet noarrow btn-sm" onclick="toggleAsgMenu(${jsArg(name)})" aria-haspopup="menu">+ Assign an account</button>
         <div class="amenu" id="amenu-${esc(name)}" role="menu" hidden>` +
@@ -171,6 +170,7 @@ function labDeskView(name, s) {
     ${stateNote ? `<div class="sd-note">${esc(stateNote)}</div>` : ""}
     <div class="sd-note">${esc(DeskLab.deskNote(book.length > 0))}</div>
     ${ro ? `<div class="sd-note">${esc(DeskLab.OTHER_DESK)}</div>` : ""}
+    ${setupHtml(name, s)}
     ${lab.auto === true ? "" : `<div class="sec"><h2>Limits</h2><div class="agroup feed static">${limits}</div>${winNote ? `<div class="mcap warn">${esc(winNote)}</div>` : ""}
       <button class="btn btn-outline btn-sm" onclick="openLabLimits(${jsArg(name)})"${ro ? " disabled" : ""}>${esc(DeskLab.EDIT_LIMITS)}</button></div>`}
     <div class="sec"><h2>${shadow ? "Today, in shadow" : "Today"}</h2>${today}${actBtn("s:" + name)}</div>${lab.name ? stratCal(name, lab.name) : ""}
@@ -178,6 +178,7 @@ function labDeskView(name, s) {
     ${row ? `<div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
     ${labCurveHtml(row.name)}${labResHtml(row.name, name)}` : ""}
     <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div>` : ""}${ro ? "" : rotationHtml(name)}${addForm}</div>
+    ${deskChangesHtml("s:" + name)}
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat(${jsArg(name)})" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       ${deskMachine() === "server" ? "" : `<button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>`}
       <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(lab.name || "")}, ${jsArg(name)})"${busy || ro || !lab.name ? " disabled" : ""} title="Off the Desk, switched off, its accounts off, and kept. Restore it from Archive any time.">Archive</button>
@@ -196,18 +197,33 @@ function labLimErrors(errors) {
   }
 }
 function labLimKey(e) { if (e.key === "Enter" && !e.repeat) { e.preventDefault(); saveLabLimits(); } }      // Enter saves; a held key does not
-function openLabLimits(name) {
+function openLabLimits(name, fill) {      // fill: other limits to show (Changes' Put back: the old ones), else the ones set
   const s = ST && ST.strategies && ST.strategies[name];
   if (!s || !s.lab || DeskLab.readOnly(s)) return;
   LAB_LIM = {name, tok: ++LAB_TOK};
   $("#llTitle").textContent = DeskLab.limitsTitle(stratLabel(name));
-  const f = DeskLab.limitsFields(s.lab.limits);
-  for (const [k, id] of LAB_LIM_FIELDS) $("#" + id).value = f[k];
+  const f = DeskLab.limitsFields(fill || s.lab.limits);
+  for (const [k, id] of LAB_LIM_FIELDS) { $("#" + id).value = f[k]; $("#" + id).oninput = labLimSaveText; }
+  labLimSaveText();
   labLimErrors({});
   const note = $("#llNote"); note.textContent = ""; note.hidden = true;
   $("#llSave").disabled = LAB_SAVING;
   showOverlay("labLimitsOverlay");
 }
+/* The Save button lists what changes, old → new, as the fields read now ("Save: Trades a day 2 → 3"); plain "Save limits" when
+   nothing changes or none were set. */
+const LAB_LIM_WORDS = {trades: "Trades a day", qty: "Contracts", risk: "At risk", last: "No new trade after", flat: "Flat by"};
+function labLimSaveText() {
+  const s = ST && ST.strategies && ST.strategies[LAB_LIM.name], old = s && s.lab && s.lab.limits;
+  const was = DeskLab.limitsFields(old), show = (k, v) => v === "" ? "none" : k === "risk" ? "$" + v.replace(/^\$/, "") : v;
+  const ch = old ? LAB_LIM_FIELDS.map(([k, id]) => [k, String($("#" + id).value).trim()]).filter(([k, v]) => v !== was[k])
+    .map(([k, v]) => `${LAB_LIM_WORDS[k]} ${show(k, was[k])} → ${show(k, v)}`) : [];
+  $("#llSave").textContent = ch.length ? "Save: " + ch.join(" · ") : DeskLab.SAVE_LIMITS;
+  return ch;
+}
+/* A limit loosened (a higher number, a later time) or removed. Tightening never asks. */
+const labLimLooser = (old, body) => !!old && ["max_trades_day", "max_qty", "max_risk_usd", "last_entry_et", "flat_et"]
+  .some(k => old[k] != null && (body[k] == null || body[k] > old[k]));
 function closeLabLimits() {
   hideOverlay("labLimitsOverlay");
   LAB_LIM = {name: "", tok: 0};
@@ -223,6 +239,12 @@ async function saveLabLimits() {
   const note = $("#llNote"); note.textContent = ""; note.hidden = true;
   if (!got.body) return;                  // nothing is sent until every field reads
   LAB_SAVING = true; $("#llSave").disabled = true;
+  const live = liveBooked(name);          // loosening a limit while it is ON with a LIVE account asks first
+  if (live && labLimLooser(s.lab && s.lab.limits, got.body)) {
+    const yes = await confirmDlg(`Loosen the limits of ${stratLabel(name)}?`, labLimSaveText().join(" · ") + ". " + liveWords(stratLabel(name), live),
+      DeskLab.SAVE_LIMITS, false);
+    if (!yes || LAB_LIM.tok !== tok) { LAB_SAVING = false; if (LAB_LIM.name) $("#llSave").disabled = false; return; }
+  }
   let r, err = null;
   try { r = await post("/api/lab-limits", {strategy: name, limits: got.body}); } catch (e) { err = e || new Error("no answer"); }
   LAB_SAVING = false;
@@ -465,6 +487,7 @@ function render() {
     if (!document.getElementById("qedit")) FREEZE = false;
   }
   if ($("#algoOverlay").classList.contains("open")) renderAlgoMgr();
+  if ($("#acctOverlay").classList.contains("open")) tickAccts();         // its read-only cells, in place
   renderGroupMgr();
 
   fillActWho();

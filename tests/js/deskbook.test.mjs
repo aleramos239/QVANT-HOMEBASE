@@ -31,7 +31,7 @@ const STRATS = {
   shadowy: { cfg: { symbol: 'NQ', qty: 1, enabled: true, shadow: true, kind: 'bars' } },
 };
 
-function load({ armed = true, confirm = true, book = {}, strategies = STRATS, accounts = ACCOUNTS } = {}) {
+function load({ armed = true, confirm = true, book = {}, strategies = STRATS, accounts = ACCOUNTS, reply = { ok: true }, machine = '' } = {}) {
   const posts = [], toasts = [], confirms = [], refreshes = [];
   let answer;   // a pending confirm the test can resolve later (confirm === 'later')
   const menus = [{ hidden: false }];
@@ -47,12 +47,14 @@ function load({ armed = true, confirm = true, book = {}, strategies = STRATS, ac
       confirms.push({ title, body, action, destructive });
       return confirm === 'later' ? new Promise((res) => { answer = res; }) : Promise.resolve(confirm);
     },
-    post: async (url, body) => { posts.push({ url, body }); return { ok: true }; },
+    post: async (url, body) => { posts.push({ url, body }); return reply; },
+    DeskLab: { refusalText: (r) => r.detail, bookedNext: () => false, bookedJoins: () => false },
     refresh: () => refreshes.push(true),
+    machineWords: () => machine,        // core.js's one machine reader
     hbClock: (t) => t,                  // the page's clock helper: 24-hour, as these tests read it
   });
   vm.runInContext(LABEL + BLOCK + `
-    globalThis.api = { pickAsg, editQty, acctShort, isDemoAcct, liveBookingNote,
+    globalThis.api = { pickAsg, editQty, removeAsg, acctShort, isDemoAcct, liveBookingNote,
       get ST() { return ST; }, get FREEZE() { return FREEZE; } };`, ctx);
   return { api: ctx.api, posts, toasts, confirms, refreshes, menus, qedit, answer: (v) => answer(v) };
 }
@@ -62,7 +64,7 @@ test('booking a LIVE account asks first -- the strategy, the account, the size a
   const s = load({ book: { nq930_1030: [{ account: 'lucid-eval-1', qty: 1 }] } });
   await s.api.pickAsg('nq930_1030', '1234567885', 3);
   assert.equal(s.confirms.length, 1);
-  assert.equal(s.confirms[0].title, 'Book NQ930_1030 on …885 LIVE × 3?');
+  assert.equal(s.confirms[0].title, 'Book NQ930_1030 on …885 LIVE, qty 3?');
   assert.match(s.confirms[0].body, /^It will trade real money at the next 9:30 fire\./);
   assert.equal(s.confirms[0].action, 'Book live');
   assert.equal(s.confirms[0].destructive, false, 'the neutral primary button -- never styled like Kill (review M2)');
@@ -149,7 +151,7 @@ test('raising a LIVE booking\'s size with Enter asks first; the new size is what
   editSize(s, 'nq930_1030', '1234567885', 3, 5);
   await tick();
   assert.equal(s.confirms.length, 1);
-  assert.equal(s.confirms[0].title, 'Book NQ930_1030 on …885 LIVE × 5 (now × 3)?');
+  assert.equal(s.confirms[0].title, 'Book NQ930_1030 on …885 LIVE, qty 3 → 5?');
   assert.equal(s.confirms[0].destructive, false);
   assert.deepEqual(plain(s.posts), [{ url: '/api/book', body: { strategy: 'nq930_1030',
     assignments: [{ account: '1234567885', qty: 5 }] } }]);
@@ -207,4 +209,49 @@ test('one commit per edit: the blur that follows Enter never sends twice, asks t
   assert.equal(s.toasts.length, 0, 'no "stays" toast: the Enter commit owns this edit');
   assert.equal(s.confirms.length, 1);
   assert.equal(s.posts.length, 1);
+});
+
+// ---- unbook (WP1.4) ---------------------------------------------------------------------------
+const LAB = { lab_orb: { cfg: { symbol: 'NQ', kind: 'lab', enabled: true },
+  lab: { rounds: [{ account: 'apex2941870000048', status: 'live', qty: 1, side: 'buy' }] } } };
+
+test('unbooking a LIVE account never asks: it sends the book without it, as before', async () => {
+  const s = load({ book: { nq930_1030: [{ account: '1234567885', qty: 3 }, { account: 'lucid-eval-1', qty: 1 }] } });
+  s.api.removeAsg('nq930_1030', '1234567885');
+  await tick();
+  assert.equal(s.confirms.length, 0);
+  assert.deepEqual(plain(s.posts), [{ url: '/api/book', body: { strategy: 'nq930_1030',
+    assignments: [{ account: 'lucid-eval-1', qty: 1 }] } }]);
+});
+
+test("a Lab strategy's open trade refuses the unbook: the toast names the account and what it holds", async () => {
+  const s = load({ strategies: LAB, reply: { ok: false, detail: 'Flatten it first.' },
+    book: { lab_orb: [{ account: 'apex2941870000048', qty: 1 }] } });
+  s.api.removeAsg('lab_orb', 'apex2941870000048');
+  await tick();
+  assert.equal(s.confirms.length, 0);
+  assert.deepEqual(plain(s.posts[0].body), { strategy: 'lab_orb', assignments: [] });
+  assert.deepEqual(s.toasts, ['APEX…048 holds 1 NQ for LAB_ORB: flatten it or wait for the exit first. It stays booked.']);
+});
+
+test("any other refusal of a Lab book is the Desk's own sentence, as before", async () => {
+  const s = load({ strategies: LAB, reply: { ok: false, detail: 'Set the limits first.' }, book: { lab_orb: [] } });
+  await s.api.pickAsg('lab_orb', 'lucid-eval-1', 1);
+  await tick();
+  assert.deepEqual(s.toasts, ['Set the limits first.']);
+});
+
+// ---- qty a → b and the machine (WP1.6) --------------------------------------------------------
+test('the live booking dialog names the size change and the machine the orders go from', async () => {
+  const s = load({ machine: 'on the SERVER · Chicago', book: { nq930_1030: [{ account: '1234567885', qty: 2 }] } });
+  await s.api.pickAsg('nq930_1030', '1234567885', 4);
+  assert.equal(s.confirms[0].title, 'Book NQ930_1030 on …885 LIVE, qty 2 → 4?');
+  assert.match(s.confirms[0].body, / It runs on the SERVER · Chicago\.$/);
+  const e = load({ machine: 'on this Mac', book: { nq930_1030: [{ account: '1234567885', qty: 3 }] } });
+  editSize(e, 'nq930_1030', '1234567885', 3, 5);
+  await tick();
+  assert.match(e.confirms[0].body, / It runs on this Mac\.$/);
+  const none = load();
+  await none.api.pickAsg('nq930_1030', '1234567885', 3);
+  assert.doesNotMatch(none.confirms[0].body, /It runs/, 'no machine known: no sentence');
 });
