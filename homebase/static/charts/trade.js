@@ -598,17 +598,21 @@ function sendLabel(side, qty, root, type) {
 }
 /* What a click on the chart's BUY / SELL or the ENTRY tag sends, in words (2026-10-26; words only -- the send reads its
    own gate): `ids` are that gate's accounts (the chart's mode). `full` "BUY 1 NQ · …047 LIVE" (2+: "BUY 3 NQ each ·
-   2 accounts (1 LIVE)" -- the desk sends the qty to EACH account), `sub` "1 NQ · …047" for under the button's side.
-   No account: the size alone. */
+   2 accounts (1 LIVE)" -- the desk sends the qty to EACH account) for tooltips; `sub` "1 NQ · …047" (2+: "3 NQ ×2")
+   for under the 76px button's side; `tag` for the ENTRY tag, kept short so its click area stays about its old size:
+   one account as `full`, 2+ "BUY 3 NQ ×2 · 1 LIVE". No account: the size alone. */
 function sendTag(side, qty, root, ids, state) {
   const list = accountsOf(state), rows = idList(ids).map((id) => list.find((x) => x.id === id) || { id });
   const one = rows.length === 1 ? rows[0] : null, live = rows.filter((a) => a.env === 'live').length;
-  const size = [qty >= 1 ? String(qty) : null, root, qty >= 1 && rows.length > 1 ? 'each' : null].filter(Boolean).join(' ');
+  const n = [qty >= 1 ? String(qty) : null, root].filter(Boolean).join(' '), SIDE = String(side || '').toUpperCase();
+  const many = rows.length > 1 ? `${n} ×${rows.length}` : null;
   const who = one ? short(one) + (one.env === 'paper' ? '' : ` ${envChip(one.env)}`)
     : rows.length ? `${rows.length} accounts${live ? ` (${live} LIVE)` : ''}` : '';
+  const full = [`${SIDE} ${n}${many && qty >= 1 ? ' each' : ''}`, who].filter(Boolean).join(' · ');
   return {
-    full: [`${String(side || '').toUpperCase()} ${size}`, who].filter(Boolean).join(' · '),
-    sub: [size, one ? short(one) : rows.length ? `${rows.length} accts` : null].filter(Boolean).join(' · '),
+    full,
+    sub: many || [n, one ? short(one) : null].filter(Boolean).join(' · '),
+    tag: many ? [`${SIDE} ${many}`, live ? `${live} LIVE` : null].filter(Boolean).join(' · ') : full,
   };
 }
 /* ---- money ---- */

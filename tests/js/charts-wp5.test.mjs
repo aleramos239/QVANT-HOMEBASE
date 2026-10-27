@@ -69,7 +69,7 @@ test('5.4 the button and the ENTRY tag read their words from the send\'s own qty
   assert.match(TL, /T\.sendTag\(side, Dc\.prefs\.qty, this\.root, mode\.accounts, Dc\.state\)/);
   // trade() still sends the same qty, root and type it always did
   assert.match(TL, /placeOrder\(\{ cell: this\.cell, root: this\.root, side, type: 'Market', qty: window\.HBDeskClient\.prefs\.qty, surface: 'chart' \}\)/);
-  assert.match(OP, /T\.sendTag\(st\.side, Number\.isInteger\(n\) \? n : 0, c\.root, m\.mode === 'on' \? m\.accounts : \[\], D\(\)\.state\)\.full/);
+  assert.match(OP, /T\.sendTag\(st\.side, Number\.isInteger\(n\) \? n : 0, c\.root, m\.mode === 'on' \? m\.accounts : \[\], D\(\)\.state\)\.tag;/);
   assert.match(OP, /title: `ENTRY · \$\{tag\}\$\{rr\}`/);
 });
 
@@ -192,7 +192,7 @@ test('5.4 run: the BUY / SELL words are the qty and accounts the click sends', (
   const two = overlayOn({ ticked: ['live099', 'sim047'], mode: { mode: 'on', accounts: ['live099', 'sim047'] }, qty: 3 });
   two.ov.paintBlock({ mode: 'on', accounts: ['live099', 'sim047'] });
   assert.equal(two.ov.buyBtn.title, 'BUY 3 NQ each · 2 accounts (1 LIVE) · at market');
-  assert.equal(two.ov.buySub.textContent, '3 NQ each · 2 accts');
+  assert.equal(two.ov.buySub.textContent, '3 NQ ×2', 'short enough for the 76px button');
 });
 
 test('5.2 run: the account spot -- "Accounts:" when it cannot trade, "Trade on: none" only while the desk trades; a chip only opens Settings › Trading', () => {

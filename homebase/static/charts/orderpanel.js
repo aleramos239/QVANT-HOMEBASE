@@ -238,8 +238,8 @@ function build() {
   const exits = coll('Exits', 'exitsOpen');
   ui.exits = exits;
   ui.ex = {};
-  // 5.7 (2026-10-27): the partial take profit is folded under the take profit ("Split", shown while the TP is on)
-  for (const [k, label] of [['tp', 'Take profit'], ['p1', 'Split: part at TP1'], ['sl', 'Stop loss'], ['be', 'Breakeven'], ['tr', 'Trailing stop']]) {
+  // 5.7 (2026-10-27): the partial take profit is folded under the take profit (shown while the TP is on); one name, as its refusals say
+  for (const [k, label] of [['tp', 'Take profit'], ['p1', 'Partial take profit'], ['sl', 'Stop loss'], ['be', 'Breakeven'], ['tr', 'Trailing stop']]) {
     const box = mk('div', 'op-exit'), top = mk('div', 'op-swrow');
     const s = sw(label);
     s.onclick = () => { st[k].on = !st[k].on; paint(); };
@@ -631,7 +631,7 @@ function paintPreview(cell, c) {
   if (c.entry != null) {
     // 2026-10-26: the tag says what a click on it sends, "BUY 1 NQ · …047 LIVE" (the chart's accounts: its send gate's)
     const n = c.order.ok ? c.order.qty : c.qty, m = UI().effectiveMode(cell);
-    const tag = T.sendTag(st.side, Number.isInteger(n) ? n : 0, c.root, m.mode === 'on' ? m.accounts : [], D().state).full;
+    const tag = T.sendTag(st.side, Number.isInteger(n) ? n : 0, c.root, m.mode === 'on' ? m.accounts : [], D().state).tag;   // the short form: the tag is a click-to-send area
     // reward to risk; with a partial, the average reward of all the contracts (TP1's and the TP's)
     const reward = !c.tp ? null : c.p1 && c.rest != null ? (c.n1 * c.p1.ticks + c.rest * c.tp.ticks) / (c.n1 + c.rest) : c.tp.ticks;
     const rr = reward != null && c.sl && c.sl.ticks > 0 ? ` · 1:${(reward / c.sl.ticks).toFixed(1)}` : '';

@@ -316,14 +316,15 @@ test('5.3 lineText named: with 2+ accounts on the chart a one-account position n
 
 test('5.4 sendTag: the BUY / SELL button and the ENTRY tag say the size, root and account a click sends to', () => {
   const st = { accounts: [acct('live099', 'FAKELIVE099', 'live'), acct('sim047', 'SIM0000047', 'demo'), acct('paper', 'PAPER', 'paper')] };
-  assert.deepEqual(T.sendTag('Buy', 1, 'NQ', ['live099'], st), { full: 'BUY 1 NQ · …099 LIVE', sub: '1 NQ · …099' });
-  assert.deepEqual(T.sendTag('Sell', 2, 'MNQ', ['sim047'], st), { full: 'SELL 2 MNQ · …047 DEMO', sub: '2 MNQ · …047' });
-  assert.deepEqual(T.sendTag('Buy', 3, 'NQ', ['live099', 'sim047'], st), { full: 'BUY 3 NQ each · 2 accounts (1 LIVE)', sub: '3 NQ each · 2 accts' },
-    'the desk sends the qty to each account: never read as 3 in all');
+  assert.deepEqual(T.sendTag('Buy', 1, 'NQ', ['live099'], st), { full: 'BUY 1 NQ · …099 LIVE', sub: '1 NQ · …099', tag: 'BUY 1 NQ · …099 LIVE' });
+  assert.deepEqual(T.sendTag('Sell', 2, 'MNQ', ['sim047'], st), { full: 'SELL 2 MNQ · …047 DEMO', sub: '2 MNQ · …047', tag: 'SELL 2 MNQ · …047 DEMO' });
+  assert.deepEqual(T.sendTag('Buy', 3, 'NQ', ['live099', 'sim047'], st), { full: 'BUY 3 NQ each · 2 accounts (1 LIVE)', sub: '3 NQ ×2', tag: 'BUY 3 NQ ×2 · 1 LIVE' },
+    'the desk sends the qty to each account: never read as 3 in all; the button and the ENTRY tag keep it short');
   assert.deepEqual(T.sendTag('Buy', 1, 'NQ', ['sim047', 'paper'], st).full, 'BUY 1 NQ each · 2 accounts');
+  assert.equal(T.sendTag('Buy', 1, 'NQ', ['sim047', 'paper'], st).tag, 'BUY 1 NQ ×2', 'no LIVE account: no LIVE word');
   assert.equal(T.sendTag('Buy', 0, 'NQ', ['sim047', 'paper'], st).full, 'BUY NQ · 2 accounts', 'no qty: no "each"');
-  assert.deepEqual(T.sendTag('Buy', 1, 'NQ', ['paper'], st), { full: 'BUY 1 NQ · PAPER', sub: '1 NQ · PAPER' });
-  assert.deepEqual(T.sendTag('Buy', 1, 'NQ', [], st), { full: 'BUY 1 NQ', sub: '1 NQ' }, 'no account: the size alone');
+  assert.deepEqual(T.sendTag('Buy', 1, 'NQ', ['paper'], st), { full: 'BUY 1 NQ · PAPER', sub: '1 NQ · PAPER', tag: 'BUY 1 NQ · PAPER' });
+  assert.deepEqual(T.sendTag('Buy', 1, 'NQ', [], st), { full: 'BUY 1 NQ', sub: '1 NQ', tag: 'BUY 1 NQ' }, 'no account: the size alone');
   assert.equal(T.sendTag('Buy', 0, 'NQ', ['nope'], st).full, 'BUY NQ · …ope ?', 'no size without a valid qty; an unlisted account is never DEMO');
 });
 

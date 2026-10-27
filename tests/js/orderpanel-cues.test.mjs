@@ -156,18 +156,18 @@ const exitBox = (label) => { let n = swOf(label); while (n && !n.cls.has('op-exi
 
 test('5.7 the partial take profit sits inside the TP box and shows while the TP (or the split itself) is on', () => {
   OP.setRoot();
-  const tp = exitBox('Take profit'), split = exitBox('Split: part at TP1');
+  const tp = exitBox('Take profit'), split = exitBox('Partial take profit');
   assert.ok(split.cls.has('op-split'));
   assert.equal(split.parentNode, tp, 'folded under the take profit');
   assert.equal(split.hidden, true, 'TP off: folded away');
   swOf('Take profit').onclick();
   assert.equal(split.hidden, false, 'TP on: the split can be switched on');
-  swOf('Split: part at TP1').onclick();
+  swOf('Partial take profit').onclick();
   swOf('Take profit').onclick();                              // TP off with the split on: it stays, so its refusal shows
   assert.equal(split.hidden, false);
   assert.equal(byClass(box, 'op-reason').textContent, 'The partial take profit needs the take profit on');
   assert.equal(send().disabled, true);
-  swOf('Split: part at TP1').onclick();
+  swOf('Partial take profit').onclick();
   assert.equal(split.hidden, true);
   assert.equal(send().disabled, false);
 });
