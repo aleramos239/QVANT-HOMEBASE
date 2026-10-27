@@ -27,7 +27,7 @@ async function setBook(strategy, assignments) {
   const lab = ((ST.strategies || {})[strategy] || {cfg: {}}).cfg.kind === "lab", before = lab ? ((ST.book && ST.book[strategy]) || []) : [];
   const r = await post("/api/book", {strategy, assignments});
   if (lab) {      // a promoted Lab strategy: the Desk's own sentence, no prefix; an account added mid-session starts once it has no open trade
-    if (!r.ok) toast(DeskLab.refusalText(r), 5000);
+    if (!r.ok) toast(unbookRefusal(strategy, before, assignments, r) || DeskLab.refusalText(r), 8000);
     else if (DeskLab.bookedNext(ST.strategies[strategy], before, assignments)) toast(DeskLab.BOOKED_NEXT, 5000);
     else if (DeskLab.bookedJoins(ST.strategies[strategy], before, assignments)) toast(DeskLab.BOOKED_JOINS, 5000);
     refresh();
@@ -63,6 +63,16 @@ async function setRotation(name, on) {
   const why = answerWhy(r, err);
   if (why) toast(`${N}: take turns NOT changed — ${why}.`, 8000);
   else toast(on ? `${N} takes turns: one account a trade.` : `${N}: every account takes every trade.`);
+}
+/* Unbooking one account of a Lab strategy that is in a trade there: the Desk refuses ("Flatten it first."); say which account
+   and what it holds, in words. null: not that refusal. */
+function unbookRefusal(strategy, before, after, r) {
+  const gone = before.filter(a => !after.some(b => b.account === a.account));
+  if (gone.length !== 1 || !r || r.detail !== "Flatten it first.") return null;
+  const s = (ST.strategies || {})[strategy] || {}, id = gone[0].account;
+  const trade = ((s.lab && s.lab.rounds) || []).find(x => x && x.account === id && ["placing", "placed", "live"].includes(x.status));
+  const holds = trade && trade.qty ? `holds ${trade.qty} ${(s.cfg && s.cfg.symbol) || ""}`.trim() : "is in a trade";
+  return `${acctShort(id)} ${holds} for ${stratLabel(strategy)}: flatten it or wait for the exit first. It stays booked.`;
 }
 function removeAsg(strategy, account) {
   const cur = (ST.book[strategy] || []).filter(a => a.account !== account);
