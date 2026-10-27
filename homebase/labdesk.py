@@ -59,6 +59,7 @@ from . import config as config_mod
 from . import labcfg
 from .config import AppCfg, assignments
 from .contracts import point_value, tick_size
+from .core.num import is_int as _whole
 from .engine_lab import GROUP_HEDGE
 from .labcfg import LAB
 from .labrun import door, fanout, intents, store
@@ -1853,10 +1854,6 @@ class LabEvent:
     @property
     def exits(self) -> list:
         return [it for it in self.intents if it["op"] in EXITS]
-
-
-def _whole(v) -> bool:
-    return isinstance(v, int) and not isinstance(v, bool)
 
 
 def parse_event(body) -> LabEvent:

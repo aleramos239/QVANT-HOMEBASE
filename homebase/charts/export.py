@@ -56,6 +56,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import qos
 from ..contracts import tick_size as contract_tick_size
+from ..core.clock import utc_iso as _now
 from ..paths import repo_root, state_dir
 from .bars import BarSpec, build as build_bars
 from .depth import DEPTH_ARCHIVE, read_depth
@@ -481,10 +482,6 @@ def run_export(req: dict, archive: Path, depth_base: Path, out_path: Path,
 
 def default_base() -> Path:
     return state_dir() / "charts" / "export"
-
-
-def _now() -> str:
-    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
 
 def write_json(path: Path, data) -> None:

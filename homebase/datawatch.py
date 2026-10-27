@@ -32,6 +32,7 @@ from pathlib import Path
 from . import symbols
 from . import tickarchive as A
 from . import ticks as T
+from .core.clock import epoch_ms as _ms
 from .core.session import session_date, session_range_ms
 
 LATE_S = 60                 # written this long after its own time, a market's newest tick is LATE ...
@@ -43,10 +44,6 @@ SILENT_247_S = 2 * 3600     # a 24/7 root, and only while the classic market is 
 LEAVING_H = 6               # what is still missing and leaves the broker within this many hours is named
 RTH = (dt.time(9, 30), dt.time(16, 0))
 NAMED = 3                   # the line names this many markets / sessions, then counts the rest
-
-
-def _ms(t: dt.datetime) -> int:
-    return int(t.timestamp() * 1000)
 
 
 def _hm(ms: int) -> str:

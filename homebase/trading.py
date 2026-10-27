@@ -88,7 +88,6 @@ import contextlib
 import contextvars
 import copy
 import datetime as dt
-import math
 import re
 import sys
 import time
@@ -103,6 +102,7 @@ from .broker.base import BrokerAdapter, OrderRequest, OrderResult
 from .config import (HARD_MAX_ORDER_QTY, HARD_MAX_POSITION_QTY, AppCfg,
                      ChartTradingCfg, assignments)
 from .contracts import point_value, root_of, round_to_tick, spec_for, tick_size
+from .core.num import finite as _finite
 
 BOT_BUSY = ("placing", "placed", "live")
 RATE_N, RATE_WINDOW_S = 5, 1.0
@@ -167,10 +167,6 @@ def state_view(st, s) -> dict:
 
 
 # --- request parsing (ValueError -> HTTP 400 in desk_api) --------------------------
-def _finite(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
-
-
 def _price(v, name: str, *, required: bool = False) -> Optional[float]:
     if v is None:
         if required:

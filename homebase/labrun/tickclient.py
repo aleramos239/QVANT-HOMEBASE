@@ -15,7 +15,7 @@ import time
 
 import httpx
 
-from ..backtest.tape import ET
+from ..core.clock import ET
 
 STREAM = "/api/labrun/ticks"
 BACKOFF_S = (1.0, 30.0)

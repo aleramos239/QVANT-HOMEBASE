@@ -47,7 +47,6 @@ block on the Lab draft and the draft's Lab group up to date. The desk reads none
 """
 from __future__ import annotations
 
-import datetime as dt
 import fcntl
 import json
 import os
@@ -56,6 +55,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from . import draftstore
+from .core.clock import utc_iso as _now
 
 ENV = "HOMEBASE_IDEAS_ROOT"
 READS_FILE = "test_reads.jsonl"
@@ -121,10 +121,6 @@ def _dir(name, root=None) -> Path:
     if not d.is_dir():
         raise FileNotFoundError(f"no idea {name!r}")
     return d
-
-
-def _now() -> str:
-    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
 
 # The old split (build days -> lock -> the one read of the test days) is RETIRED for every idea (the owner, 2026-10-25: only the

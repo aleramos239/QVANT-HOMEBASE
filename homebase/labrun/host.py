@@ -49,6 +49,8 @@ from ..backtest.engine import Costs, build_bars
 from ..backtest.sides import split_delta
 from ..backtest.runner import DAILY_LOOKBACK
 from ..backtest.tape import ARCHIVE, CACHE, ET, TapeStore, effective_session_window, et_ns
+from ..core.clock import et_hms as _hms, utc_iso as _utc
+from ..core.num import finite_big_int_ok as _num, is_int as _int
 from ..core.session import session_date, session_range_ms
 from ..contracts import exec_ok, point_value, tick_size
 from . import door, match, store
@@ -148,22 +150,6 @@ def strategy_error(msg, typed: bool) -> str:
     text = (_TYPED if typed else _NAMED).sub("", str(msg or "").strip(), count=1).strip()
     text = "" if _BARE.match(text) else (text.splitlines() or [""])[0][:200]
     return f"Strategy error: {text}" if text else "Strategy error."
-
-
-def _utc() -> str:
-    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
-
-
-def _hms(t_ns: int) -> str:
-    return dt.datetime.fromtimestamp(t_ns // 1_000_000_000, ET).strftime("%H:%M:%S")
-
-
-def _num(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and abs(v) != float("inf")
-
-
-def _int(v) -> bool:
-    return isinstance(v, int) and not isinstance(v, bool)
 
 
 _HHMM = re.compile(r"\d{2}:\d{2}")

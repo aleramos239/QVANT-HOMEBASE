@@ -46,6 +46,7 @@ from pathlib import Path
 from .. import draftstore, qos, strategies
 from ..strategies.base import wants
 from ..contracts import commission_rt
+from ..core.clock import utc_iso as _now
 from . import drafthost, hourly, minvol, sandbox
 from ..paths import repo_root, state_dir
 from . import controls as ctlmod, discipline, propsim, report
@@ -66,10 +67,6 @@ PROP_NOT_SCORED = ("not scored: this run was made without the prop sim. Pick an 
 
 def default_base() -> Path:
     return state_dir() / "tester"
-
-
-def _now() -> str:
-    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
 
 def write_json(path: Path, data) -> None:

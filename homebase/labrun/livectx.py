@@ -5,24 +5,16 @@ defaults and ValueErrors. The difference is the far end. An entry call returns a
 "intent" dict; the host reads the queue with drain() and decides what happens (the door, the would-be fill).
 What the host learned since (fills, cancels) arrives through begin() before each handler runs.
 
-Stdlib only; imports nothing from homebase, so the child can load it without the engine.
+Stdlib and homebase.core only (which imports nothing of homebase), so the child can load it without the engine.
 """
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
+
+from ..core.num import finite as _finite, to_tick
 
 SIDE = {"long": 1, "short": -1}
 ROLES = ("anchor", "entry", "sl", "tp", "level")   # Ctx.hline: what the page styles a level by
-
-
-def to_tick(px: float, tick: float) -> float:
-    return round(round(px / tick) * tick, 6)
-
-
-def _finite(v) -> bool:
-    """A real, finite number (a bool is not one). Anything else is not drawn: a bad point must not cost the orders."""
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 @dataclass(eq=False)

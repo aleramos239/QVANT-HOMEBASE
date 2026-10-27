@@ -61,11 +61,11 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 import math
-import re
 from dataclasses import asdict, dataclass
 
 from .config import AppCfg, StrategyCfg
 from .contracts import commission_rt, exec_ok
+from .core.clock import HHMM, hhmm_minutes as _minutes, is_hhmm as _hhmm
 from .labrun import store
 
 LAB = "lab"                              # StrategyCfg.kind
@@ -73,7 +73,6 @@ PREFIX = "lab_"                          # desk id = PREFIX + the store name
 FLAT_LATEST = "15:55"                    # version 1: flat no later than this, for every market
 RISK_MOST = 1e9                          # a sanity bound: "at risk per trade" above it is not a dollar amount
 NOTES_KEPT = 200                         # what apply() has to say, until the desk journals it
-HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 SAY_TRADES = "Trades a day: a whole number from 1 to 20."
 SAY_QTY = "Contracts: a whole number from 1 to 10."
@@ -118,10 +117,6 @@ def _number(v, lo: float, hi: float) -> bool:
         return False
 
 
-def _hhmm(v) -> bool:
-    return isinstance(v, str) and HHMM.fullmatch(v) is not None
-
-
 def evening(rec) -> bool:
     """The record's session opens the evening before its date (a window start with a leading "-", e.g. "-20:00": the
     tester reads such windows, labrun hosts them in SHADOW). The Desk's own time-of-day logic (accept from / until,
@@ -141,10 +136,6 @@ def window(rec: dict) -> tuple[str, str]:
     if isinstance(w, (list, tuple)) and len(w) == 2 and _hhmm(w[0]) and _hhmm(w[1]):
         return w[0], w[1]
     return store.DEFAULT_WINDOW[0], store.DEFAULT_WINDOW[1]
-
-
-def _minutes(hhmm: str) -> int:
-    return int(hhmm[:2]) * 60 + int(hhmm[3:])
 
 
 def window_note(rec: dict, limits: LabLimits | None) -> str | None:

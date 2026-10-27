@@ -28,7 +28,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
-import math
 import os
 import re
 import secrets
@@ -37,6 +36,7 @@ import sys
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from ..core.num import finite as _number
 from . import discipline, report
 from .runner import default_base, write_json
 
@@ -51,10 +51,6 @@ MIN_NS = 60_000_000_000
 _EPOCH = dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
 _STRATEGY = re.compile(r"^[a-z][a-z0-9_]{0,79}$")          # the middle of a run id (runner.RUN_ID)
 _ROOT = re.compile(r"^[A-Z0-9]{1,6}$")
-
-
-def _number(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 def _ns(t: dict, which: str, i: int) -> int:

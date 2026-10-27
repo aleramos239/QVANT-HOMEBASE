@@ -13,6 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from .core.num import to_tick as _to_tick
+
 
 @dataclass
 class Signal:
@@ -25,10 +27,6 @@ class Signal:
     tp_rr: Optional[float] = None      # if set, TP is re-derived from the FILL:
                                        # fill +/- tp_rr * |fill - sl|
     note: dict = field(default_factory=dict)
-
-
-def _to_tick(px: float, tick: float) -> float:
-    return round(round(px / tick) * tick, 6)
 
 
 RULES: dict[str, Callable] = {}      # the desk ships no bar rule today; kind "bars" and the feed stay

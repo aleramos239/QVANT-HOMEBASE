@@ -70,6 +70,7 @@ from . import config as config_mod
 from . import symbols
 from . import tickarchive
 from .broker.tradovate_ws import TradovateWS
+from .core.clock import epoch_ms as _ms
 from .core.session import always_open, session_bounds    # the session clock (callers still read T.always_open / T.session_bounds)
 from .marketdata import MD_DEMO, MD_LIVE
 from .paths import state_dir
@@ -643,10 +644,6 @@ _EMPTY = {"runs": []}
 ASKED = "_asked"                # cache key: stretches the broker had nothing for, and no file holds
 MD_USED = "_md"                 # cache key: this job's chart requests in the last hour (epoch s)
 EMPTY_ONCE = "_empty"           # cache key: stretches that got ONE empty reply (a second, later, vouches)
-
-
-def _ms(t: dt.datetime) -> int:
-    return int(t.timestamp() * 1000)
 
 
 def _utc(ms: int) -> dt.datetime:

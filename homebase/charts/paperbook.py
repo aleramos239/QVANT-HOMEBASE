@@ -78,6 +78,7 @@ from fastapi.responses import JSONResponse, Response
 from .. import netguard
 from ..backtest.engine import Costs, tick_cmp, to_tick
 from ..contracts import MICRO_COMMISSION_RT, micro_of, point_value, price_root, tick_size
+from ..core.num import finite_no_overflow as _finite
 from ..symbols import resolve_contract
 from . import _jsonl
 
@@ -157,15 +158,6 @@ def _session_until(ts_ms: int, root: str) -> int:
     roll = dt.time(18, 0) if root in _ALWAYS_OPEN else dt.time(17, 0)
     day = t.date() + dt.timedelta(days=1) if t.time() >= roll else t.date()
     return int(dt.datetime.combine(day, roll, _ET).timestamp() * 1000)
-
-
-def _finite(v) -> bool:
-    if not isinstance(v, (int, float)) or isinstance(v, bool):
-        return False
-    try:
-        return math.isfinite(v)
-    except OverflowError:                       # fix round 1 (M1): a 400-digit int is not a number we take
-        return False
 
 
 def clean_name(raw) -> str:

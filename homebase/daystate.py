@@ -10,6 +10,8 @@ import datetime as dt
 from dataclasses import dataclass
 from typing import Optional
 
+from .core.num import to_tick as _to_tick
+
 WORKING = {"Working", "PendingNew", "Pending", "Suspended", "PendingReplace"}
 TERMINAL = {"Filled", "Canceled", "Rejected", "Expired"}    # an order that can never fill (more)
 KILL_POLL_S, KILL_POLL_N = 0.25, 12     # the kill waits up to 3 s for its entry cancels to settle
@@ -20,10 +22,6 @@ PLACING_UNKNOWN = "placement outcome unknown after a restart — check the broke
 def _hhmm(s: str) -> dt.time:
     h, m = s.split(":")
     return dt.time(int(h), int(m))
-
-
-def _to_tick(px: float, tick: float) -> float:
-    return round(round(px / tick) * tick, 6)
 
 
 @dataclass

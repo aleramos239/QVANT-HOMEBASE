@@ -39,6 +39,7 @@ from typing import Iterable, Optional
 from zoneinfo import ZoneInfo
 
 from .contracts import point_value, tick_size
+from .core.num import float_or_none as _num
 
 COMMISSION_RT = 4.0              # $ per contract per round trip
 DAYS_DEFAULT, DAYS_MAX = 120, 400
@@ -163,10 +164,6 @@ def _ms(rec: dict) -> Optional[int]:
     if isinstance(ts, (int, float)) and not isinstance(ts, bool):
         return int(round(ts * 1000))
     return None
-
-
-def _num(v) -> Optional[float]:
-    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
 def _fire_ms(date: str) -> Optional[int]:

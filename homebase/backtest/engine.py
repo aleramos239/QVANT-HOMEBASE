@@ -41,6 +41,7 @@ from bisect import bisect_left
 from dataclasses import asdict, dataclass, field
 
 from ..contracts import exec_ok, point_value, tick_size
+from ..core.num import to_tick
 from ..strategies.base import wants
 from .sides import split_delta
 from .tape import et_ns
@@ -50,10 +51,6 @@ SIDE = {"long": 1, "short": -1}
 NAME = {1: "long", -1: "short"}
 ROLES = ("anchor", "entry", "sl", "tp", "level")   # Ctx.hline: what the page styles a level by
 CHUNK = 4096                    # prefilter block for the trigger scan
-
-
-def to_tick(px: float, tick: float) -> float:
-    return round(round(px / tick) * tick, 6)
 
 
 def tick_cmp(a: float, b: float, tick: float) -> int:

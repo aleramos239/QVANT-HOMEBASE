@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import json
-import math
 import re
 
 from fastapi import HTTPException, Request
 
+from ...core.num import finite as _finite
 from ..presets import MAX_PRESET_BYTES
 from .common import browser_write_ok, read_json, write_json
 
@@ -57,10 +57,6 @@ DRAWING_STYLE_BOOLS = ("extendLeft", "extendRight", "axisLabel", "bold", "priceL
 MAX_FIB_LEVELS, FIB_MIN, FIB_MAX = 16, -10, 10      # a retracement's levels: how many, and the ratios they may be
 DRAWING_VIS_MAX_S = 31 * 86400                      # `vis` (which intervals a drawing shows on): bar seconds, at most a month
 MAX_DRAWING_LABEL_TEXT = 200
-
-
-def _finite(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 def _check_position(kind: str, pts: list) -> None:
