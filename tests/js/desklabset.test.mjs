@@ -175,6 +175,16 @@ test('3.2 with no value from the Desk: plain Set, and `from` is null', async () 
   assert.deepEqual(calls, [['lab_z', 'k', 3, { from: null }]]);
 });
 
+test('3.2 a value in force that is not one of the menu\'s options: plain Set on a repaint, never "Set: 7 → "', () => {
+  const { S } = load();
+  const lab = LAB({ params: { open_min: '7', big_body: 25 } });
+  const [r1] = S.nodes('lab_w', lab, false);
+  // a real <select> holds "" for a value it has no option for
+  Object.defineProperty(r1.children[1], 'value', { get: () => '', set: () => {} });
+  S.nodes('lab_w', lab, false);
+  assert.equal(r1.children[2].textContent, 'Set');
+});
+
 test('3.2 the page\'s setLabSetting takes the extra `from` and sends the same body as before', async () => {
   const HTML = require('node:fs').readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
   const fn = HTML.slice(HTML.indexOf('async function setLabSetting('), HTML.indexOf('/* Flatten & turn off believes only'));

@@ -38,10 +38,11 @@
     var w = f.cur == null ? null : wire(f.spec, f.cur);
     return w !== w ? null : w;
   }
-  // The button shows old -> new before a change ("Set: 1 → 1.5"); plain "Set" while the field holds the value in force.
+  // The button shows old -> new before a change ("Set: 1 → 1.5"); plain "Set" while the field holds the value in force, or
+  // nothing (a menu holds "" for a value in force that is not one of its options).
   function paint(f) {
     var v = wire(f.spec, f.input.value), was = before(f);
-    f.btn.textContent = v !== v || was === null || v === was ? "Set" : "Set: " + shown(f.spec, f.cur) + " \u2192 " + shown(f.spec, f.input.value);
+    f.btn.textContent = v !== v || v === "" || was === null || v === was ? "Set" : "Set: " + shown(f.spec, f.cur) + " \u2192 " + shown(f.spec, f.input.value);
   }
 
   function build(name, lab, ro) {
