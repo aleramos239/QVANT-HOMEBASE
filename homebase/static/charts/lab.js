@@ -202,6 +202,7 @@ function release(run) {
 async function run(opts = {}) {
   const b = buf();
   if (!b) return;
+  if (opts.for && opts.for !== b) { log('Nothing ran: another strategy is open now.'); return; }    // a yes runs only the strategy it asked about
   if (b.kind !== 'builtin' && !metaOf(b) && (b.code || '').trim()) {   // its settings first: they decide the route (review #1)
     const v = await validateNow(b);
     if (buf() !== b) return;
@@ -210,8 +211,9 @@ async function run(opts = {}) {
   const wf0 = b.kind !== 'pipe' && formOf(b);
   if (wf0 && wf0.range.wf && !is31(wf0)) return wfRun();          // rolling: the heat-map walk-forward, as before
   const tag = is31(wf0) ? (opts.tag || 'is') : '';                  // 3:1 blocks: the strategy as set, one run (owner 2026-10-24)
-  if (!tag && wf0 && !opts.asked && !(S.busy && S.active && !S.active.dead && S.active.key === b.key)
-    && !(await datedRunOk(wf0, () => run({ ...opts, asked: true })))) return;
+  const ask = wf0 && JSON.stringify([b.key, wf0.strategy, wf0.range]);   // a yes holds for this strategy and these dates only
+  if (!tag && wf0 && opts.asked !== ask && !(S.busy && S.active && !S.active.dead && S.active.key === b.key)
+    && !(await datedRunOk(wf0, () => run({ ...opts, asked: ask }), b))) return;
   S.deskErr = '';
   if (S.busy && S.active && !S.active.dead) {
     if (S.active.key === b.key) return;                              // this one is already running
@@ -2373,11 +2375,11 @@ function threeEmpty(T) {
   return '<div class="rs-empty"><h3>No run yet</h3><p>Run runs your strategy as set on the 3:1 in-sample months: its curve, its numbers and every trade. The test months, all years, the heat map and the prop sim run only when you click them.</p></div>';
 }
 async function runAll() {
-  const f = buf() && formOf(buf());
+  const b = buf(), f = b && formOf(b);
   if (!is31(f) || S.busy) return;
   if (!(await hasPick(f))) { log('<span class="err">Pick a box first: all years read the test months, and they open only after a pick.</span>'); return; }
   testMonthsAsk(f, { title: 'Run all years?', text: 'Your strategy as set on every month from Sep 2021 to now. It reads the test months too.', go: 'Run all years' },
-    () => run({ tag: 'all' }));
+    () => run({ tag: 'all', for: b }));
 }
 /* The test months of the strategy as set: one box, in-sample first (the pick needs it), then its test months -- on one click, once. */
 function oosRun() {
@@ -2411,7 +2413,7 @@ async function hasPick(f) { return pickedNow(f) || !!((await loadTries(f.strateg
    `go` sends what it sent before this ask existed. */
 async function testMonthsAsk(f, what, go) {
   const t = (await loadTries(f.strategy)) || triesOf(f.strategy), reads = t ? t.reads : 0, n = t ? t.n : 1, more = !t || t.cut ? '+' : '';
-  const d = dialog(`<h2>${esc(what.title)}</h2><p>${esc(what.text)}</p>
+  const d = dialog(`<h2>${esc(what.title)}</h2><p>Strategy: <b>${esc(String(f.strategy || '').replace(/^draft_/, ''))}</b></p><p>${esc(what.text)}</p>
     <p>${esc(`They count as seen: test months read ${reads}${more} time${reads === 1 && !more ? '' : 's'} for this strategy; this is try ${reads >= 1 ? n + 1 : n}${more}.`)}</p>
     ${what.lock ? `<p>${esc(what.lock)}</p>` : ''}
     <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">${esc(what.go)}</button></div>`);

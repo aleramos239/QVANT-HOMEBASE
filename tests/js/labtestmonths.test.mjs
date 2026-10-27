@@ -92,6 +92,40 @@ test('before a pick: each market\'s own test months are refused -- 6E Feb 2023, 
   for (const p of [e, btc]) { assert.deepEqual(p.did, []); assert.equal(p.dialogs.length, 0); }
 });
 
+test('a yes runs only what it asked about: another strategy opened, or other dates, before the yes -- nothing of the first is sent', async () => {
+  const A = { key: 'b:a', kind: 'builtin', id: 'a', meta: { root: 'NQ' } }, B = { key: 'b:b', kind: 'builtin', id: 'b', meta: { root: 'NQ' } };
+  const form = (strategy, range) => ({ strategy, inputs: {}, range, qty: 1, commission: 4, slippage_ticks: 1, prop_rules: null, controls: {} });
+  const jan = { id: 'custom', start: '2022-01-03', end: '2022-01-31', wf: null };
+  const p = lab({ picked: true, real: true, runs: [LAYOUT('a'), LAYOUT('b')], wfs: [{ ...TABLE, strategy: 'a' }, { ...TABLE, id: 'w2', strategy: 'b' }] });
+  const posts = () => p.sent.filter((x) => x.startsWith('POST '));
+  p.c.forms = { 'b:a': form('a', jan), 'b:b': form('b', jan) };
+  p.c.cur = A;
+  await p.c.run(); await flush();
+  assert.equal(p.dialogs.length, 1);
+  assert.match(p.dialogs[0].html, /Strategy: <b>a<\/b>/);                  // the ask names the strategy
+  p.c.cur = B;                                                              // B opened while the ask is up
+  p.press('go'); await flush();
+  assert.deepEqual(posts(), []);
+  assert.equal(p.dialogs.length, 2);                                        // B gets its own ask
+  assert.match(p.dialogs[1].html, /Strategy: <b>b<\/b>/);
+  p.c.forms['b:b'] = form('b', { ...jan, end: '2022-05-31' });            // B's dates changed before the yes
+  p.press('go'); await flush();
+  assert.deepEqual(posts(), []);
+  assert.equal(p.dialogs.length, 3);
+  p.press('go'); await flush();
+  assert.deepEqual(posts(), ['POST /api/tester/run']);                     // B, as set now, once
+  // Run all years: a yes after another strategy was opened runs nothing
+  const q = lab({ picked: true, real: true, runs: [LAYOUT('a')], wfs: [{ ...TABLE, strategy: 'a' }] });
+  q.c.forms = { 'b:a': form('a', R31), 'b:b': form('b', R31) };
+  q.c.cur = A;
+  await q.c.runAll(); await flush();
+  assert.match(q.dialogs[0].html, /Run all years\?.*Strategy: <b>a<\/b>/s);
+  q.c.cur = B;
+  q.press('go'); await flush();
+  assert.ok(!q.sent.some((x) => x.startsWith('POST ')), q.sent.join(', '));
+  assert.match(q.logs.join(' '), /Nothing ran: another strategy is open now\./);
+});
+
 test('after a pick: one ask says the reads and the try; Not yet sends nothing, a yes runs what ran before', async () => {
   const runs = [LAYOUT(),
     { strategy: 'draft_x', status: 'done', range: { kind: 'custom', start: '2022-01-01', end: '2022-01-31' } }];
@@ -106,7 +140,7 @@ test('after a pick: one ask says the reads and the try; Not yet sends nothing, a
   assert.deepEqual(p.did, []);
   await p.c.runAll(); await flush();
   p.press('go');
-  assert.deepEqual(JSON.parse(JSON.stringify(p.did)), [['run', { tag: 'all' }]]);       // the same call as before the ask
+  assert.deepEqual(JSON.parse(JSON.stringify(p.did)), [['run', { tag: 'all', for: NQ_DRAFT }]]);       // the same call as before the ask, for this strategy only
   // a dated Run: the same ask, then run() again with asked (its body is X.body(f), as before)
   const again = [];
   assert.equal(await p.c.datedRunOk(F({ id: 'custom', start: '2023-05-01', end: '2023-05-31', wf: null }), () => again.push(1)), false);
@@ -114,7 +148,7 @@ test('after a pick: one ask says the reads and the try; Not yet sends nothing, a
   assert.match(p.dialogs.at(-1).html, /Run these dates\?.*2023-05-01 → 2023-05-31 holds test months/s);
   p.press('go');
   assert.deepEqual(again, [1]);
-  assert.match(LAB, /await datedRunOk\(wf0, \(\) => run\(\{ \.\.\.opts, asked: true \}\)\)/);
+  assert.match(LAB, /await datedRunOk\(wf0, \(\) => run\(\{ \.\.\.opts, asked: ask \}\), b\)/);
   assert.ok(p.sent.every((x) => x.startsWith('GET ')));
 });
 
