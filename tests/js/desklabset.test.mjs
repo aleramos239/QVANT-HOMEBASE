@@ -188,9 +188,9 @@ test('3.2 a value in force that is not one of the menu\'s options: plain Set on 
 test('3.2 the page\'s setLabSetting takes the extra `from` and sends the same body as before', async () => {
   const { HTML } = await import('./deskpage.mjs');   // the Desk page with its desk/*.js put back inline
   const fn = HTML.slice(HTML.indexOf('async function setLabSetting('), HTML.indexOf('/* Flatten & turn off believes only'));
-  assert.ok(fn.length > 0 && fn.length < 1200, 'the page still has its setLabSetting');
+  assert.ok(fn.length > 0 && fn.length < 2400, 'the page still has its setLabSetting');
   const posts = [];
-  const ctx = vm.createContext({ posts, DEMO: false, stratLabel: (n) => n, refresh: () => {}, toast: () => {},
+  const ctx = vm.createContext({ posts, DEMO: false, ST: { strategies: {} }, stratLabel: (n) => n, refresh: () => {}, toast: () => {},
     answerWhy: () => 'x', killText: (t) => t, post: async (url, body) => { posts.push([url, body]); return { ok: true }; } });
   vm.runInContext(fn + '\nglobalThis.f = setLabSetting;', ctx);
   assert.equal(await ctx.f('lab_x', 'open_min', '1', { from: '5' }), '');

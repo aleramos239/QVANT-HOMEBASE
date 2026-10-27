@@ -202,12 +202,27 @@ function openLabLimits(name) {
   LAB_LIM = {name, tok: ++LAB_TOK};
   $("#llTitle").textContent = DeskLab.limitsTitle(stratLabel(name));
   const f = DeskLab.limitsFields(s.lab.limits);
-  for (const [k, id] of LAB_LIM_FIELDS) $("#" + id).value = f[k];
+  for (const [k, id] of LAB_LIM_FIELDS) { $("#" + id).value = f[k]; $("#" + id).oninput = labLimSaveText; }
+  labLimSaveText();
   labLimErrors({});
   const note = $("#llNote"); note.textContent = ""; note.hidden = true;
   $("#llSave").disabled = LAB_SAVING;
   showOverlay("labLimitsOverlay");
 }
+/* The Save button lists what changes, old → new, as the fields read now ("Save: Trades a day 2 → 3"); plain "Save limits" when
+   nothing changes or none were set. */
+const LAB_LIM_WORDS = {trades: "Trades a day", qty: "Contracts", risk: "At risk", last: "No new trade after", flat: "Flat by"};
+function labLimSaveText() {
+  const s = ST && ST.strategies && ST.strategies[LAB_LIM.name], old = s && s.lab && s.lab.limits;
+  const was = DeskLab.limitsFields(old), show = (k, v) => v === "" ? "none" : k === "risk" ? "$" + v.replace(/^\$/, "") : v;
+  const ch = old ? LAB_LIM_FIELDS.map(([k, id]) => [k, String($("#" + id).value).trim()]).filter(([k, v]) => v !== was[k])
+    .map(([k, v]) => `${LAB_LIM_WORDS[k]} ${show(k, was[k])} → ${show(k, v)}`) : [];
+  $("#llSave").textContent = ch.length ? "Save: " + ch.join(" · ") : DeskLab.SAVE_LIMITS;
+  return ch;
+}
+/* A limit loosened (a higher number, a later time) or removed. Tightening never asks. */
+const labLimLooser = (old, body) => !!old && ["max_trades_day", "max_qty", "max_risk_usd", "last_entry_et", "flat_et"]
+  .some(k => old[k] != null && (body[k] == null || body[k] > old[k]));
 function closeLabLimits() {
   hideOverlay("labLimitsOverlay");
   LAB_LIM = {name: "", tok: 0};
@@ -223,6 +238,12 @@ async function saveLabLimits() {
   const note = $("#llNote"); note.textContent = ""; note.hidden = true;
   if (!got.body) return;                  // nothing is sent until every field reads
   LAB_SAVING = true; $("#llSave").disabled = true;
+  const live = liveBooked(name);          // loosening a limit while it is ON with a LIVE account asks first
+  if (live && labLimLooser(s.lab && s.lab.limits, got.body)) {
+    const yes = await confirmDlg(`Loosen the limits of ${stratLabel(name)}?`, labLimSaveText().join(" · ") + ". " + liveWords(stratLabel(name), live),
+      DeskLab.SAVE_LIMITS, false);
+    if (!yes || LAB_LIM.tok !== tok) { LAB_SAVING = false; if (LAB_LIM.name) $("#llSave").disabled = false; return; }
+  }
   let r, err = null;
   try { r = await post("/api/lab-limits", {strategy: name, limits: got.body}); } catch (e) { err = e || new Error("no answer"); }
   LAB_SAVING = false;

@@ -204,9 +204,17 @@ async function setStratRr(name, rr, slPts) {      // rr null + slPts: change the
   return killText(r && (r.detail || r.error)) || "the desk's answer was unreadable";
 }
 /* One adjustable setting of a Lab strategy (the Setup panel's controls, desklabset.js): "" when it was saved, else the sentence
-   saying why not. It takes effect from the strategy's next session. */
-async function setLabSetting(name, key, value) {
-  const N = stratLabel(name);
+   saying why not. It takes effect from the strategy's next session. `from` (optional): the value it replaces, for the words.
+   While the strategy is ON with a LIVE account it asks first: a setting changes what it trades. */
+async function setLabSetting(name, key, value, opts) {
+  const N = stratLabel(name), live = liveBooked(name);
+  if (live) {
+    const lab = ST.strategies[name].lab || {}, say = (v) => v === true ? "on" : v === false ? "off" : String(v);
+    const what = (lab.labels && lab.labels[key]) || String(key).replace(/_/g, " ");
+    const from = opts && opts.from != null ? say(opts.from) + " → " : "to ";
+    if (!await confirmDlg(`Change ${N}: ${what} ${from}${say(value)}?`, liveWords(N, live) + " It trades with the new setting from its next session.",
+        "Change it", false)) return "Not changed.";
+  }
   let r, err = null;
   try { r = await post("/api/lab-settings", {strategy: name, settings: {[key]: value}}); } catch (e) { err = e || new Error("no answer"); }
   refresh();
@@ -215,6 +223,14 @@ async function setLabSetting(name, key, value) {
   if (r && r.ok === true) { toast(r.changed === false ? `${N}: nothing changed.` : `${N} setting saved. It applies from its next session.`); return ""; }
   return killText(r && (r.detail || r.error)) || "the desk's answer was unreadable";
 }
+/* How many LIVE accounts an ON strategy has booked (an account the desk does not list counts as LIVE); 0 when it is OFF. A change
+   that loosens what it trades asks only then. */
+function liveBooked(name) {
+  const s = ((ST && ST.strategies) || {})[name];
+  if (!s || !s.cfg || s.cfg.enabled !== true) return 0;
+  return ((ST.book && ST.book[name]) || []).filter(a => !["demo", "paper"].includes((((ST.accounts || {})[a.account]) || {}).env)).length;
+}
+const liveWords = (N, n) => `${N} is ON with ${n} LIVE account${n === 1 ? "" : "s"}${machineWords() ? " " + machineWords() : ""}.`;
 /* Flatten & turn off believes only what the desk reports (second review): it answers ok:true
    whatever happened to the flatten itself, with each account's steps in `results` -- read them
    (stepFailures). A failed flatten, a refusal or a dropped / unreadable answer is the red alert:

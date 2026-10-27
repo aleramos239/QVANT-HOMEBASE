@@ -68,7 +68,7 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
     `\nDESKLAB = { strategies: ${JSON.stringify(rows)}, runner: { alive: true } }; DESKLAB_OK = ${readOk};` +
     `\nVIEW = ${JSON.stringify(view)};` +
     '\nglobalThis.api = { renderSide, renderMain, labDeskView, stratView, stratState, stratDotCls, todayRow, specOf, setBook, pickAsg, liveBookingNote, toggleStrat,' +
-    ' flattenStrat, dayHeadline, dayTimeline, journalShown, todayFoot, openLabLimits, closeLabLimits, saveLabLimits, removeLabStrat, clearLabBlock, labRowsHtml, calView, shadowData, deleteLabStrat, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
+    ' setLabSetting, flattenStrat, dayHeadline, dayTimeline, journalShown, todayFoot, openLabLimits, closeLabLimits, saveLabLimits, removeLabStrat, clearLabBlock, labRowsHtml, calView, shadowData, deleteLabStrat, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
   vm.runInContext(code, ctx);
   return { ctx, api: ctx.api, els, el, posts, toasts, confirms, alerts, shown, hidden, refreshes,
     side: () => { ctx.api.renderSide(['nq930', 'lab_nq_orb'].filter((n) => ctx.ST.strategies[n]), 0, 0); return els.side.innerHTML; },
@@ -562,6 +562,71 @@ test('a second Save while one is out sends nothing more, and an answer that land
   release();
   await first;
   assert.equal(t.els.llNote.textContent, '', 'a closed dialog is not written to');
+});
+
+// ---- WP1.5: loosening a limit, or a setting, on an ON strategy with a LIVE account asks first; tightening saves at once ----
+const LIVE_BOOK = { lab_nq_orb: [{ account: 'a2', qty: 1 }] };       // a2 is LIVE
+test('WP1.5 saveLabLimits asks for 2 → 3 trades a day and not for 3 → 2; Cancel sends nothing; the body is unchanged', async () => {
+  const up = load({ book: LIVE_BOOK, answer: { ok: true } });
+  up.ctx.ST.machine = 'server';
+  up.api.openLabLimits('lab_nq_orb');
+  fill(up, { llTrades: '3' });
+  await up.api.saveLabLimits();
+  assert.equal(up.confirms.length, 1);
+  assert.equal(up.confirms[0].title, 'Loosen the limits of NQ ORB?');
+  assert.equal(up.confirms[0].body, 'Trades a day 2 → 3. NQ ORB is ON with 1 LIVE account on the SERVER · Chicago.');
+  assert.deepEqual(up.posts, [{ url: '/api/lab-limits', body: { strategy: 'lab_nq_orb', limits: { ...LIM, max_trades_day: 3 } } }]);
+  const down = load({ book: LIVE_BOOK, strategies: { lab_nq_orb: deskStrat({ limits: { ...LIM, max_trades_day: 3 } }) } });
+  down.api.openLabLimits('lab_nq_orb');
+  fill(down, { llTrades: '2' });
+  await down.api.saveLabLimits();
+  assert.deepEqual(down.confirms, [], 'tightening saves at once');
+  assert.deepEqual(down.posts, [{ url: '/api/lab-limits', body: { strategy: 'lab_nq_orb', limits: LIM } }]);
+  const no = load({ book: LIVE_BOOK, confirm: false });
+  no.api.openLabLimits('lab_nq_orb');
+  fill(no, { llFlat: '15:55', llLast: '11:30' });
+  await no.api.saveLabLimits();
+  assert.equal(no.confirms.length, 1, 'a later last entry is looser');
+  assert.deepEqual(no.posts, []);
+  assert.equal(no.els.llSave.disabled, false, 'it can be tried again');
+  for (const t of [load({ book: BOOKED0 }), load({ book: LIVE_BOOK, strategies: { lab_nq_orb: deskStrat({}, { enabled: false }) } })]) {
+    t.api.openLabLimits('lab_nq_orb');
+    fill(t, { llTrades: '5', llRisk: '900' });
+    await t.api.saveLabLimits();
+    assert.deepEqual(t.confirms, [], 'a demo account only, or switched OFF: no ask');
+    assert.equal(t.posts.length, 1);
+  }
+});
+
+test('WP1.5 the Save button lists old → new as the fields read', () => {
+  const t = load();
+  t.api.openLabLimits('lab_nq_orb');
+  assert.equal(t.els.llSave.textContent, 'Save limits');
+  fill(t, { llTrades: '3', llRisk: '450' });
+  t.els.llTrades.oninput();
+  assert.equal(t.els.llSave.textContent, 'Save: Trades a day 2 → 3 · At risk $300 → $450');
+  const none = load({ strategies: { lab_nq_orb: deskStrat({ limits: null }) } });
+  none.api.openLabLimits('lab_nq_orb');
+  fill(none, { llTrades: '3' });
+  none.els.llTrades.oninput();
+  assert.equal(none.els.llSave.textContent, 'Save limits', 'first limits: nothing to compare');
+});
+
+test('WP1.5 setLabSetting asks while ON with a LIVE account, naming old → new; the body is the same; no ask otherwise', async () => {
+  const t = load({ book: LIVE_BOOK, answer: { ok: true, changed: true } });
+  assert.equal(await t.api.setLabSetting('lab_nq_orb', 'open_min', 15, { from: 5 }), '');
+  assert.equal(t.confirms.length, 1);
+  assert.equal(t.confirms[0].title, 'Change NQ ORB: open min 5 → 15?');
+  assert.match(t.confirms[0].body, /^NQ ORB is ON with 1 LIVE account\. It trades with the new setting from its next session\.$/);
+  assert.deepEqual(t.posts, [{ url: '/api/lab-settings', body: { strategy: 'lab_nq_orb', settings: { open_min: 15 } } }]);
+  const no = load({ book: LIVE_BOOK, confirm: false });
+  assert.equal(await no.api.setLabSetting('lab_nq_orb', 'open_min', 15), 'Not changed.');
+  assert.equal(no.confirms[0].title, 'Change NQ ORB: open min to 15?', 'no `from`: still asks');
+  assert.deepEqual(no.posts, []);
+  const demo = load({ book: BOOKED0 });
+  await demo.api.setLabSetting('lab_nq_orb', 'open_min', 15, { from: 5 });
+  assert.deepEqual(demo.confirms, []);
+  assert.equal(demo.posts.length, 1);
 });
 
 test('Enter in a field saves, a held key does not; Escape closes through the page\'s one path', () => {
