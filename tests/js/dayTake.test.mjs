@@ -6,7 +6,7 @@ import vm from 'node:vm';
 /* The accounts popup (homebase/static/index.html) carries the account's own day take: closed profit of
    the day, in dollars, after which NO strategy booked on that account takes a new entry (open trades run
    on).  The box shows the take in force and where the day stands; setDayTake sends it to the desk. */
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
 const ESC = between('const esc = (v) =>', 'async function chartPost(');
 const CODE = between('/* ---- the account\'s day take (the group\'s) ----', '/* ---- accounts popup ---- */');

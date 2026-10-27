@@ -13,7 +13,7 @@ import vm from 'node:vm';
        dragging off, pointercancel, lost buttons, a context menu, blur and a hidden page cancel;
      - a key's auto-repeat never starts, restarts or fires a hold (GOTCHAS: a held key has sent
        duplicate orders here before). */
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const BLOCK = HTML.slice(
   HTML.indexOf('/* ---- master controls (top bar)'),
   HTML.indexOf('/* ---- the bulb ---- */'));

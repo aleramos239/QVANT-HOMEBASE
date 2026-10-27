@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
    #94a3b8) that could drift from the rest of the page's good/bad language and ignored dark mode.
    They now read --pos / --warn / --neg (and --muted-foreground for info); --warn is a new token
    with a light and a dark value in shadcn.css. */
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const CSS = readFileSync(new URL('../../homebase/static/shadcn.css', import.meta.url), 'utf8');
 
 test('no hard-coded status hex is left on the desk page', () => {

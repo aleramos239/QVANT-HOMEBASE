@@ -9,7 +9,7 @@ import vm from 'node:vm';
    first, with the page's own confirm dialog; a demo account books at once, exactly as before;
    Cancel sends nothing. Raising a live booking's size asks too -- only from Enter: a blur reverts
    it without a dialog (review M2); lowering it never asks. "Book live" is never Kill's red. */
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const BLOCK = HTML.slice(
   HTML.indexOf('/* ---- the book (assignments) ---- */'),
   HTML.indexOf('/* ---- connect wizard ---- */'));

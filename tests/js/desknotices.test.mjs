@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 /* The desk's notices (status.notices, from fix/tradovate-login-loop): each shown once, in plain
    words, escaped; dismissing marks them seen; an older desk without the field shows nothing. */
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
 const BLOCK = between('const esc = (v) =>', 'async function chartPost(') +
   between('/* ---- the desk\'s notices ----', '/* ---- activity log (W4)');

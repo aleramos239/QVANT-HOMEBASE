@@ -21,7 +21,7 @@ def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapter
     # ------------------------------------------------------------ dashboard
     @app.get("/")
     async def index():
-        return FileResponse(STATIC / "index.html")
+        return FileResponse(STATIC / "index.html", headers={"cache-control": "no-cache"})   # never a cached page with newer desk/*.js
 
     live_box: dict = {"recs": None, "live": {}}        # live_metrics of the records it last saw
 

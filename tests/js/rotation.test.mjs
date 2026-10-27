@@ -6,7 +6,7 @@ import vm from 'node:vm';
 /* Take turns (account rotation, the owner 2026-10-19): a strategy's Accounts section carries a switch -- each trade to
    ONE booked account, in turn -- and, while on, "Next account: X". Off is the default. Turning it OFF with a live
    account booked asks first (the next trade then goes to every account). */
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
 const ESC = between('const esc = (v) =>', 'async function chartPost(');
 const CODE = between('/* Take turns (account rotation', 'function removeAsg(');

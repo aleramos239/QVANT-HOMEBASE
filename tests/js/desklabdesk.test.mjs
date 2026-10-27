@@ -11,7 +11,7 @@ import vm from 'node:vm';
 const require = createRequire(import.meta.url);
 const AV = require('../../homebase/static/algo-visibility.js');
 const D = require('../../homebase/static/desklab.js');
-const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+import { HTML } from './deskpage.mjs';
 const SKIN = readFileSync(new URL('../../homebase/static/apple/desk.js', import.meta.url), 'utf8');
 const SLICE = (a, b) => {
   const i = HTML.indexOf(a), j = HTML.indexOf(b, i + 1);

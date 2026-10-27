@@ -48,6 +48,7 @@ import functools
 import itertools
 import json
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -1110,8 +1111,12 @@ def lab_page(static: Path, own_port: int, ticks_port: int | None) -> str:
     """The Desk page as it is on disk, with every address that would leave this practice Desk pointed back at it:
     the chart-service line (the page's CHART) becomes this tool's own /chart pass-through, every other ":8852" the
     --ticks service's port and every ":8850" this tool's. ValueError when the page no longer has that one line: a
-    page that would call the real chart service is never served."""
+    page that would call the real chart service is never served. Its code (static/desk/*.js since 2026-10-26) is put back
+    in the page as the one inline <script> it was, so the CHART swap reaches it (tests/desk_page_util.py is the same rule)."""
     text = (static / "index.html").read_text(encoding="utf-8")
+    tag = re.compile(r'<script src="/static/(desk/[\w-]+\.js)\?v=\d+"></script>\n')
+    code = "".join((static / f).read_text(encoding="utf-8") for f in tag.findall(text))
+    text = re.sub(f"(?:{tag.pattern})+", lambda _: "<script>\n" + code + "</script>\n", text, count=1)
     if text.count(PAGE_CHART_LINE) != 1:
         raise ValueError("the Desk page's chart-service line changed: tools/fake_desk.py (PAGE_CHART_LINE) must follow it")
     text = text.replace(PAGE_CHART_LINE, PAGE_CHART_SWAP)

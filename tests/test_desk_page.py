@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-HTML = (Path(__file__).resolve().parent.parent / "homebase" / "static" / "index.html").read_text()
+from tests.desk_page_util import desk_page
+
+HTML = desk_page()
 
 
 def test_the_desk_page_has_the_chart_trading_switch_and_limits():
@@ -164,3 +166,59 @@ def test_no_visible_lab_line_says_round_sidecar_intent_overlay_or_carried():
     for text in re.findall(r'"([^"\n]*)"', block):
         assert not re.search(r"\b(round|rounds|sidecar|intent|overlay|carried)\b", text, re.I), text
     assert "plainWords" in DESKLAB
+
+
+def test_the_desk_serves_the_page_uncached_and_every_desk_script_it_names(tmp_path, monkeypatch):
+    """The page's code lives in static/desk/*.js (2026-10-26). The page itself always revalidates (no-cache), so a cached
+    old page can never pair with newer code; its body is the file on disk, and every script it names is served as is."""
+    import re
+
+    from fastapi.testclient import TestClient
+
+    import homebase.config as config_mod
+    from homebase.config import AppCfg
+    from homebase.server import create_app
+    for target in ("homebase.paths.state_dir", "homebase.engine.state_dir", "homebase.server.state_dir", "homebase.secrets_store.state_dir"):
+        monkeypatch.setattr(target, lambda: tmp_path)
+    monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
+    with TestClient(create_app(AppCfg(), {}, background=False), base_url="http://127.0.0.1:8850") as c:
+        page = c.get("/")
+        assert page.status_code == 200 and page.headers["cache-control"] == "no-cache" and page.headers["etag"]
+        assert page.content == (STATIC / "index.html").read_bytes()
+        files = re.findall(r'<script src="/static/(desk/[\w-]+\.js)\?v=\d+"></script>', page.text)
+        assert len(files) == 12 and len(set(files)) == 12
+        for f in files:
+            r = c.get(f"/static/{f}?v=1")
+            assert r.status_code == 200 and r.content == (STATIC / f).read_bytes(), f
+            assert r.headers["content-type"].startswith(("text/javascript", "application/javascript")), f
+
+
+# Each desk/*.js is cached by the browser under its ?v= (no cache-control on /static), so a changed file must get a new ?v=
+# or a fresh page can run with yesterday's code. Edited a desk file? Bump its ?v= in index.html, then its pin here (both).
+DESK_PINS = {
+    "desk/core.js": (1, "a30cddaf40be9288"),
+    "desk/topbar.js": (1, "e5e2bdd22c0b1724"),
+    "desk/activity.js": (1, "3e658602440279d7"),
+    "desk/views.js": (1, "528026221c807278"),
+    "desk/groups.js": (1, "67632f20ce311dc5"),
+    "desk/strategy.js": (1, "ed733055c36fa617"),
+    "desk/labdesk.js": (1, "09ca74d99f09711a"),
+    "desk/demo.js": (1, "80281fdd8c66654c"),
+    "desk/book.js": (1, "fbeb323fd3fc4e00"),
+    "desk/settings.js": (1, "428b206bb8e6f8ec"),
+    "desk/popups.js": (1, "8a0b647ac269ac85"),
+    "desk/start.js": (1, "5b20467b07f10f65"),
+}
+
+
+def test_every_changed_desk_script_gets_a_new_v():
+    import hashlib
+    import re
+
+    page = (STATIC / "index.html").read_text(encoding="utf-8")
+    tags = dict(re.findall(r'<script src="/static/(desk/[\w-]+\.js)\?v=(\d+)"></script>', page))
+    assert sorted(tags) == sorted(DESK_PINS), "a desk/*.js added or removed: pin it here"
+    for f, (v, sha) in DESK_PINS.items():
+        now = hashlib.sha256((STATIC / f).read_bytes()).hexdigest()[:16]
+        assert (int(tags[f]), now) == (v, sha), (f"{f}: index.html has ?v={tags[f]}, file sha {now}; pinned ({v}, {sha!r}). "
+                                                     "A changed file needs a higher ?v= in index.html, then that pin here")

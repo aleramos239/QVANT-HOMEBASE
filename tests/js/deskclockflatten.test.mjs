@@ -9,7 +9,8 @@ const DeskLab = createRequire(import.meta.url)('../../homebase/static/desklab.js
    reconnects folded into one Activity line (and never "the last event"), and an equity curve of straight steps
    with a scale. The page's own code runs in a vm sandbox, as in deskactivity / deskescape. */
 const read = (p) => readFileSync(new URL('../../homebase/static/' + p, import.meta.url), 'utf8');
-const HTML = read('index.html'), CLOCK = read('hbclock.js');
+import { HTML } from './deskpage.mjs';
+const CLOCK = read('hbclock.js');
 const between = (a, b) => { const i = HTML.indexOf(a), j = HTML.indexOf(b, i); assert.ok(i >= 0 && j > i, `${a} .. ${b}`); return HTML.slice(i, j); };
 
 function clock({ stored = null, served = null } = {}) {
