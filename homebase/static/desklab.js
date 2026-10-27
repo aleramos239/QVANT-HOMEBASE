@@ -195,15 +195,21 @@
      run on the unseen days, and the prop sim of its build run and of that run. `res` = {unseen, prop: {build, unseen}};
      undefined while the first answer is on its way. Saved runs only: a strategy with no run on the unseen days says so. ---- */
   var RES_WAIT = "Reading…";
-  var NO_UNSEEN = "Not run on the unseen days yet. It starts by itself.";
+  var NO_UNSEEN = "Not run on the test days yet. It starts by itself.";
   // A Desk straddle (nq930, gc_nfp): its tester twin is read by hand, so nothing starts by itself and a changed Desk setting says so.
-  var NO_UNSEEN_MANUAL = "Not run on the unseen days at the Desk's setting. Run its tester twin from the Lab.";
-  var RUNNING_UNSEEN = "Reading the unseen days now. This shows here when it is done.";
-  var FAILED_UNSEEN = "The unseen-days run did not finish. Run it again from the Lab.";
+  var NO_UNSEEN_MANUAL = "Not run on the test days at the Desk's setting. Run its tester twin from the Lab.";
+  var RUNNING_UNSEEN = "Reading the test days now. This shows here when it is done.";
+  var FAILED_UNSEEN = "The test-days run did not finish. Run it again from the Lab.";
   var NO_PROP = "No prop sim: its backtest run is not saved any more.";
   // A promoted strategy's build and unseen days are the 3:1 walk-forward of the strategy as set: its in-sample months (Build) and
-  // its out-of-sample months (Unseen), in blocks (owner, 2026-10-18).
-  var WF_TITLE = "Walk-forward 3:1 · build and unseen days";
+  // its out-of-sample months (Unseen), in blocks (owner, 2026-10-18). On screen (owner 2026-10-25: in- and out-of-sample are ONLY
+  // the 3:1 blocks): the 3:1's "In-sample" and "Test months"; a record from before the 3:1 (a Desk straddle's twin) is the
+  // "Old record", its build and test days ("in-sample" is only ever the 3:1). The numbers are the same either way.
+  var WF_TITLE = "3:1 in-sample / 3:1 test months";
+  var OLD_RECORD = "Old record (before 3:1)";
+  function heads(wf, both) {
+    return (wf ? ["In-sample", "Test months"] : ["Build days", "Test days"]).concat(both ? ["Both"] : []);
+  }
   var WF_NOTES = {
     none: "The 3:1 walk-forward has not run yet. It starts by itself.",
     pending: "Running the 3:1 walk-forward over all the data now. This shows here when it is done.",
@@ -274,24 +280,24 @@
       var at = {};
       al.days.forEach(function (d, i) { at[d] = i; });
       return {
-        title: "Walk-forward 3:1 · build and unseen days, after costs",
-        label: "Unseen (dark) · Build (light) · Both (dashed)",
+        title: WF_TITLE + ", after costs",
+        label: "Test months (dark) · In-sample (light) · Both (dashed)",
         vals: c.vals.slice(), build: cb.vals.slice(), both: al.a.map(function (v, i) { return v + al.b[i]; }),
         total: c.vals[c.vals.length - 1],
         ends: [from || DASH, to || DASH],
         days: c.days.slice(),
-        notes: c.days.map(function (d) { var i = at[d]; return "Unseen " + money(al.a[i]) + " · Build " + money(al.b[i]) + " · Both " + money(al.a[i] + al.b[i]); }),
-        aria: "Running net P&L after costs: the walk-forward's unseen months and its build months, each on the days it traded",
+        notes: c.days.map(function (d) { var i = at[d]; return "Test months " + money(al.a[i]) + " · In-sample " + money(al.b[i]) + " · Both " + money(al.a[i] + al.b[i]); }),
+        aria: "Running net P&L after costs: the 3:1 test months and the in-sample months, each on the days it traded",
       };
     }
     return {
-      title: res.walkforward === true ? "Unseen days (walk-forward 3:1), after costs" : "Unseen days, after costs",
+      title: res.walkforward === true ? "3:1 test months, after costs" : OLD_RECORD + ": test days, after costs",
       label: "Running total",
       vals: c.vals.slice(),
       total: c.vals[c.vals.length - 1],
       ends: [from || DASH, to || DASH],
       days: c.days.map(function (d) { return /^\d{4}-\d\d-\d\d$/.test(text(d)) ? text(d) : ""; }),
-      aria: "Running net P&L after costs on the unseen days, by day",
+      aria: "Running net P&L after costs on the " + (res.walkforward === true ? "3:1 test months" : "old record's test days") + ", by day",
     };
   }
   // Trades a week on average: the run's trades over its weeks (the 3:1's months interleave: months x 52/12; else its start..end days / 7).
@@ -327,10 +333,12 @@
     var pu = prop.unseen && typeof prop.unseen === "object" ? prop.unseen : null;
     var po = prop.both && typeof prop.both === "object" ? prop.both : null;     // Build + Unseen as one run (owner 2026-10-24)
     var account = text((b || pu || {}).account), cb = propCells(b), cu = propCells(pu), co = propCells(po);
-    // a Desk straddle also sends its build-days run at the Desk's setting: the block then reads Build | Unseen
+    // a Desk straddle also sends its build-days run at the Desk's setting: the block then reads Build days | Test days
     var bu = !wait && res.build && typeof res.build === "object" ? res.build : null;
     var wf = !wait && res.walkforward === true;
     var bo = wf && bu && res.both && typeof res.both === "object" ? res.both : null;
+    // the words while waiting are the 3:1's: only a Lab strategy (always 3:1) is shown before its answer; a straddle needs its twin
+    var w31 = wait || wf;
     var runRows = function (run) {
       var r = run.range || {}, f = monthOf(r.start), t = monthOf(r.end);
       var days = wf ? [] : [{ k: "Days", v: f && t ? f + " – " + t : DASH }];      // the 3:1's months interleave: no one span
@@ -358,15 +366,15 @@
     }
     return {
       unseen: {
-        title: wf ? WF_TITLE : bu ? "Backtest · build and unseen days" : "Unseen days (OOS)",
-        head: bu ? (bo ? ["Build", "Unseen", "Both"] : ["Build", "Unseen"]) : null,
+        title: w31 ? WF_TITLE : OLD_RECORD,
+        head: bu ? heads(wf, !!bo) : null,
         rows: rows,
         note: wait ? RES_WAIT : wf ? (u ? "" : WF_NOTES[res.unseen_state] || WF_NOTES.none)
           : u ? "" : res.unseen_state === "pending" ? RUNNING_UNSEEN : res.unseen_state === "failed" ? FAILED_UNSEEN : res.manual === true ? NO_UNSEEN_MANUAL : NO_UNSEEN,
       },
       prop: {
         title: "Prop sim" + (account ? " · " + account : ""),
-        head: po ? ["Build", "Unseen", "Both"] : ["Build", "Unseen"],
+        head: heads(w31, !!po),
         rows: b || pu ? PROP_ROWS.map(function (k, i) {
           var row = { k: k, build: cb[i], unseen: cu[i] };
           if (po) row.both = co[i];
@@ -420,6 +428,7 @@
     var wait = !isObj(res);
     var b = !wait && isObj(res.build) ? res.build : null, u = !wait && isObj(res.unseen) ? res.unseen : null;
     var bo = !wait && isObj(res.both) ? res.both : null, wf = !wait && res.walkforward === true;   // the 3:1: build, unseen, both
+    var w31 = wait || wf;      // the words while waiting: the server sends every group as the 3:1
     var prop = !wait && isObj(res.prop) ? res.prop : {};
     var pb = isObj(prop.build) ? prop.build : null, pu = isObj(prop.unseen) ? prop.unseen : null, pbo = isObj(prop.both) ? prop.both : null;
     var members = !wait && Array.isArray(res.members) ? res.members : [];
@@ -437,12 +446,12 @@
       title: text(g.name), kind: kindLabel(kind), kindNote: kindOf(kind).note, note: GROUP_NOTE,
       lead: count + (count === 1 ? " strategy" : " strategies") + " · " + kindLabel(kind),
       empty: count === 0,
-      figs: { head: wf ? ["Build", "Unseen", "Both"] : ["Build", "Unseen"],
+      figs: { head: heads(w31, wf),
         rows: b || u ? GROUP_FIG_ROWS.map(function (k, i) { var r = { k: k, build: cb[i], unseen: cu[i] }; if (wf) r.both = cbo[i]; return r; }) : [], note: note },
-      days: { title: "Unseen days traded", rows: days },
+      days: { title: w31 ? "3:1 test months: days traded" : OLD_RECORD + ": days traded", rows: days },
       prop: {
         title: "Prop sim" + (account ? " · " + account : ""),
-        head: wf ? ["Build", "Unseen", "Both"] : ["Build", "Unseen"],
+        head: heads(w31, wf),
         rows: pb || pu ? want.map(function (i) { var r = { k: PROP_ROWS[i], build: pcb[i], unseen: pcu[i] }; if (wf) r.both = pcbo[i]; return r; }) : [],
         note: wait ? RES_WAIT : NO_PROP_GROUP,
       },
@@ -805,9 +814,42 @@
   function switchOnAccounts(n) { return n + " is ON. Its orders go to its accounts."; }
   function switchOnShadow(n) { return n + " is ON: it runs in shadow."; }
   function switchOnNext(n) { return n + " is ON. It starts with the next session."; }
-  function deskSwitchTitle(s, book) {
+  // The switch's hover title, and switchOnAsk = the words for its ON confirm. Today the confirm itself is toggleStrat's own text
+  // (the Desk page script): WP1.7 puts switchOnAsk in it. With an account booked: the machine (`machine`, else window.HB_MACHINE;
+  // left out when not known), how many LIVE / demo / paper accounts, and the size -- contracts, or the $ at risk a trade for a
+  // strategy that sizes itself. `accounts` = the page's ST.accounts (read from the page when not passed); an account it does not
+  // list counts as LIVE, the page's own rule. Words only: when the switch asks is switchNeedsConfirm's (algo-visibility.js).
+  function machineWords(m) {
+    if (m === undefined) m = typeof window !== "undefined" && window ? window.HB_MACHINE : null;
+    return m === "server" ? " on the SERVER · Chicago" : m === "mac" ? " on this Mac" : "";
+  }
+  function ordersGo(s, book, accounts) {
+    var accts = isObj(accounts) ? accounts : typeof ST !== "undefined" && isObj(ST) && isObj(ST.accounts) ? ST.accounts : {};
+    var n = { LIVE: 0, demo: 0, paper: 0 }, q = [];
+    book.forEach(function (b) {
+      var a = isObj(b) ? accts[b.account] : null;
+      n[isObj(a) && (a.env === "demo" || a.env === "paper") ? a.env : "LIVE"]++;
+      if (isObj(b) && num(b.qty) !== null) q.push(b.qty);
+    });
+    var who = ["LIVE", "demo", "paper"].filter(function (k) { return n[k]; })
+      .map(function (k) { return plur(n[k], k + " account", k + " accounts"); }).join(" and ");
+    var lab = blockOf(s) || {}, risk = isObj(lab.params) ? Number(lab.params.risk) : NaN;
+    var lo = Math.min.apply(null, q), hi = Math.max.apply(null, q);
+    // a size only when every booked row says it: a wrong size is worse than none
+    var size = lab.own_size === true ? (risk > 0 ? money(risk) + " at risk a trade" : "it sizes each trade itself")
+      : q.length !== book.length ? "" : lo === hi ? plur(lo, "contract", "contracts") + (book.length > 1 ? " each" : "") : lo + " to " + hi + " contracts";
+    return who + (size ? ", " + size : "");
+  }
+  function deskSwitchTitle(s, book, accounts, machine) {
     var on = !!s && !!s.cfg && s.cfg.enabled === true;
-    return on ? (Array.isArray(book) && book.length > 0 ? "ON: its orders go to its accounts" : "ON: it runs in shadow") : switchTitle(false);
+    if (!Array.isArray(book) || !book.length) return switchTitle(on);
+    var where = machineWords(machine), go = ordersGo(s, book, accounts);
+    return on ? "ON" + where + ": its orders go to " + go : "OFF: it does nothing. Switched ON" + where + ", its orders would go to " + go + ".";
+  }
+  // The ON confirm's sentence, asked while the strategy is still OFF; "" with no account booked (it then runs in shadow: no ask).
+  function switchOnAsk(s, book, accounts, machine) {
+    if (!Array.isArray(book) || !book.length) return "";
+    return "It will run" + machineWords(machine) + " from the next signal. Its orders go to " + ordersGo(s, book, accounts) + ".";
   }
   // With no account booked there are no orders and no position: Step A's short sentence.
   function switchOffToast(n, book) {
@@ -993,7 +1035,7 @@
     checkLimits: checkLimits, limitsTitle: limitsTitle, refusalText: refusalText, roundLine: roundLine, splitRounds: splitRounds,
     refusedLine: refusedLine, switchOnAccounts: switchOnAccounts, switchOnShadow: switchOnShadow, switchOnNext: switchOnNext,
     switchOff: switchOff, switchOnToast: switchOnToast, bookedNext: bookedNext, bookedJoins: bookedJoins, flattenAsk: flattenAsk, flattenSteps: flattenSteps, deskSpec: deskSpec,
-    deskSetupRows: deskSetupRows, activity: activity, needsLook: needsLook, stateNote: stateNote, deskSwitchTitle: deskSwitchTitle,
+    deskSetupRows: deskSetupRows, activity: activity, needsLook: needsLook, stateNote: stateNote, deskSwitchTitle: deskSwitchTitle, switchOnAsk: switchOnAsk,
     switchOffToast: switchOffToast, removeAskDesk: removeAskDesk, plainSteps: plainSteps, plainRecord: plainRecord, closeOut: closeOut,
     NOT_ON_DESK: NOT_ON_DESK, CLOSE_OUT: CLOSE_OUT, NOT_OFF: NOT_OFF, hiddenEvent: hiddenEvent, HIDDEN_EVENTS: HIDDEN_EVENTS, LAB_UNKNOWN: LAB_UNKNOWN,
     OTHER_DESK: OTHER_DESK, LIMITS_CAPTION: LIMITS_CAPTION, EDIT_LIMITS: EDIT_LIMITS, SAVE_LIMITS: SAVE_LIMITS, CANCEL: CANCEL,

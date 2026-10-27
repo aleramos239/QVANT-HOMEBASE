@@ -603,8 +603,8 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=36"><\/script>/);
-  assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=2"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=40"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=4"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
   assert.equal(manifest.version >= 3, true);
@@ -807,9 +807,15 @@ test('m1 the switch\'s tooltip says where the orders go, on the page and on the 
   const none = load();
   assert.match(none.view(), /aria-checked="true"\s*title="ON: it runs in shadow"/);
   assert.match(none.api.todayRow('lab_nq_orb', none.ctx.ST.strategies.lab_nq_orb), /title="ON: it runs in shadow"/);
-  const booked = load({ book: BOOKED });
-  assert.match(booked.view(), /title="ON: its orders go to its accounts"/);
-  assert.match(booked.api.todayRow('lab_nq_orb', booked.ctx.ST.strategies.lab_nq_orb), /title="ON: its orders go to its accounts"/);
+  // desklab.js loaded beside the page's ST, the way the page loads it: the title counts the LIVE accounts from ST.accounts (3.4)
+  const asPage = (t) => { t.ctx.self = t.ctx; vm.runInContext(readFileSync(new URL('../../homebase/static/desklab.js', import.meta.url), 'utf8'), t.ctx); return t; };
+  const booked = asPage(load({ book: BOOKED }));
+  assert.match(booked.view(), /title="ON: its orders go to 1 demo account, 1 contract"/);
+  assert.match(booked.api.todayRow('lab_nq_orb', booked.ctx.ST.strategies.lab_nq_orb), /title="ON: its orders go to 1 demo account, 1 contract"/);
+  const live = asPage(load({ book: { lab_nq_orb: [{ account: 'a2', qty: 2 }] } }));
+  assert.match(live.view(), /title="ON: its orders go to 1 LIVE account, 2 contracts"/);
+  const offLive = asPage(load({ book: { lab_nq_orb: [{ account: 'a2', qty: 2 }] }, strategies: { lab_nq_orb: deskStrat({ state: 'off' }, { enabled: false }) } }));
+  assert.match(offLive.view(), /title="OFF: it does nothing\. Switched ON, its orders would go to 1 LIVE account, 2 contracts\."/);
   const off = load({ strategies: { lab_nq_orb: deskStrat({ state: 'off' }, { enabled: false }) } });
   assert.match(off.api.todayRow('lab_nq_orb', off.ctx.ST.strategies.lab_nq_orb), /title="OFF: it does nothing"/);
   // another strategy's tooltip is as it was

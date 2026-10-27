@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import vm from 'node:vm';
 
 /* desklabset.js: the settings a Lab strategy declared adjustable, as controls in the Desk's Setup panel. Run against a
    tiny fake document: ONE persistent set of nodes per strategy, what the page shows, what a save sends, and that a field
@@ -126,4 +127,74 @@ test('an on/off setting is an On / Off menu that sends a real boolean', async ()
   assert.deepEqual(calls, [['lab_x', 'red_5m', true]]);
   const on = S.nodes('lab_x', { settings: spec, params: { red_5m: true }, read_only: false }, false);
   assert.equal(on[0].children[1].value, 'true');                       // follows the Desk's value
+});
+
+test('3.2 the Set button shows old → new before a change and sends the old value as `from`', async () => {
+  const calls = [];
+  const { S } = load({ setLabSetting: async (...a) => { calls.push(a); return ''; } });
+  const [r1, r2] = S.nodes('lab_x', LAB(), false);
+  const [sel, btn1] = [r1.children[1], r1.children[2]], [num, btn2] = [r2.children[1], r2.children[2]];
+  assert.equal(btn1.textContent, 'Set');                              // the field holds the value in force
+  sel.value = '1';
+  await fire(sel, 'change');
+  assert.equal(btn1.textContent, 'Set: 5 → 1');
+  await fire(btn1, 'click');
+  assert.deepEqual(calls[0], ['lab_x', 'open_min', '1', { from: '5' }]);
+  num.value = '30';
+  await fire(num, 'input');
+  assert.equal(btn2.textContent, 'Set: 25 → 30');
+  await fire(num, 'keydown', { key: 'Enter' });
+  assert.deepEqual(calls[1], ['lab_x', 'big_body', 30, { from: 25 }]);       // both as the backend takes them
+  num.value = '25.0';
+  await fire(num, 'input');
+  assert.equal(btn2.textContent, 'Set', 'the same number typed another way is no change');
+  num.value = 'abc';
+  await fire(num, 'input');
+  assert.equal(btn2.textContent, 'Set', 'not a number: no old → new');
+  // the Desk's new value comes back: the row follows it and the button is plain again
+  S.nodes('lab_x', LAB({ params: { open_min: '1', big_body: 25 } }), false);
+  assert.equal(btn1.textContent, 'Set');
+  // an on/off setting reads Off → On
+  const bool = [{ key: 'red_5m', label: 'Red-folder days', type: 'bool', default: false }];
+  const [rb] = S.nodes('lab_y', { settings: bool, params: { red_5m: false }, read_only: false }, false);
+  rb.children[1].value = 'true';
+  await fire(rb.children[1], 'change');
+  assert.equal(rb.children[2].textContent, 'Set: Off → On');
+  await fire(rb.children[2], 'click');
+  assert.deepEqual(calls[2], ['lab_y', 'red_5m', true, { from: false }]);
+});
+
+test('3.2 with no value from the Desk: plain Set, and `from` is null', async () => {
+  const calls = [];
+  const { S } = load({ setLabSetting: async (...a) => { calls.push(a); return ''; } });
+  const [r] = S.nodes('lab_z', { settings: [{ key: 'k', label: 'K', type: 'float' }], params: {}, read_only: false }, false);
+  r.children[1].value = '3';
+  await fire(r.children[1], 'input');
+  assert.equal(r.children[2].textContent, 'Set');
+  await fire(r.children[2], 'click');
+  assert.deepEqual(calls, [['lab_z', 'k', 3, { from: null }]]);
+});
+
+test('3.2 a value in force that is not one of the menu\'s options: plain Set on a repaint, never "Set: 7 → "', () => {
+  const { S } = load();
+  const lab = LAB({ params: { open_min: '7', big_body: 25 } });
+  const [r1] = S.nodes('lab_w', lab, false);
+  // a real <select> holds "" for a value it has no option for
+  Object.defineProperty(r1.children[1], 'value', { get: () => '', set: () => {} });
+  S.nodes('lab_w', lab, false);
+  assert.equal(r1.children[2].textContent, 'Set');
+});
+
+test('3.2 the page\'s setLabSetting takes the extra `from` and sends the same body as before', async () => {
+  const HTML = require('node:fs').readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+  const fn = HTML.slice(HTML.indexOf('async function setLabSetting('), HTML.indexOf('/* Flatten & turn off believes only'));
+  assert.ok(fn.length > 0 && fn.length < 1200, 'the page still has its setLabSetting');
+  const posts = [];
+  const ctx = vm.createContext({ posts, DEMO: false, stratLabel: (n) => n, refresh: () => {}, toast: () => {},
+    answerWhy: () => 'x', killText: (t) => t, post: async (url, body) => { posts.push([url, body]); return { ok: true }; } });
+  vm.runInContext(fn + '\nglobalThis.f = setLabSetting;', ctx);
+  assert.equal(await ctx.f('lab_x', 'open_min', '1', { from: '5' }), '');
+  assert.equal(await ctx.f('lab_x', 'open_min', '1'), '');
+  assert.equal(JSON.stringify(posts[0]), JSON.stringify(['/api/lab-settings', { strategy: 'lab_x', settings: { open_min: '1' } }]));
+  assert.equal(JSON.stringify(posts[1]), JSON.stringify(posts[0]), 'with or without `from`, the same request');
 });

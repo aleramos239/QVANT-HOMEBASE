@@ -31,6 +31,19 @@
     var n = parseFloat(raw);
     return isFinite(n) ? n : NaN;
   }
+  // A value as the row shows it: an on/off setting as On / Off, anything else as it is.
+  function shown(s, raw) { return s.type === "bool" ? (wire(s, raw) ? "On" : "Off") : plain(raw); }
+  // The value in force as the backend takes it, or null when the Desk did not say.
+  function before(f) {
+    var w = f.cur == null ? null : wire(f.spec, f.cur);
+    return w !== w ? null : w;
+  }
+  // The button shows old -> new before a change ("Set: 1 → 1.5"); plain "Set" while the field holds the value in force, or
+  // nothing (a menu holds "" for a value in force that is not one of its options).
+  function paint(f) {
+    var v = wire(f.spec, f.input.value), was = before(f);
+    f.btn.textContent = v !== v || v === "" || was === null || v === was ? "Set" : "Set: " + shown(f.spec, f.cur) + " \u2192 " + shown(f.spec, f.input.value);
+  }
 
   function build(name, lab, ro) {
     var kept = { sig: JSON.stringify(specs(lab)), rows: [], fields: {}, err: null, ro: false };
@@ -59,7 +72,7 @@
       var btn = el("button", "hb-btn", "Set");
       btn.type = "button";
       f.input = input; f.btn = btn;
-      function mark() { f.dirty = true; kept.err.hidden = true; }
+      function mark() { f.dirty = true; kept.err.hidden = true; paint(f); }
       input.addEventListener("input", mark);
       input.addEventListener("change", mark);
       async function save() {
@@ -68,7 +81,7 @@
         if (typeof root.setLabSetting !== "function") return;
         btn.disabled = true;
         try {
-          var why = await root.setLabSetting(kept.name, s.key, v);
+          var why = await root.setLabSetting(kept.name, s.key, v, { from: before(f) });     // from: the value it replaces
           kept.err.textContent = why || ""; kept.err.hidden = !why;
           if (!why) f.dirty = false;
         } finally { btn.disabled = !!kept.ro; }
@@ -97,7 +110,9 @@
     Object.keys(k.fields).forEach(function (key) {
       var f = k.fields[key], v = valueOf(lab, f.spec);
       f.input.disabled = !!ro; f.btn.disabled = !!ro;
+      f.cur = v;
       if (!f.dirty && D.activeElement !== f.input) f.input.value = plain(v);
+      paint(f);
     });
     return k.rows;
   }
