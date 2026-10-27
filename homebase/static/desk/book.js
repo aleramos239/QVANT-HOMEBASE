@@ -143,12 +143,14 @@ function liveBookingNote(strategy, account) {
   return `It will trade real money ${when}.` +
     (idle.length ? ` Right now ${idle.join(" and ")}, so nothing is placed until that changes.` : "") + acct;
 }
+const bookMachine = () => machineWords() ? ` It runs ${machineWords()}.` : "";     // the one machine reader (core.js)
 async function pickAsg(strategy, account, qty) {
   FREEZE = false;
   closeAsgMenus(false);
+  const was = ((ST.book[strategy] || []).find(a => a.account === account) || {}).qty;
   if (!isDemoAcct(account) && !await confirmDlg(
-      `Book ${stratLabel(strategy)} on ${acctShort(account)} LIVE × ${qty}?`,
-      liveBookingNote(strategy, account), "Book live", false)) { refresh(); return; }
+      `Book ${stratLabel(strategy)} on ${acctShort(account)} LIVE, qty ${was ? was + " → " : ""}${qty}?`,
+      liveBookingNote(strategy, account) + bookMachine(), "Book live", false)) { refresh(); return; }
   const cur = (ST.book[strategy] || []).filter(a => a.account !== account);
   cur.push({account, qty});
   setBook(strategy, cur);
@@ -176,8 +178,8 @@ function editQty(ev, strategy, account, qty) {
           refresh(); return;
         }
         if (!await confirmDlg(
-            `Book ${stratLabel(strategy)} on ${acctShort(account)} LIVE × ${v} (now × ${qty})?`,
-            liveBookingNote(strategy, account), "Book live", false)) { refresh(); return; }
+            `Book ${stratLabel(strategy)} on ${acctShort(account)} LIVE, qty ${qty} → ${v}?`,
+            liveBookingNote(strategy, account) + bookMachine(), "Book live", false)) { refresh(); return; }
       }
       const cur = (ST.book[strategy] || []).map(a =>
         a.account === account ? {account, qty: v} : a);

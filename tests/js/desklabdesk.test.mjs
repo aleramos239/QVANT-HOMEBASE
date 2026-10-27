@@ -415,7 +415,7 @@ test('booking a live account onto a Lab strategy: the Desk\'s own confirm, with 
   const t = load();
   await t.api.pickAsg('lab_nq_orb', 'a2', 1);
   assert.equal(t.confirms.length, 1);
-  assert.equal(t.confirms[0].title, 'Book NQ ORB on APEX…048 LIVE × 1?');
+  assert.equal(t.confirms[0].title, 'Book NQ ORB on APEX…048 LIVE, qty 1?');
   assert.equal(t.confirms[0].body, 'It will trade real money on its next order. Every entry carries a stop held at the broker. Account APEX2941870000048.');
   assert.equal(t.confirms[0].action, 'Book live');
   assert.deepEqual(t.posts, [{ url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }] } }]);
