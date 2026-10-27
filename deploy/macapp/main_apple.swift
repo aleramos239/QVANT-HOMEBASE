@@ -7,9 +7,8 @@
 //    sit inside it (full-size content view). The window carries an EMPTY unified NSToolbar, which is what gives
 //    it macOS 26's toolbar-window shape (26 pt corners) and makes the system place the traffic lights itself.
 //    The toolbar's height and the lights' position are READ FROM THE SYSTEM at launch, never hard-coded.
-//    Proven with real HID events (HB_DEBUG_REAL, 2026-10-02): a click on a page button inside the strip
-//    arrives as one mousedown/mouseup/click, and a press-drag on the empty strip moves the window by exactly
-//    the pointer's travel. HB_NO_TOOLBAR=1 falls back to repositioning the lights by hand (16 pt corners).
+//    (Proven with real mouse events on 2026-10-02: a click on a page button inside the strip arrives as one
+//    mousedown/mouseup/click, and a press-drag on the empty strip moves the window by the pointer's travel.)
 //  * The page follows the window's appearance (View > Appearance: Match System / Light / Dark).
 //  * The new design is a skin: /static/apple/manifest.json on the desk names, per tab, an optional start page
 //    and the stylesheets / scripts to inject at document start. The classic pages are served unchanged, so the
@@ -17,7 +16,7 @@
 //    app behaves like the classic one (its own title bar, no injection): all of the skin or none of it.
 //  * A mousedown on the page's toolbar asks for a window drag through a message handler (a web view swallows
 //    the mouse, so the page has to ask); a double-click there does what the system setting says.
-//  * View menu: Desk / Charts / Lab (⌘1/⌘2/⌘3). Design samples open in their own window, marked "not live".
+//  * View menu: Desk / Charts / Lab (⌘1/⌘2/⌘3).
 //
 // Link handling is the classic viewer's (opus review, three-tabs): a navigation to one of the three tabs' own
 // origins switches to that tab; anything else opens in the default browser. A tab never leaves its own origin.
@@ -72,7 +71,6 @@ struct TabSkin {
 
 struct Skin {
     var tabs: [Tab: TabSkin]
-    var samples: [(title: String, path: String)]
 }
 
 /// Where this macOS puts the traffic lights in a window with a unified toolbar, and how tall that toolbar is.
@@ -194,10 +192,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     var currentTab: Tab = .desk
     var skin: Skin?
     var chrome = Chrome(toolbarHeight: 52, buttonX: [20, 40, 60], buttonSize: NSSize(width: 14, height: 16), measured: false)
-    var sampleWindows: [NSWindow] = []
     var lastMouseDown: NSEvent?
-    var relayouting = false
-    var systemToolbar = false
     var notice: (box: NSBox, label: NSTextField)?     // over the tabs while the current tab's page does not load
     var down: Set<Tab> = []                            // the tabs whose last load failed (retrying)
     var connecting: NSWindow?                          // VPS: "Connecting to the Chicago server…" until the window opens
@@ -265,15 +260,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             win.titlebarAppearsTransparent = true
             win.titleVisibility = .hidden
             win.isMovableByWindowBackground = false
-            if env("HB_NO_TOOLBAR") == nil {
-                // an empty unified toolbar: macOS 26's toolbar-window shape (26 pt corners), lights placed by the system
-                let tb = NSToolbar(identifier: "hb.main")
-                tb.displayMode = .iconOnly
-                win.toolbar = tb
-                win.toolbarStyle = .unified
-                win.titlebarSeparatorStyle = .none
-                systemToolbar = true
-            }
+            // an empty unified toolbar: macOS 26's toolbar-window shape (26 pt corners), lights placed by the system
+            let tb = NSToolbar(identifier: "hb.main")
+            tb.displayMode = .iconOnly
+            win.toolbar = tb
+            win.toolbarStyle = .unified
+            win.titlebarSeparatorStyle = .none
         }
         if debugDir != nil {
             if env("HB_DEBUG_OFFSCREEN") != nil { win.setFrameOrigin(NSPoint(x: -30000, y: -30000)) } else { win.center() }
@@ -312,7 +304,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             guard let self = self else { return }
             self.showTab(startTab)
             self.window.makeKeyAndOrderFront(nil)
-            self.layoutTrafficLights()
             self.connecting?.close()      // after the window is up: closing the last window quits
             self.connecting = nil
         }
@@ -448,11 +439,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             if let s = start, let u = URL(string: s, relativeTo: base), got(u) == nil { start = nil; return nil }
             result[tab] = TabSkin(startPath: start, css: css, js: js)
         }
-        var samples: [(String, String)] = []
-        for s in root["samples"] as? [[String: Any]] ?? [] {
-            if let t = s["title"] as? String, let u = s["url"] as? String { samples.append((t, u)) }
-        }
-        return Skin(tabs: result, samples: samples)
+        return Skin(tabs: result)
     }
 
     /// Ask the system, not a constant: a hidden window with a unified toolbar tells us the toolbar's height and
@@ -480,8 +467,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             }
         }
         // the corner radius AppKit gives a toolbar window (a private, read-only getter: asked, never set)
-        var radius: CGFloat = env("HB_NO_TOOLBAR") == nil ? 26 : 16
-        if env("HB_NO_TOOLBAR") == nil, ref.responds(to: Selector(("_cornerRadius"))),
+        var radius: CGFloat = 26
+        if ref.responds(to: Selector(("_cornerRadius"))),
            let r = (ref.value(forKey: "_cornerRadius") as? NSNumber)?.doubleValue, r >= 6, r <= 40 { radius = CGFloat(r) }
         ref.toolbar = nil
         ref.close()
@@ -492,36 +479,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         return c
     }
 
-    /// Put the traffic lights where the system puts them for a toolbar of this height. AppKit lays the title bar
-    /// out again on resize, key changes and full screen, so this is re-applied each time.
-    private func layoutTrafficLights() {
-        guard skinned, !systemToolbar, let win = window, !relayouting, !win.styleMask.contains(.fullScreen),
-              let close = win.standardWindowButton(.closeButton),
-              let titlebar = close.superview, let container = titlebar.superview else { return }
-        relayouting = true
-        defer { relayouting = false }
-        let h = chrome.toolbarHeight
-        var cf = container.frame
-        cf.size.height = h
-        cf.origin.y = win.frame.height - h
-        if container.frame != cf { container.frame = cf }
-        let kinds: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
-        for (i, kind) in kinds.enumerated() {
-            guard let b = win.standardWindowButton(kind) else { continue }
-            let o = NSPoint(x: chrome.buttonX[i], y: ((h - b.frame.height) / 2).rounded())
-            if b.frame.origin != o { b.setFrameOrigin(o) }
-        }
-    }
-
     /// Full screen has no traffic lights, and the (empty, native) toolbar would sit opaque over the page's own toolbar:
     /// the tabs and buttons were hidden under it. The page draws that band itself, so the native one steps aside
     /// while the window is full screen and comes back when it leaves.
-    func windowWillEnterFullScreen(_ n: Notification) { if systemToolbar { window.toolbar?.isVisible = false } }
-    func windowDidExitFullScreen(_ n: Notification) { if systemToolbar { window.toolbar?.isVisible = true } }
+    func windowWillEnterFullScreen(_ n: Notification) { if skinned { window.toolbar?.isVisible = false } }
+    func windowDidExitFullScreen(_ n: Notification) { if skinned { window.toolbar?.isVisible = true } }
 
     @objc private func windowChanged(_ n: Notification) {
-        layoutTrafficLights()
-        DispatchQueue.main.async { [weak self] in self?.layoutTrafficLights() }
         guard skinned else { return }
         let full = window.styleMask.contains(.fullScreen)
         let key = window.isKeyWindow
@@ -618,7 +582,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         currentTab = tab
         if debugDir == nil { UserDefaults.standard.set(tab.rawValue, forKey: lastTabKey) }
         window.makeFirstResponder(target)
-        layoutTrafficLights()
         showNotice()
     }
 
@@ -627,7 +590,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         guard let body = m.body as? [String: Any], let op = body["op"] as? String else { return }
         switch op {
         case "drag":
-            if debugDir != nil { debugDragRequests += 1; if env("HB_DEBUG_REAL") == nil { return } }
+            if debugDir != nil { debugDragRequests += 1; return }
             if let e = lastMouseDown, e.window === window, ProcessInfo.processInfo.systemUptime - e.timestamp < 0.6 {
                 window.performDrag(with: e)
             }
@@ -638,8 +601,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             case "None": break
             default: window.performZoom(nil)
             }
-        case "tab":
-            if let k = body["tab"] as? String, let t = Tab.allCases.first(where: { $0.key == k }) { showTab(t) }
         default: break
         }
     }
@@ -758,7 +719,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         showNotice()
         windowChanged(Notification(name: NSWindow.didBecomeKeyNotification))
         guard debugDir != nil, let tab = tab(for: w), debugQueue.first == tab else { return }
-        if env("HB_DEBUG_ROUTED") != nil { NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil) }
         let wait = Double(env("HB_DEBUG_WAIT") ?? "4") ?? 4
         DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in self?.debugCapture(tab) }
     }
@@ -788,32 +748,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         if let tab = Tab(rawValue: sender.tag) { showTab(tab) }
     }
 
-    @objc private func openClassic() {
-        // installed as "Homebase", the old viewer is kept as "Homebase Classic"; beside "Homebase Next" it is "Homebase"
-        let apps = NSHomeDirectory() + "/Applications/"
-        for name in ["Homebase Classic.app", "Homebase.app"] where apps + name != Bundle.main.bundlePath && FileManager.default.fileExists(atPath: apps + name) {
-            NSWorkspace.shared.open(URL(fileURLWithPath: apps + name))
-            return
-        }
-    }
-
-    // ---------------------------------------------------------------- design samples: their own window, never a tab
-    @objc private func openSample(_ sender: NSMenuItem) {
-        guard let s = skin?.samples, sender.tag < s.count,
-              let url = URL(string: s[sender.tag].path, relativeTo: origin(of: Tab.desk.baseURL)) else { return }
-        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 900),
-                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        win.title = "Sample (not live): " + s[sender.tag].title
-        win.isReleasedWhenClosed = false
-        let wv = WKWebView(frame: win.contentView!.bounds, configuration: WKWebViewConfiguration())
-        wv.autoresizingMask = [.width, .height]
-        win.contentView!.addSubview(wv)
-        wv.load(URLRequest(url: url.absoluteURL))
-        win.center()
-        win.makeKeyAndOrderFront(nil)
-        sampleWindows.append(win)
-    }
-
     private func buildMenu() {
         let main = NSMenu()
 
@@ -823,9 +757,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         let reload = NSMenuItem(title: "Reload", action: #selector(reloadPage), keyEquivalent: "r")
         reload.target = self
         appMenu.addItem(reload)
-        let classic = NSMenuItem(title: "Open Classic Homebase", action: #selector(openClassic), keyEquivalent: "")
-        classic.target = self
-        appMenu.addItem(classic)
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "Hide \(appName)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(withTitle: "Quit \(appName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -854,19 +785,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             item.target = self
             item.tag = tab.rawValue
             viewMenu.addItem(item)
-        }
-        if let samples = skin?.samples, !samples.isEmpty {
-            viewMenu.addItem(NSMenuItem.separator())
-            let sItem = NSMenuItem(title: "Design Samples", action: nil, keyEquivalent: "")
-            let sMenu = NSMenu(title: "Design Samples")
-            for (i, s) in samples.enumerated() {
-                let it = NSMenuItem(title: s.title, action: #selector(openSample(_:)), keyEquivalent: "")
-                it.target = self
-                it.tag = i
-                sMenu.addItem(it)
-            }
-            sItem.submenu = sMenu
-            viewMenu.addItem(sItem)
         }
         if skinned {
             viewMenu.addItem(NSMenuItem.separator())
@@ -935,19 +853,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
                     if type == .leftMouseDown { wv.mouseDown(with: ev) } else { wv.mouseUp(with: ev) }
                 }
             }
-            // ...and the same through AppKit's own routing (NSApp.sendEvent -> NSWindow -> hit test), 40% across
-            if env("HB_DEBUG_ROUTED") != nil {
-                self.debugLog.append("key=\(self.window.isKeyWindow) active=\(NSApp.isActive) visible=\(self.window.isVisible)")
-                // a control point in the content first (must arrive), then the toolbar strip
-                for q in [NSPoint(x: self.window.frame.width * 0.6, y: self.window.frame.height - 300), NSPoint(x: self.window.frame.width * 0.4, y: p.y)] {
-                    for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-                        if let ev = NSEvent.mouseEvent(with: type, location: q, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                                                       windowNumber: self.window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1) {
-                            NSApp.sendEvent(ev)
-                        }
-                    }
-                }
-            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 let probe = """
                 JSON.stringify({ua:navigator.userAgent,inner:[innerWidth,innerHeight],dpr:devicePixelRatio,cls:document.documentElement.className,
@@ -992,83 +897,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
                 }
             }
         }
-        let afterJS: () -> Void = { [weak self] in
-            if env("HB_DEBUG_REAL") != nil { self?.realEventTest(wv) { finish() } } else { finish() }
-        }
         if let path = env("HB_DEBUG_JS"), let js = try? String(contentsOfFile: path, encoding: .utf8) {
             wv.evaluateJavaScript(js) { _, _ in
-                DispatchQueue.main.asyncAfter(deadline: .now() + (Double(env("HB_DEBUG_JSWAIT") ?? "1.5") ?? 1.5)) { afterJS() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + (Double(env("HB_DEBUG_JSWAIT") ?? "1.5") ?? 1.5)) { finish() }
             }
         } else {
-            afterJS()
-        }
-    }
-
-    // ---------------------------------------------------------------- debug: REAL mouse events (HB_DEBUG_REAL)
-    // Posts genuine HID mouse events (the same path a hand on the trackpad takes, WindowServer included) at this
-    // window only: every event is preceded by a check that the topmost window under the point is THIS window, and
-    // the run stops if it is not. The pointer is put back where it was. Used once, on a throwaway page, to prove
-    // that a click in the toolbar strip reaches the page and that a drag there moves the window.
-    private func realEventTest(_ wv: WKWebView, done: @escaping () -> Void) {
-        NSApp.activate(ignoringOtherApps: true)
-        window.orderFrontRegardless()
-        window.makeKey()
-        let screenH = NSScreen.screens.first?.frame.height ?? 0
-        let home = CGEvent(source: nil)?.location ?? .zero
-        let src = CGEventSource(stateID: .hidSystemState)
-        func mine(_ p: NSPoint) -> Bool { NSWindow.windowNumber(at: p, belowWindowWithWindowNumber: 0) == window.windowNumber }
-        func post(_ type: CGEventType, _ p: NSPoint) -> Bool {
-            guard mine(p) else { debugLog.append("ABORT: another window is on top at \(Int(p.x)),\(Int(p.y))"); return false }
-            CGEvent(mouseEventSource: src, mouseType: type, mouseCursorPosition: CGPoint(x: p.x, y: screenH - p.y), mouseButton: .left)?.post(tap: .cghidEventTap)
-            return true
-        }
-        func after(_ t: Double, _ f: @escaping () -> Void) { DispatchQueue.main.asyncAfter(deadline: .now() + t, execute: f) }
-        let finishUp: () -> Void = {
-            CGWarpMouseCursorPosition(home)
-            after(0.4) { done() }
-        }
-        after(0.8) { [self] in
-            debugLog.append("real: key=\(window.isKeyWindow) active=\(NSApp.isActive) frame=\(window.frame)")
-            wv.evaluateJavaScript("(function(){var b=document.querySelector('[data-hb-realtest]');if(!b)return null;var r=b.getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2];})()") { [self] v, _ in
-                let f = window.frame
-                // 1. a click on a page button that sits in the toolbar strip
-                var steps: [(Double, () -> Bool)] = []
-                if let a = v as? [Double], a.count == 2 {
-                    let b = NSPoint(x: f.minX + a[0], y: f.maxY - a[1])
-                    steps.append((0.05, { post(.mouseMoved, b) }))
-                    steps.append((0.25, { post(.leftMouseDown, b) }))
-                    steps.append((0.08, { post(.leftMouseUp, b) }))
-                } else { debugLog.append("real: no [data-hb-realtest] button") }
-                // 2. a press-drag-release on the empty part of the strip: the window should move by the same amount
-                let s0 = NSPoint(x: f.minX + f.width * 0.62, y: f.maxY - chrome.toolbarHeight / 2)
-                steps.append((0.5, { post(.mouseMoved, s0) }))
-                steps.append((0.25, { post(.leftMouseDown, s0) }))
-                for i in 1...12 {
-                    let q = NSPoint(x: s0.x + CGFloat(i) * 5, y: s0.y - CGFloat(i) * 3)
-                    steps.append((0.03, {
-                        // while a window drag is in flight the window follows the pointer, so the point stays inside it
-                        CGEvent(mouseEventSource: src, mouseType: .leftMouseDragged, mouseCursorPosition: CGPoint(x: q.x, y: screenH - q.y), mouseButton: .left)?.post(tap: .cghidEventTap)
-                        return true
-                    }))
-                }
-                let s1 = NSPoint(x: s0.x + 60, y: s0.y - 36)
-                steps.append((0.15, {
-                    CGEvent(mouseEventSource: src, mouseType: .leftMouseUp, mouseCursorPosition: CGPoint(x: s1.x, y: screenH - s1.y), mouseButton: .left)?.post(tap: .cghidEventTap)
-                    return true
-                }))
-                func run(_ i: Int) {
-                    if i >= steps.count {
-                        after(0.6) { [self] in
-                            let g = window.frame
-                            debugLog.append("real: window moved by \(Int(g.minX - f.minX)),\(Int(g.minY - f.minY)) (asked 60,-36)")
-                            finishUp()
-                        }
-                        return
-                    }
-                    after(steps[i].0) { if steps[i].1() { run(i + 1) } else { finishUp() } }
-                }
-                run(0)
-            }
+            finish()
         }
     }
 }
