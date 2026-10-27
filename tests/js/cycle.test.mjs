@@ -306,3 +306,17 @@ test('1.2: a cycle still holding an account the Desk removed switches OFF and ON
   assert.match(n.toasts[0], /Save or undo/);
   assert.match(n.c.cycleHtml(G), /Save: Risk \$1,000 → \$5,000/);
 });
+
+test('A: an account the saved cycle lists but the Desk removed is never "gone" in the Save diff: typing a field back leaves no draft', async () => {
+  const STALE = { ...LIVE_ON, accounts: ['a', 'gone'] };
+  const { c, els, sent } = ctx({ cyc: STALE, risk: '1500', ticked: ['a'] });
+  c.cycleEdit('g1');
+  assert.equal(els['.cyc-save'].innerHTML.match(/>Save: (.*)<\/button>/)[1], 'Risk $1,000 → $1,500', 'no "−GONE" beside the real change');
+  els['.cyc-risk'].value = '1000';                                    // typed back to what the desk has
+  c.cycleEdit('g1');
+  assert.equal(els['.cyc-save'].innerHTML, '', 'no Save button left');
+  assert.equal(c.draft().g1, undefined, 'no draft left');
+  els['.cyc-risk'].value = '1500';
+  await c.saveCycle('g1');                                            // pressing Save: the same body as before
+  assert.equal(JSON.stringify(sent[0][1]), OLD_BODY(1500, 17, ['a']));
+});

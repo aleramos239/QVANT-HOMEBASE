@@ -120,7 +120,8 @@ const cycleEnvWord = (a) => !isDemoAcct(a) ? "LIVE" : ((((ST && ST.accounts) || 
    up: risk or Most goes up -- or risk goes to 0 ("each strategy's own size"), which may be bigger, so it counts as up. */
 function cycleDiff(cyc, nw) {
   const old = cyc ? {risk: cyc.risk_usd, minis: cyc.max_minis, accounts: cyc.accounts || []} : {risk: 1000, minis: 17, accounts: []};
-  const added = nw.accounts.filter(a => !old.accounts.includes(a)), gone = old.accounts.filter(a => !nw.accounts.includes(a));
+  // an account the Desk removed is not "gone" by a save: no tick can show it, and the save never sends it (cycleBody)
+  const added = nw.accounts.filter(a => !old.accounts.includes(a)), gone = old.accounts.filter(a => a in ((ST && ST.accounts) || {}) && !nw.accounts.includes(a));
   const parts = [];
   if (nw.risk_usd !== old.risk) parts.push(`Risk ${cycUsd(old.risk)} → ${cycUsd(nw.risk_usd)}`);
   if (nw.max_minis !== old.minis) parts.push(`Most ${old.minis} → ${Number.isFinite(nw.max_minis) ? nw.max_minis : "?"}`);
