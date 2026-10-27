@@ -331,6 +331,7 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
         aid = str(body.get("account") or "")
         if aid not in cfg.accounts:
             raise HTTPException(404, f"unknown account {aid!r}")
+        paper = cfg.accounts[aid].paper      # read now: an account removed during the wait still gets its test order cancelled (S2)
         ad = adapters.get(aid)
         if ad is None or not ad.connected:
             raise HTTPException(409, "account not connected")
@@ -393,10 +394,18 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
                 except Exception as e:  # noqa: BLE001
                     trace["readback_error"] = str(e)
         finally:
+            # the fallback reaches the WHOLE account (every order, every position): not on any broker account while armed (S2).
+            # Not only `live`: the funded prop accounts (Apex PA, Lucid) are on Tradovate's demo side (live=False).
+            guarded = not paper and cfg.armed
+            # no "or disarm first": a disarmed desk's fallback still sweeps the whole account (guarded keys on armed, the owner's call)
+            held = (f"Not done: the desk is armed and {aid} is a broker account (live, funded or demo), so the self-test "
+                    "does not cancel every order or flatten the account. Check it on the broker.")
             if r.ok and r.order_id:
                 c = await ad.cancel_order_by_id(r.order_id)
                 trace["cancelled"] = {"ok": c.ok, "error": c.error}
-                if not c.ok:
+                if not c.ok and guarded:
+                    trace["cancel_all_fallback"] = {"ok": False, "error": held}
+                elif not c.ok:
                     ca = await ad.cancel_all()
                     trace["cancel_all_fallback"] = {"ok": ca.ok, "error": ca.error}
                 await asyncio.sleep(1.0)
@@ -407,7 +416,9 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
                     # cancel lands — never leave a position behind
                     net = await ad.get_net_position(symbol)
                     trace["net_after_cancel"] = net
-                    if net:
+                    if net and guarded:
+                        trace["emergency_flatten"] = {"ok": False, "error": held}
+                    elif net:
                         f = await ad.flatten_all()
                         trace["emergency_flatten"] = {"ok": f.ok, "error": f.error}
                 except Exception as e:  # noqa: BLE001

@@ -349,3 +349,35 @@ test('the account cycle says what it skipped and why, and which accounts it runs
   assert.match(l({ event: 'group_skipped', group: 'g4', strategy: 'lab_x', reason: 'No account of its group could take this trade.',
     accounts: { '1234567049': 'busy' } }).text, /skipped — No account of its group could take this trade\. \(.*049: busy\)/);
 });
+
+// ---- the self-test order (S2) -------------------------------------------------------------------------------------------------
+test('the self-test line says what happened to the test order and to the account: cancelled, swept, or still there; red when something may be left', () => {
+  const held = { ok: false, error: 'Not done: the desk is armed and main is a broker account (live, funded or demo), ...' };
+  const yes = { ok: true, error: null }, no = { ok: false, error: 'x' };
+  const placed = { ok: true, order_id: 'plain', error: null };
+  const st = (r) => ({ ...line({ event: 'selftest_order', account: '1234567049', placed, ...r }) });
+  const at = (t, tone) => ({ text: 'Self-test order on …049 — ' + t, tone });
+  const check = ' Check it on the broker.';
+  // its own cancel worked
+  assert.deepEqual(st({ cancelled: yes }), at('placed and cancelled', ''));
+  assert.deepEqual(st({ cancelled: yes, net_after_cancel: 1, emergency_flatten: yes }),
+    at('placed and cancelled; a position was left, so every position on the account was flattened', 'warn'));      // disarmed or paper: flatten_all ran
+  assert.deepEqual(st({ cancelled: yes, net_after_cancel: 1, emergency_flatten: held }), at('placed and cancelled; a position may be open.' + check, 'neg'));      // armed: held
+  assert.deepEqual(st({ cancelled: yes, net_after_cancel: 1, emergency_flatten: no }), at('placed and cancelled; a position may be open.' + check, 'neg'));       // flatten failed
+  // its own cancel failed, armed: nothing swept, so it may still be there (and a position, when the account held one)
+  const still = 'placed, but its cancel failed: it may still be on the account';
+  assert.deepEqual(st({ cancelled: no }), at(still + '.' + check, 'neg'));
+  assert.deepEqual(st({ cancelled: no, cancel_all_fallback: held }), at(still + '.' + check, 'neg'));
+  assert.deepEqual(st({ cancelled: no, cancel_all_fallback: held, net_after_cancel: 1, emergency_flatten: held }), at(still + '; a position may be open.' + check, 'neg'));
+  assert.deepEqual(st({ cancelled: no, cancel_all_fallback: no }), at(still + '.' + check, 'neg'));      // disarmed, and cancel-all failed too
+  // its own cancel failed, disarmed or paper: cancel-all ran, so it is not "still on the account"
+  const swept = 'placed; its own cancel failed, so every order on the account was cancelled';
+  assert.deepEqual(st({ cancelled: no, cancel_all_fallback: yes }), at(swept, 'warn'));
+  assert.deepEqual(st({ cancelled: no, cancel_all_fallback: yes, net_after_cancel: 1, emergency_flatten: yes }),
+    at(swept + '; a position was left, so every position on the account was flattened', 'warn'));
+  assert.deepEqual(st({ cancelled: no, cancel_all_fallback: yes, net_after_cancel: 1, emergency_flatten: no }), at(swept + '; a position may be open.' + check, 'neg'));
+  // placed, but the broker gave no order id: nothing was cancelled
+  assert.deepEqual(st({ placed: { ok: true, order_id: null, error: null } }),
+    at('placed, but it has no order id, so it was not cancelled: it may still be on the account.' + check, 'neg'));
+  assert.deepEqual(st({ placed: { ok: false, error: 'no' } }), at('refused: no', 'warn'));
+});
