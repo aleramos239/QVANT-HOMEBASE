@@ -135,6 +135,47 @@ test('one row, never two: until the Desk knows it, the Step A row draws it; the 
   assert.match(none.side(), /lab_nq_orb/);
 });
 
+// ---- WP1.14 the Setup summary --------------------------------------------------------------------------------------------
+const setupOf = (html) => { const i = html.indexOf('<div class="sec setup">'); assert.ok(i >= 0, 'a Setup block'); return html.slice(i, html.indexOf('</div></div>', i) + 12); };
+const setupRow = (html, k) => (new RegExp(`<span class="t">${k}</span><span class="h">([^<]*)</span>`).exec(setupOf(html)) || [])[1];
+
+test('WP1.14 a Lab strategy\'s Setup: accounts, LIVE / paper, the group\'s $ risk, limits, window, group and machine in one place', () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 2 }] } });
+  t.ctx.ST.groups = { g3: { name: 'apex 300k', members: ['lab_nq_orb'], accounts: ['a2'], risk_usd: 500, max_minis: 3, on: true, next: 'a2' } };
+  t.ctx.ST.machine = 'server';
+  const html = t.view();
+  assert.equal(setupRow(html, 'Accounts'), 'Lucid Eval #1 demo ×1 · APEX…048 LIVE ×2');
+  assert.equal(setupRow(html, 'LIVE / paper'), 'LIVE on 1 · demo on 1');
+  assert.equal(setupRow(html, 'Size'), '$500 at risk a trade (the apex 300k group sizes it)');
+  assert.equal(setupRow(html, 'Limits'), 'Trades a day 2 · Most contracts per account 1 · Most at risk per trade $300 · No new trade after 11:00 ET · Flat by 15:55 ET');
+  assert.equal(setupRow(html, 'Window'), 'NQ · 09:25-16:00 ET · from the Lab', 'the Lab strategy\'s own spec line');
+  assert.equal(setupRow(html, 'Group'), 'apex 300k (account cycle ON, next APEX…048)');
+  assert.equal(setupRow(html, 'Machine'), 'the SERVER · Chicago');
+  assert.doesNotMatch(setupOf(html), /mcap warn/, 'nothing missing: no red line');
+  assert.doesNotMatch(setupOf(html), /<button|<input|onclick/, 'shown only: nothing here edits the window or anything else');
+});
+
+test('WP1.14 what still stops it is a red line at the top: "Limits needed first", "Desk not armed"', () => {
+  const t = load({ strategies: { lab_nq_orb: deskStrat({ limits: null }) } });
+  t.ctx.ST.armed = false;
+  const box = setupOf(t.view());
+  assert.match(box, /^<div class="sec setup"><h2>Setup<\/h2><div class="mcap warn">Limits needed first<\/div><div class="mcap warn">Desk not armed<\/div>/);
+  assert.equal(setupRow(t.view(), 'LIVE / paper'), 'no account: it runs in shadow');
+  assert.equal(setupRow(t.view(), 'Limits'), undefined);
+  assert.equal(setupRow(t.view(), 'Machine'), undefined, 'an unknown machine is not named');
+});
+
+test('WP1.14 the built-in page has the Setup too: its contracts, when it fires, flat time and days, shown only', () => {
+  const t = load({ book: { nq930: [{ account: 'a2', qty: 3 }] } });
+  t.ctx.ST.strategies.nq930.cfg.fire_et = '09:30:00';
+  const html = t.ctx.api.stratView('nq930');
+  assert.equal(setupRow(html, 'Accounts'), 'APEX…048 LIVE ×3');
+  assert.equal(setupRow(html, 'Size'), '3 contracts an account');
+  assert.equal(setupRow(html, 'Window'), 'fires 09:30 ET · flat by 15:55 ET · every weekday');
+  assert.equal(setupRow(html, 'Group'), 'none');
+  assert.doesNotMatch(setupOf(html), /Limits needed first|<button|<input/);
+});
+
 test('WP1.8 sidebar accounts: a LIVE / DEMO / PAPER tag on every row, what it holds, and one in a trade is never under the cut', () => {
   const accounts = {};
   for (let i = 1; i <= 14; i++) accounts['d' + i] = { label: 'Demo ' + i, env: 'demo', connected: true, balance: 1000 };

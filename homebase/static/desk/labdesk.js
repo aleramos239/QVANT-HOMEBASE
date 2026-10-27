@@ -170,6 +170,7 @@ function labDeskView(name, s) {
     ${stateNote ? `<div class="sd-note">${esc(stateNote)}</div>` : ""}
     <div class="sd-note">${esc(DeskLab.deskNote(book.length > 0))}</div>
     ${ro ? `<div class="sd-note">${esc(DeskLab.OTHER_DESK)}</div>` : ""}
+    ${setupHtml(name, s)}
     ${lab.auto === true ? "" : `<div class="sec"><h2>Limits</h2><div class="agroup feed static">${limits}</div>${winNote ? `<div class="mcap warn">${esc(winNote)}</div>` : ""}
       <button class="btn btn-outline btn-sm" onclick="openLabLimits(${jsArg(name)})"${ro ? " disabled" : ""}>${esc(DeskLab.EDIT_LIMITS)}</button></div>`}
     <div class="sec"><h2>${shadow ? "Today, in shadow" : "Today"}</h2>${today}${actBtn("s:" + name)}</div>${lab.name ? stratCal(name, lab.name) : ""}

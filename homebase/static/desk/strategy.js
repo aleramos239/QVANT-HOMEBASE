@@ -299,6 +299,7 @@ function stratView(name) {
     <div class="sd-top"><div><h1 class="sd-title">${esc(stratLabel(name))}</h1><div class="sp mono">${esc(specOf(c, name))}</div></div>${sw}</div>
     <div class="sd-state"><b>${esc(state)}</b>${p != null ? ` · today ${usdS(p)}` : ""}</div>
     <div class="sd-note">${esc(execTxt)}</div>
+    ${setupHtml(name, s)}
     ${eqChart(name)}${figs}${links}
     ${twin ? labCurveHtml(name) + labResHtml(name, name) : ""}
     <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div><div class="mcap acct-note">An account's balance and its green or red figure are the whole account: every strategy and every manual trade on it, not this strategy alone.</div>` : ""}${rotationHtml(name)}${addForm}</div>
@@ -310,3 +311,30 @@ function stratView(name) {
     ${hide.locked ? `<div class="mcap">Remove from Desk: ${esc(hide.reason)}. Switch it off first.</div>` : ""}`;
 }
 
+/* WP1.14 The Setup summary at the top of a strategy's page: the whole setup in one place, read only. The window and the days are
+   shown, never edited here (editing them would change what it trades). Red lines first: what still stops it trading. */
+function setupHtml(name, s) {
+  const c = s.cfg || {}, lab = c.kind === "lab" ? (s.lab || {}) : null, book = (ST.book && ST.book[name]) || [], accts = ST.accounts || {};
+  const envOf = (id) => (accts[id] || {}).env, word = (e) => e === "live" ? "LIVE" : e === "demo" || e === "paper" ? e : "";
+  const red = [...(lab && DeskLab.accountsLock(s).caption === DeskLab.LIMITS_CAPTION ? ["Limits needed first"] : []),
+    ...(ST.armed ? [] : ["Desk not armed"])];
+  const cyc = Object.values(ST.groups || {}).find(g => (g.members || []).includes(name));
+  const dg = cyc ? null : DESKGROUPS.groups.find(g => g.members.includes(name));
+  const qs = [...new Set(book.map(a => +a.qty || 1))], whole = (v) => usd(v).replace(/\.00$/, "");
+  const n = (e) => book.filter(a => envOf(a.account) === e).length;
+  const rows = [
+    ["Accounts", book.map(a => `${acctShort(a.account)} ${word(envOf(a.account))} ×${+a.qty || 1}`.replace("  ", " ")).join(" · ") || "none yet"],
+    ["LIVE / paper", book.length ? [["LIVE", n("live")], ["demo", n("demo")], ["paper", n("paper")]].filter(x => x[1]).map(x => `${x[0]} on ${x[1]}`).join(" · ") || "—"
+      : lab ? "no account: it runs in shadow" : "no account"],
+    ["Size", lab && cyc && cyc.on && cyc.risk_usd > 0 ? `${whole(cyc.risk_usd)} at risk a trade (the ${cyc.name} group sizes it)`
+      : qs.length === 1 ? `${qs[0]} contract${qs[0] === 1 ? "" : "s"} an account` : qs.length ? `${Math.min(...qs)}-${Math.max(...qs)} contracts an account` : "—"],
+    ...(lab && lab.limits ? [["Limits", DeskLab.limitsRows(lab.limits).map(x => `${x.k} ${x.v}`).join(" · ")]] : []),
+    ["Window", lab ? specOf(c, name) : [c.kind === "bars" ? `${c.bar_minutes}-minute bars` : c.fire_et ? `fires ${String(c.fire_et).slice(0, 5)} ET` : "",
+      c.flat_et ? `flat by ${c.flat_et} ET` : "", (c.only_dates || []).length ? `only on ${c.only_dates.length} set day${c.only_dates.length === 1 ? "" : "s"}` : "every weekday"]
+      .filter(Boolean).join(" · ")],
+    ["Group", cyc ? `${cyc.name} (account cycle ${cyc.on ? "ON" : "OFF"}${cyc.on && cyc.next ? `, next ${acctShort(cyc.next)}` : ""})` : dg ? dg.name : "none"],
+    ...(machineWords() ? [["Machine", machineWords().replace(/^on /, "")]] : []),
+  ];
+  return `<div class="sec setup"><h2>Setup</h2>${red.map(t => `<div class="mcap warn">${esc(t)}</div>`).join("")}
+    <div class="agroup feed static">${rows.map(([k, v]) => `<div class="feed-row"><span class="t">${esc(k)}</span><span class="h">${esc(v)}</span></div>`).join("")}</div></div>`;
+}
