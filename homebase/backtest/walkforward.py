@@ -1116,10 +1116,12 @@ class WalkForwardManager(GridManager):
     def list(self, limit: int = 20) -> list[dict]:
         out = super().list(limit)
         for g in out:
-            j = read_json(self.grids / g["id"] / "grid.json", {}) or {}
-            g["metric"] = (j.get("walkforward") or {}).get("metric")
-            g["compare"] = bool((j.get("walkforward") or {}).get("compare"))
-            g["test_months"] = (j.get("walkforward") or {}).get("test_months")
-            g["select_months"] = (j.get("walkforward") or {}).get("select_months", SELECT_MONTHS)
-            g["scheme"] = (j.get("walkforward") or {}).get("scheme", "pick")
+            g.update(self._on_file(self.grids / g["id"] / "grid.json", _wf_row))
         return out
+
+
+def _wf_row(j: dict) -> dict:
+    """What a walk-forward's /walkforwards row adds to its grid's."""
+    w = j.get("walkforward") or {}
+    return {"metric": w.get("metric"), "compare": bool(w.get("compare")), "test_months": w.get("test_months"),
+            "select_months": w.get("select_months", SELECT_MONTHS), "scheme": w.get("scheme", "pick")}

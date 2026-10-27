@@ -37,13 +37,14 @@ import secrets
 import subprocess
 import sys
 import threading
+import time
 from collections import deque
 from pathlib import Path
 
 from .. import draftstore, strategies
 from . import controls as ctlmod, drafthost, runner
 from .discipline import WF_OOS_ONLY, parse_range
-from .runner import RUN_ID, _now, read_json, write_json
+from .runner import RUN_ID, _now, _settled, _stamp, read_json, write_json
 from .slots import NO_BACKTESTS, QUIET_MSG, Slots, backtests_off, shared_dir
 from .tape import ARCHIVE, CACHE
 
@@ -333,6 +334,19 @@ def _summary(run: dict | None) -> dict:
             "sessions": cov.get("sessions"), "used": cov.get("used")}
 
 
+_ON_FILE: dict = {}                 # (path, fn) -> (the file's stamp, fn's answer): GridManager._on_file
+_ON_FILE_LOCK = threading.Lock()
+
+
+def _grid_row(g: dict):
+    """A grid's /grids row, None for an empty grid.json."""
+    if not g:
+        return None
+    return {"id": g["id"], "strategy": g.get("strategy"), "created": g.get("created"),
+            "status": g.get("status"), "done": g.get("done"), "total": g.get("total"),
+            "axes": [a["key"] for a in g.get("axes", [])]}
+
+
 class GridManager:
     """The chart service's handle on heat-map grids (thread-safe; no asyncio).
 
@@ -439,17 +453,31 @@ class GridManager:
         with self._lock:
             return self._view(gid)
 
+    @staticmethod
+    def _on_file(path: Path, fn):
+        """fn(the JSON at `path`, {} when it does not read), kept until the file changes (its stamp, taken before the read;
+        a file there that did not read, or written in the last 2 s, is never kept)."""
+        now, stamp, key = time.time_ns(), _stamp(path), (str(path), fn.__module__, fn.__qualname__)
+        with _ON_FILE_LOCK:
+            hit = _ON_FILE.get(key)
+        if hit is not None and hit[0] == stamp:
+            return copy.deepcopy(hit[1])
+        got = read_json(path, None)
+        val = fn(got or {})
+        if (got is not None or stamp is None) and _settled(now, stamp):
+            with _ON_FILE_LOCK:
+                _ON_FILE[key] = (stamp, copy.deepcopy(val))
+        return val
+
     def list(self, limit: int = 20) -> list[dict]:
         out = []
         for d in sorted((p for p in self.grids.iterdir() if RUN_ID.match(p.name)), key=lambda p: p.name,
                         reverse=True)[:limit]:
             with self._lock:
-                g = copy.deepcopy(self._live[d.name]) if d.name in self._live else read_json(d / "grid.json", {})
-            if not g:
-                continue
-            out.append({"id": g["id"], "strategy": g.get("strategy"), "created": g.get("created"),
-                        "status": g.get("status"), "done": g.get("done"), "total": g.get("total"),
-                        "axes": [a["key"] for a in g.get("axes", [])]})
+                row = _grid_row(copy.deepcopy(self._live[d.name])) if d.name in self._live else \
+                    self._on_file(d / "grid.json", _grid_row)
+            if row is not None:
+                out.append(row)
         return out
 
     def cell_dir(self, gid: str, i: int) -> Path:

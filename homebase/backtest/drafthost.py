@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import sys
 import threading
+import time
 import types
 from pathlib import Path
 
@@ -96,6 +97,8 @@ def is_draft_req(req) -> bool:
 
 _cache: dict = {}
 _cache_lock = threading.Lock()
+_entries: dict = {}     # (path, name, mtime_ns, size) -> the catalog entry read from that file: only one draft changed is
+SETTLED_NS = 2_000_000_000      # read again; kept only once the file is 2 s old (a write after that always moves its stamp)
 
 
 def _stamp_of(base: Path) -> tuple:
@@ -113,28 +116,39 @@ def catalog(base: Path | None = None, builtin_ids=()) -> list[dict]:
     """The drafts' catalog entries, read statically (no draft code runs), cached until a file changes --
     failures included. A draft whose metadata cannot be read statically is listed with `error`."""
     base = Path(base) if base is not None else draftstore.drafts_dir()
-    stamp_ = _stamp_of(base)
+    now, stamp_ = time.time_ns(), _stamp_of(base)      # now: before the stamps (the 2 s rule)
     if not stamp_:
         return []
     key = (str(base), stamp_, tuple(sorted(builtin_ids)))
     with _cache_lock:
         if key in _cache:
             return _cache[key]
-    out = []
+    global _entries
+    stamps = {name: (m, size) for name, m, size in stamp_}
+    out, kept = [], {}
     for name, p in draftstore.list_files(base):
         sid = draftstore.draft_id(name)
         entry = {"id": sid, "name": name, "draft": True, "file": str(p)}
         if sid in set(builtin_ids):
             continue                                   # never shadow a built-in
-        try:
-            cls = stub_class(name, p.read_text(encoding="utf-8"))
-            out.append({**cls.describe(), "draft": True, "file": str(p),
-                        "session_independent": cls.session_independent, "doc": cls.__doc__ or ""})
-        except (DraftError, OSError, UnicodeDecodeError) as e:
-            out.append({**entry, "error": str(e), "inputs": []})
+        fkey = (str(p), name, *stamps[name]) if name in stamps and now - stamps[name][0] >= SETTLED_NS else None
+        got = _entries.get(fkey) if fkey is not None else None
+        if got is None:
+            try:
+                cls = stub_class(name, p.read_text(encoding="utf-8"))
+                got = {**cls.describe(), "draft": True, "file": str(p),
+                       "session_independent": cls.session_independent, "doc": cls.__doc__ or ""}
+            except (DraftError, UnicodeDecodeError) as e:      # the file's own text: kept with it
+                got = {**entry, "error": str(e), "inputs": []}
+            except OSError as e:                               # not the file's text: read again next time
+                got, fkey = {**entry, "error": str(e), "inputs": []}, None
+        out.append(got)
+        if fkey is not None:
+            kept[fkey] = got
     with _cache_lock:
         _cache.clear()
         _cache[key] = out
+        _entries = kept
     return out
 
 
