@@ -52,6 +52,7 @@ from bisect import bisect_left, bisect_right
 from pathlib import Path
 from typing import Callable, Iterable
 
+from .. import qos
 from ..backtest.engine import Costs, run_session, to_tick
 from ..backtest.tape import ARCHIVE, CACHE, ET, Tape, et_ns, stable_sorted
 from ..contracts import tick_size
@@ -682,8 +683,8 @@ def spawn_backtest(folder: Path) -> subprocess.Popen:
     folder.mkdir(parents=True, exist_ok=True)
     log = open(folder / "backtest.log", "ab")
     try:
-        return subprocess.Popen([sys.executable, "-m", "homebase.charts.paper", "backtest",
-                                 "--folder", str(folder)], cwd=repo_root(), stdout=log,
+        return subprocess.Popen(qos.utility([sys.executable, "-m", "homebase.charts.paper", "backtest",
+                                             "--folder", str(folder)]), cwd=repo_root(), stdout=log,
                                 stderr=subprocess.STDOUT)
     finally:
         log.close()                          # the child holds its own descriptor

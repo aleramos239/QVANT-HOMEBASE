@@ -58,7 +58,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .. import draftstore, ideastore, paths
+from .. import draftstore, ideastore, paths, qos
 from .client import ToolError
 
 ENV_BP, ENV_PYTHON = "HOMEBASE_BP", "HOMEBASE_BP_PYTHON"
@@ -484,7 +484,7 @@ class BlueprintMixin:
         # never this server's own stdin: that is the JSON-RPC stream
         feed = {"stdin": subprocess.DEVNULL} if stdin is None else {"input": json.dumps(stdin)}
         try:
-            p = subprocess.run(argv, capture_output=True, encoding="utf-8", errors="replace", timeout=timeout,
+            p = subprocess.run(qos.utility(argv), capture_output=True, encoding="utf-8", errors="replace", timeout=timeout,
                                cwd=str(Path(script).parent), env={**os.environ, "PYTHONIOENCODING": "utf-8"}, **feed)
         except subprocess.TimeoutExpired:
             raise ToolError(f"The blueprint toolkit did not answer `{cmd}` within {timeout:g} s and was stopped."
