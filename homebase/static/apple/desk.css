@@ -35,6 +35,9 @@ html.hb-apple .hb-ready-word { -webkit-appearance: none; appearance: none; borde
 html.hb-apple .hb-ready-word[data-lvl=""] { color: var(--a-label-2); font-weight: 400; }
 html.hb-apple .hb-ready-word[data-lvl="warn"] { color: var(--a-orange); }
 html.hb-apple .hb-ready-word[data-lvl="bad"] { color: var(--a-red-text); }
+/* chart trading ON (desk.js chartWords), under the readiness word, armed or not: orange, never red (red is ARMED) */
+html.hb-apple .hb-ct-chip { display: inline-flex; align-items: center; height: 17px; padding: 0 7px; border-radius: var(--hb-bubble-r); white-space: nowrap; box-sizing: border-box;
+  font-size: 10px; line-height: 13px; font-weight: 590; background: color-mix(in srgb, var(--a-orange) 16%, transparent); color: var(--a-orange); }
 /* the pill keeps its fixed slot (nothing in the bar may move under a Kill hold); DISARMED is plain text, ARMED is solid red */
 html.hb-apple .pill-slot { display: flex; justify-content: flex-start; align-items: center; width: 84px; height: 18px; flex: none; }
 html.hb-apple #statusPill.pill { display: inline-block; border: 0; border-radius: 0; padding: 0; background: transparent; color: var(--a-label);
@@ -480,7 +483,10 @@ html.hb-apple .eq-tip i { font-style: normal; color: var(--a-label-2); }
 html.hb-apple .eq-tip em { font-style: normal; font-variant-numeric: tabular-nums; }
 html.hb-apple .eq-tip em.pos { color: var(--a-green, var(--a-label)); }
 html.hb-apple .eq-tip small { display: block; margin-top: 2px; font-size: 11px; color: var(--a-label-2); }
-/* the Desk's right-hand group (status, readiness words, Disarm, Kill) is wide: below 1600 px the centred page switcher would sit under
-   it, so it flows; below 1180 px the readiness words go (the shield stays and opens the same checks), so the bar is as it was */
-@media (max-width: 1600px) { html.hb-apple .hb-tb-c { position: static; transform: none; flex: none; } }
-@media (max-width: 1180px) { html.hb-apple .hb-ready-word { display: none; } }
+/* the Desk's right-hand group (status, readiness words, chart trading, Disarm, Kill) is wide: below 1800 px the centred page switcher
+   would sit under it, so it flows. Narrower, the words give way so Kill never slides under the gear: the live-account count (1360),
+   the readiness word (1270; the shield stays and opens the same checks), then the whole column (1160), leaving the bar as it was */
+@media (max-width: 1800px) { html.hb-apple .hb-tb-c { position: static; transform: none; flex: none; } }
+@media (max-width: 1360px) { html.hb-apple .hb-ct-tail { display: none; } }
+@media (max-width: 1270px) { html.hb-apple .hb-ready-word { display: none; } }
+@media (max-width: 1160px) { html.hb-apple .hb-rd-col { display: none; } }

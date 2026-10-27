@@ -92,7 +92,7 @@ function toolbarWords(ctx = {}) {
   const i = DESK_SKIN.indexOf('/* ---- toolbar words'), j = DESK_SKIN.indexOf('/* ---- end toolbar words ---- */');
   assert.ok(i >= 0 && j > i, 'the toolbar words block');
   const c = vm.createContext({ window: {}, ...ctx });
-  vm.runInContext(DESK_SKIN.slice(i, j) + '\nglobalThis.W = { machineWord, readyWord };', c);
+  vm.runInContext(DESK_SKIN.slice(i, j) + '\nglobalThis.W = { machineWord, readyWord, chartWords };', c);
   return c.W;
 }
 
@@ -122,4 +122,18 @@ test('desk skin: readiness in words comes from the page\'s own readinessShown --
   assert.deepEqual(word({ readiness: { checks: [{ label: 'feed', level: 'warn' }] } }), ['warn', '1 thing needs a look']);
   assert.deepEqual(word({ readiness: { checks: [{ label: 'a', level: 'warn' }, { label: 'b', level: 'bad' }, { label: 'c', level: 'info' }] } }), ['bad', '2 things need a look']);
   assert.match(DESK_SKIN, /class: 'hb-ready-word'[^\n]*window\.openChecks\(\)/, 'the word opens the page\'s own System checks');
+});
+
+test('desk skin: the chart-trading chip shows whenever the switch is ON, armed or not, with the live accounts the page tags LIVE', () => {
+  const words = (st) => toolbarWords().chartWords(st);
+  const acc = { a: { env: 'live' }, b: { env: 'live', connected: false }, c: { env: 'demo' }, d: { env: 'paper' }, e: null };
+  for (const st of [null, {}, { chart_trading: null }, { chart_trading: { enabled: false }, accounts: acc }]) assert.equal(words(st), '', 'off or unknown: no chip');
+  const on = { enabled: true, max_order_qty: 10, max_position_qty: 20 };
+  assert.equal(words({ chart_trading: on }), 'Chart trading ON');
+  assert.equal(words({ chart_trading: on, accounts: { c: { env: 'demo' } } }), 'Chart trading ON');
+  assert.equal(words({ chart_trading: on, accounts: { a: { env: 'live' } } }), 'Chart trading ON · 1 live account');
+  assert.equal(words({ chart_trading: on, accounts: acc }), 'Chart trading ON · 2 live accounts', 'an offline live account still counts');
+  // the Arm state plays no part (Disarm does not stop the chart page)
+  for (const armed of [true, false]) assert.equal(words({ armed, status: armed ? 'armed' : 'disarmed', chart_trading: on, accounts: acc }), 'Chart trading ON · 2 live accounts');
+  assert.match(DESK_SKIN, /el\('span', \{ class: 'hb-ct-chip', hidden: true/, 'the chip starts hidden');
 });
