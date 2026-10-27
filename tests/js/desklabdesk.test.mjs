@@ -307,6 +307,17 @@ test('WP1.14 what still stops it is a red line at the top: "Limits needed first"
   assert.equal(setupRow(t.view(), 'Machine'), undefined, 'an unknown machine is not named');
 });
 
+test('F: a strategy that sizes each trade itself: the Setup Size row says what the switch says, never a contract count', () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a2', qty: 3 }] } });
+  Object.assign(t.ctx.ST.strategies.lab_nq_orb.lab, { auto: true, own_size: true, params: { risk: 650 } });
+  assert.equal(setupRow(t.view(), 'Size'), '$650 at risk a trade');
+  assert.match(D.deskSwitchTitle(t.ctx.ST.strategies.lab_nq_orb, t.ctx.ST.book.lab_nq_orb, ACCOUNTS), /, \$650 at risk a trade$/, 'the same words as the switch');
+  t.ctx.ST.strategies.lab_nq_orb.lab.params = {};
+  assert.equal(setupRow(t.view(), 'Size'), 'it sizes each trade itself');
+  t.ctx.ST.strategies.lab_nq_orb.lab.own_size = false;
+  assert.equal(setupRow(t.view(), 'Size'), '3 contracts an account', 'not own size: as before');
+});
+
 test('WP1.14 the built-in page has the Setup too: its contracts, when it fires, flat time and days, shown only', () => {
   const t = load({ book: { nq930: [{ account: 'a2', qty: 3 }] } });
   t.ctx.ST.strategies.nq930.cfg.fire_et = '09:30:00';
