@@ -21,6 +21,9 @@
     <key>HOMEBASE_CHARTS_MD_ONLY</key><string>demo</string>
     <key>HOMEBASE_DEPTH_RELAY_IN</key><string>1</string>
   </dict>
+  <!-- Interactive: without it launchd clamps the job to the utility QoS, below every shell and agent process
+       (perf 2026-10-26). Its backtests, exports and research runs stay utility: homebase/qos.py -->
+  <key>ProcessType</key><string>Interactive</string>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>

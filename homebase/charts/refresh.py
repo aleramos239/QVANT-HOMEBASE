@@ -38,6 +38,7 @@ from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from .. import qos
 from ..paths import repo_root, state_dir
 from .export import read_json, write_json
 from .tester_api import host_ok
@@ -153,7 +154,7 @@ class RefreshManager:
                 log.write(f"\n=== {_now()} {s['label']}: {' '.join(s['argv'])}\n".encode())
                 log.flush()
                 try:
-                    proc = self.popen(s["argv"], cwd=self.cwd, stdout=log, stderr=subprocess.STDOUT)
+                    proc = self.popen(qos.utility(s["argv"]), cwd=self.cwd, stdout=log, stderr=subprocess.STDOUT)
                     with self._lock:
                         self._proc = proc
                     code = proc.wait()

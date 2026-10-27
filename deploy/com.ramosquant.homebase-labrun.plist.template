@@ -24,6 +24,9 @@
        code runs in a sandboxed child of this job, never in the chart service or the trading app. With the chart service
        or the Desk down it waits and reconnects by itself. Reload this job outside the sessions only: a
        clean stop ends each desk day that has begun. -->
+  <!-- Interactive: without it launchd clamps the job to the utility QoS, below every shell and agent process
+       (perf 2026-10-26). Its backtests, exports and research runs stay utility: homebase/qos.py -->
+  <key>ProcessType</key><string>Interactive</string>
   <key>RunAtLoad</key><true/>
   <!-- kept alive, and never started again sooner than 30 s after it ended: a runner that keeps failing must not spin -->
   <key>KeepAlive</key><true/>

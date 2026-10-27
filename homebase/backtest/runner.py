@@ -43,7 +43,7 @@ from bisect import bisect_left
 from collections import OrderedDict, deque
 from pathlib import Path
 
-from .. import draftstore, strategies
+from .. import draftstore, qos, strategies
 from ..strategies.base import wants
 from ..contracts import commission_rt
 from . import drafthost, hourly, minvol, sandbox
@@ -754,13 +754,13 @@ def launch(run_dir: Path, python: str, archive: Path, cache: Path, slot, extra: 
     try:
         if draft:
             proc = subprocess.Popen(
-                sandbox.command(argv, sandbox.params(run_dir=run_dir, archive=archive, cache=cache, tmp=tmp,
-                                                     python=python)),
+                qos.utility(sandbox.command(argv, sandbox.params(run_dir=run_dir, archive=archive, cache=cache, tmp=tmp,
+                                                                 python=python))),
                 cwd=tmp, env=sandbox.env(tmp), stdout=log, stderr=subprocess.STDOUT,
                 pass_fds=(slot.fileno(),), start_new_session=True)
         else:
             proc = subprocess.Popen(      # the child holds the slot too: it lives as long as the backtest
-                argv, cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT, pass_fds=(slot.fileno(),))
+                qos.utility(argv), cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT, pass_fds=(slot.fileno(),))
     except BaseException:
         log.close()
         if tmp is not None:

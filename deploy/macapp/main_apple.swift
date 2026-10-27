@@ -108,6 +108,29 @@ func fetch(_ url: URL, timeout: TimeInterval = 3) -> Data? {
     return out
 }
 
+/// Many small GETs (launch and ⌘R only): one chain per server (origin), the chains side by side, each chain one fetch()
+/// after another in the given order. Every server still gets its GETs one at a time, each with fetch()'s own budget,
+/// so launch waits for the slowest server, not for the sum. Each distinct URL is fetched once; every chain stops at the
+/// first miss (the caller then drops the whole skin anyway). The bodies that answered 200, keyed by absolute URL.
+func fetchAll(_ urls: [URL]) -> [URL: Data] {
+    var chains: [URL: [URL]] = [:]
+    for u in urls.map({ $0.absoluteURL }) where !(chains[origin(of: u)]?.contains(u) ?? false) {
+        chains[origin(of: u), default: []].append(u)
+    }
+    let list = Array(chains.values), lock = NSLock()
+    var out: [URL: Data] = [:], missed = false
+    DispatchQueue.concurrentPerform(iterations: list.count) { i in
+        for u in list[i] {
+            lock.lock(); let stop = missed; lock.unlock()
+            if stop { return }
+            let d = fetch(u)
+            lock.lock(); if let d = d { out[u] = d } else { missed = true }; lock.unlock()
+            if d == nil { return }
+        }
+    }
+    return out
+}
+
 func jsString(_ s: String) -> String {
     guard let d = try? JSONSerialization.data(withJSONObject: [s]), let t = String(data: d, encoding: .utf8) else { return "\"\"" }
     return String(t.dropFirst().dropLast())     // ["..."] -> "..."
@@ -277,10 +300,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let tabs = root["tabs"] as? [String: Any] else { return nil }
         let shared = root["shared"] as? [String: Any] ?? [:]
+        // every file of every tab fetched first (one chain per server, the servers side by side), then read below in order
+        var urls: [URL] = []
+        for tab in Tab.allCases {
+            guard let t = tabs[tab.key] as? [String: Any] else { return nil }
+            let base = origin(of: tab.baseURL)
+            var paths: [String] = (shared["css"] as? [String] ?? []) + (t["css"] as? [String] ?? [])
+            paths += (shared["js"] as? [String] ?? []) + (t["js"] as? [String] ?? [])
+            if let s = t["url"] as? String { paths.append(s) }
+            urls += paths.compactMap { URL(string: $0, relativeTo: base) }
+        }
+        let bodies = fetchAll(urls)
+        func got(_ u: URL) -> Data? { bodies[u.absoluteURL] }
         func text(_ paths: [String], _ base: URL) -> String? {
             var out: [String] = []
             for p in paths {
-                guard let u = URL(string: p, relativeTo: base), let d = fetch(u), let t = String(data: d, encoding: .utf8) else { return nil }
+                guard let u = URL(string: p, relativeTo: base), let d = got(u), let t = String(data: d, encoding: .utf8) else { return nil }
                 out.append("/* \(p) */\n" + t)
             }
             return out.joined(separator: "\n")
@@ -293,7 +328,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             let jsPaths = (shared["js"] as? [String] ?? []) + (t["js"] as? [String] ?? [])
             guard let css = text(cssPaths, base), let js = text(jsPaths, base) else { return nil }
             var start = t["url"] as? String
-            if let s = start, let u = URL(string: s, relativeTo: base), fetch(u) == nil { start = nil; return nil }
+            if let s = start, let u = URL(string: s, relativeTo: base), got(u) == nil { start = nil; return nil }
             result[tab] = TabSkin(startPath: start, css: css, js: js)
         }
         var samples: [(String, String)] = []

@@ -54,6 +54,7 @@ from typing import Callable, Iterator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from .. import qos
 from ..contracts import tick_size as contract_tick_size
 from ..paths import repo_root, state_dir
 from .bars import BarSpec, build as build_bars
@@ -632,7 +633,7 @@ class ExportManager:
                 "--archive", str(self.archive), "--depth-base", str(self.depth_base),
                 "--out-dir", str(self.out_dir)]
         try:
-            proc = subprocess.Popen(argv, cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT)
+            proc = subprocess.Popen(qos.utility(argv), cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT)
         except BaseException:
             log.close()
             raise
