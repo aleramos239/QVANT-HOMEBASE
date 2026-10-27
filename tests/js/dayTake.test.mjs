@@ -106,3 +106,10 @@ test('the desk refusing it is shown in its own words', async () => {
   await t.c.setDayTake('a1', '500');
   assert.equal(t.toasts[0], 'day_lock must be 0..100000');
 });
+
+test('J: setting the take to 0 always says it is off, even when the desk says the day was already stopped', async () => {
+  const { c, sent, toasts } = ctx({ reply: { ok: true, locked: 'day_lock', closed_net: 1250 }, accounts: { a1: { day: { day_lock: 1000 } } } });
+  await c.setDayTake('a1', '0');
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)), [['/api/account-day-lock', { account: 'a1', day_lock: 0 }]], 'the body is as before');
+  assert.deepEqual(toasts, ['Day take off.']);
+});

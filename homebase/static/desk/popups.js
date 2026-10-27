@@ -285,8 +285,9 @@ async function setDayTake(id, raw) {
   if (v === 0 && was !== 0 && !await confirmDlg(`Day take OFF for ${acctShort(id)}: nothing stops it today?`,
       "No profit amount ends its day: every strategy booked on it keeps taking new trades.", "Turn it off", false)) return;
   const r = await post("/api/account-day-lock", {account: id, day_lock: v});
-  if (r && r.ok) toast(r.locked ? `Day take set: ${usd(v)}. ${acctShort(id)} has already made ${usd(r.closed_net || 0)} today, so it takes no new trade for the rest of the day. Open trades run to their stop or target.`
-    : (v ? "Day take set: " + usd(v) + "." : "Day take off."), r.locked ? 8000 : 4000);
+  const lock = v > 0 && r && r.locked;   // 0 is OFF: its words never say the day is stopped
+  if (r && r.ok) toast(lock ? `Day take set: ${usd(v)}. ${acctShort(id)} has already made ${usd(r.closed_net || 0)} today, so it takes no new trade for the rest of the day. Open trades run to their stop or target.`
+    : (v ? "Day take set: " + usd(v) + "." : "Day take off."), lock ? 8000 : 4000);
   else toast((r && r.detail) || "Could not set the day take.", 5000);
   await refresh();
   if ($("#acctOverlay").classList.contains("open")) openAccts(id);   // the popup shows the new take at once
