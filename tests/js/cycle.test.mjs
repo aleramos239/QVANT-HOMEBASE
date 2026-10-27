@@ -285,3 +285,24 @@ test('1.2: a new cycle\'s Start question names Most too', async () => {
   assert.match(asked[0], /\$1,000 at risk, at most 40 full contracts/);
   assert.equal(sent[0][1].max_minis, 40);
 });
+
+test('1.2: a cycle still holding an account the Desk removed switches OFF and ON with the page\'s ticks, never the removed one', async () => {
+  const STALE = { ...LIVE_ON, accounts: ['a', 'gone'] };              // removing an account never takes it out of a cycle
+  const BODY = (on) => OLD_BODY(1000, 17, ['a']).replace(/}$/, `,"on":${on}}`);
+  for (const on of [false, true]) {
+    const { c, sent, toasts } = ctx({ cyc: { ...STALE, on: !on }, ticked: ['a'] });
+    await c.setCycle('g1', on);
+    assert.equal(JSON.stringify(sent[0][1]), BODY(on), `switch ${on ? 'ON' : 'OFF'}`);
+    assert.doesNotMatch(toasts.join(' '), /Save or undo/);
+  }
+  const d = ctx({ cyc: STALE, risk: '5000', ticked: ['a'] });         // OFF with a draft: the desk's values, the removed one left out
+  d.c.cycleEdit('g1');
+  await d.c.setCycle('g1', false);
+  assert.equal(JSON.stringify(d.sent[0][1]), BODY(false));
+  const n = ctx({ cyc: { ...STALE, on: false }, risk: '5000', ticked: ['a'] });   // ON with a draft: Save first, and the Save is there
+  n.c.cycleEdit('g1');
+  await n.c.setCycle('g1', true);
+  assert.equal(n.sent.length, 0);
+  assert.match(n.toasts[0], /Save or undo/);
+  assert.match(n.c.cycleHtml(G), /Save: Risk \$1,000 → \$5,000/);
+});

@@ -256,8 +256,11 @@ async function setCycle(id, on) {
   if (switchBounced("cycle:" + id)) return;
   /* A draft (typed or ticked, not saved) never rides on the switch: ON waits for Save; OFF sends the desk's own values and
      the draft stays for its Save button. */
-  const cyc = ((ST && ST.groups) || {})[id] || null;
-  const saved = cyc && cycleDiff(cyc, cycleBody(id)).parts.length ? {accounts: cyc.accounts || [], risk_usd: cyc.risk_usd, max_minis: cyc.max_minis} : null;
+  const cyc = ((ST && ST.groups) || {})[id] || null, dr = CYC_DRAFT[id];
+  // A draft = what the card's Save button shows (cycleHtml), so ON never points at a Save that is not there. OFF sends the
+  // desk's own values as the page ticks them: never an account the Desk removed (the server refuses one).
+  const saved = cyc && dr && cycleDiff(cyc, cycleDraftBody(dr)).parts.length ? {accounts: Object.keys(ST.accounts || {}).filter(a => (cyc.accounts || []).includes(a)),
+                                                                                 risk_usd: cyc.risk_usd, max_minis: cyc.max_minis} : null;
   if (saved && on) { toast("Save or undo your changes first, then switch the cycle on.", 6000); refresh(); return; }
   const b = {...cycleBody(id), ...saved};
   const copies = on ? [] : cycleCopies(b.members);
