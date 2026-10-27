@@ -1356,6 +1356,16 @@ def test_a_day_that_cannot_be_rebuilt_in_full_is_not_hosted(desk):
     assert len(k.spawned) == n and f.read_bytes() == before and k.journal("lab_y") == []
 
 
+def test_a_tape_whose_first_print_comes_just_after_the_window_opens_is_not_too_late(desk):
+    # owner 2026-10-27: the 18:00 evening windows stopped "too late" every night (first print at 18:00:00.x)
+    k = desk()
+    k.promote()
+    k.clock("09:25:30")
+    k.rows("09:25:01", [21000.0] * 5)                                        # the window began 09:25
+    k.r.sync()
+    assert k.r.hosting() == ["lab_x"] and k.today()["state"] != "stopped"
+
+
 def test_a_window_that_has_not_begun_is_hosted_whenever_the_tape_starts(desk):
     k = desk()
     k.promote()
