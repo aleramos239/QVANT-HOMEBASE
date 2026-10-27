@@ -16,9 +16,11 @@ Protocol (SockJS-style, decoded from the web app):
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import json
 import sys
 import time
+from zoneinfo import ZoneInfo
 from collections import deque
 from typing import Any, Optional
 
@@ -30,7 +32,21 @@ RTTS_KEPT = 64      # the latest request round trips, for timing only
 
 
 def log(msg: str) -> None:
-    print(f"{time.strftime('%H:%M:%S')} [tradovate_ws] {msg}", file=sys.stderr, flush=True)
+    now = dt.datetime.now(ZoneInfo("America/New_York")).strftime("%H:%M:%S")
+    print(f"[tradovate_ws] {now} {msg}", file=sys.stderr, flush=True)
+
+
+def close_note(ws) -> str:
+    """How a socket ended, for the log: the close code and reason, and who closed first
+    ("peer" = the server sent its close frame first, "us" = we did, "none" = no close frame at
+    all: the connection was cut, code 1006). Reads attributes only; never raises."""
+    try:
+        proto = getattr(ws, "protocol", None)
+        first = getattr(proto, "close_rcvd_then_sent", None)
+        who = {True: "peer", False: "us"}.get(first, "none")
+        return f"code={getattr(ws, 'close_code', None)} reason={getattr(ws, 'close_reason', '')!r} first={who}"
+    except Exception as e:  # noqa: BLE001 -- a log helper must never break the reader
+        return f"close info unreadable ({type(e).__name__})"
 
 
 class WSClosed(ConnectionError):
@@ -121,8 +137,10 @@ class TradovateWS:
                                 h(msg)
                             except Exception as e:
                                 log(f"event handler error: {e}")
+            # the read loop ended with no exception: a clean close (1000/1001/1005)
+            log(f"websocket ended clean: {close_note(self.ws)}")
         except websockets.ConnectionClosed:
-            log("websocket closed")
+            log(f"websocket closed: {close_note(self.ws)}")
         except Exception as e:
             log(f"reader error: {e}")
         finally:

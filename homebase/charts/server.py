@@ -756,6 +756,15 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             feed_kwargs = {"md_env": settings_store.get()["md"]}
             if md_connect is not None:   # tests: a fake connect_env, never a real login
                 feed_kwargs["connect_env"] = md_connect
+            elif settings_store.md_account():
+                # a login nobody opens by hand (settings "md_account"): the feed and its recycle
+                # take that account's md token while it is valid, else the freshest, as before
+                pin = settings_store.md_account()
+
+                async def _pinned_connect(env, _pin=pin):
+                    return await T.connect_md(prefer_live=(env == "live"), account=_pin)
+                feed_kwargs["connect_env"] = _pinned_connect
+                feed_kwargs["fresh_token"] = lambda prefer_live, _pin=pin: T.md_token(prefer_live, account=_pin)
             if recorder is not None:     # the early rebuild's swap: a gap marker, no refill
                 feed_kwargs["on_gap"] = recorder.mark_gap_span
             # two logins at once: the markets named in settings ("md_other_roots") ride a second

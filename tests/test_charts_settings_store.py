@@ -107,3 +107,14 @@ def test_md_only_pins_the_login_and_shuts_the_second_socket(tmp_path, monkeypatc
     assert store.set_md("demo") == {"md": "demo"}
     monkeypatch.delenv("HOMEBASE_CHARTS_MD_ONLY")
     assert store.other_roots() == ["YM", "GC", "SI"]
+
+
+def test_md_account_is_none_unless_the_file_names_an_account(tmp_path):
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    assert store.md_account() is None
+    path.write_text('{"md_account": "  paapex1  "}')
+    assert store.md_account() == "paapex1"
+    for bad in ('{"md_account": ""}', '{"md_account": 5}', "not json"):
+        path.write_text(bad)
+        assert store.md_account() is None

@@ -442,6 +442,8 @@ class TickFeed:
             wait = BACKOFF_S[min(attempt, len(BACKOFF_S) - 1)]
             if refused_all:
                 wait = max(wait, RETRY_REFUSED_S)   # each such round costs one getChart per root
+            T.log(f"md feed ({self.md_env}) cycle ended after {self._now() - started:.0f}s: {self.error}; "
+                  f"reconnect in {wait}s (try {attempt + 1})")
             await self._backoff(wait)
             attempt += 1
 

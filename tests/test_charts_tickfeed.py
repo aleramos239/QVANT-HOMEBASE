@@ -1129,3 +1129,24 @@ def test_the_feed_publishes_its_hourly_chart_requests_for_the_tick_job(tmp_path)
     assert got == {"requests": {"live": [1_790_003_000.0, 1_790_004_000.0], "demo": [1_790_003_000.0]}}
 
 
+
+
+def test_every_cycle_end_is_logged_with_its_reason_age_and_backoff(capsys):
+    socks = []
+
+    async def connect():
+        ws = FakeWS()
+        socks.append(ws)
+        return ws
+
+    async def sleep(s):
+        await asyncio.sleep(0)
+        if s == 1:
+            socks[-1].connected = False                # the socket drops
+        else:
+            feed.stop()
+
+    feed = TickFeed(["NQ"], lambda *a: None, connect=connect, sleep=sleep, md_env="demo")
+    run(feed.run())
+    out = capsys.readouterr().out
+    assert "md feed (demo) cycle ended after" in out and "md socket closed; reconnect in 5s (try 1)" in out
