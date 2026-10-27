@@ -21,6 +21,7 @@ from typing import Optional
 
 from .config import assignments
 from .contracts import market_of
+from .core import atomic
 from .engine_lab import GROUP_HEDGE, LAB, LAB_BAD_ORDER, LAB_PREFIX
 
 GROUP_NONE = "No account of its group could take this trade."
@@ -74,9 +75,8 @@ class GroupMixin:
 
     def _save_groups(self) -> None:
         p = self._groups_path()
-        tmp = p.with_suffix(".tmp")                   # never half a file: a lost switch would trade every account
-        tmp.write_text(json.dumps(self.groups, indent=2) + "\n")
-        tmp.replace(p)
+        # never half a file: a lost switch would trade every account
+        atomic.write_text(p, json.dumps(self.groups, indent=2) + "\n", tmp=p.with_suffix(".tmp"))
 
     # --- reads ------------------------------------------------------------------------------------------------
     def group_of(self, name: str) -> Optional[tuple]:

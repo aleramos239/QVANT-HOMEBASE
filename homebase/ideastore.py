@@ -55,6 +55,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from . import draftstore
+from .core import atomic
 from .core.clock import utc_iso as _now
 
 ENV = "HOMEBASE_IDEAS_ROOT"
@@ -159,9 +160,7 @@ def _dumps(data) -> str:
 def _write(path: Path, text: str) -> Path:
     """Atomically: a temp file beside it, then a replace."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+    atomic.write_text(path, text, tmp=path.with_name(f".{path.name}.{os.getpid()}.tmp"), encoding="utf-8")
     return path
 
 

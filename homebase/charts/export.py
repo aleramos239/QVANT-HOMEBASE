@@ -39,7 +39,6 @@ import argparse
 import csv
 import datetime as dt
 import gzip
-import json
 import os
 import re
 import secrets
@@ -57,6 +56,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from .. import qos
 from ..contracts import tick_size as contract_tick_size
 from ..core.clock import utc_iso as _now
+from ..core.jsonio import read_json, write_json
 from ..paths import repo_root, state_dir
 from .bars import BarSpec, build as build_bars
 from .depth import DEPTH_ARCHIVE, read_depth
@@ -482,19 +482,6 @@ def run_export(req: dict, archive: Path, depth_base: Path, out_path: Path,
 
 def default_base() -> Path:
     return state_dir() / "charts" / "export"
-
-
-def write_json(path: Path, data) -> None:
-    tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(data, separators=(",", ":"), default=str))
-    os.replace(tmp, path)
-
-
-def read_json(path: Path, default=None):
-    try:
-        return json.loads(path.read_text())
-    except (OSError, ValueError):
-        return default
 
 
 def _alive(pid) -> bool:

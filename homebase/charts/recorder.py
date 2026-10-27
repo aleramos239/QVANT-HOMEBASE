@@ -14,12 +14,12 @@ import datetime as dt
 import gzip
 import io
 import json
-import os
 import time
 import zlib
 from pathlib import Path
 
 from .. import ticks as T
+from ..core import atomic
 from .session import session_date, split_by_session
 from .store import ARCHIVE, LIVE_SUFFIX, gaps_path, read_table
 
@@ -91,9 +91,8 @@ class LiveRecorder:
         w = csv.writer(out)
         w.writerow(header)
         w.writerows(recs)
-        tmp = p.with_name(p.name + ".tmp")
-        tmp.write_bytes(gzip.compress(out.getvalue().encode()))
-        os.replace(tmp, p)                    # atomic: a crash here still leaves p intact
+        # atomic: a crash here still leaves p intact
+        atomic.write_bytes(p, gzip.compress(out.getvalue().encode()), tmp=p.with_name(p.name + ".tmp"))
 
     def _open(self, p: Path) -> set[int]:
         seen = self._seen.get(p)

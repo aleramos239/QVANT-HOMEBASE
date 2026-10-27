@@ -30,9 +30,9 @@ record's, copied when the day starts: a day file is final for its date only for 
 ({"ok": bool | None, "text"}: the daily match against the tester, labrun/match.py) and, only for a day made from prints
 already held (catch-up), `rebuilt: true`.
 
-Stdlib only, and it imports nothing else of homebase: the desk process reads this store (Step B), and the desk must
-never load the draft helper (tests/test_claude_drafts.py). The name rule is the drafts' own, kept here as a copy that a
-test holds equal to draftstore.NAME_RE.
+Stdlib and homebase.core only, and it imports nothing else of homebase: the desk process reads this store (Step B),
+and the desk must never load the draft helper (tests/test_claude_drafts.py). The name rule is the drafts' own, kept
+here as a copy that a test holds equal to draftstore.NAME_RE.
 """
 from __future__ import annotations
 
@@ -47,6 +47,8 @@ import shutil
 import threading
 import time
 from pathlib import Path
+
+from ..core import atomic
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,39}$")        # a draft's name (draftstore.NAME_RE: tests pin them equal)
 ENV_ROOT = "HOMEBASE_DESKLAB_ROOT"
@@ -122,9 +124,8 @@ def write_lock(at=None, wait_s: float | None = None):
 
 def _write(f: Path, obj) -> None:
     f.parent.mkdir(parents=True, exist_ok=True)
-    tmp = f.with_name(f".{f.name}.tmp")
-    tmp.write_text(json.dumps(obj), encoding="utf-8")
-    os.replace(tmp, f)                               # whole or not at all
+    # whole or not at all
+    atomic.write_text(f, json.dumps(obj), tmp=f.with_name(f".{f.name}.tmp"), encoding="utf-8")
 
 
 def _read(f: Path) -> dict | None:

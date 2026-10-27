@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import paths
+from .core import atomic
 
 ENV = "HOMEBASE_ARSENAL"
 ENV_SRC = "HOMEBASE_ARSENAL_SRC"                    # a checkout whose research toolkit is cataloged, when it is not this one's
@@ -317,9 +318,8 @@ def _chat_groups(src: Sources) -> list:
 def save(catalog: dict, path=None) -> Path:
     p = Path(path) if path else arsenal_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_name(p.name + ".tmp")
-    tmp.write_text(json.dumps(catalog), encoding="utf-8")
-    os.replace(tmp, p)                          # a reader never sees half a file
+    # a reader never sees half a file
+    atomic.write_text(p, json.dumps(catalog), tmp=p.with_name(p.name + ".tmp"), encoding="utf-8")
     return p
 
 

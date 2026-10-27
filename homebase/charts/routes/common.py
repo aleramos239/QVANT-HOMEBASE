@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request
+
+from ...core import atomic
+from ...core.jsonio import read_dict as read_json  # noqa: F401 -- the route modules and server.py import it from here
 
 LOCAL_HOSTS = ("localhost", "127.0.0.1")
 
@@ -25,20 +27,11 @@ def origin_ok(origin: str | None, host: str | None) -> bool:
     return o is not None and (o in LOCAL_HOSTS or o == h)
 
 
-def read_json(path: Path) -> dict:
-    try:
-        v = json.loads(path.read_text())
-    except (OSError, ValueError):
-        return {}
-    return v if isinstance(v, dict) else {}
-
 def write_json(path: Path, data: dict | list) -> None:
     """Via a temp file + atomic rename: a crash or a full disk mid-write
     must never tear the file (torn, it reads back as {} and the next
     save would wipe everything in it)."""
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(data, indent=2))
-    os.replace(tmp, path)
+    atomic.write_text(path, json.dumps(data, indent=2), tmp=path.with_name(path.name + ".tmp"))
 
 def read_json_list(path: Path) -> list:
     try:

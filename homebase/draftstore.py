@@ -32,6 +32,7 @@ import time
 from pathlib import Path
 
 from .contracts import exec_ok
+from .core import atomic
 
 ENV = "HOMEBASE_DRAFTS_DIR"
 PREFIX = "draft_"
@@ -199,9 +200,7 @@ def write(name: str, code: str, base: Path | None = None, builtin_ids=()) -> Pat
     p = path_for(name, base)
     if p.is_symlink():
         raise ValueError(f"{p} is a symlink: refusing to write through it")
-    tmp = p.with_name(f".{p.name}.{os.getpid()}.tmp")
-    tmp.write_text(code, encoding="utf-8")
-    os.replace(tmp, p)
+    atomic.write_text(p, code, tmp=p.with_name(f".{p.name}.{os.getpid()}.tmp"), encoding="utf-8")
     return p
 
 
@@ -297,9 +296,8 @@ def _edit_groups(change, base: Path | None) -> dict:
         change(st)
         p = groups_path(base)
         p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_name(f".{p.name}.{os.getpid()}.tmp")
-        tmp.write_text(json.dumps(st, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        os.replace(tmp, p)
+        atomic.write_text(p, json.dumps(st, indent=2, ensure_ascii=False) + "\n",
+                          tmp=p.with_name(f".{p.name}.{os.getpid()}.tmp"), encoding="utf-8")
     return st
 
 

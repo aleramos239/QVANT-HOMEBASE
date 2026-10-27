@@ -47,6 +47,7 @@ from .. import draftstore, qos, strategies
 from ..strategies.base import wants
 from ..contracts import commission_rt
 from ..core.clock import utc_iso as _now
+from ..core.jsonio import read_json, write_json
 from . import drafthost, hourly, minvol, sandbox
 from ..paths import repo_root, state_dir
 from . import controls as ctlmod, discipline, propsim, report
@@ -67,19 +68,6 @@ PROP_NOT_SCORED = ("not scored: this run was made without the prop sim. Pick an 
 
 def default_base() -> Path:
     return state_dir() / "tester"
-
-
-def write_json(path: Path, data) -> None:
-    tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(data, separators=(",", ":"), default=str))
-    os.replace(tmp, path)
-
-
-def read_json(path: Path, default=None):
-    try:
-        return json.loads(path.read_text())
-    except (OSError, ValueError):
-        return default
 
 
 def _stamp(path: Path):

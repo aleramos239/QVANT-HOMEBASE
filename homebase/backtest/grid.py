@@ -42,6 +42,7 @@ from collections import deque
 from pathlib import Path
 
 from .. import draftstore, strategies
+from ..core import atomic
 from . import controls as ctlmod, drafthost, runner
 from .discipline import WF_OOS_ONLY, parse_range
 from .runner import RUN_ID, _now, _settled, _stamp, read_json, write_json
@@ -268,17 +269,9 @@ def read_looks(path: Path) -> dict[str, int]:
 
 
 def _write_durable(path: Path, data) -> None:
-    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(json.dumps(data, separators=(",", ":"), sort_keys=True))
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
-    dfd = os.open(path.parent, os.O_RDONLY)
-    try:
-        os.fsync(dfd)
-    finally:
-        os.close(dfd)
+    atomic.write_text(path, json.dumps(data, separators=(",", ":"), sort_keys=True),
+                      tmp=path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp"), encoding="utf-8",
+                      fsync=True, fsync_dir=True)
 
 
 class _looks_lock:

@@ -34,6 +34,7 @@ from typing import Optional
 from .broker.base import BrokerAdapter, OrderRequest, OrderResult
 from .config import StrategyCfg, assignments
 from .contracts import tick_size
+from .core import atomic
 from .daystate import (KILL_POLL_N, KILL_POLL_S, MARKET_OUT_FAILED, PLACING_UNKNOWN, TERMINAL, WORKING, DayState,
                        _hhmm, _to_tick)
 
@@ -229,9 +230,7 @@ class LabMixin:
         round must be on disk before its order leaves); otherwise say so on stderr and go on."""
         try:
             p = self._lab_path()
-            tmp = p.with_name(p.name + ".tmp")
-            tmp.write_text(json.dumps(self._lab_mem(), indent=2) + "\n")
-            tmp.replace(p)
+            atomic.write_text(p, json.dumps(self._lab_mem(), indent=2) + "\n", tmp=p.with_name(p.name + ".tmp"))
         except Exception as e:  # noqa: BLE001
             if strict:
                 raise

@@ -11,8 +11,10 @@ temp file + `os.replace`, which a single small append does not need."""
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
+
+from ..core import atomic
+from ..core.jsonio import read_dict as read_json  # noqa: F401 -- news.py and paper.py call _jsonl.read_json
 
 DAY_FILE_RE = r"^\d{4}-\d{2}-\d{2}\.jsonl$"     # anchored: never matches another prefix's file
 
@@ -34,9 +36,7 @@ def read_all(path: Path) -> list[dict]:
 
 
 def write_all(path: Path, objs: list[dict]) -> None:
-    tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
-    tmp.write_text("".join(json.dumps(o) + "\n" for o in objs))
-    os.replace(tmp, path)
+    atomic.write_text(path, "".join(json.dumps(o) + "\n" for o in objs))
 
 
 def append(path: Path, obj: dict) -> None:
@@ -49,14 +49,4 @@ def append(path: Path, obj: dict) -> None:
 
 def write_json(path: Path, data: dict) -> None:
     """Same atomic pattern for a single JSON object (state files)."""
-    tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(data))
-    os.replace(tmp, path)
-
-
-def read_json(path: Path) -> dict:
-    try:
-        v = json.loads(path.read_text())
-    except (OSError, ValueError):
-        return {}
-    return v if isinstance(v, dict) else {}
+    atomic.write_text(path, json.dumps(data))

@@ -72,6 +72,8 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .core import atomic
+
 UTC = dt.timezone.utc
 # the archive's columns: the broker's (homebase.ticks.FIELDS) + Massive's ns stamp
 COLS = ("ts_ms", "price", "size", "bid", "ask", "bid_size", "ask_size", "id", "ts_ns")
@@ -333,12 +335,7 @@ def merge(sources, massive_new: list[tuple] = (), edge_ms: int = MASSIVE_EDGE_MS
 
 # ------------------------------------------------------------------ write
 def atomic_write(path: Path, data: bytes) -> None:
-    tmp = path.with_name(path.name + ".tmp")
-    with open(tmp, "wb") as f:
-        f.write(data)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
+    atomic.write_bytes(path, data, tmp=path.with_name(path.name + ".tmp"), fsync=True)
 
 
 def verify(path: Path, m: Merged, fields: tuple) -> None:

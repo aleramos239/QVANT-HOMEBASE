@@ -42,12 +42,12 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
-import os
 import time
 from typing import Awaitable, Callable, Optional
 
 from .. import symbols
 from .. import ticks as T
+from ..core import atomic
 from . import MD_ENV
 from .session import ET, session_date
 
@@ -156,9 +156,8 @@ class TickFeed:
         cut = self._now() - 3600
         body = {"requests": {e: [t for t in ts if t > cut] for e, ts in self._requests.items()}}
         try:
-            tmp = self.usage_path.with_name(self.usage_path.name + ".tmp")
-            tmp.write_text(json.dumps(body))
-            os.replace(tmp, self.usage_path)
+            atomic.write_text(self.usage_path, json.dumps(body),
+                              tmp=self.usage_path.with_name(self.usage_path.name + ".tmp"))
         except OSError:
             pass                                   # the job then just counts itself: never break the feed
 

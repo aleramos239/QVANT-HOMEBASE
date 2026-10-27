@@ -54,6 +54,7 @@ from pathlib import Path
 from typing import Callable, Hashable, Optional
 
 from .. import symbols
+from ..core import atomic
 from . import parse_depth_roots as parse_roots  # noqa: F401 — re-exported
 from .desk import Fanout
 from .session import session_date
@@ -247,9 +248,8 @@ class DepthRecorder:
         if not members:
             p.rename(p.with_name(p.name + ".corrupt"))
             return
-        tmp = p.with_name(p.name + ".tmp")
-        tmp.write_bytes(gzip.compress(b"".join(members), compresslevel=GZIP_LEVEL))
-        os.replace(tmp, p)
+        atomic.write_bytes(p, gzip.compress(b"".join(members), compresslevel=GZIP_LEVEL),
+                           tmp=p.with_name(p.name + ".tmp"))
 
     def _take(self) -> dict[Path, list[str]]:
         """(loop) The buffered lines, handed to one write; add() starts new buffers."""

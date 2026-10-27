@@ -26,6 +26,7 @@ from fastapi import HTTPException, Request
 
 from .. import netguard
 from ..contracts import root_of, round_to_tick, tick_size
+from ..core import atomic
 from ..core.num import finite_big_int_ok as _finite
 
 KINDS = ("be", "trail")
@@ -175,9 +176,7 @@ class ExitRunner:
     def _save(self) -> None:
         if self.path is None:
             return
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.arms))
-        tmp.replace(self.path)
+        atomic.write_text(self.path, json.dumps(self.arms), tmp=self.path.with_suffix(".tmp"))
 
     def listing(self) -> list[dict]:
         return [dict(a) for a in self.arms]
