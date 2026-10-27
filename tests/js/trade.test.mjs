@@ -325,12 +325,14 @@ test('5.4 sendTag: the BUY / SELL button and the ENTRY tag say the size, root an
   assert.equal(T.sendTag('Buy', 0, 'NQ', ['nope'], st).full, 'BUY NQ · …ope ?', 'no size without a valid qty; an unlisted account is never DEMO');
 });
 
-test('5.2 tradeSpot: "Trade on:" while BUY / SELL is hidden, "Trade on: none" for no account, nothing in replay', () => {
-  assert.deepEqual(T.tradeSpot(1, false, false), { lead: 'Trade on:', empty: '' });
-  assert.deepEqual(T.tradeSpot(0, false, false), { lead: '', empty: 'Trade on: none' });
-  assert.deepEqual(T.tradeSpot(2, true, false), { lead: '', empty: '' }, 'BUY / SELL showing: the buttons say it (sendTag)');
-  assert.deepEqual(T.tradeSpot(0, false, true), { lead: '', empty: '' }, 'replay: its practice block is there');
-  assert.deepEqual(T.tradeSpot(1, false, true), { lead: '', empty: '' });
+test('5.2 tradeSpot: "Accounts:" while BUY / SELL is hidden, "Trade on: none" for no account only while the desk trades, nothing in replay', () => {
+  assert.deepEqual(T.tradeSpot(1, false, false, true), { lead: 'Accounts:', empty: '' }, 'it cannot trade now: never "Trade on:"');
+  assert.deepEqual(T.tradeSpot(1, false, false, false), { lead: 'Accounts:', empty: '' });
+  assert.deepEqual(T.tradeSpot(0, false, false, true), { lead: '', empty: 'Trade on: none' });
+  assert.deepEqual(T.tradeSpot(0, false, false, false), { lead: '', empty: '' }, 'chart trading off / desk down: no prompt');
+  assert.deepEqual(T.tradeSpot(2, true, false, true), { lead: '', empty: '' }, 'BUY / SELL showing: the buttons say it (sendTag)');
+  assert.deepEqual(T.tradeSpot(0, false, true, true), { lead: '', empty: '' }, 'replay: its practice block is there');
+  assert.deepEqual(T.tradeSpot(1, false, true, true), { lead: '', empty: '' });
 });
 
 test('lineAccounts: every account the desk lists as tradable -- ticked on a chart or not; never an unlisted one', () => {

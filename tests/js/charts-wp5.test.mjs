@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { createRequire } from 'node:module';
 
 /* WP5 of the 2026-10-26 Charts clean-up: each change pinned here, the page's own code lifted and run on stand-ins. */
 const rd = (f) => readFileSync(new URL(`../../homebase/static/${f}`, import.meta.url), 'utf8');
@@ -75,7 +76,7 @@ test('5.4 the button and the ENTRY tag read their words from the send\'s own qty
 test('5.2 the account spot\'s chips open this chart\'s Settings › Trading and do nothing else', () => {
   const TL = rd('charts/tradelines.js');
   const body = TL.slice(TL.indexOf('  paintAccts(mode) {'), TL.indexOf('  /* ---- lines: positions'));
-  assert.match(body, /T\.tradeSpot\(t\.accounts\.length, mode\.mode === 'on', !!this\.cell\.replay \|\| !!cfg\.replayHalt\)/);
+  assert.match(body, /T\.tradeSpot\(t\.accounts\.length, mode\.mode === 'on', !!this\.cell\.replay \|\| !!cfg\.replayHalt, !window\.HBDeskClient\.gate\(\)\)/);
   assert.match(body, /el\.onclick = \(e\) => \{ e\.stopPropagation\(\); el\.blur\(\); this\.page\.chartSettings\(this\.cell, 'trading'\); \};/);
   assert.doesNotMatch(body, /toggleAccount|setCellTrade|placeOrder|send\(/, 'a chip never ticks an account or sends');
   assert.match(rd('charts/app.js'), /^function chartSettings\(c = cur\(\), tab = null\)/m);
@@ -146,4 +147,57 @@ test('5.12 the chart lines read the desk\'s marks for display only: grey, "not w
   assert.match(TL, /\(it\.g\.gone \? ' · not working' : ''\)/);
   assert.doesNotMatch(TL, /gone[^\n]*(onclick|onpointerdown|disabled)/, 'the mark never touches a click, a drag or the ×');
   assert.match(rd('charts/charts.css'), /\.tl-chip\.gone \{ opacity: \.6; \}/);
+});
+
+/* The Overlay's own methods, lifted from tradelines.js and run on a stand-in chart: a tiny fake DOM, the real HBTrade,
+   stubbed HBTradeUI / HBDeskClient. */
+const TL_SRC = rd('charts/tradelines.js');
+const method = (name) => {
+  const i = TL_SRC.indexOf(`\n  ${name}(`);
+  assert.ok(i >= 0, `defines ${name}`);
+  return TL_SRC.slice(i + 1, TL_SRC.indexOf('\n  }\n', i) + 4);
+};
+const fakeEl = (tagName) => ({ tagName, className: '', textContent: '', title: '', hidden: false, disabled: false, children: [],
+  classList: { on: new Set(), toggle(c, v) { if (v) this.on.add(c); else this.on.delete(c); }, contains(c) { return this.on.has(c); } },
+  append(...k) { this.children.push(...k); }, replaceChildren(...k) { this.children = k; }, blur() {} });
+function overlayOn({ ticked, mode, gate = null, qty = 1 }) {
+  const T = createRequire(import.meta.url)('../../homebase/static/charts/trade.js');
+  const live = (id) => id === 'live099';
+  const state = { enabled: true, accounts: [
+    { id: 'live099', label: 'FAKELIVE099', env: 'live', tradable: true }, { id: 'sim047', label: 'SIM0000047', env: 'demo', tradable: true }] };
+  const calls = [], sent = [];
+  const window = {
+    HBDeskClient: { state, prefs: { qty }, gate: () => gate },
+    HBTradeUI: { tradeOf: () => ({ accounts: ticked }), liveCue: () => (mode.mode === 'on' ? mode.accounts.filter(live) : []),
+      busy: () => false, flatBusy: () => false, sending: () => null, placeOrder: (o) => sent.push(o) },
+  };
+  const ctx = vm.createContext({ window, T, document: { createElement: fakeEl, activeElement: null } });
+  vm.runInContext(`${lift(TL_SRC, 'mk')} globalThis.O = { ${method('trade')}, ${method('paintBlock')}, ${method('paintAccts')} };`, ctx);
+  const ov = { cell: { cfg: {}, replay: false }, root: 'NQ', page: { chartSettings: (c, tab) => calls.push(['settings', tab]) },
+    block: fakeEl('div'), accts: fakeEl('div'), qty: fakeEl('input'), sellBtn: fakeEl('button'), buyBtn: fakeEl('button'),
+    flatBtn: fakeEl('button'), sellSub: fakeEl('span'), buySub: fakeEl('span'), sellLive: fakeEl('span'), buyLive: fakeEl('span') };
+  for (const k of ['trade', 'paintBlock', 'paintAccts']) ov[k] = ctx.O[k].bind(ov);
+  return { ov, calls, sent };
+}
+const texts = (box) => box.children.map((c) => [c.textContent, ...c.children.map((k) => k.textContent)].join(' '));
+
+test('5.2 run: the account spot -- "Accounts:" when it cannot trade, "Trade on: none" only while the desk trades; a chip only opens Settings › Trading', () => {
+  const off = overlayOn({ ticked: ['live099'], mode: { mode: 'none', accounts: [] } });
+  off.ov.paintAccts({ mode: 'none', accounts: [] });
+  assert.equal(off.ov.accts.hidden, false);
+  assert.deepEqual(texts(off.ov.accts), ['Accounts:', '…099 LIVE']);
+  assert.equal(off.ov.accts.children[1].className, 'tr-acct off', 'dimmed: not trading from this chart right now');
+  off.ov.accts.children[1].onclick({ stopPropagation() {} });
+  assert.deepEqual(off.calls, [['settings', 'trading']]);
+  assert.deepEqual(off.sent, [], 'a chip never sends');
+  const on = overlayOn({ ticked: ['live099'], mode: { mode: 'on', accounts: ['live099'] } });
+  on.ov.paintAccts({ mode: 'on', accounts: ['live099'] });
+  assert.deepEqual(texts(on.ov.accts), ['…099 LIVE'], 'beside a showing BUY / SELL: no lead');
+  assert.equal(on.ov.accts.children[0].className, 'tr-acct');
+  const none = overlayOn({ ticked: [], mode: { mode: 'off', accounts: [] } });
+  none.ov.paintAccts({ mode: 'off', accounts: [] });
+  assert.deepEqual(texts(none.ov.accts), ['Trade on: none']);
+  const down = overlayOn({ ticked: [], mode: { mode: 'down', accounts: [] }, gate: { mode: 'off' } });
+  down.ov.paintAccts({ mode: 'off', accounts: [] });
+  assert.equal(down.ov.accts.hidden, true, 'chart trading off at the desk: no prompt on every chart');
 });

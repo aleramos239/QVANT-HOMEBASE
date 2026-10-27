@@ -425,12 +425,13 @@ function accountChips(state, accounts, activeIds) {
   });
 }
 
-/* The legend's account spot (2026-10-26): while the chart's BUY / SELL is hidden, "Trade on:" leads its account chips,
-   and a chart with no account says "Trade on: none" -- each opens Settings › Trading. A replaying (or replay-ended)
-   chart gets neither: its practice block or its Resume sits there. */
-function tradeSpot(n, shown, replay) {
+/* The legend's account spot (2026-10-26): while the chart's BUY / SELL is hidden (it cannot trade right now),
+   "Accounts:" leads its dimmed account chips -- never "Trade on:", which would read as if a click could trade -- and,
+   while chart trading is on at the desk (`deskOn`), a chart with no account says "Trade on: none"; each opens
+   Settings › Trading. A replaying (or replay-ended) chart gets neither: its practice block or its Resume sits there. */
+function tradeSpot(n, shown, replay, deskOn) {
   const idle = !shown && !replay;
-  return { lead: idle && n > 0 ? 'Trade on:' : '', empty: idle && n === 0 ? 'Trade on: none' : '' };
+  return { lead: idle && n > 0 ? 'Accounts:' : '', empty: idle && n === 0 && deskOn ? 'Trade on: none' : '' };
 }
 
 /* An account's env as its chip: LIVE (red), DEMO (grey), PAPER (the paper colour -- Task 2's virtual account), or
