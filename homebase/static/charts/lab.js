@@ -17,7 +17,7 @@ const MINUS = '−';
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
   view: 'lib', libQ: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plFilter: 'all', plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plExec: '', desk: null, deskBuiltins: new Set(), deskBusy: false,
-  picks: [], anchor: '', listFocus: false, delBusy: false, unlocked: new Set(), heat: {}, wf: {}, three: {}, tries: {} };
+  picks: [], anchor: '', listFocus: false, delBusy: false, unlocked: new Set(), heat: {}, wf: {}, three: {}, tries: {}, stepped: {} };
 /* picks: the list's rows picked for a delete (keys, shown order); anchor: where a shift-click's range starts; listFocus: the
    list was the last thing touched (a button takes no focus on a click in Safari, so the keyboard is judged by this) */
 /* view: what the sidebar lists -- 'lib' (strategies), 'tk' (the arsenal: every tool, with its code), and the strategy pipeline's three:
@@ -548,6 +548,17 @@ function stepTrade(d) {
   ti = Math.max(0, Math.min(n - 1, (ti == null ? (d > 0 ? -1 : n) : ti) + d));
   paintNav();
   jumpTo(ti);
+  seenTrade();
+}
+/* The code check looks at 3 chart trades (plan 4.4): each trade of the open strategy's run that was stepped to, typed or picked in
+   the report counts once, this session. The tracker ticks at the third. */
+const STEP_TRADES = 3;
+function seenTrade() {
+  const sid = S.run && shownRid === S.run.rid ? S.run.strategy : '';
+  if (!sid || ti == null) return;
+  const s = S.stepped[sid] || (S.stepped[sid] = new Set()), had = s.size;
+  s.add(`${shownRid}:${ti}`);
+  if (had < STEP_TRADES && s.size >= STEP_TRADES) paintRes();
 }
 /* Click the count and type the trade's number instead of stepping: Enter goes there (a number past either end goes to the
    nearest trade), Escape or a click away leaves things as they were. `host` is the element that shows the count; `done` runs
@@ -573,7 +584,7 @@ function askTrade(host, done) {
     const v = parseInt(String(inp.value).replace(/[^\d]/g, ''), 10);
     navEditing = null;
     host.textContent = '';
-    if (go && Number.isFinite(v) && v > 0) { ti = Math.min(n, v) - 1; paintNav(); jumpTo(ti); } else paintNav();
+    if (go && Number.isFinite(v) && v > 0) { ti = Math.min(n, v) - 1; paintNav(); jumpTo(ti); seenTrade(); } else paintNav();
     if (done) done();
   };
   inp.addEventListener('keydown', (e) => {
@@ -592,7 +603,7 @@ document.getElementById('labNav')?.addEventListener('click', (e) => {
 // a trade picked in the full report's list moves the stepper too; and a run the tester has just been handed brings it up
 if (window.HBTesterUI && window.HBTesterUI.on) window.HBTesterUI.on(() => {
   const i = window.HBTesterUI.selected;
-  if (i != null && i !== ti && i < navTrades().length) ti = i;
+  if (i != null && i !== ti && i < navTrades().length) { ti = i; seenTrade(); }
   if (ti != null && ti >= navTrades().length) ti = null;      // another run's count
   paintNav();
 });
@@ -2385,6 +2396,7 @@ async function loadTries(sid) {
   const wfs = Array.isArray(w.json) ? w.json : [], fixed = wfs.filter((x) => x && x.strategy === sid && x.scheme === 'fixed');
   const res = await Promise.all(fixed.map((x) => send('GET', `/api/tester/walkforward/${encodeURIComponent(x.id)}/result`).then((g) => (g.ok ? g.json : null))));
   S.tries[sid] = C.triesCount(Array.isArray(r.json) ? r.json : [], wfs, sid, res);
+  S.tries[sid].read = res.find((g) => g && g.lock && g.oos && g.oos.state === 'done') || null;     // for the tracker's verdict
   if (curSid() === sid) paintRes();
   return S.tries[sid];
 }
@@ -2572,6 +2584,31 @@ function wfStepsHtml(r, axes) {
 const curSid = () => { const b = buf(), f = b && formOf(b); return f ? f.strategy : ''; };
 const triesOf = (sid) => S.tries[sid] || null;          // {n, cut} once counted; none yet = a count that may be short
 function realRead(res, sid) { const t = triesOf(sid); return RL && res ? RL.labRead(res, t ? t.n : 1, !t || t.cut) : null; }
+/* The step tracker (plan 4.4): the blueprint's phases for the open strategy, from what the Lab already has. It only shows; every
+   lock it names is held elsewhere (the server, and the Lab's refusal of test months before a pick). */
+function steps(b, f) {
+  const sid = f.strategy, T = S.three[sid], w = S.wf[sid], t = triesOf(sid), seen = S.stepped[sid] ? S.stepped[sid].size : 0;
+  const read = [T && T.oos.result, w && w.result, t && t.read].find((r) => r && r.lock && r.oos && r.oos.state === 'done');
+  const saved = b.kind === 'builtin' || (b.kind === 'draft' && !isDirty(b) && !!(b.valid && b.valid.ok));
+  const table = !!(w && w.result && w.result.scheme === 'fixed' && (w.result.cells || []).length > 1) || !!(t && t.tabled);
+  const picked = pickedNow(f), v = read && realRead(read, sid);
+  return [
+    ['Idea card', saved, '', b.valid && b.valid.ok === false ? 'the code does not load' : 'save it'],
+    ['Code check', seen >= STEP_TRADES, '', `step through ${STEP_TRADES} trades on the chart (${seen} of ${STEP_TRADES})`],
+    ['In-sample table', table, saved ? '' : 'save it first', 'not run (only when you say so)'],
+    ['Your pick', picked, table ? '' : 'run the in-sample table first', 'pick a box in the in-sample table'],
+    ['Test months', !!read, picked ? '' : 'pick a box first', 'not run (only when you say so)'],
+    [v ? `Verdict: ${v.verdict.word}` : 'Verdict', !!v, read ? '' : 'test months not run (only when you say so)', ''],
+  ].map(([name, ok, lock, todo]) => ({ name, ok, lock: ok ? '' : lock, why: ok ? '' : lock || todo }));
+}
+function stepsHtml(b, f) {
+  const st = steps(b, f), next = st.findIndex((x) => !x.ok && !x.lock);
+  const said = st.filter((x, i) => !x.ok && (x.lock || i === next)).map((x) => `${x.name}: ${x.why}`);
+  return `<div class="lab-steps"><ol>${st.map((x, i) => {
+    const k = x.ok ? 'ok' : x.lock ? 'lock' : i === next ? 'next' : '';
+    return `<li class="${k}" title="${esc(x.ok ? `${x.name}: done` : `${x.name}: ${x.why}`)}"><i aria-hidden="true">${x.ok ? '✓' : x.lock ? ICON_LOCK : i === next ? '●' : '○'}</i>${esc(x.name)}<span class="vh">${x.ok ? ', done' : x.lock ? ', locked' : ''}</span></li>`;
+  }).join('')}</ol>${said.length ? `<p>${esc(said.join(' · '))}</p>` : ''}</div>`;
+}
 function perYearHtml(cells, what) {
   const ys = RL ? RL.perYear(cells) : [];
   return ys.length ? `<div class="rs-gh">Per year · ${esc(what)}</div><div class="rl-years">${ys.map(([y, v]) => `<span>${esc(y)} <b class="${X.toneOf(v)}">${esc(X.signed(v))}</b></span>`).join('')}</div>` : '';
@@ -3062,7 +3099,7 @@ function paintRes() {
   } else {
     main = `<div class="rs-empty"><h3>No backtest yet</h3><p>Run it to see the P&amp;L, the equity curve and every trade. <kbd>⌘↵</kbd> runs it from the editor.</p></div>`;
   }
-  if (T) main = threeTabs(T) + main;
+  if (T) main = (b.kind === 'pipe' ? '' : stepsHtml(b, wfF)) + threeTabs(T) + main;
   el.innerHTML = settingsDone ? main : `${main}${settings ? `<div class="rs-gh">Run settings</div>${settings}` : ''}`;
   el.scrollTop = top;
   drawEq();

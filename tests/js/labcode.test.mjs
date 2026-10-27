@@ -795,13 +795,13 @@ test('rangeReadsTestMonths: a saved run\'s range, by kind (plan 4.3)', () => {
 test('triesCount: each in-sample setting, one per heat-map table, every test-months read after the first (O5)', () => {
   const run = (kind, extra = {}) => ({ strategy: 's', status: 'done', range: { kind, start: '2022-02-01', end: kind === 'custom' ? '2022-05-10' : '2022-03-31' }, ...extra });
   // nothing yet: the first try
-  assert.deepEqual(L.triesCount([], [], 's', []), { n: 1, reads: 0, settings: 0, tables: 0, cut: false, locked: false });
+  assert.deepEqual(L.triesCount([], [], 's', []), { n: 1, reads: 0, settings: 0, tables: 0, cut: false, locked: false, tabled: false });
   // 3 settings, one heat-map table, an old 1:N walk-forward, one custom run into May, one 3:1 read: 3 + 2 tables + (3 reads - 1)
   const runs = [run('wf_is'), run('wf_is'), run('wf_is'), run('custom'), run('wf_is', { status: 'error' }), run('wf_is', { strategy: 'other' })];
   const wfs = [{ strategy: 's', scheme: 'fixed', axes: ['ctl.stop', 'ctl.target_rr'] }, { strategy: 's', scheme: 'fixed', axes: [] },
     { strategy: 's', scheme: 'pick', axes: ['x'] }, { strategy: 'other', scheme: 'fixed', axes: ['x'] }];
   const t = L.triesCount(runs, wfs, 's', [{ lock: { cell: 0 }, oos: { state: 'done' } }, null]);
-  assert.deepEqual(t, { n: 3 + 2 + 2, reads: 3, settings: 3, tables: 2, cut: false, locked: true });
+  assert.deepEqual(t, { n: 3 + 2 + 2, reads: 3, settings: 3, tables: 2, cut: false, locked: true, tabled: false });
   // one heat-map table is one try, whatever its box count
   assert.equal(L.triesCount([], [{ strategy: 's', scheme: 'fixed', axes: ['a', 'b', 'c'] }], 's', []).n, 1);
   assert.equal(L.triesCount([run('wf_is')], [{ strategy: 's', scheme: 'fixed', axes: ['a'] }], 's', []).n, 2);
@@ -815,4 +815,9 @@ test('triesCount: each in-sample setting, one per heat-map table, every test-mon
   assert.equal(L.triesCount([], Array.from({ length: 20 }, () => ({ strategy: 'x', scheme: 'fixed', axes: [] })), 's', []).cut, true);
   // no pick yet: not locked, even with a table
   assert.equal(L.triesCount([], [{ strategy: 's', scheme: 'fixed', axes: ['a'] }], 's', [{ lock: null, oos: null }]).locked, false);
+  // the step tracker's "In-sample table" ticks once a fixed table of this strategy finished
+  assert.equal(L.triesCount([], [{ strategy: 's', scheme: 'fixed', axes: ['a'], status: 'done' }], 's', []).tabled, true);
+  assert.equal(L.triesCount([], [{ strategy: 's', scheme: 'fixed', axes: ['a'], status: 'running' }], 's', []).tabled, false);
+  assert.equal(L.triesCount([], [{ strategy: 's', scheme: 'fixed', axes: [], status: 'done' }], 's', []).tabled, false);
+  assert.equal(L.triesCount([], [{ strategy: 'x', scheme: 'fixed', axes: ['a'], status: 'done' }], 's', []).tabled, false);
 });

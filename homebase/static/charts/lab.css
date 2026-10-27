@@ -802,3 +802,15 @@ html.hb-apple .lab-dlg.am-dlg { width: min(1040px, calc(100vw - 32px)); max-heig
 .rl-years { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 4px 6px; font-variant-numeric: tabular-nums; font-size: var(--hb-fs-ui); }
 .rl-years b { font-weight: 600; }
 .rl-years .up { color: var(--up); } .rl-years .down { color: var(--down); }
+
+/* the step tracker above a 3:1 result (lab.js stepsHtml): done, the next step, locked; the locked steps' reasons in words under it */
+.lab-steps { margin: 0 6px 12px; font-size: var(--hb-fs-ui); line-height: 1.4; }
+.lab-steps ol { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; padding: 0; list-style: none; }
+.lab-steps li { display: inline-flex; align-items: center; gap: 4px; color: var(--hb-fg2); }
+.lab-steps li i { font-style: normal; display: inline-flex; }
+.lab-steps li svg { width: 11px; height: 11px; }
+.lab-steps li.ok { color: var(--hb-fg); } .lab-steps li.ok i { color: var(--hb-gain, #2e6b4f); }
+.lab-steps li.next { color: var(--hb-fg); font-weight: 600; } .lab-steps li.next i { color: var(--hb-accent); }
+.lab-steps li.lock { opacity: .7; }
+.lab-steps p { margin: 4px 0 0; color: var(--hb-fg2); }
+.lab-steps .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

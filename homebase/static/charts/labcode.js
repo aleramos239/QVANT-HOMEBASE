@@ -880,7 +880,8 @@ const RUNS_PAGE = 500, WFS_PAGE = 20;       // GET /api/tester/runs?limit=500, G
    (they ran out-of-sample months), and every 3:1 walk-forward whose test months were started. `results`: the GET .../result of
    this strategy's fixed walk-forwards (null = not loaded). A full page of either list = `cut`: the count may be short.
    shortcut: each wf_is run counts as a setting (the runs list carries no inputs; a repeat is found by run-match and not run again),
-   so it over-counts, never under. `locked`: a box of this strategy is picked (O15: no test month before a pick). */
+   so it over-counts, never under. `locked`: a box of this strategy is picked (O15: no test month before a pick). `tabled`: an
+   in-sample table (a fixed walk-forward with a heat map) finished, for the step tracker. */
 function triesCount(runs, wfs, sid, results) {
   const rs = (runs || []).filter((r) => r && r.strategy === sid && r.status !== 'error');
   const ws = (wfs || []).filter((w) => w && w.strategy === sid), got = (results || []).filter(Boolean);
@@ -889,7 +890,8 @@ function triesCount(runs, wfs, sid, results) {
   const reads = rs.filter((r) => rangeReadsTestMonths(r.range)).length + ws.filter((w) => w.scheme && w.scheme !== 'fixed').length
     + got.filter((g) => g.oos).length;
   return { n: Math.max(1, settings + tables + Math.max(0, reads - 1)), reads, settings, tables,
-    cut: (runs || []).length >= RUNS_PAGE || (wfs || []).length >= WFS_PAGE, locked: got.some((g) => !!g.lock) };
+    cut: (runs || []).length >= RUNS_PAGE || (wfs || []).length >= WFS_PAGE, locked: got.some((g) => !!g.lock),
+    tabled: ws.some((w) => w.scheme === 'fixed' && (w.axes || []).length > 0 && w.status === 'done') };
 }
 
 const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, withDeskGroup, ON_DESK, INDENT,
