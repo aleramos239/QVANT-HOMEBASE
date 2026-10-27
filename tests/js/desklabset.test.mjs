@@ -186,7 +186,7 @@ test('3.2 a value in force that is not one of the menu\'s options: plain Set on 
 });
 
 test('3.2 the page\'s setLabSetting takes the extra `from` and sends the same body as before', async () => {
-  const HTML = require('node:fs').readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+  const { HTML } = await import('./deskpage.mjs');   // the Desk page with its desk/*.js put back inline
   const fn = HTML.slice(HTML.indexOf('async function setLabSetting('), HTML.indexOf('/* Flatten & turn off believes only'));
   assert.ok(fn.length > 0 && fn.length < 1200, 'the page still has its setLabSetting');
   const posts = [];
