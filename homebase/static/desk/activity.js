@@ -417,9 +417,11 @@ const CHG_WORDS = {
     const now = DeskLab.limitsRows(r.limits), was = r.previous ? DeskLab.limitsRows(r.previous) : null, lab = s.lab || {};
     if (!was) return {text: "Limits set: " + now.map(x => `${x.k} ${x.v}`).join(" · ")};
     const diff = now.map((x, i) => [x, was[i]]).filter(([x, y]) => x.v !== y.v).map(([x, y]) => `${x.k} ${y.v} → ${x.v}`);
-    const still = !!lab.limits && ["max_trades_day", "max_qty", "max_risk_usd", "last_entry_et", "flat_et"].every(k => lab.limits[k] == r.limits[k]);
-    // Put back: the Limits dialog opens with the old values and its own Save runs (its checks, its ask when loosening)
-    return diff.length ? {text: "Limits: " + diff.join(" · "), back: still && !lab.read_only
+    const keys = ["max_trades_day", "max_qty", "max_risk_usd", "last_entry_et", "flat_et"];
+    const still = !!lab.limits && keys.every(k => lab.limits[k] == r.limits[k]), whole = keys.every(k => r.previous[k] != null);
+    // Put back: the Limits dialog opens with the old values and its own Save runs (its checks, its ask when loosening); an old
+    // blank (no limit) is not offered: the dialog refuses a blank
+    return diff.length ? {text: "Limits: " + diff.join(" · "), back: still && whole && !lab.read_only
       ? () => { openLabLimits(r.strategy, r.previous); if (LAB_LIM.name === r.strategy) return saveLabLimits(); } : null} : null;
   },
   lab_settings_set: (r, prior, s) => {
@@ -437,13 +439,15 @@ const CHG_WORDS = {
     return parts.length ? {text: parts.join(" · "), back: !still || sl === rr ? null      // one of the two, as the controls change them
       : sl ? async () => chgTell(await setStratRr(r.strategy, null, p.sl_pts)) : +p.rr >= 0.25 ? async () => chgTell(await setStratRr(r.strategy, p.rr)) : null} : null;
   },
-  book_updated: (r, prior) => {
+  book_updated: (r, prior, s) => {
     const now = r.assignments || [], A = (a) => acctShort(a.account);
+    // locked as the Assign control is: another Desk owns it, or a Lab strategy with no limits yet
+    const locked = (s.lab && s.lab.read_only === true) || ((s.cfg || {}).kind === "lab" && DeskLab.accountsLock(s).locked);
     if (!prior) return {text: "Accounts: " + (now.map(a => `${A(a)} ×${a.qty}`).join(" · ") || "none")};
     const old = prior.assignments || [], q = (l, a) => (l.find(b => b.account === a.account) || {}).qty;
     const parts = [...now.filter(a => q(old, a) == null).map(a => `${A(a)} added ×${a.qty}`), ...old.filter(b => q(now, b) == null).map(b => `${A(b)} taken off`),
       ...now.filter(a => q(old, a) != null && q(old, a) !== a.qty).map(a => `${A(a)} qty ${q(old, a)} → ${a.qty}`)];
-    return parts.length ? {text: parts.join(" · "), back: parts.length === 1 && chgSameBook((ST.book || {})[r.strategy], now) ? () => putBackBook(r.strategy, old) : null} : null;
+    return parts.length ? {text: parts.join(" · "), back: parts.length === 1 && !locked && chgSameBook((ST.book || {})[r.strategy], now) ? () => putBackBook(r.strategy, old) : null} : null;
   },
   group_set: (r, prior) => {
     const money = (v) => +v > 0 ? usd(v).replace(/\.00$/, "") + " at risk a trade" : "each at its own size";

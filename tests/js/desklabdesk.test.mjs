@@ -241,6 +241,30 @@ test('WP1.15 putting back a LIVE qty raise keeps the account in its place (the t
   assert.deepEqual(no.posts, [], 'Cancel books nothing');
 });
 
+test('H: no Put back on an account change while the Assign control is locked (another Desk owns it, or no limits yet)', () => {
+  const BOOK = [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }] })];
+  const backs = (labOver) => {
+    const t = load({ strategies: { nq930: nq930(), lab_nq_orb: deskStrat(labOver) }, book: { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] } });
+    changes(t, BOOK);
+    return plain(t.api.deskChangeList('s:lab_nq_orb').map((x) => !!x.back));
+  };
+  assert.deepEqual(backs({}), [true, false], 'unlocked: as before');
+  assert.deepEqual(backs({ read_only: true }), [false, false], 'another Desk owns it');
+  assert.deepEqual(backs({ limits: null }), [false, false], 'no limits yet: the Assign control is locked');
+});
+
+test('H: no Put back on a limits change whose old value had a limit left blank (the Limits dialog refuses a blank)', () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  t.ctx.ST.strategies.lab_nq_orb.lab.limits = LIM_NEW;
+  changes(t, [chg('lab_limits_set', { strategy: 'lab_nq_orb', limits: LIM_NEW, previous: { ...LIM_OLD, max_risk_usd: null } })]);
+  const [x] = t.api.deskChangeList('s:lab_nq_orb');
+  assert.match(x.text, /^Limits: /);
+  assert.equal(x.back, null);
+  changes(t, [chg('lab_limits_set', { strategy: 'lab_nq_orb', limits: LIM_NEW, previous: LIM_OLD })]);
+  assert.ok(t.api.deskChangeList('s:lab_nq_orb')[0].back, 'every old value known: Put back as before');
+});
+
 test('WP1.15 a change no longer in force, or any group row (even on its own page), has no Put back', () => {
   const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 2 }] } });
   t.ctx.ST.strategies.lab_nq_orb.lab.limits = LIM_OLD;
