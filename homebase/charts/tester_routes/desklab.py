@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import copy
 import datetime as dt
 import hashlib
 import json
@@ -13,20 +14,22 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from collections import OrderedDict
 from typing import Callable
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
 from ... import draftstore
-from ...backtest import sandbox, slots
-from ...backtest.runner import read_json
+from ...backtest import propsim, sandbox, slots, walkforward
+from ...backtest.runner import _settled, read_json
 from ...backtest.tape import TapeStore
 from ...labrun import door, store
 from ..desk import DESK_URL
 from ...labrun.host import session_today
 from .. import deskgroups, deskresults
 from ..paperbook import DESK_ORIGINS, _cors, desk_origin_refusal
+from .jobs import WF_RESULT_FILES, wf_stamp
 
 
 DESKLAB_ACTIONS = ("promote", "remove", "delete", "onoff", "open", "archive", "filed", "restore", "archive_builtin",
@@ -39,6 +42,7 @@ DESKLAB_PROP = "lucid-pro-50k-no-dll@2026-10-11"   # the account every Desk pane
 DESKLAB_SHADOW_DAYS = 800    # the shadow calendar: about three years of session days
 DESKLAB_DAYS = 10        # day summaries shown under each promoted strategy ...
 DESKLAB_DAY_KEYS = ("date", "state", "why", "net", "match")      # ... each cut to these and `rebuilt` (no order or trade rows)
+DESKLAB_BLOCKS = 256     # card blocks kept per service (one per Desk strategy and month: ~20 KB each, curves included)
 
 
 def register(r: APIRouter, ctx) -> Callable[[], None]:
@@ -170,31 +174,76 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
         except Exception:      # noqa: BLE001 -- a panel's research never costs a promote or the list its answer
             return {"state": "none"}
 
-    def wf_prop(key: tuple, trades: list, months=None):
+    def wf_prop(key: tuple, trades: list, months=None, failed: list | None = None):
         try:        # months: the side's own (1 in 4 for the unseen side): the others are no flat days of it (2026-10-24)
             return deskresults.prop_headline(_rescore(key, lambda: {"run": {"range": {"months": months}}, "trades": trades}, DESKLAB_PROP))
         except (HTTPException, KeyError, ValueError, OSError):
+            if failed is not None:
+                failed.append(key)
             return None
 
-    def wf_block(rec: dict) -> dict:
+    blocks: OrderedDict = OrderedDict()     # walk-forward id -> (block_key, the card's block): wf_block
+    blocks_lock = threading.Lock()
+    claim_at, oos_at = WF_RESULT_FILES.index(walkforward.CLAIM), WF_RESULT_FILES.index(walkforward.OOS)
+
+    def block_key(wid: str):
+        """What a done walk-forward's card block is made from: the stamps of the files its result is read from and the prop
+        account's rules version; None when it cannot be kept (a file under 2 s old or not to be looked at, a test-month read
+        under way, rules that do not load)."""
+        now = time.time_ns()
+        try:
+            stamp, version = wf_stamp(wfs.dir(wid)), propsim.load_rules(DESKLAB_PROP).get("version")
+        except (KeyError, ValueError, OSError):
+            return None
+        if stamp is None or not _settled(now, *stamp) or (stamp[claim_at] is not None and stamp[oos_at] is None):
+            return None
+        return stamp, version
+
+    def wf_block(rec: dict, state=None) -> dict:
         """The card's block from the 3:1 walk-forward of the strategy as set: {build, unseen, both, unseen_state, curve, prop_build,
-        prop_unseen, prop_both} -- build = its in-sample months, unseen = its out-of-sample months, both = all of them as one run."""
-        got = ensure_wf(rec)
+        prop_unseen, prop_both} -- build = its in-sample months, unseen = its out-of-sample months, both = all of them as one run.
+        state: where the walk-forward stands (ensure_wf, which may start it; the warm-up passes the read-only wf_state). A done
+        one's block is kept until one of its files or the prop rules change; it is worked out under desk_res_lock (one prop sim
+        at a time), a kept one is not."""
+        got = (state or ensure_wf)(rec)
         out = {"build": None, "unseen": None, "both": None, "unseen_state": got["state"], "curve": None, "curve_build": None,
                "prop_build": None, "prop_unseen": None, "prop_both": None}
         if got["state"] != "done":
             return out
-        try:
-            res = wfs.result(got["id"])
-        except (ValueError, KeyError, OSError):
-            out["unseen_state"] = "failed"
-            return out
-        oos, ins = (res.get("stitched") or {}).get("trades") or [], (res.get("stitched_is") or {}).get("trades") or []
-        out.update(unseen=deskresults.wf_summary(got["id"], res), build=deskresults.wf_summary(got["id"], res, "stitched_is"),
-                   curve=deskresults.curve_of_trades(oos), curve_build=deskresults.curve_of_trades(ins),
-                   prop_unseen=wf_prop(("wf", got["id"]), oos, (res.get("stitched") or {}).get("months")),
-                   prop_build=wf_prop(("wf-is", got["id"]), ins, (res.get("stitched_is") or {}).get("months")),
-                   both=deskresults.wf_both(got["id"], res), prop_both=wf_prop(("wf-both", got["id"]), *both_side(res)))
+        wid, key = got["id"], block_key(got["id"])
+
+        def kept():
+            with blocks_lock:
+                hit = blocks.get(wid)
+                if key is not None and hit is not None and hit[0] == key:
+                    blocks.move_to_end(wid)
+                    return copy.deepcopy(hit[1])
+            return None
+        hit = kept()
+        if hit is not None:
+            return hit
+        with desk_res_lock:
+            hit = kept()                    # worked out by another ask while this one waited
+            if hit is not None:
+                return hit
+            try:
+                res = wfs.result(wid)
+            except (ValueError, KeyError, OSError):
+                out["unseen_state"] = "failed"
+                return out
+            failed: list = []
+            oos, ins = (res.get("stitched") or {}).get("trades") or [], (res.get("stitched_is") or {}).get("trades") or []
+            out.update(unseen=deskresults.wf_summary(wid, res), build=deskresults.wf_summary(wid, res, "stitched_is"),
+                       curve=deskresults.curve_of_trades(oos), curve_build=deskresults.curve_of_trades(ins),
+                       prop_unseen=wf_prop(("wf", wid), oos, (res.get("stitched") or {}).get("months"), failed),
+                       prop_build=wf_prop(("wf-is", wid), ins, (res.get("stitched_is") or {}).get("months"), failed),
+                       both=deskresults.wf_both(wid, res), prop_both=wf_prop(("wf-both", wid), *both_side(res), failed=failed))
+            if key is not None and not failed and block_key(wid) == key:     # nothing changed while it was read
+                with blocks_lock:
+                    blocks[wid] = (key, copy.deepcopy(out))
+                    blocks.move_to_end(wid)
+                    while len(blocks) > DESKLAB_BLOCKS:
+                        blocks.popitem(last=False)
         return out
 
     def both_side(res: dict) -> tuple:
@@ -203,23 +252,22 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
         trades = sorted((ins.get("trades") or []) + (oos.get("trades") or []), key=lambda t: (t.get("entry_ms") or 0))
         return trades, sorted(set(ins.get("months") or []) | set(oos.get("months") or []))
 
+    def read_wf(rec: dict) -> dict:
+        """ensure_wf without the start: the warm-up reads saved walk-forwards only."""
+        return deskresults.wf_state(wfs.grids, rec, slots.et_now().date())
+
     def warm_desklab_results() -> None:
         """Score every promoted strategy's (and the two built-in straddles' twins') saved runs, so the Desk's first results
         ask is a cache hit (about 16 prop sims: 25-90 s cold; a new run was 3-4 s on the next ask). One pass; the chart
         service repeats it every WARM_EVERY_S. Reads saved runs only and never starts one (unlike ensure_unseen). The lock
-        is taken per record, so a real ask is never held behind the whole warm-up. Never raises."""
+        is taken per record (and per group: the Desk groups' prop sims too), so a real ask is never held behind the whole
+        warm-up. Never raises."""
         try:
             for rec in store.listing():
-                with desk_res_lock:
-                    try:                    # the card's two prop sims: the 3:1's in- and out-of-sample months
-                        st = deskresults.wf_state(wfs.grids, rec, slots.et_now().date())
-                        if st["state"] == "done":
-                            res = wfs.result(st["id"])
-                            wf_prop(("wf", st["id"]), (res.get("stitched") or {}).get("trades") or [], (res.get("stitched") or {}).get("months"))
-                            wf_prop(("wf-is", st["id"]), (res.get("stitched_is") or {}).get("trades") or [], (res.get("stitched_is") or {}).get("months"))
-                            wf_prop(("wf-both", st["id"]), *both_side(res))
-                    except Exception:      # noqa: BLE001 -- the route computes it on ask
-                        pass
+                try:                        # the card's block and its three prop sims: the 3:1's in-sample, test months and Both
+                    wf_block(rec, read_wf)
+                except Exception:      # noqa: BLE001 -- the route computes it on ask
+                    pass
             for desk_id in deskresults.BUILTIN_TWINS:      # the Desk's own straddles: their twin's saved runs
                 try:
                     rec = deskresults.builtin_rec(desk_id)
@@ -230,6 +278,14 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
                                 prop_of(rid)
                 except Exception:      # noqa: BLE001 -- a twin that cannot be read is skipped, as the route does
                     continue
+            for g in deskgroups.load():     # each group's three prop sims, from its members' saved walk-forwards
+                try:
+                    with desk_res_lock:
+                        for side, chosen in group_sides(g, read_wf)[2].items():
+                            ledger, _, key = side_ledger(side, chosen)
+                            group_prop(key, ledger)
+                except Exception:      # noqa: BLE001 -- the route computes it on ask
+                    continue
         except Exception:      # noqa: BLE001 -- a warm-up never takes the service down; the route computes it on ask
             pass
 
@@ -239,13 +295,13 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
         only: no strategy runs and no test day is read. A plain `def`: FastAPI's threadpool, not the loop."""
         watch_guard(request)
         out = {}
+        for rec in store.listing():
+            # build and unseen days ARE the 3:1 walk-forward's in- and out-of-sample months, the strategy as set (owner, 2026-10-18)
+            w = wf_block(rec)               # takes desk_res_lock itself, only to work a block out
+            out[rec["name"]] = {"build": w["build"], "unseen": w["unseen"], "both": w["both"], "unseen_state": w["unseen_state"],
+                                "curve": w["curve"], "curve_build": w["curve_build"], "walkforward": True,
+                                "prop": {"build": w["prop_build"], "unseen": w["prop_unseen"], "both": w["prop_both"]}}
         with desk_res_lock:
-            for rec in store.listing():
-                # build and unseen days ARE the 3:1 walk-forward's in- and out-of-sample months, the strategy as set (owner, 2026-10-18)
-                w = wf_block(rec)
-                out[rec["name"]] = {"build": w["build"], "unseen": w["unseen"], "both": w["both"], "unseen_state": w["unseen_state"],
-                                    "curve": w["curve"], "curve_build": w["curve_build"], "walkforward": True,
-                                    "prop": {"build": w["prop_build"], "unseen": w["prop_unseen"], "both": w["prop_both"]}}
             # the Desk's own straddles (nq930, gc_nfp): their tester twin's SAVED runs, at the Desk's size and setting. Nothing here
             # starts a run (the unseen days of a built-in are read by hand, once, from the Lab): "manual" says so to the page.
             for desk_id in deskresults.BUILTIN_TWINS:
@@ -592,6 +648,55 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
         except HTTPException as e:
             return watch_answer(request, {"ok": False, "detail": e.detail}, e.status_code)
 
+    def group_prop(key, ledger):
+        if not ledger:
+            return None
+        try:
+            got = _rescore(("group", key), lambda: {"run": {}, "trades": ledger, "propsim": None}, DESKLAB_PROP)
+            return deskresults.prop_headline(got)
+        except (HTTPException, KeyError, ValueError, OSError):
+            return None
+
+    def group_sides(g: dict, state_of) -> tuple:
+        """A group's (members, left_out, sides): each member's own numbers, those left out and why, and per side the (sid, wf
+        id, trades) of the members whose 3:1 walk-forward is done. state_of: ensure_wf on an ask, read_wf in the warm-up."""
+        heads = ("net", "trades", "win_rate", "profit_factor", "max_drawdown")
+        members, left_out, sides = [], [], {"build": [], "unseen": [], "both": []}
+        for sid in g["members"]:
+            try:
+                rec = store.get(sid[4:]) if sid.startswith("lab_") else None
+            except ValueError:
+                rec = None
+            if not isinstance(rec, dict):
+                left_out.append({"strategy": sid, "why": "not on the Desk any more" if sid.startswith("lab_")
+                                 else "built in: it has no 3:1 walk-forward to add"})
+                continue
+            got, res = state_of(rec), None
+            if got["state"] == "done":
+                try:
+                    res = wfs.result(got["id"])
+                except (ValueError, KeyError, OSError):
+                    res = None
+            ins = ((res or {}).get("stitched_is") or {}).get("trades") or []
+            oos = ((res or {}).get("stitched") or {}).get("trades") or []
+            members.append({"strategy": sid, "label": rec.get("label") or rec.get("name"),
+                            "state": "done" if res else ("failed" if got["state"] == "done" else got["state"]),
+                            "build": {k: v for k, v in deskresults.wf_summary(got["id"], res, "stitched_is").items() if k in heads}
+                            if res else None,
+                            "unseen": {k: v for k, v in deskresults.wf_summary(got["id"], res).items() if k in heads} if res else None})
+            if res is None:
+                left_out.append({"strategy": sid, "why": "no 3:1 walk-forward yet"})
+                continue
+            sides["build"].append((sid, got["id"], ins))
+            sides["unseen"].append((sid, got["id"], oos))
+            sides["both"].append((sid, got["id"], ins + oos))
+        return members, left_out, sides
+
+    def side_ledger(side: str, chosen: list) -> tuple:
+        """(ledger, owners, prop-sim key) of one side of a group: its members' trades as one account's."""
+        ledger, owners = deskgroups.merged([(sid, trades) for sid, _, trades in chosen])
+        return ledger, owners, (side,) + tuple(sorted(w for _, w, _ in chosen))
+
     @r.get("/deskgroups/results")
     def deskgroups_results(request: Request):
         """For each group: its members' own 3:1 walk-forward numbers and, for their trades put together as one account's, the
@@ -601,54 +706,16 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
         out and named. Reads saved walk-forwards; ensure_wf may START a missing one on a host that has the data (the Mac, the
         first view of a new month), never on one without it (the server: no_data)."""
         watch_guard(request)
-
-        def prop_of(key, ledger):
-            if not ledger:
-                return None
-            try:
-                got = _rescore(("group", key), lambda: {"run": {}, "trades": ledger, "propsim": None}, DESKLAB_PROP)
-                return deskresults.prop_headline(got)
-            except (HTTPException, KeyError, ValueError, OSError):
-                return None
-        heads = ("net", "trades", "win_rate", "profit_factor", "max_drawdown")
         out = {}
         with desk_res_lock:
             for g in deskgroups.load():
-                members, left_out, sides = [], [], {"build": [], "unseen": [], "both": []}
-                for sid in g["members"]:
-                    try:
-                        rec = store.get(sid[4:]) if sid.startswith("lab_") else None
-                    except ValueError:
-                        rec = None
-                    if not isinstance(rec, dict):
-                        left_out.append({"strategy": sid, "why": "not on the Desk any more" if sid.startswith("lab_")
-                                         else "built in: it has no 3:1 walk-forward to add"})
-                        continue
-                    got, res = ensure_wf(rec), None
-                    if got["state"] == "done":
-                        try:
-                            res = wfs.result(got["id"])
-                        except (ValueError, KeyError, OSError):
-                            res = None
-                    ins = ((res or {}).get("stitched_is") or {}).get("trades") or []
-                    oos = ((res or {}).get("stitched") or {}).get("trades") or []
-                    members.append({"strategy": sid, "label": rec.get("label") or rec.get("name"),
-                                    "state": "done" if res else ("failed" if got["state"] == "done" else got["state"]),
-                                    "build": {k: v for k, v in deskresults.wf_summary(got["id"], res, "stitched_is").items() if k in heads}
-                                    if res else None,
-                                    "unseen": {k: v for k, v in deskresults.wf_summary(got["id"], res).items() if k in heads} if res else None})
-                    if res is None:
-                        left_out.append({"strategy": sid, "why": "no 3:1 walk-forward yet"})
-                        continue
-                    sides["build"].append((sid, got["id"], ins))
-                    sides["unseen"].append((sid, got["id"], oos))
-                    sides["both"].append((sid, got["id"], ins + oos))
+                members, left_out, sides = group_sides(g, ensure_wf)
                 res_g = {"id": g["id"], "name": g["name"], "kind": g["kind"], "members": members, "left_out": left_out,
                          "walkforward": True}
                 for key, chosen in sides.items():
-                    ledger, owners = deskgroups.merged([(sid, trades) for sid, _, trades in chosen])
+                    ledger, owners, prop_key = side_ledger(key, chosen)
                     res_g[key] = deskgroups.summarize(ledger, owners)
-                    res_g.setdefault("prop", {})[key] = prop_of((key,) + tuple(sorted(w for _, w, _ in chosen)), ledger)
+                    res_g.setdefault("prop", {})[key] = group_prop(prop_key, ledger)
                     res_g.setdefault("in", {})[key] = [sid for sid, _, _ in chosen]
                 out[g["id"]] = res_g
         return watch_answer(request, {"results": out})
