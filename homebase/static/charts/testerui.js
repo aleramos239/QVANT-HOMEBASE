@@ -939,6 +939,7 @@ function refreshTabsBar() {
   for (const [id, label] of tabs) {
     const b = page.mk('button', 'tst-tab' + (innerTab === id ? ' active' : ''), label);
     b.type = 'button';
+    b.dataset.tab = id;                // the Lab's read-only Report hides some tabs by this (lab.css)
     b.setAttribute('role', 'tab');
     b.setAttribute('aria-selected', String(innerTab === id));
     b.onclick = () => {

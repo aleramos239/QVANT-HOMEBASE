@@ -814,3 +814,10 @@ html.hb-apple .lab-dlg.am-dlg { width: min(1040px, calc(100vw - 32px)); max-heig
 .lab-steps li.lock { opacity: .7; }
 .lab-steps p { margin: 4px 0 0; color: var(--hb-fg2); }
 .lab-steps .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* The Strategy Tester under the chart is a read-only Report on the Lab page (plan 4.6): its trades, metrics and properties stay;
+   its own Run, the range pill, the heat map (with the old walk-forward's settings) and Compare are hidden -- the Lab's Run, its
+   3:1 in-sample table and its test months are the only way to run. The Recent runs menu sits outside the panel (#menuRoot). */
+.lab[data-report="1"] .bpanel .tst-run-area, .lab[data-report="1"] .bpanel .tst-range,
+.lab[data-report="1"] .bpanel .tst-tab[data-tab="heatmap"], .lab[data-report="1"] .bpanel .tst-tab[data-tab="compare"],
+.lab-page .menu-tester-runs .tst-cmp-cb, .lab-page .menu-tester-runs .tst-cmp-footer { display: none !important; }

@@ -3086,7 +3086,7 @@ function paintRes() {
       <div class="rs-gh">Run settings</div>${settings}
       <div class="rs-group">${P.chart ? '' : '<button class="rs-row" data-act="show"><span>Show trades on the chart</span><span>›</span></button>'}
         <button class="rs-row" data-act="allmetrics"><span>All metrics</span><span>›</span></button>
-        <button class="rs-row" data-act="report"><span>${root.dataset.report === '1' && P.chart ? 'Hide the full report' : 'Full report'}</span><span>›</span></button>
+        <button class="rs-row" data-act="report"><span>${root.dataset.report === '1' && P.chart ? 'Hide the report' : 'Report'}</span><span>›</span></button>
         ${b.kind === 'pipe' ? '' : `<button class="rs-row" data-act="review"${b.kind === 'builtin' ? ' disabled' : ''}><span>Request a review</span><span>›</span></button>${deskRows(b)}`}</div>${b.kind === 'pipe' ? '' : deskNote(b)}`;
     main = main.replace('<div class="rs-gh">Run settings</div>', `${propHtml(r)}<div class="rs-gh">Run settings</div>`);
     settingsDone = true;
