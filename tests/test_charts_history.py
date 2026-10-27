@@ -242,6 +242,25 @@ def test_bars_finer_than_5_minutes_are_not_kept_except_30s(tmp_path):
     assert list((tmp_path / "cache").glob("*.t900.pkl"))
 
 
+def test_tick_volume_and_range_bars_are_kept_per_session_and_read_back_equal(tmp_path):
+    h, store, _ = setup(tmp_path)
+    ticks = store.load("NQ", D).ticks
+    specs = {"tick50": BarSpec("tick", 50), "volume40": BarSpec("volume", 40), "range4": BarSpec("range", 4)}
+    first = {}
+    for name, spec in specs.items():
+        closed, cur = build(ticks, spec, 0.25)
+        first[name] = h.bars("NQ", spec, D)
+        assert [_k(b) for b in first[name]] == [_k(b) for b in closed + ([cur] if cur else [])]
+        assert len(first[name]) >= 2 and list((tmp_path / "cache").glob(f"*.{name}.pkl")), name
+    # a new service: no memo, and the ticks are not read again
+    store.load = lambda *a: (_ for _ in ()).throw(AssertionError("ticks read"))
+    again = History(store, cache_dir=tmp_path / "cache")
+    for name, spec in specs.items():
+        back = again.bars("NQ", spec, D)
+        assert back == first[name]
+        assert [b.wire(0.25) for b in back] == [b.wire(0.25) for b in first[name]]
+
+
 def test_the_memo_is_weighed_by_what_its_bars_hold_not_by_sessions_or_bars(tmp_path):
     """A daily bar holds a whole day's footprint: weighed as one bar, 1D / 1W charts of a few roots pinned gigabytes.
     The budget is in cells, so a session is evicted for its weight, not its count."""
