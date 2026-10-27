@@ -113,32 +113,12 @@ function buildTrading() {
       <button class="switch" id="ctSwitch" role="switch" aria-label="Chart trading" aria-checked="false"
         title="OFF — the chart page cannot trade"></button>
       <span class="nm" id="ctState" style="font-size:13px">Off</span>
-      <span class="spacer"></span>
-      <label class="hint" hidden for="ctMaxOrder">Max per order</label>
-      <input id="ctMaxOrder" hidden type="number" min="1" max="50" step="1"
-        style="width:64px;padding:5px 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--background);color:var(--foreground)">
-      <label class="hint" hidden for="ctMaxPos">Max position</label>
-      <input id="ctMaxPos" hidden type="number" min="1" max="100" step="1"
-        style="width:64px;padding:5px 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--background);color:var(--foreground)">
-      <button class="btn btn-outline btn-sm" hidden id="ctSave">Save limits</button>
     </div>`;
-  tradingEls = {sw: $("#ctSwitch"), save: $("#ctSave")};
-  // Chart trading's own handlers -- UNCHANGED bodies, just wired here instead of at page load
-  // (these ids exist only from here on, once Settings has been opened for the first time).
+  tradingEls = {sw: $("#ctSwitch")};
+  // The switch's handler -- wired here, not at page load (the id exists only once Settings has been opened).
+  // The old hidden limit inputs are gone: no order path reads the per-order / per-position limits.
   $("#ctSwitch").onclick = () =>
     setChartTrading(!(ST && ST.chart_trading && ST.chart_trading.enabled));
-  $("#ctSave").onclick = async () => {
-    const body = {max_order_qty: parseInt($("#ctMaxOrder").value, 10),
-                  max_position_qty: parseInt($("#ctMaxPos").value, 10)};
-    try {
-      const r = await post("/api/chart-trading", body);
-      toast(r.ok ? `Limits saved — ${body.max_order_qty} per order, ${body.max_position_qty} per position.`
-                 : "Refused — " + (r.detail || r.error || "unknown"), 5000);
-    } catch (e) {
-      toast("Couldn't reach the desk", 5000);
-    }
-    refresh();
-  };
   return tradingEls;
 }
 
@@ -153,16 +133,12 @@ function renderChartTrading(ct) {
   sw.title = ct.enabled ? "ON — the chart page can place real orders"
                         : "OFF — the chart page cannot trade";
   $("#ctState").textContent = ct.enabled ? "On — the chart page can place orders" : "Off";
-  for (const [id, v] of [["ctMaxOrder", ct.max_order_qty], ["ctMaxPos", ct.max_position_qty]]) {
-    const el = $("#" + id);
-    if (document.activeElement !== el) el.value = v;       // never overwrite a value being typed
-  }
 }
 async function setChartTrading(enabled) {
   if (switchBounced("chartTrading")) return;         // a double-click is one flip
-  const ct = (ST && ST.chart_trading) || {};
+  const where = machineWords();                       // "on the SERVER · Chicago" / "on this Mac" / "" (unknown)
   if (needsConfirm("chartTrading", enabled) && !await confirmDlg("Turn chart trading ON?",
-      `The chart page can then place REAL orders on the accounts you tick there — at most ${ct.max_order_qty} per order and ${ct.max_position_qty} per position. A bot's symbol stays locked on its accounts while the bot is working. The desk's Kill switches it off.`,
+      `Chart pages${where ? " " + where : ""} can then place REAL orders on the LIVE accounts you tick there. No size limit. A bot's symbol stays locked on its accounts while the bot is working. Kill turns it off.`,
       "Turn on", false)) { refresh(); return; }
   try {
     const r = await post("/api/chart-trading", {enabled});
@@ -282,7 +258,7 @@ function renderClock() {
 function renderSettings() {
   renderClock();
   buildTrading();                                  // once; patched in place from then on
-  renderChartTrading(ST && ST.chart_trading);      // the switch + limits as the desk has them now
+  renderChartTrading(ST && ST.chart_trading);      // the switch as the desk has it now
   renderMarketData();  // rebuilds only its own container, and only when its inputs changed
 }
 

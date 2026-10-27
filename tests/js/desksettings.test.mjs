@@ -12,8 +12,8 @@ const AV = require('../../homebase/static/algo-visibility.js');   // the desk's 
    tests are in deskmaster.test.mjs), run for real in a sandbox -- the same technique as
    deskpaper.test.mjs: slice the inline block out of the page and run it in a vm context with a
    minimal fake DOM/fetch/confirm. Covers, per the fix-round review:
-     I1 -- CHART TRADING is built ONCE and only ever patched in place: #ctSwitch / #ctSave (and
-       any focus on them) are the SAME nodes across renderSettings()/loadChartStatus() repaints,
+     I1 -- CHART TRADING is built ONCE and only ever patched in place: #ctSwitch (and
+       any focus on it) are the SAME nodes across renderSettings()/loadChartStatus() repaints,
        never replaced. MARKET DATA lives in its own container and is skipped when nothing in it
        changed.
      I2 -- ST == null: CHART TRADING still builds (nothing asserted), no throw.
@@ -36,13 +36,14 @@ const CHART = 'http://127.0.0.1:8852';
 async function tick(n = 12) { for (let i = 0; i < n; i++) await Promise.resolve(); }
 
 // Ids that exist in the static HTML from page load (the overlay's own containers) -- everything
-// else (#ctSwitch, #ctSave, #mdApply, ...) is only "in the DOM" once some
+// else (#ctSwitch, #mdApply, ...) is only "in the DOM" once some
 // container's innerHTML has actually been built with it, exactly like the real page: $("#ctSwitch")
 // must return null before Settings has ever been opened, so a stray top-level `.onclick = ...`
 // on it would throw here just like it would in a real browser.
 const STATIC_IDS = new Set(['settingsOverlay', 'settingsBody', 'settingsTrading', 'settingsMarketData']);
 
-function load({ armed = false, confirm = true, demo = false, fetchAnswers = {}, putAnswers = {} } = {}) {
+const WHERE = { server: 'on the SERVER · Chicago', mac: 'on this Mac' };   // core.js machineWords()
+function load({ armed = false, confirm = true, demo = false, fetchAnswers = {}, putAnswers = {}, machine = null } = {}) {
   const els = {}, fetched = [], posts = [], toasts = [], confirms = [], refreshes = [];
   const listeners = {}, builtIds = new Set(STATIC_IDS);
   const doc = { activeElement: null };
@@ -88,6 +89,7 @@ function load({ armed = false, confirm = true, demo = false, fetchAnswers = {}, 
     ST: armed == null ? null : { armed },
     DESK_STALE: false,
     DEMO: demo,
+    machineWords: () => WHERE[machine] || '',
     document: doc,
     $: (sel) => {
       const id = sel.replace(/^#/, '');
@@ -138,15 +140,22 @@ test('CHART TRADING and MARKET DATA render into their own, separate containers',
   assert.doesNotMatch(els.settingsMarketData.innerHTML, /CHART TRADING/);
 });
 
-test('#ctSwitch / #ctSave are the SAME nodes across renderSettings() repaints -- never rebuilt', () => {
+test('#ctSwitch is the SAME node across renderSettings() repaints -- never rebuilt', () => {
   const { api, els } = load({ armed: false });
   api.renderSettings();
-  const sw = els.ctSwitch, save = els.ctSave;
-  assert.ok(sw && save, 'built once');
+  const sw = els.ctSwitch, html = els.settingsTrading.innerHTML;
+  assert.ok(sw, 'built once');
   api.renderSettings();
   api.renderSettings();
   assert.equal(els.ctSwitch, sw, 'renderSettings() must patch CHART TRADING in place, never rebuild it');
-  assert.equal(els.ctSave, save);
+  assert.equal(els.settingsTrading.innerHTML, html);
+});
+
+test('1.1: CHART TRADING has no limit inputs and no Save limits any more (no order path reads them)', () => {
+  const { api, els } = load();
+  api.renderSettings();
+  assert.doesNotMatch(els.settingsTrading.innerHTML, /ctMaxOrder|ctMaxPos|ctSave|Save limits|Max per order/);
+  assert.doesNotMatch(BLOCK, /max_order_qty|max_position_qty|Limits saved/);
 });
 
 test('#ctSwitch survives loadChartStatus() -- a MARKET DATA-only poll never touches CHART TRADING', async () => {
@@ -161,13 +170,11 @@ test('#ctSwitch survives loadChartStatus() -- a MARKET DATA-only poll never touc
   assert.equal(els.settingsTrading.innerHTML, html);
 });
 
-test('opening Settings paints the chart-trading switch and limits from ST at once, not on the next 2.5 s refresh', () => {
+test('opening Settings paints the chart-trading switch from ST at once, not on the next 2.5 s refresh', () => {
   const { api, els } = load();
   api.ST = { armed: false, chart_trading: { enabled: true, max_order_qty: 7, max_position_qty: 14 } };
   api.openSettings();
   assert.equal(els.ctSwitch.getAttribute('aria-checked'), 'true');
-  assert.equal(els.ctMaxOrder.value, 7);
-  assert.equal(els.ctMaxPos.value, 14);
 });
 
 test('Settings holds no Arm / Disarm / Kill any more -- it says they are in the top bar (one place for them)', () => {
@@ -184,7 +191,6 @@ test('CHART TRADING never calls fetch -- it only talks to the desk (post/refresh
   api.ST = { armed: false, chart_trading: { enabled: false, max_order_qty: 10, max_position_qty: 20 } };
   api.renderSettings();
   await els.ctSwitch.onclick();
-  await els.ctSave.onclick();
   assert.deepEqual(fetched, []);
 });
 
@@ -344,29 +350,14 @@ test('renderChartTrading is a safe no-op while the dialog has never been opened 
   assert.doesNotThrow(() => api.renderChartTrading(null));
 });
 
-test('once built, renderChartTrading patches the switch/state/limits in place -- never rebuilding', () => {
+test('once built, renderChartTrading patches the switch/state in place -- never rebuilding', () => {
   const { api, els } = load();
   api.renderSettings();   // builds TRADING, including the chart-trading controls
-  const switchNode = els.ctSwitch, saveNode = els.ctSave;
+  const switchNode = els.ctSwitch;
   api.renderChartTrading({ enabled: true, max_order_qty: 7, max_position_qty: 14 });
   assert.equal(els.ctSwitch.getAttribute('aria-checked'), 'true');
   assert.equal(els.ctState.textContent, 'On — the chart page can place orders');
-  assert.equal(els.ctMaxOrder.value, 7);
-  assert.equal(els.ctMaxPos.value, 14);
-  // the SAME nodes, never replaced
-  assert.equal(els.ctSwitch, switchNode);
-  assert.equal(els.ctSave, saveNode);
-});
-
-test('renderChartTrading never overwrites a limit input the user is actively typing in', () => {
-  const { api, els, doc } = load();
-  api.renderSettings();
-  api.renderChartTrading({ enabled: false, max_order_qty: 1, max_position_qty: 2 });   // first paint: populates the fake els
-  doc.activeElement = els.ctMaxOrder;   // the user has focus in "Max per order"
-  els.ctMaxOrder.value = '99';          // mid-edit, not yet saved
-  api.renderChartTrading({ enabled: false, max_order_qty: 10, max_position_qty: 20 });
-  assert.equal(els.ctMaxOrder.value, '99', 'a focused input is never clobbered by a repaint');
-  assert.equal(els.ctMaxPos.value, 20, 'an unfocused input still gets patched');
+  assert.equal(els.ctSwitch, switchNode, 'the SAME node, never replaced');
 });
 
 test('the chart-trading switch calls setChartTrading, which confirms before turning ON', async () => {
@@ -389,14 +380,27 @@ test('the chart-trading switch never asks when turning OFF -- the safer directio
   assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ url: '/api/chart-trading', body: { enabled: false } }]);
 });
 
-test('Save limits POSTs the two number inputs\' parsed values, same endpoint as before', async () => {
-  const { api, els, posts } = load();
+test('1.1: the ON confirm names the machine, says no size limit, and never says "at most"', async () => {
+  for (const [machine, where] of [['server', /^Chart pages on the SERVER · Chicago can then place REAL orders on the LIVE accounts/],
+                                  ['mac', /^Chart pages on this Mac can then place REAL orders on the LIVE accounts/],
+                                  [null, /^Chart pages can then place REAL orders on the LIVE accounts/]]) {
+    const { api, els, confirms, posts } = load({ machine });
+    api.renderSettings();
+    api.ST = { armed: false, chart_trading: { enabled: false, max_order_qty: 10, max_position_qty: 20 } };
+    await els.ctSwitch.onclick();
+    assert.equal(confirms.length, 1, 'ON still asks');
+    assert.match(confirms[0].body, where);
+    assert.match(confirms[0].body, /No size limit\./);
+    assert.doesNotMatch(confirms[0].body, /at most|per order|per position|undefined/);
+    assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ url: '/api/chart-trading', body: { enabled: true } }], 'same body as before');
+  }
+});
+
+test('1.1: cancelling the ON confirm posts nothing', async () => {
+  const { api, els, posts, refreshes } = load({ confirm: false, machine: 'server' });
   api.renderSettings();
-  api.renderChartTrading({ enabled: false, max_order_qty: 1, max_position_qty: 2 });   // populates the fake els
-  els.ctMaxOrder.value = '15';
-  els.ctMaxPos.value = '30';
-  assert.ok(els.ctSave.onclick);
-  await els.ctSave.onclick();
-  assert.deepEqual(JSON.parse(JSON.stringify(posts)),
-    [{ url: '/api/chart-trading', body: { max_order_qty: 15, max_position_qty: 30 } }]);
+  api.ST = { armed: false, chart_trading: { enabled: false } };
+  await els.ctSwitch.onclick();
+  assert.deepEqual(posts, []);
+  assert.equal(refreshes.length, 1);
 });

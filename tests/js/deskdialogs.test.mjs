@@ -103,7 +103,7 @@ function load() {
   const trigger = body.append(h('button', { id: 'gear', onclick: 'openSettings()' }));
   const other = body.append(h('button', { id: 'other' }));
   const settings = body.append(dialog('settingsOverlay', 'Settings', [
-    h('button', { id: 'sx', 'aria-label': 'Close' }), h('input', { id: 'ctMaxOrder' }), h('button', { id: 'ctSave' })]));
+    h('button', { id: 'sx', 'aria-label': 'Close' }), h('input', { id: 'clockField' }), h('button', { id: 'mdApply' })]));
   const confirm = body.append(h('div', { class: 'overlay', id: 'confirmOverlay' },
     h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', tabindex: '-1', inert: '' },
       h('h2', { id: 'cfTitle' }), h('p', { id: 'cfBody' }),
