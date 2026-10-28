@@ -12,7 +12,7 @@ const T = window.HBTrade;
 const M = window.HBSpring;   // the feel pass (2026-09-28): toast()'s own materialize()/dematerialize()
 const TOAST_MS = { ok: 5000, err: 10000, warn: 0 }, TOAST_MAX = 5;   // 0: a warning ("check it") stays until dismissed
 const HISTORY_TTL = 60000, HISTORY_RETRY = { 503: 30000, other: 60000 };
-const desk = { state: null, down: 'connecting to the desk', quotes: {}, prefs: loadPrefs() };
+const desk = { state: null, down: 'connecting to the desk', quotes: {}, prefs: loadPrefs(), quick: loadQuick() };
 /* c-30 (2026-10-27): DISPLAY ONLY. `held` is the last desk state before a "down" word, and `sock` whether the chart
    service socket is open: the lines stay drawn, marked "not live" (HBDeskClient.stale). Nothing that sends reads
    them -- `state` and the gate go null exactly as before. */
@@ -35,6 +35,18 @@ function setPrefs(patch) {
   desk.prefs = T.parsePrefs(JSON.stringify({ ...desk.prefs, ...patch }));
   try { localStorage.setItem(T.PREFS_KEY, T.prefsText(desk.prefs)); } catch (_) { /* storage off: this session only */ }
   emit('prefs');
+}
+/* Size per symbol + saved order templates (owner D6): a store of its own, OFF until switched on (HBTrade.parseQuick). */
+function loadQuick() { try { return T.parseQuick(localStorage.getItem(T.QUICK_KEY)); } catch (_) { return T.parseQuick(null); } }
+function setQuick(patch) {
+  desk.quick = T.parseQuick(JSON.stringify({ ...desk.quick, ...patch }));
+  try { localStorage.setItem(T.QUICK_KEY, T.quickText(desk.quick)); } catch (_) { /* storage off: this session only */ }
+  emit('prefs');
+}
+/* The size box of a chart on `root`: always the global qty too, so switching the per-symbol size off keeps the last one. */
+function setQty(root, n) {
+  if (desk.quick.on && root) setQuick({ qtyBy: { ...desk.quick.qtyBy, [root]: n } });
+  setPrefs({ qty: n });
 }
 function on(fn) { subs.add(fn); return () => subs.delete(fn); }
 /* Every fill the desk reports ({account, fill}), whoever placed it -- sounds.js; called before the views move on. */
@@ -206,7 +218,7 @@ window.HBDeskClient = {
      last state, the paper books as they are now, or null. Display only. */
   get stale() { return desk.state ? (desk.sock ? null : 'service') : desk.held ? 'desk' : null; },
   get heldState() { return desk.held ? T.withPaper(desk.held, window.HBPaperClient ? window.HBPaperClient.accounts() : []) : null; },
-  get prefs() { return desk.prefs; }, setPrefs, on, onAnyFill, onMessage, send, toast, dismiss: evict, socket, botHistory, notWorking,
+  get prefs() { return desk.prefs; }, setPrefs, get quick() { return desk.quick; }, setQuick, setQty, qtyFor: (root) => T.qtyFor(desk.prefs, desk.quick, root), on, onAnyFill, onMessage, send, toast, dismiss: evict, socket, botHistory, notWorking,
   mode: (cellTrade) => T.tradeMode({ state: merged(), down: desk.down }, cellTrade),   // ONE chart's mode, from its own {accounts}
   gate: () => T.deskGate(desk),                        // the desk-level half alone (null: up and on)
   bookChanged: () => emit('account'),                  // the PAPER account changed (app.js, on a /ws paperbook push)

@@ -559,7 +559,7 @@ function registerChartMenuTrading() {
     if (effectiveMode(ctx.cell).mode !== 'on' || flatBusy()) return [];
     const flatten = { text: `Flatten ${ctx.root}`, run: () => symbolAction(ctx.cell, 'flatten', ctx.root) };
     if (busy()) return [flatten];   // an order still in flight: Flatten stays reachable
-    const Dk = D(), q = T.freshQuote(Dk.quotes[ctx.root], page.clockMs()), qty = Dk.prefs.qty, out = [];   // M4
+    const Dk = D(), q = T.freshQuote(Dk.quotes[ctx.root], page.clockMs()), qty = T.qtyFor(Dk.prefs, Dk.quick, ctx.root), out = [];   // M4
     if (ctx.price != null) {
       const price = T.roundTick(ctx.price, ctx.tick);   // always tick-rounded before inferType (review item 2)
       for (const side of ['Buy', 'Sell']) {

@@ -184,7 +184,8 @@ class Overlay {
     T.wireSend(this.flatBtn, () => window.HBTradeUI.symbolAction(this.cell, 'flatten', this.root), { blur: true });
     this.qty.onchange = () => {
       const n = Math.round(Number(this.qty.value));
-      window.HBDeskClient.setPrefs({ qty: Number.isFinite(n) ? n : window.HBDeskClient.prefs.qty });
+      const Dc = window.HBDeskClient;
+      Dc.setQty(this.root, Number.isFinite(n) ? n : Dc.qtyFor(this.root));   // per symbol while Settings > Trading's quick setup is on
     };
     cell.el.querySelector('.lg-tradeslot').appendChild(this.block);
     this.accts = mk('span', 'tr-accts');   // the chart's accounts, "…047 DEMO" (shown while its Trading is on)
@@ -270,7 +271,7 @@ class Overlay {
   /* ---- the Buy/Sell block ---- */
   trade(side) {
     if (window.HBTradeUI.busy()) return;
-    window.HBTradeUI.placeOrder({ cell: this.cell, root: this.root, side, type: 'Market', qty: window.HBDeskClient.prefs.qty, surface: 'chart' });
+    window.HBTradeUI.placeOrder({ cell: this.cell, root: this.root, side, type: 'Market', qty: window.HBDeskClient.qtyFor(this.root), surface: 'chart' });
   }
 
   paintBlock(mode) {
@@ -285,11 +286,11 @@ class Overlay {
     this.sellLive.hidden = this.buyLive.hidden = !live.length;
     if (liveTitle !== this.liveKey) { this.liveKey = liveTitle; this.sellLive.title = this.buyLive.title = liveTitle; }
     this.block.title = liveTitle ? `Sell / buy at market · ${liveTitle}` : 'Sell / buy at market';
-    if (document.activeElement !== this.qty) this.qty.value = String(Dc.prefs.qty);
+    if (document.activeElement !== this.qty) this.qty.value = String(Dc.qtyFor(this.root));
     // the size, root and account of what a click sends (H1: one qty box serves every chart): the very qty trade() reads
     // and this chart's mode's accounts -- the set the send's own gate (cellGate) answers with while it is 'on'
     for (const [btn, sub, side] of [[this.sellBtn, this.sellSub, 'Sell'], [this.buyBtn, this.buySub, 'Buy']]) {
-      const t = T.sendTag(side, Dc.prefs.qty, this.root, mode.accounts, Dc.state);
+      const t = T.sendTag(side, Dc.qtyFor(this.root), this.root, mode.accounts, Dc.state);
       if (sub.textContent !== t.sub) sub.textContent = t.sub;
       btn.title = `${t.full} · at market`;
     }
@@ -314,25 +315,36 @@ class Overlay {
     const spot = T.tradeSpot(t.accounts.length, mode.mode === 'on', !!this.cell.replay || !!cfg.replayHalt, !window.HBDeskClient.gate());
     this.accts.hidden = !t.accounts.length && !spot.empty;
     if (this.accts.hidden) return;
-    const chips = T.accountChips(window.HBDeskClient.state, t.accounts, mode.mode === 'on' ? mode.accounts : []);
-    const key = JSON.stringify([spot, chips]);
+    // Settings > Trading's quick setup (owner D6, off by default): the chips also list the desk's other tradable accounts,
+    // and a click ticks / unticks that account through HBTradeUI.toggleAccount -- the same guarded tick (a LIVE one still
+    // needs its second click within 3 s). Off: the strip is exactly what it was.
+    const Dc = window.HBDeskClient, quick = !!(Dc.quick && Dc.quick.on), arming = quick ? window.HBTradeUI.armPending() : null;
+    const ids = quick ? [...new Set([...t.accounts, ...((Dc.state && Dc.state.accounts) || []).filter((a) => a.tradable).map((a) => a.id)])] : t.accounts;
+    const chips = T.accountChips(Dc.state, ids, mode.mode === 'on' ? mode.accounts : []);
+    const key = JSON.stringify([spot, chips, quick, arming, t.accounts]);
     if (key === this.acctsKey) return;
     this.acctsKey = key;
-    const open = (el) => {
+    const open = (el, id) => {
       el.type = 'button';
-      el.onclick = (e) => { e.stopPropagation(); el.blur(); this.page.chartSettings(this.cell, 'trading'); };
+      el.onclick = (e) => {
+        e.stopPropagation(); el.blur();
+        if (quick && id) window.HBTradeUI.toggleAccount(this.cell, id, { quiet: false });
+        else this.page.chartSettings(this.cell, 'trading');
+      };
       return el;
     };
-    if (spot.empty) {
+    if (spot.empty && !quick) {
       const el = open(mk('button', 'tr-acct off', spot.empty));
       el.title = 'Pick the accounts this chart trades on';
       this.accts.replaceChildren(el);
       return;
     }
-    this.accts.replaceChildren(...(spot.lead ? [mk('span', 'tr-on', spot.lead)] : []), ...chips.map((c) => {
-      const el = open(mk('button', 'tr-acct' + (c.active ? '' : ' off'), c.who));
+    this.accts.replaceChildren(...(spot.lead || (quick && spot.empty) ? [mk('span', 'tr-on', spot.lead || spot.empty)] : []), ...chips.map((c) => {
+      const el = open(mk('button', 'tr-acct' + (c.active ? '' : ' off'), c.who), c.id);
       if (c.env) el.append(mk('span', 'env' + (c.live ? ' live' : c.paper ? ' paper' : ''), c.env));
-      el.title = (c.active ? `Orders from this chart go to ${c.id}` : `${c.id} — not trading from this chart right now`) + ' · click to change';
+      if (arming === c.id) el.append(mk('span', 'tr-on', 'click again to arm'));
+      el.title = quick ? (t.accounts.includes(c.id) ? `${c.id} · click to remove it from this chart` : `${c.id} · click to trade on it from this chart${c.live ? ' (LIVE: click twice)' : ''}`)
+        : (c.active ? `Orders from this chart go to ${c.id}` : `${c.id} — not trading from this chart right now`) + ' · click to change';
       return el;
     }));
   }

@@ -434,6 +434,24 @@ test('Trading tab: the two one-click switches show and flip their own pref only'
   assert.deepEqual([prefs.oneClickChart, prefs.oneClickPanel, prefs.oneClick], [false, true, false]);
 });
 
+test('Trading tab: the quick-setup switch (owner D6) starts off and flips only the quick store, never the trade prefs', () => {
+  const cell = makeCell('time:60');
+  cell.cfg.root = 'NQ';
+  cell.cfg.trade = { accounts: [] };
+  cell.cfg.algo = null;
+  const prefs = { oneClick: false, oneClickChart: true, oneClickPanel: false, qty: 1, slTicks: 0, tpTicks: 0 }, quick = { on: false, qtyBy: {}, templates: [] };
+  const before = JSON.stringify(prefs);
+  const { box } = openTrading(cell, { prefs: () => prefs, setPrefs: (p) => Object.assign(prefs, p), quick: () => quick, setQuick: (p) => Object.assign(quick, p) });
+  const sw = descend({ children: [box] }, (c) => c.getAttribute && c.getAttribute('aria-label') === 'Size per symbol, order templates, account chips');
+  assert.equal(sw.getAttribute('aria-checked'), 'false', 'off by default');
+  sw.onclick();
+  assert.equal(quick.on, true);
+  assert.equal(sw.getAttribute('aria-checked'), 'true');
+  assert.equal(JSON.stringify(prefs), before, 'the trade prefs object is not touched');
+  sw.onclick();
+  assert.equal(quick.on, false);
+});
+
 /* S7 (2026-09-28 safety pass): the Template ▾ "Save as…" field saves once per Enter PRESS -- a held key's
    auto-repeat (e.repeat) never sends another PUT (GOTCHAS.md: a held key has sent duplicates here before). */
 test('S7: Template ▾ Save as… -- Enter saves once; a held Enter\'s repeats never save again', async () => {

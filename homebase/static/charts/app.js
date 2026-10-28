@@ -2088,6 +2088,8 @@ function chartSettings(c = cur(), tab = null) {
     tradeWhy: (x) => { const m = window.HBTradeUI.effectiveMode(x); return m.mode === 'on' ? '' : m.reason; },
     prefs: () => window.HBDeskClient.prefs,
     setPrefs: (patch) => window.HBDeskClient.setPrefs(patch),
+    quick: () => window.HBDeskClient.quick,
+    setQuick: (patch) => window.HBDeskClient.setQuick(patch),
     // 5.7: the order preview's line / thickness / labels / shading, moved here from the order panel
     ...(window.HBOrderPanel && window.HBOrderPanel.setLook ? { look: () => window.HBOrderPanel.look(), setLook: (k, v) => window.HBOrderPanel.setLook(k, v) } : {}),
     // the Trading tab re-reads on a tick / LIVE arm AND on a desk change (a new account list, one going

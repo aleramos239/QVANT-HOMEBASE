@@ -1737,6 +1737,52 @@ function routeSend(action, body, send) {
   return Promise.all(out);
 }
 
+/* ---- size per symbol + saved order templates (owner D6, 2026-10-28) ----
+   Kept apart from the prefs (parsePrefs is unchanged): `on` is OFF until the viewer switches it on in Settings >
+   Trading, and while it is off qtyFor is the one global qty, exactly as before. A template only FILLS the form (qty,
+   stop and target ticks, the chart's accounts); the send is still the normal Buy / Sell click and its confirm, and
+   LIVE is never ticked by one (templatePlan). */
+const QUICK_KEY = 'hb_trade_quick', TEMPLATES_MAX = 5, QUICK_QTY_MAX = 10000;
+const wholeIn = (v, lo, hi) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= lo && n <= hi ? n : 0; };
+function parseTemplate(t) {
+  const name = isObj(t) && typeof t.name === 'string' ? t.name.trim().slice(0, 48) : '', qty = isObj(t) ? wholeIn(t.qty, 1, QUICK_QTY_MAX) : 0;
+  return name && qty ? { name, qty, sl: wholeIn(t.sl, 1, 100000), tp: wholeIn(t.tp, 1, 100000), accounts: idList(t.accounts) } : null;
+}
+function parseQuick(text) {
+  let o = null;
+  try { o = JSON.parse(text); } catch (_) { o = null; }
+  if (!isObj(o)) o = {};
+  const qtyBy = {}, templates = [];
+  if (isObj(o.qtyBy)) for (const [k, v] of Object.entries(o.qtyBy)) { const n = wholeIn(v, 1, QUICK_QTY_MAX); if (n && /^[A-Z0-9]{1,8}$/.test(k)) qtyBy[k] = n; }
+  for (const raw of Array.isArray(o.templates) ? o.templates : []) {
+    const t = parseTemplate(raw);
+    if (t && !templates.some((x) => x.name === t.name) && templates.length < TEMPLATES_MAX) templates.push(t);
+  }
+  return { on: o.on === true, qtyBy, templates };
+}
+const quickText = (q) => JSON.stringify(parseQuick(JSON.stringify(q)));
+/* The qty a Buy / Sell on `root` carries: the global one unless the viewer switched the per-symbol size on. */
+const qtyFor = (prefs, quick, root) => (quick && quick.on ? (quick.qtyBy || {})[root] || 1 : prefs.qty);
+function saveTemplate(quick, t) {
+  const have = quick.templates.filter((x) => x.name !== t.name);
+  if (have.length >= TEMPLATES_MAX) return { quick, error: 'Five templates are saved: delete one first' };
+  const at = quick.templates.findIndex((x) => x.name === t.name), next = [...quick.templates];
+  if (at >= 0) next[at] = t; else next.push(t);
+  return { quick: parseQuick(JSON.stringify({ ...quick, templates: next })) };
+}
+const removeTemplate = (quick, name) => ({ ...quick, templates: quick.templates.filter((x) => x.name !== name) });
+/* Applying a template's account set to a chart: `add` (desk-listed, tradable, not LIVE), `remove` (everything else on
+   the chart, LIVE included: the set REPLACES the chart's), `live` (in the template but never ticked from here). */
+function templatePlan(tpl, onChart, state) {
+  if (!tpl.accounts.length) return { add: [], remove: [], live: [] };
+  const list = accountsOf(state), have = new Set(onChart), want = tpl.accounts.filter((id) => list.some((a) => a.id === id && a.tradable));
+  const live = want.filter((id) => list.find((a) => a.id === id).env === 'live');
+  const keep = want.filter((id) => !live.includes(id));
+  return { add: keep.filter((id) => !have.has(id)), remove: onChart.filter((id) => !keep.includes(id)), live };
+}
+const templateName = ({ root, qty, sl, tp, accounts }) => `${root} · ${qty} lot${qty === 1 ? '' : 's'}`
+  + (sl || tp ? ` · ${sl || '–'}/${tp || '–'}` : '') + (accounts.length ? ` · ${accounts.length} acct${accounts.length === 1 ? '' : 's'}` : '');
+
 const api = { PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
   lineText, lineTitle, lineColor, notWorkingKeys, lineGone, exitZones, beStop, beArmStep, trailStop, trailStep, splitOrder, splitNote, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
@@ -1752,6 +1798,7 @@ const api = { PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, r
   replayEndPatch, sendsWithoutConfirm, chartWhy,
   PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel, sendTag,
   parseQty, parseUsd, parseDecimal, roundTickDir, riskTicks,
+  QUICK_KEY, parseQuick, quickText, qtyFor, saveTemplate, removeTemplate, templatePlan, templateName,
   paperKey, isPaperAlgo, paperStrategyId, paperStrategiesMap, paperPill, paperToday, paperLabel, paperLines,
   paperMarkers, paperOverlay, paperRunMarkers, paperStatsText, PAPER_ID, isPaperId, withPaper, splitSend, routeSend };
 if (typeof window !== 'undefined') window.HBTrade = api;

@@ -66,9 +66,9 @@ test('5.3 the chart lines pass "2+ accounts here" into the chip text', () => {
 
 test('5.4 the button and the ENTRY tag read their words from the send\'s own qty and accounts; the sends are untouched', () => {
   const TL = rd('charts/tradelines.js'), OP = rd('charts/orderpanel.js');
-  assert.match(TL, /T\.sendTag\(side, Dc\.prefs\.qty, this\.root, mode\.accounts, Dc\.state\)/);
+  assert.match(TL, /T\.sendTag\(side, Dc\.qtyFor\(this\.root\), this\.root, mode\.accounts, Dc\.state\)/);
   // trade() still sends the same qty, root and type it always did
-  assert.match(TL, /placeOrder\(\{ cell: this\.cell, root: this\.root, side, type: 'Market', qty: window\.HBDeskClient\.prefs\.qty, surface: 'chart' \}\)/);
+  assert.match(TL, /placeOrder\(\{ cell: this\.cell, root: this\.root, side, type: 'Market', qty: window\.HBDeskClient\.qtyFor\(this\.root\), surface: 'chart' \}\)/);
   assert.match(OP, /T\.sendTag\(st\.side, Number\.isInteger\(n\) \? n : 0, c\.root, m\.mode === 'on' \? m\.accounts : \[\], D\(\)\.state\)\.tag;/);
   assert.match(OP, /title: `ENTRY · \$\{tag\}\$\{rr\}`/);
 });
@@ -77,8 +77,11 @@ test('5.2 the account spot\'s chips open this chart\'s Settings › Trading and 
   const TL = rd('charts/tradelines.js');
   const body = TL.slice(TL.indexOf('  paintAccts(mode) {'), TL.indexOf('  /* ---- lines: positions'));
   assert.match(body, /T\.tradeSpot\(t\.accounts\.length, mode\.mode === 'on', !!this\.cell\.replay \|\| !!cfg\.replayHalt, !window\.HBDeskClient\.gate\(\)\)/);
-  assert.match(body, /el\.onclick = \(e\) => \{ e\.stopPropagation\(\); el\.blur\(\); this\.page\.chartSettings\(this\.cell, 'trading'\); \};/);
-  assert.doesNotMatch(body, /toggleAccount|setCellTrade|placeOrder|send\(/, 'a chip never ticks an account or sends');
+  // off (the default) a chip opens Settings; only with Settings > Trading's quick setup on does it tick, through the guarded toggleAccount
+  assert.match(body, /if \(quick && id\) window\.HBTradeUI\.toggleAccount\(this\.cell, id, \{ quiet: false \}\);\n\s+else this\.page\.chartSettings\(this\.cell, 'trading'\);/);
+  assert.match(body, /const Dc = window\.HBDeskClient, quick = !!\(Dc\.quick && Dc\.quick\.on\)/);
+  assert.doesNotMatch(body, /setCellTrade|placeOrder|send\(/, 'a chip never sends');
+  assert.equal(body.match(/toggleAccount\(/g).length, 1, 'the one tick path is the guarded toggleAccount, under the quick-setup switch only');
   assert.match(rd('charts/app.js'), /^function chartSettings\(c = cur\(\), tab = null\)/m);
 });
 
@@ -161,16 +164,17 @@ const method = (name) => {
 const fakeEl = (tagName) => ({ tagName, className: '', textContent: '', title: '', hidden: false, disabled: false, children: [],
   classList: { on: new Set(), toggle(c, v) { if (v) this.on.add(c); else this.on.delete(c); }, contains(c) { return this.on.has(c); } },
   append(...k) { this.children.push(...k); }, replaceChildren(...k) { this.children = k; }, blur() {} });
-function overlayOn({ ticked, mode, gate = null, qty = 1 }) {
+function overlayOn({ ticked, mode, gate = null, qty = 1, quick }) {
   const T = createRequire(import.meta.url)('../../homebase/static/charts/trade.js');
   const live = (id) => id === 'live099';
   const state = { enabled: true, accounts: [
     { id: 'live099', label: 'FAKELIVE099', env: 'live', tradable: true }, { id: 'sim047', label: 'SIM0000047', env: 'demo', tradable: true }] };
   const calls = [], sent = [];
   const window = {
-    HBDeskClient: { state, prefs: { qty }, gate: () => gate },
+    HBDeskClient: { state, prefs: { qty }, quick, qtyFor: (r) => T.qtyFor({ qty }, quick, r), gate: () => gate },
     HBTradeUI: { tradeOf: () => ({ accounts: ticked }), liveCue: () => (mode.mode === 'on' ? mode.accounts.filter(live) : []),
-      busy: () => false, flatBusy: () => false, sending: () => null, placeOrder: (o) => sent.push(o) },
+      busy: () => false, flatBusy: () => false, sending: () => null, placeOrder: (o) => sent.push(o),
+      armPending: () => null, toggleAccount: (cell, id, o) => calls.push(['toggle', id, o.quiet]) },
   };
   const ctx = vm.createContext({ window, T, document: { createElement: fakeEl, activeElement: null } });
   vm.runInContext(`${lift(TL_SRC, 'mk')} globalThis.O = { ${method('trade')}, ${method('paintBlock')}, ${method('paintAccts')} };`, ctx);
@@ -180,6 +184,7 @@ function overlayOn({ ticked, mode, gate = null, qty = 1 }) {
   for (const k of ['trade', 'paintBlock', 'paintAccts']) ov[k] = ctx.O[k].bind(ov);
   return { ov, calls, sent };
 }
+const T0 = createRequire(import.meta.url)('../../homebase/static/charts/trade.js');
 const texts = (box) => box.children.map((c) => [c.textContent, ...c.children.map((k) => k.textContent)].join(' '));
 
 test('5.4 run: the BUY / SELL words are the qty and accounts the click sends', () => {
@@ -235,4 +240,38 @@ test('5.12 run: a chip whose order the desk said is not working reads so and gre
   assert.doesNotMatch(chip.text.textContent, /not working/);
   assert.equal(props['--c'], 'D', 'its own colour back');
   assert.equal(chip.classList.contains('gone'), false);
+});
+
+/* owner D6 (2026-10-28): size per symbol + account chips, behind Settings > Trading's quick setup (off by default). */
+test('D6 run: quick setup OFF, the chart sends the one global qty for every symbol and a chip only opens Settings', () => {
+  const quickOff = T0.parseQuick(JSON.stringify({ on: false, qtyBy: { NQ: 7 } }));   // stale per-symbol sizes change nothing
+  const { ov, sent, calls } = overlayOn({ ticked: ['sim047'], mode: { mode: 'on', accounts: ['sim047'] }, qty: 3, quick: quickOff });
+  ov.paintBlock({ mode: 'on', accounts: ['sim047'] });
+  assert.equal(ov.buySub.textContent, '3 NQ · …047');
+  ov.trade('Buy');
+  ov.root = 'GC'; ov.trade('Sell');
+  assert.deepEqual(sent.map((o) => [o.side, o.qty, o.root, o.type]), [['Buy', 3, 'NQ', 'Market'], ['Sell', 3, 'GC', 'Market']]);
+  ov.paintAccts({ mode: 'on', accounts: ['sim047'] });
+  assert.deepEqual(texts(ov.accts), ['…047 DEMO'], 'only the chart\'s own accounts');
+  ov.accts.children[0].onclick({ stopPropagation() {} });
+  assert.deepEqual(calls, [['settings', 'trading']], 'no tick');
+});
+
+test('D6 run: quick setup ON, each symbol sends its own qty; the chips list the tradable accounts and a click ticks through toggleAccount', () => {
+  const quick = T0.parseQuick(JSON.stringify({ on: true, qtyBy: { NQ: 2, GC: 5 } }));
+  const { ov, sent, calls } = overlayOn({ ticked: ['sim047'], mode: { mode: 'on', accounts: ['sim047'] }, qty: 3, quick });
+  ov.paintBlock({ mode: 'on', accounts: ['sim047'] });
+  assert.equal(ov.buySub.textContent, '2 NQ · …047', 'the button shows this symbol\'s size');
+  ov.trade('Buy');
+  ov.root = 'GC'; ov.trade('Buy');
+  ov.root = 'ES'; ov.trade('Buy');
+  assert.deepEqual(sent.map((o) => [o.root, o.qty]), [['NQ', 2], ['GC', 5], ['ES', 1]], 'never another symbol\'s qty; none saved = 1');
+  ov.root = 'NQ';
+  ov.paintAccts({ mode: 'on', accounts: ['sim047'] });
+  assert.deepEqual(texts(ov.accts), ['…047 DEMO', '…099 LIVE'], 'the ticked one first, the other tradable account beside it');
+  assert.equal(ov.accts.children[1].className, 'tr-acct off');
+  ov.accts.children[1].onclick({ stopPropagation() {} });
+  ov.accts.children[0].onclick({ stopPropagation() {} });
+  assert.deepEqual(calls, [['toggle', 'live099', false], ['toggle', 'sim047', false]], 'the guarded toggle, never Settings, never a send');
+  assert.equal(sent.length, 3);
 });
