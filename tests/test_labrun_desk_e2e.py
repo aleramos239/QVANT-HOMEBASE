@@ -175,11 +175,11 @@ def test_a_day_through_the_real_desk_the_child_sees_the_fills_the_engine_booked(
         assert view["mode_today"] == "desk" and view["trades_today"] == 1
         assert k.today(NAME, d=DAY)["mode"] == "desk" and k.today(NAME, d=DAY)["net"] == trade["net"] < 200.0
     finally:
-        k.r.close()                                                          # a clean stop: the Desk's day is over
+        k.r.close()                                                          # a clean close: the Desk's day stays open
         ld.close()
-    assert [it["op"] for it in line.bodies[-1]["intents"]] == ["stop"]
-    assert ld.snapshot()["strategies"][lab]["stopped"] == "Stopped for today."
-    assert k.file(NAME, d=DAY)["state"] == "stopped"
+    assert [it["op"] for it in line.bodies[-1]["intents"]] != ["stop"]
+    assert ld.snapshot()["strategies"][lab]["stopped"] is None
+    assert k.file(NAME, d=DAY)["state"] != "stopped"
     assert not [p for p in k.spawned if p.poll() is None]
 
 

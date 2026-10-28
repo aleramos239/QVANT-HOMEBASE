@@ -106,7 +106,7 @@ function load() {
     h('button', { id: 'sx', 'aria-label': 'Close' }), h('input', { id: 'clockField' }), h('button', { id: 'mdApply' })]));
   const confirm = body.append(h('div', { class: 'overlay', id: 'confirmOverlay' },
     h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', tabindex: '-1', inert: '' },
-      h('h2', { id: 'cfTitle' }), h('p', { id: 'cfBody' }),
+      h('h2', { id: 'cfTitle' }), h('p', { id: 'cfBody' }), h('input', { id: 'cfInput', hidden: '' }),
       h('button', { id: 'cfCancel', 'data-autofocus': '' }), h('button', { id: 'cfGo' }))));
   const card = body.append(h('div', { class: 'card' }));
   const plus = card.append(h('button', { id: 'plus', onclick: "toggleAsgMenu('nq930')" }));

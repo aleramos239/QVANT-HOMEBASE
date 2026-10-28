@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-/* The readiness list lets the owner check a concern off (2026-10-28): amber goes grey and leaves the bulb, red is only marked
+/* The readiness list lets the owner X a notice away (2026-10-28): amber leaves the list and the bulb, red is only marked
    seen and keeps the bulb red; the check is kept for the trading day by label + words, so a changed detail brings it back. */
 import { HTML } from './deskpage.mjs';
 const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
@@ -35,7 +35,7 @@ test('a checked-off amber turns grey info and is marked; a checked-off red stays
   assert.deepEqual([w.level, w.acked], ['info', true]);
   assert.deepEqual([b.level, b.acked], ['bad', true]);
   assert.equal(ok.acked, undefined);
-  assert.equal(api.chkKey(w), api.chkKey(WARN), 'the grey row keeps its key, so the switch can turn it back on');
+  assert.equal(api.chkKey(w), api.chkKey(WARN), 'the grey row keeps its key, so an older saved check-off still matches it');
 });
 
 test('a changed detail, or another day, brings the concern back', () => {
@@ -47,9 +47,12 @@ test('a changed detail, or another day, brings the concern back', () => {
   assert.equal(api.readinessShown(R, ST).checks[0].level, 'warn');
 });
 
-test('every concern row has a switch, wired to one handler', () => {
+test('an amber row has an X, wired to one handler; a red row has none and a dismissed one is not drawn', () => {
   const body = between('function renderChecks()', 'function openChecks()');
-  assert.match(body, /role="switch"/);
+  assert.doesNotMatch(body, /role="switch"/);
+  assert.match(body, /class="chk-x"/);
+  assert.match(body, /c\.level !== "warn" \? ""/);
+  assert.match(body, /c\.acked && c\.level === "info"/);
   assert.match(body, /data-ack=/);
   assert.match(HTML, /closest\("\[data-ack\]"\)/);
 });

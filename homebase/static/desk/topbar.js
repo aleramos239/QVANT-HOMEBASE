@@ -258,13 +258,14 @@ function renderChecks() {
   $("#bulbBig").className = "bulb" + (lvl ? " " + lvl : "");
   $("#checksTitle").textContent = lvl === "ok" ? "All good — ready to trade"
     : lvl === "warn" ? "Attention" : "Not ready";
-  $("#checksList").innerHTML = r.checks.map(c => {
-    const flag = c.level === "bad" || c.level === "warn" || c.acked;   // a problem row (or one already checked off) gets its switch
-    const sw = !flag ? "" : `<button class="switch" role="switch" aria-label="Check off: ${esc(c.label)}" aria-checked="${!!c.acked}"
-        data-ack="${esc(chkKey(c))}" title="${c.acked ? "Checked off — click to bring it back" : "Check this off (it comes back if it changes, and tomorrow)"}"></button>`;
+  // An amber row has an X: it is only a notice, so X takes it out of the list and the count (it comes back if its words
+  // change, and tomorrow). A red row has none: "the algo cannot run right" is never silenced. A row already X'd is not drawn.
+  $("#checksList").innerHTML = r.checks.filter(c => !(c.acked && c.level === "info")).map(c => {
+    const x = c.level !== "warn" ? "" : `<button class="chk-x" aria-label="Dismiss: ${esc(c.label)}" data-ack="${esc(chkKey(c))}"
+        title="Dismiss (it comes back if it changes, and tomorrow)">&times;</button>`;
     return `
     <div class="chk${c.acked ? " acked" : ""}"><span class="dot" style="background:${CHK_COLOR[c.level] || CHK_COLOR.info}"></span>
-      <span class="lbl">${esc(c.label)}</span><span class="det">${esc(c.detail)}</span>${sw}</div>`;
+      <span class="lbl">${esc(c.label)}</span><span class="det">${esc(c.detail)}</span>${x}</div>`;
   }).join("");
 }
 function openChecks() { renderChecks(); showOverlay("checksOverlay"); }
@@ -275,10 +276,10 @@ $("#checksOverlay").addEventListener("click", (e) => {
   if (sw) toggleAck(sw.dataset.ack);
 });
 
-/* ---- checking a concern off ----
-   A switch on every amber or red row. An amber row checked off reads as grey info (out of the bulb); a red row checked off
-   stays red in the bulb -- "the algo cannot run right" is never silenced -- and is only marked seen. The check is remembered
-   for the trading day by label + words: when the words change, or tomorrow comes, the row is back. */
+/* ---- dismissing a notice ----
+   An X on every amber row. A dismissed amber row reads as grey info (out of the bulb and the count) and is not drawn. A red
+   row is never dismissed (an older saved check-off still marks it seen). The X is remembered for the trading day by
+   label + words: when the words change, or tomorrow comes, the row is back. */
 function toggleAck(key) {
   const keys = ackSet();
   if (!keys.delete(key)) keys.add(key);

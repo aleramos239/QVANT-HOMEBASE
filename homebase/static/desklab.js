@@ -883,6 +883,19 @@
   function removeAskDesk(name) {
     return { title: "Remove " + name + " from the Desk?", body: "Its history is kept. Its accounts come off." };
   }
+  function renameAsk(name) {
+    return { title: "Rename " + name, body: "The name the Desk shows. Its code, settings and history stay as they are." };
+  }
+  function duplicateAsk(name) {
+    return { title: "Duplicate " + name + "?", body: "A copy with the same code, settings and size. It starts OFF, on no account, with no history." };
+  }
+  // instrument: the contract its orders go to now ("mini" | "micro"); the ask is for the other one.
+  function switchAsk(name, instrument) {
+    var to = instrument === "micro" ? "mini" : "micro";
+    return { to: to, title: "Switch " + name + " to the " + to + "?",
+             body: "Its orders go to the " + to + " from the next session. Every size moves at the same exposure (10 micros are 1 mini); a size that does not come out whole is refused. Only with no trade open and outside its session. Its backtest numbers stay in the other contract's dollars.",
+             action: "Switch to " + to };
+  }
   function switchOff(n) { return n + " is OFF. Unfilled orders are cancelled. An open position keeps its stop and is closed at the flat time. It trades again from the next session."; }
   // The toast after a switch-on: stopped for today first (the ruling), then with accounts, then shadow.
   function switchOnToast(n, s, book) {
@@ -1002,6 +1015,14 @@
       var s = isObj(r.settings) ? Object.keys(r.settings).map(function (k) { return k.replace(/_/g, " ") + " " + text(String(r.settings[k])); }) : [];
       return [who + " setting changed: " + (s.join(", ") || "none") + ". It applies from its next session."];
     },
+    lab_identity_set: function (r, who) {
+      var was = isObj(r.previous) ? r.previous : {}, to = r.exec_root ? "micro" : "mini", from = was.exec_root ? "micro" : "mini";
+      var parts = [];
+      if (text(r.label) && text(was.label) !== text(r.label)) parts.push("renamed to " + text(r.label));
+      if (to !== from) parts.push("orders now go to the " + to);
+      return [who + " " + (parts.join(", ") || "changed")];
+    },
+    lab_duplicated: function (r, who) { return [who + " copied as " + text(r.copy)]; },
     lab_limits_set: function (r, who) {
       var l = r.limits;
       if (!isObj(l)) return [who + " limits set"];
@@ -1061,7 +1082,7 @@
     refusedLine: refusedLine, switchOnAccounts: switchOnAccounts, switchOnShadow: switchOnShadow, switchOnNext: switchOnNext,
     switchOff: switchOff, switchOnToast: switchOnToast, bookedNext: bookedNext, bookedJoins: bookedJoins, flattenAsk: flattenAsk, flattenSteps: flattenSteps, deskSpec: deskSpec,
     deskSetupRows: deskSetupRows, activity: activity, needsLook: needsLook, stateNote: stateNote, deskSwitchTitle: deskSwitchTitle, switchOnAsk: switchOnAsk,
-    switchOffToast: switchOffToast, removeAskDesk: removeAskDesk, plainSteps: plainSteps, plainRecord: plainRecord, closeOut: closeOut,
+    switchOffToast: switchOffToast, removeAskDesk: removeAskDesk, renameAsk: renameAsk, duplicateAsk: duplicateAsk, switchAsk: switchAsk, plainSteps: plainSteps, plainRecord: plainRecord, closeOut: closeOut,
     NOT_ON_DESK: NOT_ON_DESK, CLOSE_OUT: CLOSE_OUT, NOT_OFF: NOT_OFF, hiddenEvent: hiddenEvent, HIDDEN_EVENTS: HIDDEN_EVENTS, LAB_UNKNOWN: LAB_UNKNOWN,
     OTHER_DESK: OTHER_DESK, LIMITS_CAPTION: LIMITS_CAPTION, EDIT_LIMITS: EDIT_LIMITS, SAVE_LIMITS: SAVE_LIMITS, CANCEL: CANCEL,
     OLD_TITLE: OLD_TITLE, CLEAR: CLEAR, CLEARED: CLEARED, BOOKED_NEXT: BOOKED_NEXT, BOOKED_JOINS: BOOKED_JOINS, LIVE_NOTE: LIVE_NOTE,

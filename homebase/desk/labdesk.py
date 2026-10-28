@@ -52,13 +52,13 @@ import re
 import sys
 import time
 from collections import OrderedDict, deque
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Callable
 
 from .. import config as config_mod
 from . import labcfg
 from ..config import AppCfg, assignments
-from ..contracts import point_value, tick_size
+from ..contracts import commission_rt, micro_of, point_value, tick_size
 from ..core.num import is_int as _whole
 from . import engine_lab
 from .engine_lab import GROUP_HEDGE
@@ -525,6 +525,166 @@ class LabDesk:
         self._journal("lab_settings_set", strategy=name, settings=changes, previous={k: was.get(k) for k in changes})
         return {"ok": True, "strategy": name, "settings": changes, "changed": True}
 
+    # ------------------------------------------------------------ name and instrument
+    def _switch_plan(self, name: str, rec: dict, to: str):
+        """The record, limits and book of this strategy with its orders going to `to` ("mini": its market's full
+        contract; "micro": that market's micro), or None when it already does. Sizes move at the same exposure (10 micros
+        are 1 mini); a size that does not come out whole is a refusal, never a rounding. Nothing is written here."""
+        if to not in ("mini", "micro"):
+            raise ValueError(labcfg.SAY_IDENTITY)
+        root = rec["root"]
+        micro = micro_of(root)
+        if micro is None:
+            raise Refused(f"{root} has no micro here.")
+        if rec.get("own_size") is True:
+            raise Refused("It sizes its own orders in micro dollars. Its contract cannot be switched.")
+        if (to == "micro") == bool(rec.get("exec_root")):
+            return None
+        ratio = round(point_value(root) / point_value(micro))
+
+        def scale(n, what):
+            out = n * ratio if to == "micro" else (n // ratio if n % ratio == 0 else 0)
+            if not labcfg._whole(out, 1, 10 ** 6):
+                raise Refused(f"{what} of {n} {'minis' if to == 'micro' else 'micros'} is not a whole number of "
+                              f"{'micros' if to == 'micro' else 'minis'}. Change it first.")
+            return out
+        new = {k: v for k, v in rec.items() if k != "exec_root"}
+        if to == "micro":
+            new["exec_root"] = micro
+        new["exec_pick"] = True                      # the owner's pick: the runner no longer holds it to the code's own
+        new["commission"] = commission_rt(micro if to == "micro" else root)
+        if labcfg._whole(rec.get("qty"), 1, 10 ** 6):
+            new["qty"] = scale(rec["qty"], "Its size")
+        new["notes"] = [*(rec.get("notes") or []),
+                        f"Switched to the {'micro' if to == 'micro' else 'mini'} on the Desk. Its backtest numbers are in the other contract's dollars."]
+        was = labcfg.limits_of(self.cfg, name)
+        limits = was
+        if was is not None:
+            limits = labcfg.derive_limits(new) if labcfg.auto_of(self.cfg, name) else replace(was, max_qty=scale(was.max_qty, "Its most"))
+            if limits is None or (not labcfg.auto_of(self.cfg, name) and not labcfg._whole(limits.max_qty, 1, 10)):
+                raise Refused("Its most contracts would be over 10. Lower it first.")
+        rows = [{"account": r["account"], "qty": scale(int(r["qty"]), "An account's size")} for r in self.cfg.book.get(name) or []]
+        if rows and limits is None:
+            raise Refused(SET_LIMITS_FIRST)
+        if limits is not None and any(r["qty"] > limits.max_qty for r in rows):
+            raise Refused(BOOKED_FOR_MORE)
+        return new, limits, rows
+
+    def _instrument(self, name: str) -> str | None:
+        """The contract this strategy's orders go to, for the page's switch; None when it has no micro here or sizes itself."""
+        rec = labcfg.record_of(self.cfg, name) or {}
+        if rec.get("own_size") is True or not rec.get("root") or micro_of(rec["root"]) is None:
+            return None
+        return "micro" if rec.get("exec_root") else "mini"
+
+    async def set_identity(self, name: str, body) -> dict:
+        """The owner's name for a strategy (`label`) and the contract its orders go to (`instrument`: "mini" or "micro").
+        ValueError: a bad field, with its sentence. Refused: the Lab side is off, not a Lab strategy (404), another desk
+        owns the store, its session is running, a round is open, a size would not come out whole, or the record
+        changed / could not be written. The record and its sidecar are written together; if the second write fails the
+        first is put back. Nothing changes on a refusal."""
+        if not self.on:
+            raise Refused(SWITCHED_OFF)
+        self._need(name)
+        self._must_own()
+        if not isinstance(body, dict) or ("label" not in body and "instrument" not in body):
+            raise ValueError(labcfg.SAY_IDENTITY)
+        rec = labcfg.record_of(self.cfg, name)
+        label = labcfg.parse_label(body["label"]) if "label" in body else None
+        if self._in_session(rec) and "instrument" in body:
+            w = rec.get("session_window") or ["", ""]
+            raise Refused(f"Not while it is in session. Change it before {w[0]} or after {w[1]} ET.")
+        why = self._open_why(name)
+        if why is not None:
+            raise Refused(why)
+        plan = self._switch_plan(name, rec, body["instrument"]) if "instrument" in body else None
+        new, limits, rows = plan if plan is not None else (dict(rec), labcfg.limits_of(self.cfg, name), None)
+        if label is not None:
+            new["label"] = label
+        if new == rec:
+            return {"ok": True, "strategy": name, "changed": False}
+        sname, mark, at, cfg = labcfg.store_name(name), store.mark_of(rec), self._at, self.cfg
+        book = rows if rows is not None else [dict(r) for r in cfg.book.get(name) or []]
+        want = labcfg.sidecar_for(cfg, name, new, limits, book) if plan is not None else None
+
+        def work():
+            with store.write_lock(at, REQ_WAIT_S):
+                self._still_mine()
+                cur = store.get(sname, at)
+                if cur is None or store.mark_of(cur) != mark:
+                    return None
+                full = {**cur, **{k: v for k, v in new.items() if k != "exec_root"}}
+                if "exec_root" in new:
+                    full["exec_root"] = new["exec_root"]
+                else:
+                    full.pop("exec_root", None)
+                store.put(full, at)
+                if want is not None and (labcfg.entry(cfg, name) or {}).get("saved") != want:
+                    try:
+                        store.put_desk(sname, labcfg.stamped(want), at)
+                    except BaseException:
+                        store.put(cur, at)           # the record goes back: its size must not be read in the other contract
+                        raise
+                return full
+
+        def keep(done):
+            if done is None:
+                raise Refused(RECORD_CHANGED)
+            slim = {k: v for k, v in done.items() if k != "source"}
+            if want is not None:
+                labcfg.adopt(cfg, name, slim, limits, book, want)
+            else:
+                labcfg.adopt(cfg, name, slim, labcfg.limits_of(cfg, name), book, None)
+        await self._write(name, work, keep)
+        self._journal("lab_identity_set", strategy=name, label=new.get("label"), exec_root=new.get("exec_root"),
+                      previous={"label": rec.get("label"), "exec_root": rec.get("exec_root")})
+        return {"ok": True, "strategy": name, "label": new.get("label"), "instrument": "micro" if new.get("exec_root") else "mini",
+                "changed": True}
+
+    async def duplicate(self, name: str) -> dict:
+        """A copy of a promoted strategy under a new name (<name>_copy, _copy2, ...): the same code, settings and size,
+        switched OFF, on no account, with no history. Its Lab draft is copied too when this machine has the original's.
+        Refused: the Lab side is off, not a Lab strategy (404), another desk owns the store, no free name, or it could
+        not be written."""
+        if not self.on:
+            raise Refused(SWITCHED_OFF)
+        self._need(name)
+        self._must_own()
+        from ..store import draftstore
+        at, sname = self._at, labcfg.store_name(name)
+
+        def work():
+            with store.write_lock(at, REQ_WAIT_S):
+                self._still_mine()
+                cur = store.get(sname, at)
+                if cur is None:
+                    raise Refused(NOT_ON_DESK, 404)
+                taken = set(store.names(at)[0])
+                for i in range(1, 100):
+                    tail = "_copy" if i == 1 else f"_copy{i}"
+                    new = cur["name"][:40 - len(tail)] + tail
+                    if new not in taken and not draftstore.path_for(new).exists():
+                        break
+                else:
+                    raise Refused("It has been copied too often. Remove a copy first.")
+                label = f"{cur.get('label') or cur['name']} (copy)"[:60]
+                rec = {**cur, "name": new, "id": draftstore.draft_id(new), "label": label, "enabled": False,
+                       "promoted_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
+                if draftstore.path_for(cur["name"]).exists() and isinstance(cur.get("source"), str):
+                    with contextlib.suppress(OSError, ValueError):     # (the Lab's "open" wants a draft under the new name; the copy works without)
+                        draftstore.write(new, cur["source"])
+                store.put(rec, at)
+                return new
+        try:
+            new = await asyncio.to_thread(work)
+        except Refused:
+            raise
+        except (OSError, ValueError) as e:
+            self._journal("lab_save_error", strategy=name, error=f"{type(e).__name__}: {e}"[:200])
+            raise Refused(NOT_SAVED) from None
+        self._journal("lab_duplicated", strategy=name, copy=new)
+        return {"ok": True, "strategy": name, "copy": new}
+
     def window_note(self, name: str) -> str | None:
         """The window-past-the-flat-time note of a Lab strategy (labcfg.window_note), or None. Memory only; never
         raises: it rides along an answer that is already a success."""
@@ -807,6 +967,7 @@ class LabDesk:
                     "params": self._params(name),                    # the settings it was promoted with
                     "settings": self._settings(name),                # the ones of them the Setup panel may change
                     "own_size": (labcfg.record_of(self.cfg, name) or {}).get("own_size") is True,   # sizes itself: no Desk size
+                    "instrument": self._instrument(name),            # "micro" / "mini": the contract its orders go to; None: not switchable
                     "labels": self._labels(name),                    # each setting's own label (the Setup card's words)
                     "state": took["state"], "why": took["why"],
                     "trades_today": took["trades_today"], "mode_today": took["mode_today"],

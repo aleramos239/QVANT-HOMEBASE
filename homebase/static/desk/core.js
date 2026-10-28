@@ -211,15 +211,18 @@ document.addEventListener("keydown", (e) => {
 
 /* ---- confirmation popup (every consequential action asks here; Kill is also a hold first) ---- */
 let CONFIRM_CB = null;
-function confirmDlg(title, body, action, destructive) {
+function confirmDlg(title, body, action, destructive, text) {      // text (a string): also asks for one line, and resolves to it ("" or false = cancelled)
   return new Promise((res) => {
     $("#cfTitle").textContent = title;
     $("#cfBody").textContent = body;
+    const inp = $("#cfInput");
+    inp.hidden = typeof text !== "string"; inp.value = typeof text === "string" ? text : "";
     const b = $("#cfGo");
     b.textContent = action || "Confirm";
     b.className = "btn " + (destructive ? "btn-destructive" : "btn-default");
     CONFIRM_CB = res;
-    showOverlay("confirmOverlay");   // focus lands on Cancel, the safe default
+    showOverlay("confirmOverlay");   // focus lands on Cancel, the safe default (on the field when it asks for one)
+    if (!inp.hidden) setTimeout(() => { inp.focus(); inp.select(); }, 50);
   });
 }
 /* The desk's ONE confirm policy for every switch (S6): ask only when a flip turns ON something
@@ -242,6 +245,9 @@ function switchBounced(key) {
   return now - last < DOUBLE_CLICK_MS;
 }
 function cfDone(v) {
+  const inp = $("#cfInput");
+  if (v === true && !inp.hidden) v = inp.value.trim();
+  inp.hidden = true;
   hideOverlay("confirmOverlay");
   const cb = CONFIRM_CB; CONFIRM_CB = null;
   if (cb) cb(v);

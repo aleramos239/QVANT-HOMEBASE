@@ -194,15 +194,15 @@ def _since(t0_ns: int, t_ns: int) -> str:
     return f"{m // 60:02d}:{m % 60:02d}"
 
 
-def well_set(meta, root, exec_root: str = "") -> bool:
+def well_set(meta, root, exec_root: str = "", picked: bool = False) -> bool:
     """The child's answer to `init`, checked like an intent before anything is built from it (a negative bar_minutes
     kept the tester's build_bars going for ever): the record's own market (and the one its orders go to, when that is
     another), windows of two "HH:MM" with start < end, whole numbers in range, at most 500 times, true/false where
-    true/false belongs."""
+    true/false belongs. picked: the owner chose the contract on the Desk (the record's `exec_pick`), so the code's own is not held to it."""
     if not isinstance(meta, dict):
         return False
     bars, place, times = meta.get("bar_minutes"), meta.get("placement_ms"), meta.get("times")
-    return (isinstance(root, str) and meta.get("root") == root and (meta.get("exec_root") or "") == exec_root
+    return (isinstance(root, str) and meta.get("root") == root and (picked or (meta.get("exec_root") or "") == exec_root)
             and _window(meta.get("session_window"))
             and (meta.get("bar_window") is None or _window(meta["bar_window"]))
             and _int(bars) and 0 <= bars <= 1440 and _int(place) and 0 <= place <= 60_000
@@ -623,7 +623,7 @@ class StrategyDay:
         ex = ex if isinstance(ex, str) and exec_ok(root, ex) else ""
         if record.get("exec_root") and not ex:       # a record that names a market it may not trade: never hosted
             raise _Stop(BAD_SETTINGS, f"exec_root: {str(record.get('exec_root'))[:40]}")
-        if not well_set(meta, root, ex):             # checked like an intent, before anything is built from it
+        if not well_set(meta, root, ex, record.get("exec_pick") is True):             # checked like an intent, before anything is built from it
             raise _Stop(BAD_SETTINGS, f"meta: {str(meta)[:300]}")
         if not meta["trades_on"]:
             self.state = "not_today"
@@ -1569,7 +1569,7 @@ class StrategyDay:
         self._changed(now=True)
 
     def leave(self) -> None:
-        """The runner is going away on purpose (not a crash): a day that has begun in desk mode is ended at the Desk
+        """The day is being ended on purpose (replaced by a new promotion): a day that has begun in desk mode is ended at the Desk
         with a stop that keeps the position. The day reads stopped once the Desk has answered it; if it never does,
         the day is left as it is and the next runner picks it up from the tell-log."""
         if self._desk is None or self.state != "running" or self._stop_sent or self._send is None or self._held():
@@ -2196,8 +2196,8 @@ class Runner:
             self._desk_say()
 
     def close(self) -> None:
-        if self._desk is not None:
-            self._desk_leave()
+        # No stop to the Desk here (owner, 2026-10-28): a restart must not end the day. The Desk's own rule for a runner
+        # that is away cancels the unfilled entries, a position keeps its broker stop, and the next runner picks the day up.
         for h in [*self._days.values(), *self._twins.values()]:
             h.day.kill()
 
@@ -2523,19 +2523,6 @@ class Runner:
                                                        "refused": None if ok else NO_ANSWER, "dead": False}
                                                       for it in line["intents"]]})
         log(f"{name}: {d} its stop never reached the Desk: sent once more ({'taken' if ok else 'no answer'})")
-
-    def _desk_leave(self) -> None:
-        """The runner is going away on purpose: every day that has begun in desk mode is ended at the Desk (a stop
-        that keeps the position), asked again for ten seconds at most."""
-        days = [h.day for h in self._days.values()] + self._ending
-        for day in days:
-            day.leave()
-        for _ in range(int(RETRY_FOR_S / RETRY_S)):
-            if not any(day.asking() for day in days):
-                break
-            self._nap(RETRY_S)
-            for day in days:
-                day.tend()
 
     def _real_trades(self, m: _Match) -> bool:
         """A desk day's match compares the lead account's REAL trades, as they stand when the match starts, with the

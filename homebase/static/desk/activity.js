@@ -94,7 +94,7 @@ const ACTIVITY = {
   strategy_toggled: (r) => [`${actStrat(r)} switched ${r.enabled ? "ON" : "OFF"}${r.cause === "manual_flatten" ? " (Flatten & turn off)" : ""}`],
   lab_refused: labAct("lab_refused"), lab_runner_down: labAct("lab_runner_down"), lab_runner_back: labAct("lab_runner_back"),
   lab_stopped: labAct("lab_stopped"), lab_flatten: labAct("lab_flatten"), lab_cancelled: labAct("lab_cancelled"),
-  lab_limits_set: labAct("lab_limits_set"), lab_settings_set: labAct("lab_settings_set"), lab_round: labAct("lab_round"), lab_settled: labAct("lab_settled"),
+  lab_limits_set: labAct("lab_limits_set"), lab_settings_set: labAct("lab_settings_set"), lab_identity_set: labAct("lab_identity_set"), lab_duplicated: labAct("lab_duplicated"), lab_round: labAct("lab_round"), lab_settled: labAct("lab_settled"),
   lab_check: labAct("lab_check"), lab_carry: labAct("lab_carry"), lab_carry_cleared: labAct("lab_carry_cleared"),
   lab_exit_unconfirmed: labAct("lab_exit_unconfirmed"), lab_cancel_raced_fill: labAct("lab_cancel_raced_fill"), lab_open_without_cfg: labAct("lab_open_without_cfg"),
   lab_removed: labAct("lab_removed"), lab_event_error: labAct("lab_event_error"), lab_intake_error: labAct("lab_intake_error"),

@@ -433,6 +433,31 @@ def set_limits(cfg: AppCfg, desk_id: str, limits: LabLimits | None) -> None:
     cfg.strategies[desk_id] = strategy_cfg(m["rec"], limits)
 
 
+SAY_LABEL = "Name: 1 to 60 characters."
+SAY_IDENTITY = "{strategy, label and/or instrument}: the instrument is mini or micro."
+
+
+def parse_label(v) -> str:
+    """The name the owner typed for a strategy, checked. A ValueError carries the sentence the page shows."""
+    s = " ".join(v.split()) if isinstance(v, str) else ""
+    if not 1 <= len(s) <= 60 or not s.isprintable():
+        raise ValueError(SAY_LABEL)
+    return s
+
+
+def sidecar_for(cfg: AppCfg, desk_id: str, rec: dict, limits: LabLimits | None, book: list) -> dict:
+    """What the sidecar would hold if the record were `rec` (its limits typed or its own are judged against that record)."""
+    m = {**_meta(cfg)[desk_id], "rec": rec}
+    return _norm(m["mark"], _typed(m, limits), book)
+
+
+def adopt(cfg: AppCfg, desk_id: str, rec: dict, limits: LabLimits | None, book: list, saved: dict | None) -> None:
+    """Memory only, after the record AND its sidecar were written: the new record, limits and book become the desk's
+    in one step (the strategy is rebuilt from them: its label, its market for orders, its size)."""
+    _meta(cfg)[desk_id]["rec"] = rec
+    commit(cfg, desk_id, limits, book, saved)
+
+
 def set_enabled(cfg: AppCfg, desk_id: str, on: bool) -> None:
     """Memory only, after the store took the switch: the page must not wait for the next read."""
     m = _meta(cfg)[desk_id]

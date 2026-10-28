@@ -165,6 +165,7 @@ def test_the_child_must_agree_with_the_record_about_the_market_its_orders_go_to(
             "times": [], "needs_daily": False, "trades_on": True}
     assert well_set(meta, "NQ") and well_set({**meta, "exec_root": "MNQ"}, "NQ", "MNQ")
     assert not well_set({**meta, "exec_root": "MNQ"}, "NQ") and not well_set(meta, "NQ", "MNQ")
+    assert well_set({**meta, "exec_root": "MNQ"}, "NQ", "", picked=True) and well_set(meta, "NQ", "MNQ", picked=True)   # the owner's pick on the Desk
 
 
 def shadow_net(source, **kw):

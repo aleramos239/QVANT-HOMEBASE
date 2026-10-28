@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=4">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=43"></script>
+<script src="/static/desklab.js?v=44"></script>
 <script src="/static/desklabset.js?v=4"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
@@ -315,6 +315,7 @@
     align-self:center; }
   .chk .lbl{ font-weight:600; min-width:150px; }
   .chk .det{ color:var(--muted-foreground); }
+  .chk .chk-x{ margin-left:auto; flex:none; border:0; background:none; color:var(--muted-foreground); font-size:18px; line-height:1; padding:0 4px; cursor:pointer; }
   /* A dialog: the scrim dims what is behind it, the box is heavy glass that materializes out of
      whatever opened it (transform-origin set at open) and leaves back along the same path. Open is
      live at once -- visible and clickable immediately, the motion never gates a button. Closing,
@@ -747,6 +748,7 @@
   <div class="modal" style="width:400px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="cfTitle" aria-describedby="cfBody">
     <h2 id="cfTitle" style="margin:0 0 6px;font-size:1.05rem;font-weight:600"></h2>
     <p id="cfBody" class="sub" style="margin:0 0 16px;font-size:13px;color:var(--muted-foreground)"></p>
+    <input id="cfInput" class="hb-field" type="text" maxlength="60" autocomplete="off" hidden style="width:100%;margin:0 0 16px" onkeydown="if(event.key==='Enter'){event.preventDefault();cfDone(true)}">
     <div class="row-btns">
       <button class="btn btn-outline" id="cfCancel" data-autofocus onclick="cfDone(false)">Cancel</button>
       <button class="btn btn-default" id="cfGo" onclick="cfDone(true)">Confirm</button>
@@ -901,13 +903,13 @@
 <div id="alertBar" role="alert" hidden><span id="alertText"></span>
   <button type="button" id="alertX" title="Dismiss" aria-label="Dismiss">&times;</button></div>
 
-<script src="/static/desk/core.js?v=3"></script>
-<script src="/static/desk/topbar.js?v=4"></script>
-<script src="/static/desk/activity.js?v=7"></script>
+<script src="/static/desk/core.js?v=4"></script>
+<script src="/static/desk/topbar.js?v=5"></script>
+<script src="/static/desk/activity.js?v=8"></script>
 <script src="/static/desk/views.js?v=1"></script>
 <script src="/static/desk/groups.js?v=6"></script>
 <script src="/static/desk/strategy.js?v=9"></script>
-<script src="/static/desk/labdesk.js?v=9"></script>
+<script src="/static/desk/labdesk.js?v=10"></script>
 <script src="/static/desk/demo.js?v=2"></script>
 <script src="/static/desk/book.js?v=7"></script>
 <script src="/static/desk/settings.js?v=8"></script>

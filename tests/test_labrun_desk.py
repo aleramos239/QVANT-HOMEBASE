@@ -1161,36 +1161,19 @@ def test_a_day_made_while_the_stream_is_down_knows_it(kit):
 
 
 # ---------------------------------------------------------------- the runner's own stops and its idle step
-def test_a_runner_that_shuts_down_ends_each_begun_desk_day_and_no_other(kit):
+def test_a_runner_that_shuts_down_sends_no_stop_and_leaves_each_desk_day_to_be_picked_up(kit):
+    """Owner, 2026-10-28: a restart must not end the day. The Desk's own rule for a runner that is away cancels the
+    unfilled entries; a position keeps its broker stop; the next runner picks the day up from its tell-log."""
     k = kit()
     booked(k)
     k.promote(MARKET_930, name="lab_y")
-    day = before_the_window(k)
+    before_the_window(k)
     minute(k, "09:29:01")
     k.r._nap = lambda s: None
     k.r.close()
-    assert k.stub.ops() == [["entry"], ["stop"]]
-    assert k.stub.bodies[-1]["intents"] == [{"op": "stop", "why": "Stopped for today.", "flatten": False}]
-    assert (k.file()["state"], k.file()["why"]) == ("stopped", "Stopped for today.")
-    assert k.file("lab_y")["state"] == "running"                             # the shadow day: as it always was
-
-
-def test_a_shutdown_asks_again_for_ten_seconds_and_leaves_the_day_to_be_picked_up_if_the_desk_never_answers(kit):
-    k = kit()
-    booked(k)
-    before_the_window(k)
-    minute(k, "09:29:01")
-    k.stub.script = [StubDesk.NO_ANSWER] * 99
-    naps = []
-
-    def nap(s):
-        naps.append(s)
-        k.wall[0] += s
-    k.r._nap = nap
-    k.r.close()
-    assert naps == [1.0] * 10 and len(k.stub.bodies) == 1 + 1 + 10
-    assert len({json.dumps(b) for b in k.stub.bodies[1:]}) == 1              # the same stop, the same seq
-    assert k.file()["state"] == "running"                                    # not final: the next runner picks it up
+    assert k.stub.ops() == [["entry"]]
+    assert k.file()["state"] == "running"
+    assert k.file("lab_y")["state"] == "running"
 
 
 def test_switched_off_the_stop_is_sent_and_asked_again_from_the_idle_step(kit):

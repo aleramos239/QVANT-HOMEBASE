@@ -342,10 +342,10 @@ html.hb-apple .hb-insp .labres-prop .f .v { flex: none; width: 74px; text-align:
 html.hb-apple .hb-insp .labres-prop .f.fh { min-height: 26px; }
 html.hb-apple .hb-insp .labres-prop .f.fh .v { font-size: 11px; line-height: 14px; }
 /* three columns, Build | Unseen | Both (owner 2026-10-24): fixed narrow values, the label wraps rather than being cut */
-html.hb-apple .hb-insp .figs.three .f { gap: 6px; }
-html.hb-apple .hb-insp .figs.three .f .k { flex: 1 1 auto; min-width: 0; white-space: normal; overflow: visible; font-size: 12px; line-height: 15px; }
-html.hb-apple .hb-insp .figs.three .f .v { flex: none; width: 68px; text-align: right; white-space: nowrap; font-size: 12px; }
-html.hb-apple .hb-insp .figs.three .f.fh .v { font-size: 11px; }
+html.hb-apple .hb-insp .figs.three .f { gap: 4px; }
+html.hb-apple .hb-insp .figs.three .f .k { flex: 1 1 auto; min-width: 0; white-space: normal; overflow: visible; overflow-wrap: anywhere; font-size: 12px; line-height: 15px; }
+html.hb-apple .hb-insp .figs.three .f .v { flex: none; width: 52px; text-align: right; white-space: nowrap; font-size: 12px; }
+html.hb-apple .hb-insp .figs.three .f.fh .v { font-size: 11px; line-height: 12px; white-space: normal; }
 /* a group's combined figures: dollar amounts such as +$86,412 need a wider column than the prop sim's percentages */
 html.hb-apple .hb-insp .figs.grp-figs .f .v { width: 72px; }
 html.hb-apple .hb-insp .qlinks { display: block; margin: 0; }
@@ -474,7 +474,8 @@ html.hb-apple .chk:first-child { border-top: 0; }
 html.hb-apple .chk .dot { flex: none; width: 7px; height: 7px; border: 0; border-radius: 50%; align-self: center; box-shadow: none; }
 html.hb-apple .chk .lbl { min-width: 150px; font-weight: 400; color: var(--a-label); overflow-wrap: anywhere; }
 html.hb-apple .chk .det { color: var(--a-label-2); overflow-wrap: anywhere; }
-html.hb-apple .chk .switch { margin-left: auto; align-self: center; }
+html.hb-apple .chk .chk-x { margin-left: auto; align-self: center; flex: none; border: 0; background: none; color: var(--a-label-2); font-size: 18px; line-height: 1; padding: 0 4px; cursor: pointer; }
+html.hb-apple .chk .chk-x:hover { color: var(--a-label); }
 html.hb-apple .chk.acked .lbl, html.hb-apple .chk.acked .det { color: var(--a-label-2); text-decoration: line-through; text-decoration-thickness: 1px; }
 html.hb-apple #checksOverlay .bulb { display: none; }
 /* the accounts sheet rows may wrap */

@@ -40,6 +40,32 @@ def register(app, *, labdesk) -> None:
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
 
+    @app.post("/api/lab-identity")
+    async def lab_identity(request: Request):
+        """Rename a promoted Lab strategy and/or switch the contract its orders go to: {strategy, label?, instrument?
+        ("mini" | "micro")}. Sizes move at the same exposure; one that would not come out whole is refused with its
+        sentence (409). A bad field is a 400."""
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(400, "{strategy, label, instrument}")
+        try:
+            return await labdesk.set_identity(str(body.get("strategy") or ""), {k: v for k, v in body.items() if k != "strategy"})
+        except labdesk_mod.Refused as e:
+            raise HTTPException(e.status, str(e)) from None
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.post("/api/lab-duplicate")
+    async def lab_duplicate(request: Request):
+        """Copy a promoted Lab strategy under a new name: {strategy}. The copy is OFF, on no account, with no history."""
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(400, "{strategy}")
+        try:
+            return await labdesk.duplicate(str(body.get("strategy") or ""))
+        except labdesk_mod.Refused as e:
+            raise HTTPException(e.status, str(e)) from None
+
     @app.post("/api/lab-remove")
     async def lab_remove(request: Request):
         """Take a promoted Lab strategy off the Desk: {strategy}. Its accounts are unassigned, its record and

@@ -805,7 +805,6 @@ def test_a_pick_up_after_a_crash_sends_no_request_of_the_log_again(kits):
     k.stub.script = [StubDesk.NO_ANSWER] * 5
     minute(k, "09:30:01")                                                    # 09:31: [cancel 1, entry 2], no answer
     minute(k, "09:31:01")                                                    # 09:32: the flatten, no answer
-    old = {b["seq"] for b in k.stub.bodies}
     crash(k)
     k2 = restart(kits, "09:32:30", [("09:20:00", [21000.0] * 2), ("09:29:01", [21000.0] * 180)],
                  snap(REPLACE, orders={1: WORKING}, answered=[2]))
@@ -817,4 +816,4 @@ def test_a_pick_up_after_a_crash_sends_no_request_of_the_log_again(kits):
     minute(k2, "09:32:01", n=40)
     assert k2.stub.bodies == []                                              # nothing of the log, under any number
     k2.r.close()
-    assert [b["seq"] for b in k2.stub.bodies] == [max(old) + 1]              # the clean stop: a new number
+    assert k2.stub.bodies == []                                              # a clean close sends no stop: the day stays open
