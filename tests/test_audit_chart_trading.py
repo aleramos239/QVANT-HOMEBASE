@@ -58,20 +58,27 @@ def test_a_timed_out_exit_pair_never_puts_the_old_exit_back(tmp_path):
     assert ad.orders == [], "the old stop was re-placed on top of a pair that may be working"
 
 
-# --- size caps are enforced here ----------------------------------------------------------------
-def test_an_order_over_the_per_order_cap_is_refused(tmp_path):
+# --- no size caps (owner 2026-10-14, again 2026-10-27): max_order_qty / max_position_qty are not enforced -----------
+def test_an_order_over_the_old_per_order_cap_goes_through_like_a_small_one(tmp_path):
     desk, eng, ads, clock, mono, saved = mkdesk(tmp_path)
     r = order(desk, clock, qty=11)
-    assert r["refused"] and "limit of 10 an order" in r["error"] and ads["a1"].orders == []
-    assert order(desk, clock, cid="o2", qty=10)["ok"] is True
+    assert r["ok"] is True and not r.get("refused") and [o.qty for o in ads["a1"].orders] == [11]
+    desk.cfg.chart_trading.max_order_qty = 1                 # a saved limit changes nothing
+    assert order(desk, clock, cid="o2", qty=50)["ok"] is True
 
 
-def test_an_order_that_could_pass_the_position_cap_is_refused(tmp_path):
+def test_an_order_that_takes_the_position_past_the_old_cap_goes_through(tmp_path):
     desk, eng, ads, clock, mono, saved = mkdesk(tmp_path)
     ads["a1"].view["positions"] = [{"contract_id": 1, "symbol": NQC, "net": 15, "avg_price": 100.0}]
-    r = order(desk, clock, qty=6)
-    assert r["refused"] and "limit of 20 a position" in r["error"] and ads["a1"].orders == []
-    assert order(desk, clock, cid="o2", qty=5)["ok"] is True
+    desk.cfg.chart_trading.max_position_qty = 12
+    r = order(desk, clock, qty=6)                            # 15 + 6 = 21
+    assert r["ok"] is True and not r.get("refused") and [o.qty for o in ads["a1"].orders] == [6]
+
+
+def test_a_quantity_of_zero_is_still_refused(tmp_path):
+    desk, eng, ads, clock, mono, saved = mkdesk(tmp_path)
+    r = order(desk, clock, qty=0)
+    assert r["refused"] and r["error"] == "quantity must be at least 1" and ads["a1"].orders == []
 
 
 # --- every account not paper is real money ---------------------------------------------------------
@@ -197,20 +204,6 @@ def test_a_chart_entry_limit_cannot_be_repriced_with_chart_trading_off(tmp_path)
     r = run(desk.modify({"client_id": "m1", "account": "a1", "order_id": "70", "price": 120.0,
                          "quotes": quote(clock, last=100.0)}))["results"]["a1"]
     assert r["refused"] and "chart trading is off" in r["error"] and a.modified == []
-
-
-def test_a_reducing_order_is_not_blocked_by_the_position_cap(tmp_path):
-    desk, eng, ads, clock, mono, saved = mkdesk(tmp_path)
-    a = ads["a1"]
-    a.view["positions"] = [{"contract_id": 1, "symbol": NQC, "net": 10, "avg_price": 100.0}]
-    a.view["orders"] = [{**WORKING, "order_id": "81", "symbol": NQC, "type": "Stop", "side": "Sell",
-                         "qty": 10, "stop_price": 95.0},
-                        {**WORKING, "order_id": "82", "symbol": NQC, "type": "Limit", "side": "Sell",
-                         "qty": 10, "price": 110.0}]
-    desk.cfg.chart_trading.max_position_qty = 12
-    assert order(desk, clock, side="Sell", qty=10)["ok"] is True       # closes it: never grows |net|
-    r = order(desk, clock, cid="o2", side="Buy", qty=5)                # grows it: 10 + 10 + 5 working > cap
-    assert r["refused"] and "a position" in r["error"]
 
 
 def test_a_pre_send_error_is_a_plain_refusal_not_an_unknown_outcome(tmp_path):

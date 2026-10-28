@@ -69,7 +69,6 @@ from homebase.desk.trading import (Refused, check_prices, exit_levels, parse_can
 PORT = 8859
 FORBIDDEN_PORTS = frozenset({8850, 8852, 8853, 8854})   # the real desk, the chart service, the replays
 KEY_FILE = "fake-desk.key"
-MAX_ORDER, MAX_POSITION = 10, 20
 HEARTBEAT_S = 15.0
 MONTH = "Z6"
 ET = ZoneInfo("America/New_York")
@@ -123,7 +122,7 @@ class FakeDesk:
 
     def snapshot(self) -> dict:
         return {"enabled": self.enabled,
-                "limits": {"max_order_qty": MAX_ORDER, "max_position_qty": MAX_POSITION},
+                "limits": {},                 # no size limits, as the real desk's snapshot
                 "accounts": [self.account_view(aid) for aid in self.acct], "bot": self.bot}
 
     def publish(self, event: str, data) -> None:
@@ -256,8 +255,8 @@ class FakeDesk:
         res = {}
         for aid in it.accounts:
             why, px = self.gate(aid), None
-            if why is None and not 1 <= it.qty <= MAX_ORDER:
-                why = f"quantity must be 1-{MAX_ORDER}"
+            if why is None and it.qty < 1:
+                why = "quantity must be at least 1"
             if why is None and it.type == "Stop" and last is not None:
                 if it.side == "Buy" and it.price <= last:
                     why = f"a buy stop must be above the last price ({last:,})"

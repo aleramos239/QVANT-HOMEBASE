@@ -30,7 +30,9 @@ Guards, per account (a refusal is one sentence the page shows as-is):
      are never modified or cancelled from the chart. A reverse re-checks
      guards 1 and 4 before its flatten and again before its open.
   3. quantity: at least 1. No size limits (removed 2026-10-14 at the owner's
-     word; the 09:20-09:35 lock went the same day). A flatten also cancels those not-shown ids in its
+     word; the 09:20-09:35 lock went the same day; the audit's 10 / 20 caps
+     were taken out again 2026-10-27, so max_order_qty / max_position_qty in
+     the config are kept for old files and clients but enforced nowhere). A flatten also cancels those not-shown ids in its
      contract first (the adapter's symbol flatten only sees the cache).
      A flatten's own close order is such a chart order too, and while it
      counts a second flatten of that contract whose position read still
@@ -473,24 +475,6 @@ def reversed_stop(view: dict, contract: str, net: int, quote: Optional[dict], la
     return round_to_tick(contract, quote["last"] + dist if net > 0 else quote["last"] - dist)
 
 
-def worst_net(view: dict, contract: str, side: str, qty: int, reserved=()) -> int:
-    """Worst-case |net| in `contract` if this order AND every working order
-    on its side fill. An OCO pair counts twice (conservative). `reserved`
-    are chart orders the broker accepted that the cache does not show yet
-    ({contract, side, qty}); they count like working orders. An order with
-    an unknown side counts on BOTH sides (whichever grows |net|)."""
-    net = sum(int(p.get("net") or 0) for p in view.get("positions", [])
-              if p.get("symbol") == contract)
-    legs = [(o.get("side"), int(o.get("qty") or 0)) for o in view.get("orders", [])
-            if o.get("symbol") == contract]
-    legs += [(r.get("side"), int(r.get("qty") or 0)) for r in reserved
-             if r.get("contract") == contract]
-    legs.append((side, qty))
-    buys = sum(q for sd, q in legs if sd != "Sell")
-    sells = sum(q for sd, q in legs if sd != "Buy")
-    return max(abs(net + buys), abs(net - sells))
-
-
 async def _call(coro) -> OrderResult:
     """A broker call whose raise is a failed result, never an exception."""
     try:
@@ -802,7 +786,8 @@ class ChartDesk:
 
     # --- settings (the desk page) ----------------------------------------------
     def set_settings(self, body) -> dict:
-        """{enabled?, max_order_qty?, max_position_qty?} -> the new settings.
+        """{enabled?, max_order_qty?, max_position_qty?} -> the new settings. (The two quantities are
+        stored and echoed for old clients; no order is checked against them.)
         ValueError (the page shows it) on anything malformed; nothing changes then.
         Inside the P2 pause (09:29:50-09:30:30 ET weekdays, or any bot
         `placing`) a change is refused unwritten and unpublished, except one
@@ -1119,21 +1104,9 @@ class ChartDesk:
         ad, view, label = self._gate(aid)
         contract = self._contract(it.root)
         self._lock(aid, contract, label)
-        lim = self.cfg.chart_trading
         if it.qty < 1:
             raise Refused("quantity must be at least 1")
-        if it.qty > lim.max_order_qty:
-            raise Refused(f"quantity {it.qty} is over the chart-trading limit of {lim.max_order_qty} an order "
-                          "— change it on the desk page")
         self._unresolved(view)
-        worst = worst_net(view, contract, it.side, it.qty, self._reservations(aid, view))
-        net = sum(int(p.get("net") or 0) for p in view.get("positions", []) if p.get("symbol") == contract)
-        # the position cap is for orders that can grow |net|: one against the position, no bigger than it, only closes
-        # (the position's own SL/TP count in `worst`, so a scale-out near the cap would be refused for nothing)
-        reduces = net != 0 and it.side == ("Sell" if net > 0 else "Buy") and it.qty <= abs(net)
-        if worst > lim.max_position_qty and not reduces:
-            raise Refused(f"this order could take {contract} on {label} to {worst}, over the "
-                          f"chart-trading limit of {lim.max_position_qty} a position — change it on the desk page")
         price, sl, tp, trigger = check_prices(it.side, it.type, it.price, it.sl_price,
                                               it.tp_price, contract, quote,
                                               trigger=it.trigger_price)

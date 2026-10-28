@@ -96,15 +96,15 @@ class AccountCfg:
     day_lock: float = 0.0
 
 
-HARD_MAX_ORDER_QTY = 50        # the desk page cannot set chart-trading limits above these
+HARD_MAX_ORDER_QTY = 50        # the settings route cannot store chart-trading limits above these (no longer enforced)
 HARD_MAX_POSITION_QTY = 100
 
 
 @dataclass
 class ChartTradingCfg:
     enabled: bool = False        # orders from the chart page; off until switched on
-    max_order_qty: int = 10      # per order, per account
-    max_position_qty: int = 20   # worst-case |net| per contract, per account
+    max_order_qty: int = 10      # NOT enforced since 2026-10-27 (no size limits): kept so old config.json files load
+    max_position_qty: int = 20   # NOT enforced either
 
 
 def chart_trading_from(d) -> ChartTradingCfg:
