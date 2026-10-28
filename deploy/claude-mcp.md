@@ -19,6 +19,7 @@ book/unbook an account, or touch a strategy or chart-trading switch (`homebase/c
 ```sh
 claude mcp add --scope user \
   -e PYTHONPATH=/Users/ramoscapital/ramos-quant-homebase \
+  -e HOMEBASE_DESK_URL=http://127.0.0.1:18850 \
   homebase -- /Users/ramoscapital/ramos-quant-homebase/.venv/bin/python -m homebase.claude_mcp
 ```
 
@@ -42,7 +43,9 @@ claude mcp add --scope user \
   `-e HOMEBASE_CHARTS_URL=http://127.0.0.1:8862`).
 - `http://127.0.0.1:8850/api/status`, `/api/journal`, `/api/accounts/reconnect`, `/api/accounts/remove`
   only (the desk) — `homebase/claude_mcp/desk_client.py`'s exact allowlist, nothing else. `HOMEBASE_DESK_URL`
-  overrides the loopback port the same way `HOMEBASE_CHARTS_URL` does for the chart service.
+  overrides the loopback port the same way `HOMEBASE_CHARTS_URL` does for the chart service. Set it to
+  `http://127.0.0.1:18850`: the server's live desk through the Mac's tunnel (deploy/linux/depthrelay.sh on).
+  Left unset, the tools read this Mac's own idle desk on 8850, not the one that trades.
 - DRAFT strategy files: `~/.homebase/strategies/<name>.py` (`HOMEBASE_DRAFTS_DIR` overrides). `set_group`
   writes `groups.json` in the same folder (which group the Lab lists a strategy under) and nothing else.
 - `homebase/.state/tick_coverage.json` and `homebase/.state/data_watch.json` (the tick job's data watchdog: live feed

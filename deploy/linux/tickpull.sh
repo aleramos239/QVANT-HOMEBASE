@@ -12,3 +12,6 @@ echo "[tickpull] $(date '+%F %T') from $HOST"
 rsync -a --timeout=120 --rsync-path='nice -n 10 ionice -c3 rsync' --exclude='*.live*' --include='*/' --include='*.csv.gz' --include='*.json' --exclude='*' \
   "$HOST:/home/homebase/futures_ticks/" "$STAGE/"
 /usr/bin/python3 "$REPO/deploy/linux/tickmerge.py" "$STAGE" "$HOME/futures_ticks" --lock "$REPO/homebase/.state/ticks.lock"
+# the server's coverage report and data watchdog, for the chat tools' data_coverage / desk_readiness (this Mac runs no tick job)
+rsync -t --timeout=60 "$HOST:/home/homebase/ramos-quant-homebase/homebase/.state/tick_coverage.json" \
+  "$HOST:/home/homebase/ramos-quant-homebase/homebase/.state/data_watch.json" "$REPO/homebase/.state/" || echo "[tickpull] coverage copy failed"

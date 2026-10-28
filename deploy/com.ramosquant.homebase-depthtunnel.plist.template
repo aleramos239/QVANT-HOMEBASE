@@ -4,6 +4,7 @@
 <dict>
   <key>Label</key><string>com.ramosquant.homebase-depthtunnel</string>
   <!-- the book relay's road (homebase/charts/depthrelay.py): this Mac's 127.0.0.1:18852 is the server's charts.
+       And 127.0.0.1:18850 is the server's desk: the homebase chat tools read the live desk there (HOMEBASE_DESK_URL).
        The Mac opens it: nothing on the Mac is reachable from the server. -->
   <key>ProgramArguments</key>
   <array>
@@ -14,6 +15,7 @@
     <string>-o</string><string>ServerAliveInterval=15</string>
     <string>-o</string><string>ServerAliveCountMax=3</string>
     <string>-L</string><string>127.0.0.1:18852:127.0.0.1:8852</string>
+    <string>-L</string><string>127.0.0.1:18850:127.0.0.1:8850</string>
     <string>__HOST__</string>
   </array>
   <key>RunAtLoad</key><true/>
