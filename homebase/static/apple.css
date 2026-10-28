@@ -127,10 +127,6 @@ h1, h2, h3, .card-title { letter-spacing: -0.02em; }
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
 /* ---- 3. Controls ----------------------------------------------------------------- */
-.btn { border-radius: var(--radius-md); font-size: 13px; font-weight: 500; height: 34px; padding: 0 14px;
-  transition: transform 140ms var(--ease-spring-out, cubic-bezier(.23,1,.32,1)), background-color 150ms ease, color 150ms ease; }
-.btn:active { transform: scale(.97); transition-duration: 80ms; }
-.btn-sm { height: 30px; padding: 0 12px; }
 .btn-outline { background: var(--hb-fill); border-color: transparent; }
 .btn-outline:hover { background: var(--hb-fill-hover); }
 .btn-ghost:hover { background: var(--hb-fill); }
@@ -177,13 +173,11 @@ h1, h2, h3, .card-title { letter-spacing: -0.02em; }
 .item.one { padding-top: 6px; padding-bottom: 6px; }
 .item .it b .tag-live { margin-left: 6px; vertical-align: 1px; }
 .app-main { background: var(--background); }
-.scroll { padding: 40px 48px 64px; }
 .view-wrap { max-width: 1040px; }
 .view[hidden] { display: none; }
 @media (max-width: 900px) {
   .frame { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
   .side { max-height: 34vh; margin: 0 10px 10px; }
-  .scroll { padding: 28px 20px 48px; }
 }
 
 /* sidebar */

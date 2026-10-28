@@ -255,32 +255,28 @@ html.hb-apple .tag-live, html.hb-apple .tag-paper { display: inline-flex; align-
   letter-spacing: normal; background: var(--a-fill); color: var(--a-label-2); }
 html.hb-apple .tag-live { background: color-mix(in srgb, var(--a-red) 12%, transparent); color: var(--a-red-text); }
 html.hb-apple .qty-edit { cursor: default; border-bottom: 1px dashed var(--a-label-3); }
-html.hb-apple .qty-input { width: 46px; height: 22px; padding: 0 5px; border: 0; border-radius: 5px; background: var(--a-field); box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08);
+html.hb-apple .qty-input { width: 46px; height: 22px; padding: 0 5px; border: 0; border-radius: var(--hb-r-mini); background: var(--a-field); box-shadow: var(--a-field-shadow);
   font-family: var(--a-font); font-size: 13px; color: var(--a-label); font-variant-numeric: tabular-nums; }
 html.hb-apple .mcap { margin-top: 8px; padding: 0 10px; font-size: 11px; line-height: 14px; color: var(--a-label-2); }
 html.hb-apple .mcap.warn { color: var(--a-red-text); }
 
 /* ---- buttons, the page's own classes on the system sizes -------------------------------------------------------------- */
-html.hb-apple .btn { height: 28px; padding: 0 14.5px; border: 0; border-radius: var(--hb-bubble-r); gap: 5px; background: var(--a-fill); color: var(--a-label); box-shadow: none;
-  font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; transform: none; cursor: default; transition: background-color 100ms ease; }
-html.hb-apple .btn:hover { background: var(--a-fill); color: var(--a-label); }
-html.hb-apple .btn:active { background: var(--a-fill-press); transform: none; }
+html.hb-apple .btn { cursor: default; }
 html.hb-apple .btn:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; box-shadow: none; border-color: transparent; }
-html.hb-apple .btn:disabled { opacity: 1; background: var(--a-fill-off); color: var(--a-label-3); }
-html.hb-apple .btn-sm { height: 24px; padding: 0 12.5px; border-radius: 6px; }
+html.hb-apple .btn-sm { padding: 0 12.5px; }
 html.hb-apple .btn-default { background: var(--a-accent); color: var(--a-on-accent); }
 html.hb-apple .btn-default:hover { background: var(--a-accent); color: var(--a-on-accent); }
 html.hb-apple .btn-default:active { background: color-mix(in srgb, var(--a-accent) 86%, #000); }
 html.hb-apple .btn-destructive { background: var(--a-red); color: var(--a-on-red); font-weight: 590; }
 html.hb-apple .btn-destructive:hover { background: var(--a-red); }
 html.hb-apple .btn-destructive:active { background: color-mix(in srgb, var(--a-red) 86%, #000); }
-html.hb-apple .btn-icon, html.hb-apple .btn-icon.btn-sm { width: 24px; height: 24px; padding: 0; border-radius: 6px; }
-html.hb-apple .btn-quiet { height: 24px; padding: 0 12.5px; border-radius: 6px; background: var(--a-fill); color: var(--a-label); }
+html.hb-apple .btn-icon, html.hb-apple .btn-icon.btn-sm { width: 24px; padding: 0; }
+html.hb-apple .btn-quiet { padding: 0 12.5px; background: var(--a-fill); color: var(--a-label); }
 html.hb-apple .btn-quiet::after { content: none; }
 html.hb-apple.hb-inactive .btn-default { background: var(--a-fill); color: var(--a-label); }
 
 /* the + Assign menu: a system menu */
-html.hb-apple .amenu { position: absolute; top: calc(100% + 5px); left: 0; z-index: 40; min-width: 200px; padding: 5px; border: 0; border-radius: 13px; background: var(--a-pane-glass);
+html.hb-apple .amenu { position: absolute; top: calc(100% + 5px); left: 0; z-index: 40; min-width: 200px; padding: 5px; border: 0; border-radius: var(--hb-menu-r); background: var(--a-pane-glass);
   -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-menu-shadow); }
 html.hb-apple .amenu .mi2 { display: flex; align-items: center; width: 100%; height: 24px; padding: 0 9px; border: 0; border-radius: 8px; background: transparent; color: var(--a-label); font-size: 13px; line-height: 16px; text-align: left; }
 html.hb-apple .amenu .mi2:hover, html.hb-apple .amenu .mi2:focus-visible { background: var(--a-accent); color: var(--a-on-accent); outline: none; }
@@ -408,13 +404,13 @@ html.hb-apple .cal-head { display: flex; align-items: center; gap: 8px; margin: 
 html.hb-apple .cal-head > span:first-child, html.hb-apple .cal-head > .bulb + span { font-size: 15px !important; line-height: 20px; font-weight: 590 !important; color: var(--a-label); }
 html.hb-apple .cal-head > span[id]:not(:first-child):not(.m), html.hb-apple .cal-head > span[style*="12px"] { font-size: 11px !important; line-height: 14px; color: var(--a-label-2) !important; font-family: var(--a-font) !important; }
 html.hb-apple .cal-head .m { min-width: 120px; text-align: center; font-size: 13px; font-weight: 400; color: var(--a-label); }
-html.hb-apple .cal-nav { -webkit-appearance: none; appearance: none; flex: none; width: 24px; height: 24px; padding: 0 0 2px; border: 0; border-radius: var(--hb-bubble-r); background: var(--a-fill); color: var(--a-label-2); font-size: 15px; line-height: 1; }
+html.hb-apple .cal-nav { -webkit-appearance: none; appearance: none; flex: none; width: 24px; padding: 0 0 2px; border: 0; background: var(--a-fill); color: var(--a-label-2); font-size: 15px; line-height: 1; }
 html.hb-apple .cal-nav:active { background: var(--a-fill-press); }
 /* form fields */
 html.hb-apple .field { margin: 0 0 12px; }
 html.hb-apple .field label { display: block; margin: 0 0 5px; font-size: 13px; line-height: 16px; color: var(--a-label); }
 html.hb-apple .field input, html.hb-apple .modal input[type="text"], html.hb-apple .modal input[type="number"], html.hb-apple .modal input:not([type]), html.hb-apple .modal select {
-  height: 24px; padding: 0 7px; border: 0; border-radius: 6px; background: var(--a-field); box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .1); color: var(--a-label);
+  height: 24px; padding: 0 7px; border: 0; border-radius: var(--hb-r-ctl); background: var(--a-field); box-shadow: var(--a-field-shadow-strong); color: var(--a-label);
   font-family: var(--a-font); font-size: 13px; line-height: 16px; }
 html.hb-apple .field input { width: 100%; }
 html.hb-apple .field input:focus, html.hb-apple .modal input:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
