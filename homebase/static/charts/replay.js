@@ -360,7 +360,7 @@ class PracticeSim {
     const fill = fillPrice(o, printPx, this.tick, this.slip);
     this.cancel(o.id);
     if (o.role !== 'entry') { this._close(fill, ms, o.role); return; }
-    this.position = { side: o.side, qty: o.qty, entryPrice: fill, entryMs: ms, sl: null, tp: null };
+    this.position = { side: o.side, qty: o.qty, entryPrice: fill, entryMs: ms, sl: null, tp: null, stop0: o._sl == null ? null : o._sl };
     if (o._sl != null) this.position.sl = this.order(-o.side, 'stop', o._sl, o.qty, 'sl');
     if (o._tp != null) this.position.tp = this.order(-o.side, 'limit', o._tp, o.qty, 'tp');
   }
@@ -373,9 +373,12 @@ class PracticeSim {
     this.position = null;
     const gross = pos.side * (fill - pos.entryPrice) * this.pv * pos.qty;         // engine.py:357
     const commission = this.commRt * pos.qty;                                    // engine.py:358
+    const net = round2(gross - commission);
+    // risk = entry to the stop it was placed with (a dragged stop does not change it); R = net / risk
+    const risk = pos.stop0 == null ? null : round2(Math.abs(pos.entryPrice - pos.stop0) * this.pv * pos.qty);
     this.trades.push({ side: pos.side > 0 ? 'long' : 'short', qty: pos.qty, entryPrice: pos.entryPrice,
       entryMs: pos.entryMs, exitPrice: fill, exitMs: ms, exitReason: reason,
-      gross: round2(gross), commission: round2(commission), net: round2(gross - commission) });
+      gross: round2(gross), commission: round2(commission), net, risk, r: risk > 0 ? round2(net / risk) : null });
   }
 
   /* Which extreme an OHLC bar's print path must visit FIRST, to resolve a same-bar ambiguity the way that is
@@ -493,10 +496,38 @@ function pushPracticeSession(existing, session) {
   return list.length > PRACTICE_MAX ? list.slice(list.length - PRACTICE_MAX) : list;
 }
 
+/* Results of a list of closed practice trades: {n, wins, winRate (null with no trades), net, avgR (over the
+   trades that had a stop; null if none), curve (running net after each trade)}. */
+function practiceStats(trades) {
+  const list = Array.isArray(trades) ? trades : [];
+  let net = 0, rSum = 0, rN = 0, wins = 0;
+  const curve = list.map((t) => {
+    net = round2(net + t.net);
+    if (t.net > 0) wins++;
+    if (Number.isFinite(t.r)) { rSum += t.r; rN++; }
+    return net;
+  });
+  return { n: list.length, wins, winRate: list.length ? wins / list.length : null, net,
+    avgR: rN ? round2(rSum / rN) : null, curve };
+}
+
+const fmtR = (r) => (Number.isFinite(r) ? `${r > 0 ? '+' : ''}${r.toFixed(2)}R` : '—');
+
+/* The saved log (hb.practice) as CSV: one row per trade of every session; entries that are not sessions are skipped. */
+function practiceCsv(sessions) {
+  const rows = ['date,root,side,qty,entry_et,entry_price,exit_et,exit_price,exit_reason,net,r'];
+  for (const s of Array.isArray(sessions) ? sessions : []) {
+    if (!isObj(s) || !Array.isArray(s.trades)) continue;
+    for (const t of s.trades) rows.push([s.date, s.root, t.side, t.qty, fmtCursor(t.entryMs), t.entryPrice,
+      fmtCursor(t.exitMs), t.exitPrice, t.exitReason, t.net, Number.isFinite(t.r) ? t.r : ''].join(','));
+  }
+  return rows.join('\n');
+}
+
 const api = { FIRST_DATE, SPEEDS, SPEED_MENU, parseState, fmtCursor, fmtCursorCompact, validStart, typeDate, typeTime, tidyDate, tidyTime, startError, dayOpen, speedLabel, startOp, ctlOp, stopOp,
   clampLogical, barAt, fmtPickLabel, etHM, selectBarPlan, randomBarIndex, backOnePick,
   DEFAULT_COSTS, toTick, tickCmp, firstAtOrAbove, firstAtOrBelow, triggerIndex, fillPrice, PracticeSim,
-  barPrints, BarFeed, POINT_VALUE, pointValue, PRACTICE_KEY, PRACTICE_MAX, practiceSession, pushPracticeSession };
+  barPrints, BarFeed, POINT_VALUE, pointValue, PRACTICE_KEY, PRACTICE_MAX, practiceSession, pushPracticeSession, practiceStats, fmtR, practiceCsv };
 if (typeof window !== 'undefined') window.HBReplay = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
