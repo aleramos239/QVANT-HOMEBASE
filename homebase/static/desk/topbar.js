@@ -258,15 +258,34 @@ function renderChecks() {
   $("#bulbBig").className = "bulb" + (lvl ? " " + lvl : "");
   $("#checksTitle").textContent = lvl === "ok" ? "All good — ready to trade"
     : lvl === "warn" ? "Attention" : "Not ready";
-  $("#checksList").innerHTML = r.checks.map(c => `
-    <div class="chk"><span class="dot" style="background:${CHK_COLOR[c.level] || CHK_COLOR.info}"></span>
-      <span class="lbl">${esc(c.label)}</span><span class="det">${esc(c.detail)}</span></div>`).join("");
+  $("#checksList").innerHTML = r.checks.map(c => {
+    const flag = c.level === "bad" || c.level === "warn" || c.acked;   // a problem row (or one already checked off) gets its switch
+    const sw = !flag ? "" : `<button class="switch" role="switch" aria-label="Check off: ${esc(c.label)}" aria-checked="${!!c.acked}"
+        data-ack="${esc(chkKey(c))}" title="${c.acked ? "Checked off — click to bring it back" : "Check this off (it comes back if it changes, and tomorrow)"}"></button>`;
+    return `
+    <div class="chk${c.acked ? " acked" : ""}"><span class="dot" style="background:${CHK_COLOR[c.level] || CHK_COLOR.info}"></span>
+      <span class="lbl">${esc(c.label)}</span><span class="det">${esc(c.detail)}</span>${sw}</div>`;
+  }).join("");
 }
 function openChecks() { renderChecks(); showOverlay("checksOverlay"); }
 function closeChecks() { hideOverlay("checksOverlay"); }
 $("#checksOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeChecks();
+  const sw = e.target.closest && e.target.closest("[data-ack]");
+  if (sw) toggleAck(sw.dataset.ack);
 });
+
+/* ---- checking a concern off ----
+   A switch on every amber or red row. An amber row checked off reads as grey info (out of the bulb); a red row checked off
+   stays red in the bulb -- "the algo cannot run right" is never silenced -- and is only marked seen. The check is remembered
+   for the trading day by label + words: when the words change, or tomorrow comes, the row is back. */
+function toggleAck(key) {
+  const keys = ackSet();
+  if (!keys.delete(key)) keys.add(key);
+  try { localStorage.setItem(ACK_KEY, JSON.stringify({day: ackDay(), keys: [...keys]})); } catch (_) { /* private mode: not kept */ }
+  const r = ST && readinessShown(ST.readiness, ST);
+  if (r) renderBulb(r);                     // renderBulb redraws the open list
+}
 
 /* ---- readiness, as the page shows it (W4) ----
    The desk's readiness flags an enabled straddle still idle once its accept window has passed:
@@ -316,9 +335,24 @@ function readinessShown(r, st) {
     changed = true;
     return {...c, level: "info", detail: why};
   });
+  const acks = ackSet();
+  const marked = checks.concat(extra).map(c => {
+    if (!c || (c.level !== "bad" && c.level !== "warn") || !acks.has(chkKey(c))) return c;
+    changed = true;
+    return c.level === "warn" ? {...c, level: "info", acked: true, ackDetail: c.detail} : {...c, acked: true};
+  });
   if (!changed && !extra.length) return r;
-  const all = checks.concat(extra);
-  return {...r, checks: all, ready: !all.some(c => c && c.level === "bad")};
+  return {...r, checks: marked, ready: !marked.some(c => c && c.level === "bad")};
+}
+
+const ACK_KEY = "hb.chk.ack";
+const chkKey = (c) => c.label + "\u0001" + (c.ackDetail !== undefined ? c.ackDetail : c.detail);
+function ackDay() { return String((ST && ST.et_now) || "").slice(0, 10); }
+function ackSet() {
+  try {
+    const v = JSON.parse(localStorage.getItem(ACK_KEY) || "null");
+    return new Set(v && v.day === ackDay() && Array.isArray(v.keys) ? v.keys : []);
+  } catch (_) { return new Set(); }
 }
 
 /* ---- the pre-open check, in the same list ----

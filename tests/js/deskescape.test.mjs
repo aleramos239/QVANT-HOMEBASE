@@ -63,7 +63,7 @@ test('System checks escape a check\'s label and detail', () => {
   const ctx = vm.createContext({
     ST: { readiness: { ready: false, checks: [{ level: 'bad', label: HOSTILE_TEXT, detail: '<script>x</script>' }] } },
     $: (sel) => els[sel.replace(/^#/, '')], readinessShown: (r) => r,
-    bulbLevel: () => 'bad', CHK_COLOR: { bad: 'var(--neg)', info: 'var(--muted-foreground)' },
+    bulbLevel: () => 'bad', chkKey: () => 'k', CHK_COLOR: { bad: 'var(--neg)', info: 'var(--muted-foreground)' },
   });
   vm.runInContext(ESC + between('function renderChecks()', 'function openChecks()') + '\nglobalThis.renderChecks = renderChecks;', ctx);
   ctx.renderChecks();

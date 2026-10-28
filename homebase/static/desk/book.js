@@ -1,4 +1,5 @@
 /* ---- account row (rendered inside strategy cards) ---- */
+const DAY_PNL_WORDS = (v) => v == null ? "—" : (v > 0 ? "+" : "") + usd(v);   // an account's day, signed
 /* "in a trade 1 · 2 working": the broker's count of open positions and of resting orders; "" when neither. */
 function tradeWords(a) {
   const n = Array.isArray(a && a.open_positions) ? a.open_positions.length : 0, w = Number(a && a.working_orders) || 0;
@@ -7,7 +8,7 @@ function tradeWords(a) {
 const DEMO_TAG = '<span class="tag" title="A demo account — the broker\'s practice money">DEMO</span>';
 function acctRow(id, extra) {
   const a = (ST.accounts || {})[id] || {label: id};   // LIVE unless demo or paper, as isDemoAcct (an unknown env is LIVE)
-  const pnl = a.realized_pnl;
+  const pnl = a.day_pnl;          // today: the balance now minus the balance at the 18:00 ET open (broker figures are lifetime or on their own clock)
   const err = (!a.connected && a.error)
     ? `<span class="kvi neg" style="font-size:11px;text-align:left;min-width:0">${esc(String(a.error).slice(0, 46))}…</span>` : "";
   return `<div class="acct">
@@ -22,7 +23,7 @@ function acctRow(id, extra) {
       : `<span class="strats">×${extra.qty}</span>`) : ""}
     ${err}<span class="spacer"></span>
     <span class="kvi" data-ro="bal">${usd(a.balance)}</span>
-    <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}" data-ro="pnl">${pnl > 0 ? "+" : ""}${usd(pnl)}</span>
+    <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}" data-ro="pnl" title="Today, 18:00 to 16:00 ET: balance now minus balance at 18:00">${DAY_PNL_WORDS(pnl)}</span>
     <button class="btn btn-outline btn-sm" onclick="openCal(${jsArg(a.account || a.label)})">Calendar</button>
     ${extra.strategy ? `<button class="x"${extra.locked ? " disabled" : ""} style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
       ${extra.locked ? "" : `onclick="removeAsg('${extra.strategy}',${jsArg(id)})" `}title="Unassign">&times;</button>` : ""}

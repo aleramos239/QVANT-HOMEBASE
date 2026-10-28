@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi.responses import FileResponse
 
 from ..backtest.slots import backtests_off, status as backtest_slots
-from ..desk import labdesk as labdesk_mod
+from ..desk import dayopen, labdesk as labdesk_mod
 from ..desk.metrics import live_metrics
 
 
@@ -30,6 +30,7 @@ def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapter
     async def status():
         import time as _t
         accounts = {}
+        day, open_path = engine._today(), state_dir() / "day_open.json"
         for aid, a in cfg.accounts.items():
             ad = adapters.get(aid)
             try:        # the adapters' caches only: a poll costs Tradovate nothing
@@ -43,7 +44,8 @@ def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapter
             accounts[aid] = {"label": a.label or a.account_name or aid,
                              "env": "paper" if a.paper else "live" if a.live else "demo",
                              "cooldown_s": round(cooldown_s, 1) if cooldown_s else 0, **m,
-                             "day": engine.day_view(aid)}      # the day take in force, the day's closed P&L, the lock
+                             "day": engine.day_view(aid),      # the day take in force, the day's closed P&L, the lock
+                             "day_pnl": dayopen.day_pnl(open_path, aid, m.get("balance"), day)}   # balance now - balance at the 18:00 open
         # the journal is parsed once, then only the lines appended since the last poll
         jp = state_dir() / "journal.jsonl"
         if live_box["recs"] is None:          # the first poll parses the whole file: in a thread, off the loop

@@ -346,11 +346,11 @@ function tickAccts() {
     const a = accts[row.getAttribute("data-acct")];
     if (!a) { row.remove(); continue; }   // the Desk removed this account
     if (row.contains(document.activeElement)) continue;
-    const cell = (k) => row.querySelector(`[data-ro="${k}"]`) || {}, pnl = a.realized_pnl;
+    const cell = (k) => row.querySelector(`[data-ro="${k}"]`) || {}, pnl = a.day_pnl;
     cell("dot").className = "dot " + (a.connected ? "on" : "off");
     cell("bal").textContent = usd(a.balance);
     cell("pnl").className = "kvi " + (pnl > 0 ? "pos" : pnl < 0 ? "neg" : "");
-    cell("pnl").textContent = (pnl > 0 ? "+" : "") + usd(pnl);
+    cell("pnl").textContent = DAY_PNL_WORDS(pnl);
     cell("strats").textContent = acctRunning(row.getAttribute("data-acct")) || "no strategy assigned";
     cell("trade").textContent = tradeWords(a);
     cell("day").innerHTML = dayState(a);

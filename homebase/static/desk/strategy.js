@@ -40,7 +40,7 @@ function renderSide(names, hiddenCount, issues) {
     : '<span class="tag" style="margin-left:6px">DEMO</span>';
   const shortId = (t) => { t = String(t); return /^[A-Za-z0-9]{12,}$/.test(t) ? t.slice(0, 4) + " ··" + t.slice(-4) : t; };
   const acctRows = shown.map(([id, a]) => `<button class="item one" onclick="openAccts(${jsArg(id)})" title="${esc((a.label || id) + " · " + (!isDemoAcct(id) ? "Live" : a.env === "paper" ? "Paper" : "Demo") + (a.connected ? "" : " · offline"))}">
-      <i class="sd ${a.connected ? "ok" : "warn"}"></i><span class="it"><b>${esc(shortId(a.label || id))}${envTag(id, a)}${a.connected ? "" : '<span class="tag">offline</span>'}</b>${tradeWords(a) ? `<small>${esc(tradeWords(a))}</small>` : ""}</span>
+      <i class="sd ${a.connected ? "ok" : "warn"}"></i><span class="it"><b>${esc(shortId(a.label || id))}${envTag(id, a)}${a.connected ? "" : '<span class="tag">offline</span>'}</b>${a.connected && a.day_pnl != null ? `<small>today <span class="${a.day_pnl > 0 ? "pos" : a.day_pnl < 0 ? "neg" : ""}">${DAY_PNL_WORDS(a.day_pnl)}</span></small>` : tradeWords(a) ? `<small>${esc(tradeWords(a))}</small>` : ""}</span>
       <span class="ir mono${a.connected ? "" : " dim"}">${a.connected && a.balance != null ? "$" + fmt(a.balance, 0) : ""}</span></button>`).join("");
   const more = (SIDE_ALL ? accts.length > 12 : shown.length < accts.length)
     ? `<button class="side-more" onclick="SIDE_ALL=!SIDE_ALL;render()">${SIDE_ALL ? "Show fewer" : `Show ${accts.length - shown.length} more`}</button>` : "";

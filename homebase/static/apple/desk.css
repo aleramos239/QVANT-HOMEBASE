@@ -120,6 +120,12 @@ html.hb-apple .hb-side .item .it small { display: none; }
 html.hb-apple .hb-side .item[onclick^="setView('activity')"] { height: auto; min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
 html.hb-apple .hb-side .item[onclick^="setView('activity')"] .it small { display: block; font-size: 11px; line-height: 14px; color: var(--a-label-pane-2);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* an account row's second line: today's P&L (18:00 ET open), the balance staying on the right */
+html.hb-apple .hb-side .item[onclick^="openAccts"] { height: auto; min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
+html.hb-apple .hb-side .item[onclick^="openAccts"] .it small { display: block; font-size: 11px; line-height: 14px; color: var(--a-label-pane-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.hb-apple .hb-side .item[onclick^="openAccts"] .it small .pos { color: var(--a-green); }
+html.hb-apple .hb-side .item[onclick^="openAccts"] .it small .neg { color: var(--a-label); }
 html.hb-apple .hb-side .item .ir { flex: none; margin-left: 8px; font-family: var(--a-font); font-size: 11px; line-height: 14px; font-weight: 510; color: var(--a-label-pane-2); font-variant-numeric: tabular-nums; }
 html.hb-apple .hb-side .item .ir:empty { display: none; }
 /* a strategy with no P&L yet shows its state there instead (the row's own title) */
@@ -332,16 +338,16 @@ html.hb-apple .hb-row-note { color: var(--a-label-2); }
 /* a Lab strategy's research: the unseen days' figures, and the prop sim as rows of two values (Build | Unseen) */
 html.hb-apple .hb-insp .labres-note { padding: 10px; font-size: 12px; line-height: 16px; color: var(--a-label-2); }
 html.hb-apple .hb-insp .labres-prop .f .k { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-html.hb-apple .hb-insp .labres-prop .f .v { flex: none; width: 46px; text-align: right; }
+html.hb-apple .hb-insp .labres-prop .f .v { flex: none; width: 74px; text-align: right; white-space: nowrap; }
 html.hb-apple .hb-insp .labres-prop .f.fh { min-height: 26px; }
 html.hb-apple .hb-insp .labres-prop .f.fh .v { font-size: 11px; line-height: 14px; }
 /* three columns, Build | Unseen | Both (owner 2026-10-24): fixed narrow values, the label wraps rather than being cut */
 html.hb-apple .hb-insp .figs.three .f { gap: 6px; }
 html.hb-apple .hb-insp .figs.three .f .k { flex: 1 1 auto; min-width: 0; white-space: normal; overflow: visible; font-size: 12px; line-height: 15px; }
-html.hb-apple .hb-insp .figs.three .f .v { flex: none; width: 50px; text-align: right; font-size: 12px; }
+html.hb-apple .hb-insp .figs.three .f .v { flex: none; width: 68px; text-align: right; white-space: nowrap; font-size: 12px; }
 html.hb-apple .hb-insp .figs.three .f.fh .v { font-size: 11px; }
 /* a group's combined figures: dollar amounts such as +$86,412 need a wider column than the prop sim's percentages */
-html.hb-apple .hb-insp .figs.grp-figs .f .v { width: 70px; }
+html.hb-apple .hb-insp .figs.grp-figs .f .v { width: 72px; }
 html.hb-apple .hb-insp .qlinks { display: block; margin: 0; }
 html.hb-apple .hb-insp .qlinks .btn { display: flex; align-items: center; justify-content: flex-start; width: 100%; height: auto; min-height: 37px; padding: 0 10px; border-radius: 0; background: transparent; position: relative;
   font-size: 13px; line-height: 16px; color: var(--a-label); }
@@ -425,7 +431,14 @@ html.hb-apple .field input { width: 100%; }
 :where(html.hb-apple) :where(input[type="search"]):focus-visible,
 :where(html.hb-apple) :where(input:not([type])):focus-visible {
   outline: 3.5px solid var(--a-focus); outline-offset: 0; }
-:where(html.hb-apple) :where(input[type="checkbox"]) { width: 14px; height: 14px; margin: 0 4px 0 0; vertical-align: -2px; accent-color: var(--a-accent); }
+/* a checkbox reads as the same on/off switch as the rest of the Desk (the mini 36x16); the click, key and form behaviour are the input's own */
+:where(html.hb-apple) :where(input[type="checkbox"]) { appearance: none; -webkit-appearance: none; position: relative; flex: none; width: 36px; height: 16px; margin: 0 6px 0 0; border: 0; border-radius: 8px; vertical-align: -3px; background: var(--a-track); cursor: pointer; transition: background-color 160ms ease; }
+:where(html.hb-apple) :where(input[type="checkbox"])::after { content: ""; position: absolute; left: 2px; top: 2px; width: 21px; height: 12px; border-radius: 6px; background: #fff; box-shadow: var(--a-knob-shadow); transition: transform 240ms var(--a-spring); }
+:where(html.hb-apple) :where(input[type="checkbox"]:checked) { background: var(--a-accent-on); }
+:where(html.hb-apple) :where(input[type="checkbox"]:checked)::after { transform: translateX(11px); }
+:where(html.hb-apple) :where(input[type="checkbox"]:disabled) { opacity: .45; cursor: default; }
+:where(html.hb-apple) :where(input[type="checkbox"]:focus-visible) { outline: 3.5px solid var(--a-focus); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) { :where(html.hb-apple) :where(input[type="checkbox"]), :where(html.hb-apple) :where(input[type="checkbox"])::after { transition: none; } }
 html.hb-apple .wnote { margin: 8px 0 0; font-size: 11px; line-height: 14px; color: var(--a-label-2); }
 html.hb-apple .slabel, html.hb-apple .slabel2 { margin: 14px 0 6px; font-size: 11px; line-height: 14px; font-weight: 700; letter-spacing: normal; text-transform: none; color: var(--a-label-2); }
 /* the connect wizard */
@@ -461,6 +474,8 @@ html.hb-apple .chk:first-child { border-top: 0; }
 html.hb-apple .chk .dot { flex: none; width: 7px; height: 7px; border: 0; border-radius: 50%; align-self: center; box-shadow: none; }
 html.hb-apple .chk .lbl { min-width: 150px; font-weight: 400; color: var(--a-label); overflow-wrap: anywhere; }
 html.hb-apple .chk .det { color: var(--a-label-2); overflow-wrap: anywhere; }
+html.hb-apple .chk .switch { margin-left: auto; align-self: center; }
+html.hb-apple .chk.acked .lbl, html.hb-apple .chk.acked .det { color: var(--a-label-2); text-decoration: line-through; text-decoration-thickness: 1px; }
 html.hb-apple #checksOverlay .bulb { display: none; }
 /* the accounts sheet rows may wrap */
 html.hb-apple #acctList2 .acct, html.hb-apple #paperList .acct { flex-wrap: wrap; row-gap: 4px; padding: 6px 2px !important; min-height: 37px; }

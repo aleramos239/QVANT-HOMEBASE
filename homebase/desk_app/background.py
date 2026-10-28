@@ -8,7 +8,7 @@ import asyncio
 import contextlib
 import sys
 
-from ..desk import desk_api, equity
+from ..desk import desk_api, dayopen, equity
 from ..desk import inactive as inactive_mod
 from .readiness import compute_readiness, power_status, should_fire_readiness
 
@@ -31,6 +31,7 @@ def make_lifespan(*, cfg, engine, adapters, acct_status, timer, level_timer, des
                         if m.get("balance") is not None and m.get("account"):
                             equity.record_equity(_equity_path(), str(m["account"]), float(m["balance"]),
                                                  engine.now_et().date().isoformat())
+                            dayopen.note(state_dir() / "day_open.json", aid, m["balance"], engine._today())
                 except Exception:  # noqa: BLE001 — snapshots must never crash
                     pass
             await asyncio.sleep(EQUITY_INTERVAL_S)
