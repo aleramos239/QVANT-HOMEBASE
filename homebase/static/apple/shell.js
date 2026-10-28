@@ -11,6 +11,8 @@
      toggle(name)                  'sidebar' | 'inspector': flip, remember, return the new state
      command(name)                 a View-menu command from the app ('sidebar' | 'inspector')
      syncTheme(fn)                 follow the window's appearance; fn(wantDark) flips the page's own theme
+     fit(zone)                     centre the page switcher on the window, or let it flow when the groups beside it need the
+                                   room (html.hb-c-tight; system.css); `zone` = the inspector zone's width if it is about to change
      ready()                       the page has its shape: show it                                                   */
 (function () {
   'use strict';
@@ -96,6 +98,22 @@
 
   function command(name) { if (PANES[name]) toggle(name); }
 
+  /* ---- the page switcher: centred on the window while the trailing group (and the inspector zone) leave it room, else in the row.
+     One measured rule for all three tabs (it was a media-query ladder per tab). ---- */
+  function fit(zone) {
+    if (!TB) return;
+    const W = window.innerWidth, sw = TB.center.firstElementChild;
+    const need = W / 2 + (sw ? sw.offsetWidth / 2 : 0) + 12, room = W - (zone == null ? TB.insp.offsetWidth : zone) - 8 - TB.right.offsetWidth;
+    const tight = need > room;
+    if (H.classList.contains('hb-c-tight') !== tight) H.classList.toggle('hb-c-tight', tight);
+  }
+  function watchFit() {
+    window.addEventListener('resize', () => fit());
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => fit());          // the trailing group grows and shrinks as the page fills it
+    for (const n of [TB.right, TB.insp, TB.center]) ro.observe(n);
+  }
+
   /* ---- appearance: the page follows the window (View > Appearance in the app) ---- */
   function syncTheme(flip) {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -109,7 +127,7 @@
   }
 
   /* ---- page links: the app switches tabs itself; in a plain browser a link is just a link ---- */
-  function ready() { H.classList.add('hb-ready'); }
+  function ready() { if (TB) { fit(); if (!TB.watched) { TB.watched = true; watchFit(); } } H.classList.add('hb-ready'); }
 
-  window.HBApple = { el, sf, disableSheets, toolbar, toggle, command, syncTheme, ready, tab: TAB, get, set };
+  window.HBApple = { el, sf, disableSheets, toolbar, toggle, command, syncTheme, fit, ready, tab: TAB, get, set };
 })();

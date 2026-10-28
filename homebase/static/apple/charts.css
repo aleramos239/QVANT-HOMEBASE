@@ -38,7 +38,6 @@ html.hb-apple .hb-tb-scrim { display: none; }                         /* nothing
 html.hb-apple .hb-tb-lead { width: var(--hb-native-tl, 12px); padding: 0; }   /* no sidebar: the title follows the window buttons */
 html.hb-apple .hb-tb-main { padding-left: 8px; }
 html.hb-apple .hb-tb-insp { transition: none; }
-html.hb-apple.hb-c-tight .hb-tb-c { position: static; transform: none; flex: none; }   /* no room to centre it on the window (charts.js) */
 html.hb-apple #tbTheme { display: none; }
 /* the earlier "lens" glass never applies here (charts.js also takes the class off) */
 html.hb-apple .hb-lens::before, html.hb-apple .hb-lens::after { content: none; display: none; }

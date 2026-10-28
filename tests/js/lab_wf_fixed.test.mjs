@@ -190,12 +190,12 @@ test('the in-sample table says how many boxes made money, a per-year row first, 
   assert.match(h, /Luck test: tries not counted yet/);
   assert.ok(!/\bIS\b|\bOOS\b|\bcell\b/.test(h.replace(/<[^>]+>/g, '')), 'no IS / OOS / cell on screen');
   assert.match(c.perYearHtml(res.cells, 'the average box'), /Per year · the average box.*2022 <b class="up">\+\$100<\/b>/s);
-  // the order in the result: per year, the table, its count, the six lines, then the test months
+  // the order in the result: per year, the count, the six lines (above the rows, 2026-10-27), the table, then the test months
   const w = LAB.slice(b, LAB.indexOf('\n}\n', b));
   const at = (s) => { const i = w.indexOf(s); assert.ok(i >= 0, s); return i; };
-  assert.ok(at('${perYearHtml(yc') < at('In-sample table ·'));
-  assert.ok(at('In-sample table ·') < at('boxes made money'));
+  assert.ok(at('${perYearHtml(yc') < at('boxes made money'));
   assert.ok(at('boxes made money') < at('${realHtml(rd, sid)}'));
-  assert.ok(at('${realHtml(rd, sid)}') < at('<div class="rs-gh">Test months</div>'));
+  assert.ok(at('${realHtml(rd, sid)}') < at('In-sample table ·'));
+  assert.ok(at('In-sample table ·') < at('<div class="rs-gh">Test months</div>'));
   assert.match(LAB, /perYearHtml\(cell \? \[cell\] : \[\], 'in-sample, as set'\)/);     // the test months view too
 });

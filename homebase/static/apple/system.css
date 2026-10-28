@@ -168,7 +168,8 @@ html.hb-apple .hb-tb-l { display: flex; align-items: center; gap: 8px; min-width
 /* the page switcher sits at the window's centre on every tab, so it never moves when the tab changes */
 html.hb-apple .hb-tb-c { position: absolute; left: 50%; top: 0; height: var(--a-toolbar); transform: translateX(-50%); display: flex; align-items: center; justify-content: center; gap: 8px; }
 html.hb-apple .hb-tb-r { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; flex: none; height: 100%; }
-@media (max-width: 1100px) { html.hb-apple .hb-tb-c { position: static; transform: none; flex: none; } }
+/* shell.js fit() sets hb-c-tight when the groups beside it leave no room to centre it: one rule for Desk, Charts and Lab */
+html.hb-apple.hb-c-tight .hb-tb-c { position: static; transform: none; flex: none; }
 
 /* window title: 13 bold over an 11 subtitle (15 semibold when alone); never on glass */
 html.hb-apple .hb-title { display: flex; flex-direction: column; justify-content: center; min-width: 0; height: 36px; }

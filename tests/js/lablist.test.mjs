@@ -276,7 +276,7 @@ function page({ drafts, groups, refuse = {}, gone = [] }) {
     }
     return [200, {}];
   };
-  const win = { HBTester: stub('HBTester'), HBLabCode: L, addEventListener() {}, innerWidth: 1400, innerHeight: 900 };
+  const win = { HBIcons: new Proxy({}, { get: () => '<svg/>' }), HBTester: stub('HBTester'), HBLabCode: L, addEventListener() {}, innerWidth: 1400, innerHeight: 900 };
   const ctx = { window: win, document, location: { hash: '', pathname: '/backtest', search: '' }, history: { replaceState() {} },
     localStorage: { getItem: () => null, setItem() {} }, setTimeout: () => 0, setInterval: () => 0, clearTimeout() {}, console,
     innerWidth: 1400, innerHeight: 900, Event: function () {}, CustomEvent: function () {}, performance: { now: () => 0 },

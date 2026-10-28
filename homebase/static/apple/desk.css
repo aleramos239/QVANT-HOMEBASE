@@ -500,12 +500,10 @@ html.hb-apple .eq-tip small { display: block; margin-top: 2px; font-size: 11px; 
 /* the Desk's right-hand group (the readiness column, the armed state, Arm, Kill; 468 px) is wide. Everything below is added up for the
    widest machine chip at every window width from 980 px, either pane open or shut (apple-skin.test.mjs "the toolbar fits"), so Arm
    and Kill never reach the gear corner's chip, gear or inspector button. Where the centred page switcher would sit under the group,
-   it flows -- below 1740 px with the inspector open, below 1640 px with it shut (the gear corner then holds only its own items). At
+   it flows (shell.js fit() measures it: html.hb-c-tight, system.css; the gear corner holds only its own items). At
    1200 px and under the column gives way: the readiness word goes (the shield stays and opens the same checks), the chip shortens
    to "Chart ON · 5 live" (never without its count, never hidden while chart trading is ON), the machine chip to "Server", and the
    page switch loses its padding */
-@media (max-width: 1740px) { html.hb-apple:not(.hb-insp-off) .hb-tb-c { position: static; transform: none; flex: none; } }
-@media (max-width: 1640px) { html.hb-apple .hb-tb-c { position: static; transform: none; flex: none; } }
 @media (max-width: 1200px) {
   html.hb-apple .hb-rd-col { width: 104px; }
   html.hb-apple .hb-ready-word, html.hb-apple .hb-ct-long, html.hb-apple .hb-m-long { display: none; }
