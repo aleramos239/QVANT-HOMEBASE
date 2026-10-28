@@ -305,6 +305,23 @@ test('lines no account may manage (desk down / off, replay): every account\'s li
   assert.deepEqual(T.linesFor(STATE, 'ES', []).map((g) => T.lineText(g, 6490)), ['SHORT 1 · +$500']);
 });
 
+test('c-11 position chip shows open P&L in R when exactly one stop covers it; no groups or no usable stop = unchanged', () => {
+  const lines = T.linesFor(STATE, 'NQ', []);
+  assert.equal(T.lineText(lines[0], 30910, 0, false, lines), 'LONG 3 · +$600 · +0.7R · 2 accts');
+  assert.equal(T.lineText(lines[0], 30890, 0, false, lines), `LONG 3 · ${M}$600 · ${M}0.7R · 2 accts`);
+  assert.equal(T.lineText(lines[0], 30910), 'LONG 3 · +$600 · 2 accts', 'no groups passed: today\'s text exactly');
+  assert.equal(T.lineText(lines[0], null, 0, false, lines), 'LONG 3 · 2 accts', 'no last price: no R');
+  assert.equal(T.lineText(lines[1], 30910, 0, false, lines), T.lineText(lines[1], 30910), 'an SL line is unchanged');
+  const tp = lines.filter((g) => g.kind !== 'sl');
+  assert.equal(T.lineText(lines[0], 30910, 0, false, tp), 'LONG 3 · +$600 · 2 accts', 'no stop: no R');
+  const moved = lines.map((g) => (g.kind === 'sl' ? T.withPrice(g, 30900) : g));
+  assert.equal(T.lineText(lines[0], 30910, 0, false, moved), 'LONG 3 · +$600 · 2 accts', 'stop at entry or past it: no risk left, no R');
+  const two = [...lines, { ...lines[1], price: 30880 }];
+  assert.equal(T.lineText(lines[0], 30910, 0, false, two), 'LONG 3 · +$600 · 2 accts', 'two stops: no R');
+  const pend = lines.map((g) => (g.kind === 'sl' ? { ...g, legs: g.legs.map((l) => ({ ...l, pending: true })) } : g));
+  assert.equal(T.lineText(lines[0], 30910, 0, false, pend), 'LONG 3 · +$600 · 2 accts', 'a pending stop: no R');
+});
+
 test('5.3 lineText named: with 2+ accounts on the chart a one-account position names its account; nothing else changes', () => {
   const [es] = T.linesFor(STATE, 'ES', []);
   assert.equal(T.lineText(es, 6490), 'SHORT 1 · +$500', 'one account on the chart: unchanged');

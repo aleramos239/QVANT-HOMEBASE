@@ -431,7 +431,7 @@ class Overlay {
 
   paint(it) {
     const Dc = window.HBDeskClient, q = Dc.quotes[this.root];
-    it.chip.text.textContent = T.lineText(it.g, q ? q.last : null, this.cell.tick, !!this.named) + (it.g.gone ? ' · not working' : '') + (it.g.stale ? ' · not live' : '');
+    it.chip.text.textContent = T.lineText(it.g, q ? q.last : null, this.cell.tick, !!this.named, [...this.items.values()].map((x) => x.g)) + (it.g.gone ? ' · not working' : '') + (it.g.stale ? ' · not live' : '');
     it.chip.style.setProperty('--c', T.lineColor(it.g, this.cell.P));
     it.chip.classList.toggle('gone', !!it.g.gone || !!it.g.stale);
     if (it.g.gone) it.chip.title = 'The desk said this order is not working any more; the line goes when its list catches up';

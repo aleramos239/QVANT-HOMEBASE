@@ -697,13 +697,31 @@ function canDrag(g) { return g.kind !== 'position' && g.type !== 'StopLimit'; }
    shortcut: no "strategy (server)" tag (plan 5.3's second half) -- the desk marks only ITS OWN bots' orders (`owner`),
    so a server strategy's order on an account both machines hold arrives as owner null, just like a hand order; build
    it once the desk snapshot says which orders the server placed. */
-function lineText(g, last, tick, named = false) {
+function lineText(g, last, tick, named = false, groups = null) {
   if (g.kind === 'order') return [lineLabel(g), whoText(g)].join(' · ');
   if (g.kind === 'position') {
     const many = new Set(g.legs.map((l) => l.who)).size > 1;
-    return [lineLabel(g), usd(linePnl(g, last)), many || named ? whoText(g) : null].filter(Boolean).join(' · ');
+    return [lineLabel(g), usd(linePnl(g, last)), positionR(g, last, groups), many || named ? whoText(g) : null].filter(Boolean).join(' · ');
   }
   return [lineLabel(g), usd(linePnl(g, last)), exitTicks(g, tick), whoText(g)].filter(Boolean).join(' · ');
+}
+/* A position's open P&L in R ("+0.7R", c-11): its dollars over what its one stop risks from the entry. Only when exactly one
+   working SL covers every account of the position and sits on the losing side of each entry; otherwise null (a stop moved to
+   breakeven or past has no risk left, so R is not shown -- never a guess). */
+function positionR(g, last, groups) {
+  const mine = new Set(g.legs.map((l) => l.account));
+  const sls = (groups || []).filter((x) => x.kind === 'sl' && x.legs.some((l) => mine.has(l.account)));
+  if (sls.length !== 1 || ![...mine].every((a) => sls[0].legs.some((l) => l.account === a)) || sls[0].legs.some((l) => l.pending)) return null;
+  let risk = 0;
+  for (const l of g.legs) {
+    const d = (l.avg - sls[0].price) * l.s;
+    if (!(d > 0) || l.pv == null) return null;
+    risk += d * l.qty * l.pv;
+  }
+  const open = linePnl(g, last);
+  if (open == null || !(risk > 0)) return null;
+  const r = Math.round((open / risk) * 10) / 10;
+  return (r > 0 ? '+' : r < 0 ? '−' : '') + Math.abs(r).toFixed(1) + 'R';
 }
 /* An SL / TP line's distance from its position's entry, "100t" -- only when every leg shares one entry. */
 function exitTicks(g, tick) {
