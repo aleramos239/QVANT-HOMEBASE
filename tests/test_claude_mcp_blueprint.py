@@ -218,7 +218,7 @@ REQUIRED = {"blueprint_blocks": [], "blueprint_card": ["name", "card", "settings
             "blueprint_status": [], "blueprint_heatmap": ["name"], "blueprint_mc": ["name"],
             "blueprint_wf": ["owner_said"], "blueprint_wf_pick": ["name", "box"], "blueprint_wf_oos": ["name", "box", "owner_said"]}
 INPUTS = {"blueprint_blocks": [], "blueprint_card": ["name", "card", "settings"],
-          "blueprint_code_check": ["name", "store", "trades_file", "run_id", "looked"],
+          "blueprint_code_check": ["name", "store", "trades_file", "looked"],
           "blueprint_sim": ["name", "account", "attempts", "fee_budget"], "blueprint_portfolio": ["names", "account"],
           "blueprint_eval_card": ["name", "fills", "account", "replay_since_stop"], "blueprint_status": ["name", "job_id"],
           "blueprint_heatmap": ["name", "place", "round"], "blueprint_mc": ["name", "on"],
@@ -406,8 +406,6 @@ def test_each_tool_runs_its_command_as_the_contract_has_it(fake, ideas_root):
     assert fake.argv() == ["code-check", NAME, "--store=orb-GC-tf15", *end]
     b.call("blueprint_code_check", {"name": NAME, "trades_file": "/tmp/x/my trades.json", "looked": True})
     assert fake.argv() == ["code-check", NAME, "--trades=/tmp/x/my trades.json", "--looked", *end]
-    b.call("blueprint_code_check", {"name": NAME, "run_id": "20261006-010203-draft_nq_orb_pre-abcd", "looked": False})
-    assert fake.argv() == ["code-check", NAME, "--run-id=20261006-010203-draft_nq_orb_pre-abcd", *end]
     b.call("blueprint_sim", {"name": NAME, "account": ACCOUNT, "attempts": 3, "fee_budget": 345})
     assert fake.argv() == ["sim", NAME, f"--account={ACCOUNT}", "--attempts=3", "--fee-budget=345", *end]
     b.call("blueprint_eval_card", {"name": NAME})
@@ -468,7 +466,7 @@ def test_inputs_that_do_not_read_are_refused_before_anything_starts(fake):
     bad_calls = [
         ("blueprint_card", {"name": NAME, "card": "why: it works", "settings": SETTINGS}, "card"),
         ("blueprint_card", {"name": NAME, "card": CARD, "settings": ["orb"]}, "settings"),
-        ("blueprint_code_check", {"name": NAME, "store": "a", "run_id": "b"}, "one of"),
+        ("blueprint_code_check", {"name": NAME, "store": "a", "trades_file": "b"}, "one of"),
         ("blueprint_code_check", {"name": NAME, "store": 7}, "store"),
         ("blueprint_code_check", {"name": NAME, "looked": "yes"}, "looked"),
         ("blueprint_wf", {"name": NAME, "owner_said": "run it", "wait_s": 5}, "wait_s"),
@@ -760,3 +758,12 @@ def test_the_server_runs_the_toolkit_over_stdio_and_keeps_its_own_stdin(fake, id
         except subprocess.TimeoutExpired:
             p.kill()
     assert [c["stdin"] for c in fake.calls()] == ["", "", ""]
+
+
+def test_the_code_check_no_longer_offers_a_run_id_the_toolkit_refuses(fake):
+    """bp-2: the toolkit refuses --run-id ("a tester run is not read yet"), so the tool does not offer it (the chat would be told no)."""
+    spec = next(s for s in blueprint_tools.SPECS if s["name"] == "blueprint_code_check")
+    assert "run_id" not in spec["inputSchema"]["properties"] and "run_id" not in spec["description"]
+    with pytest.raises(ToolError, match="run_id"):
+        box().call("blueprint_code_check", {"name": NAME, "run_id": "20261006-010203-draft_nq_orb_pre-abcd"})
+    assert not fake.calls()

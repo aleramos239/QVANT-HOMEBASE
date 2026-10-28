@@ -9,7 +9,7 @@ the toolkit plan's section 8 (research/edge-library/out/blueprint/toolkit_plan.m
     <python> <bp.py> <command> [its arguments] --root=<the idea folder> --json
       blocks                                   what an idea can be built from                 before the card
       card <name> --spec=-                     stdin: {"name", "card", "run"}                 phase 0
-      code-check <name> [--store=KEY | --trades=FILE | --run-id=ID] [--looked]                phase 1
+      code-check <name> [--store=KEY | --trades=FILE] [--looked]                phase 1
       sim <name> --account=ID --attempts=N --fee-budget=USD                                   phase 5
       eval-card <name> [--account=ID] [--fills=-]     stdin: {"fills": [...]}                 phase 6
       status [<name>]
@@ -214,14 +214,13 @@ SPECS = [
           "says? It counts entries outside the session window, more than one position at a time or a trade not flat "
           "by 15:58 ET, a trade count the rule does not imply, winners and losers that do not pay about the target "
           "and the stop, and a trade list that no longer reproduces after a code change -- and names 3 trades to "
-          "look at on the chart (the first 1 and 2 at random). Give at most one of store, trades_file, run_id. Call "
+          "look at on the chart (the first 1 and 2 at random). Give at most one of store, trades_file. Call "
           "it again with looked=true once those 10 were looked at. An old idea: refused for any day on or after 2025-07-01. "
           "A 3:1 idea (blueprint_wf): only its own 3:1 in-sample store (no store = that one); a test month, the old build "
           "days and a trades file are refused.",
           {"name": _NAME,
            "store": {"type": "string", "description": "A store key of the research engine."},
            "trades_file": {"type": "string", "description": "The path of a trade list file."},
-           "run_id": {"type": "string", "description": "A tester run id (from backtest / list_runs)."},
            "looked": {"type": "boolean", "description": "true = the 3 trades it named were looked at on the chart, "
                                                         "and each entry and exit sits where the rule says (line 1.5). "
                                                         "Default false."}},
@@ -545,13 +544,12 @@ class BlueprintMixin:
 
     # ---- phase 1: the code check
 
-    def t_blueprint_code_check(self, name: str, store=None, trades_file=None, run_id=None, looked=False) -> str:
+    def t_blueprint_code_check(self, name: str, store=None, trades_file=None, looked=False) -> str:
         args = ["code-check", _name(name)]
-        sources = (("--store", "store", store), ("--trades", "trades_file", trades_file),
-                   ("--run-id", "run_id", run_id))
+        sources = (("--store", "store", store), ("--trades", "trades_file", trades_file))   # a tester run id is refused by the toolkit: not offered
         given = [(flag, key, v) for flag, key, v in sources if v is not None]
         if len(given) > 1:
-            raise ToolError("give one of store, trades_file, run_id")
+            raise ToolError("give one of store, trades_file")
         args += [f"{flag}={_text(v, key)}" for flag, key, v in given]
         if not isinstance(looked, bool):
             raise ToolError("looked: true or false")
