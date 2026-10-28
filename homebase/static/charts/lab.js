@@ -1370,6 +1370,7 @@ function paintLib() {
   const { rows, builtins } = libRows(), n = rows.length + builtins.length;
   el.innerHTML = `<div class="lb-top lb-sw">${seg}<button class="hb-ib" data-act="new" data-fk="new" aria-label="New strategy" title="New strategy">${ICON_PLUS}</button></div>
     <div class="tk-find"><input id="libQ" type="search" placeholder="Find a strategy: ${n} in all" value="${esc(S.libQ)}" spellcheck="false" autocomplete="off" aria-label="Find a strategy"></div>
+    <div class="lb-tools"><button class="btn btn-sm btn-outline" data-act="ideas" title="Every saved idea: where it stands and what is next">Idea board</button></div>
     ${listTools([...rows, ...builtins])}
     <div id="libList">${libBody()}</div>`;
   el.scrollTop = top;
@@ -3215,6 +3216,7 @@ function act(name, el) {
   else if (name === 'plhide') { S.plSaid = null; paintLib(); }
   else if (name === 'plexec') showExecutions(el.dataset.name);
   else if (name === 'tkblock') codeSheet(el.dataset.id);
+  else if (name === 'ideas') { if (window.HBLabIdeas) window.HBLabIdeas.open(); }
 }
 root.addEventListener('click', (e) => {
   if (inChart(e)) return;
