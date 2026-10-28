@@ -70,9 +70,8 @@
                                           record WITHOUT its code, plus `today` (the day summary of the session day the
                                           runner is on, or null) and `days` (of the last 10, those this promotion wrote,
                                           each cut to {date, state, why, net, match, rebuilt})],
-                                          runner: {alive, seen_utc, prices}, promote_refused} -- alive = the runner's heartbeat
-                                          is under 20 s old; promote_refused = desklab_unproven(): why no promote can pass
-                                          now ('' when one may), so the Lab's Promote row says it before it is pressed (S4)
+                                          runner: {alive, seen_utc, prices}} -- alive = the runner's heartbeat
+                                          is under 20 s old
     GET  /api/tester/desklab/results     {results: {name: {unseen, prop: {build, unseen}}}}: for each promoted strategy, its
                                           saved run on the unseen days (the newest finished run of the same code, settings
                                           and size; cut as the record's `run`, or null when none is saved) and the prop
@@ -100,8 +99,7 @@
     POST /api/tester/desklab/promote     {name, run_id, owner_said} -> {ok, name, notes} | {ok: false, detail}: a frozen copy of
                                           the draft's text, its settings and that backtest's headline numbers. owner_said:
                                           the owner's own words, not empty (400). Refused (in words) for a draft not in the
-                                          Lab, then unless the six real-or-luck lines all PASS (desklab_unproven: today
-                                          never, S4), then for a run that is not a finished run of it, code that changed
+                                          Lab, then for a run that is not a finished run of it, code that changed
                                           since, code that cannot be read, one that is not session_independent, a market
                                           this service does not stream, a sandbox that does not work. No draft runs here
                                           and no order goes anywhere; it starts no walk-forward (DESKLAB_AUTO_UNSEEN is
@@ -267,14 +265,6 @@ def desk_strategy_ids() -> list[str]:
 
 
 DESKLAB_AUTO_UNSEEN = False  # nothing runs by itself (S4): a promote or a Desk ask starts no walk-forward (it did, owner 2026-10-11)
-
-
-def desklab_unproven() -> str:
-    """Why promote is refused on the six real-or-luck lines ('' = all six PASS; there is no override). Today two of them
-    cannot PASS for any Lab run (S4): its 3:1 walk-forward saves no t-statistic and the Lab runs no worse fills (S11)."""
-    # the same words are the Lab's Promote row hint (GET /desklab promote_refused) and the 409 of a promote
-    return ("Nothing new can go on the Desk yet: two of the six real-or-luck lines cannot pass in the Lab. Luck: the Lab's "
-            "3:1 walk-forward saves no t-statistic. Worse fills: the Lab does not run them.")
 
 
 PIPE_KEYS = {"add": ("card", "inbox"), "start": (), "pause": (), "resume": (), "approve": ("name",), "refuse": ("name", "why")}

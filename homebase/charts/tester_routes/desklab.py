@@ -78,7 +78,7 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
         archived = [{k: rec.get(k) for k in ("name", "label", "root", "run", "archived_utc", "promoted_utc")} for rec in store.archived()]
         archived += [{"name": k, "builtin": True, "archived_utc": v.get("archived_utc")} for k, v in store.archived_builtins().items()]
         return watch_answer(request, {"strategies": out, "archived": archived, "builtins": api.desk_strategy_ids(),
-                                      "promote_refused": api.desklab_unproven(), "runner": {
+                                      "runner": {
             "alive": runner_alive(beat.get("seen_utc")), "seen_utc": beat.get("seen_utc"), "prices": beat.get("prices") or {}}})
 
     @r.get("/desklab/shadow")
@@ -341,9 +341,6 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
             source = draftstore.read(name)
         except (FileNotFoundError, ValueError, OSError):
             raise HTTPException(404, "That strategy is not in the Lab.") from None
-        why = api.desklab_unproven()         # the six real-or-luck lines, all PASS, no override (S4); first: no run fixes it
-        if why:
-            raise HTTPException(409, why)
         run_first = HTTPException(409, "Run a backtest of this strategy first.")
         try:
             d = manager.dir(run_id)

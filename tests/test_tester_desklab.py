@@ -24,7 +24,6 @@ RUN_FIRST = "Run a backtest of this strategy first."
 CHANGED = "The code changed since this backtest. Run it again, then promote."
 CARRY = "It must not carry anything from one day to the next (set session_independent = True)."
 NO_SANDBOX = "The sandbox is not working, so it cannot run."
-UNPROVEN = tester_api.desklab_unproven      # the real answer (S4): the Lab cannot pass luck and worse fills yet
 AUTO_UNSEEN = tester_api.DESKLAB_AUTO_UNSEEN   # the default, read before any fixture patches it
 SAID = "put nq_bars on the desk"           # the owner's words, which every promote carries (S4)
 
@@ -38,7 +37,6 @@ def c(tmp_path, monkeypatch):
     monkeypatch.setenv(store.ENV_ROOT, str(tmp_path / "desklab"))
     monkeypatch.setattr(sandbox, "available", lambda: True)
     monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", False)     # a promote starts no run here unless a test says so
-    monkeypatch.setattr(tester_api, "desklab_unproven", lambda: "")   # a fake: the six lines all PASS, unless a test says not
     return TestClient(app(tmp_path), base_url="http://localhost:8852")
 
 
@@ -97,15 +95,7 @@ def test_each_refusal_says_its_sentence_in_order(c, drafts_dir, make_run, monkey
     monkeypatch.setattr(sandbox, "available", lambda: False)
     assert sentence(promote(c, run_id="nope"), 404) == LAB
     draft(drafts_dir)
-    # 2 the six real-or-luck lines come next (S4), before anything of the run: no new run can pass them, so it never
-    # says "run it again, then promote" first. Today the Lab cannot pass luck and worse fills: every promote is refused.
-    monkeypatch.setattr(tester_api, "desklab_unproven", UNPROVEN)
-    older = make_run(code=CODE + "# older\n")
-    assert sentence(promote(c, run_id="nope"), 409) == UNPROVEN() != ""
-    assert sentence(promote(c, run_id=older), 409) == UNPROVEN()
-    assert "Luck: the Lab's 3:1 walk-forward saves no t-statistic" in UNPROVEN() and "Worse fills" in UNPROVEN()
-    assert c.get("/api/tester/desklab").json()["promote_refused"] == UNPROVEN()     # the Lab's Promote row says it before a press
-    monkeypatch.setattr(tester_api, "desklab_unproven", lambda: "")    # the fake again: the later lines
+    older = make_run(code=CODE + "# older\n")      # no real-or-luck gate (the owner removed it, 2026-10-28): the run is the next line
     # 3 the run is unknown / not finished / of another strategy
     assert sentence(promote(c, run_id="20261009-120000-draft_nq_bars-ab12"), 409) == RUN_FIRST
     assert sentence(promote(c, run_id=make_run(status="running"))) == RUN_FIRST
@@ -184,7 +174,7 @@ def test_promoting_again_replaces_the_record_and_keeps_the_history(c, drafts_dir
 
 def test_the_list_shows_today_the_days_and_whether_the_runner_is_alive(c, drafts_dir, make_run, tmp_path):
     at = tmp_path / "desklab"
-    assert c.get("/api/tester/desklab").json() == {"strategies": [], "archived": [], "builtins": [], "promote_refused": "",
+    assert c.get("/api/tester/desklab").json() == {"strategies": [], "archived": [], "builtins": [],
                                                     "runner": {"alive": False, "seen_utc": None, "prices": {}}}
     draft(drafts_dir)
     promote(c, run_id=make_run())
@@ -291,7 +281,6 @@ def test_the_desk_page_calls_cross_origin_and_nobody_else_does(c, drafts_dir, ma
 def test_only_markets_the_service_streams_can_be_promoted(tmp_path, drafts_dir, make_run, monkeypatch):
     monkeypatch.setenv(store.ENV_ROOT, str(tmp_path / "desklab"))
     monkeypatch.setattr(sandbox, "available", lambda: True)
-    monkeypatch.setattr(tester_api, "desklab_unproven", lambda: "")   # the six lines come first (S4): a fake PASS reaches this one
     a = FastAPI()
     a.include_router(tester_api.tester_router(lambda request: None, tmp_path / "ticks", tmp_path / "state2", live_roots=("ES",)))
     es = TestClient(a, base_url="http://localhost:8852")
@@ -320,7 +309,6 @@ def test_promote_checks_the_markets_this_service_really_streams(tmp_path, monkey
     from tests.backtest_util import D1, nq_archive
     monkeypatch.setenv(store.ENV_ROOT, str(tmp_path / "desklab"))
     monkeypatch.setattr(sandbox, "available", lambda: True)
-    monkeypatch.setattr(tester_api, "desklab_unproven", lambda: "")   # the six lines come first (S4): a fake PASS reaches this one
     es_only = create_app(roots=["ES"], base=nq_archive(tmp_path / "ticks"), replay=D1, speed=1, start_et=dt.time(9, 30),
                          state=tmp_path / "state")
     c = TestClient(es_only, base_url="http://localhost:8852")
