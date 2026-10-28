@@ -103,7 +103,60 @@ function execArrow(x, y, spacing) {
     pts: [[tx, y], [hx, y - A.half], [hx, y - A.thick], [sx, y - A.thick], [sx, y + A.thick], [hx, y + A.thick], [hx, y + A.half]] };
 }
 
-const api = { PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd, POINT_VALUE, pointValue,
+/* ---- chart hotkeys (2026-10-28, owner D2): OFF, and no key set, until the owner records each one in Settings > Trading
+   > Keys. This browser's (localStorage), every chart, both pages (the replay keys steer the Backtest tab). The only TRADING keys are the two that reduce risk -- Flatten and
+   Cancel all, for the focused chart's own symbol -- and tradeui.js runs them through the very function the FLAT button and
+   the right-click menu run (same confirm, same LIVE arm). There is never a Buy or Sell key. The replay keys only steer a
+   replaying chart. A chord needs Ctrl, Alt or Cmd: a bare letter or digit opens the symbol / timeframe box. */
+const HOTKEYS_KEY = 'hb_chart_hotkeys';
+const HOTKEY_ACTIONS = [
+  ['flatten', 'Flatten this chart', 'trade'],
+  ['cancel-symbol', 'Cancel all orders on this chart', 'trade'],
+  ['replay-faster', 'Replay: faster', 'replay'],
+  ['replay-slower', 'Replay: slower', 'replay'],
+  ['replay-back', 'Replay: back one bar', 'replay'],
+  ['replay-flatten', 'Replay: flatten the practice position', 'replay'],
+];
+const HOTKEY_CHORD = /^(?=.*(?:Ctrl|Alt|Meta)\+)(?:Ctrl\+)?(?:Alt\+)?(?:Shift\+)?(?:Meta\+)?[A-Za-z][A-Za-z0-9]{1,15}$/;
+/* what the chart already uses: Alt + a letter (drawing tools, Reset view), Ctrl/Cmd + Z / Y / C / V (undo, redo, copy, paste) */
+const HOTKEY_TAKEN = /^(?:Alt\+Key[A-Z]|(?:Ctrl|Meta)\+(?:Shift\+)?Key[ZYCV])$/;
+/* "Ctrl+Shift+KeyF" for a key event; null for a bare key, Shift alone or a modifier key on its own */
+function chordOf(e) {
+  if (!e || !e.code || /^(?:Control|Alt|Shift|Meta|OS)(?:Left|Right)?$/.test(e.code)) return null;
+  if (!(e.ctrlKey || e.altKey || e.metaKey)) return null;
+  return [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Meta', e.code].filter(Boolean).join('+');
+}
+/* '' when `chord` may be set for action `id` on top of `map`, else the plain-words reason */
+function hotkeyAssignError(map, id, chord) {
+  if (!HOTKEY_ACTIONS.some((a) => a[0] === id)) return 'No such key action';
+  if (typeof chord !== 'string' || !HOTKEY_CHORD.test(chord)) return 'Hold Ctrl, Alt or Cmd and press a key';
+  if (HOTKEY_TAKEN.test(chord)) return 'That key is already used on the chart';
+  const other = HOTKEY_ACTIONS.find((a) => a[0] !== id && isObj(map) && map[a[0]] === chord);
+  return other ? `Already set for "${other[1]}"` : '';
+}
+/* The saved keys, cleaned: {on: boolean, map: {action: chord}}. Anything unknown, bare, reserved or doubled is dropped. */
+function parseHotkeys(text) {
+  let o = null;
+  try { o = JSON.parse(text); } catch (_) { o = null; }
+  if (!isObj(o)) o = {};
+  const map = {};
+  if (isObj(o.map)) for (const [id] of HOTKEY_ACTIONS) if (!hotkeyAssignError(map, id, o.map[id])) map[id] = o.map[id];
+  return { on: o.on === true, map };
+}
+function loadHotkeys() {
+  try { return parseHotkeys(localStorage.getItem(HOTKEYS_KEY)); } catch (_) { return parseHotkeys(null); }
+}
+function saveHotkeys(keys) {
+  try { localStorage.setItem(HOTKEYS_KEY, JSON.stringify(parseHotkeys(JSON.stringify(keys)))); } catch (_) { /* this session only */ }
+}
+/* The action a key event is for, or null: nothing while the switch is off, never a held-down repeat or a key mid-composition */
+function hotkeyAction(e, keys) {
+  if (!keys || keys.on !== true || !isObj(keys.map) || e.repeat || e.isComposing) return null;
+  const chord = chordOf(e);
+  return (chord && HOTKEY_ACTIONS.map((a) => a[0]).find((id) => keys.map[id] === chord)) || null;
+}
+
+const api = { HOTKEYS_KEY, HOTKEY_ACTIONS, chordOf, hotkeyAssignError, parseHotkeys, loadHotkeys, saveHotkeys, hotkeyAction, PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd, POINT_VALUE, pointValue,
   inferType, menuText, execArrow };
 if (typeof window !== 'undefined') window.HBTradePure = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

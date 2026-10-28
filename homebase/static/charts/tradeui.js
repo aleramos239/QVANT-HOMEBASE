@@ -392,6 +392,19 @@ function symbolAction(cell, kind, root) {
   confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend(kind, g, build); } });
 }
 
+/* Chart hotkeys (2026-10-28, owner D2): app.js's onKey calls this with the SELECTED chart and the action the key was set to
+   (HBTradePure.hotkeyAction: nothing at all while Settings > Keys is off, which it is by default, and every key starts
+   empty), after its text-box / menu / dialog checks. 'flatten' and 'cancel-symbol' go through symbolAction exactly as the FLAT
+   button and the right-click menu do, for the chart's own symbol: the same confirm, the same LIVE arm, the same gate (a
+   replaying, gone or re-symboled chart refuses). There is no Buy or Sell key. True when the key was used. */
+function hotkey(cell, id) {
+  if ((id !== 'flatten' && id !== 'cancel-symbol') || !cell || !cell.cfg) return false;
+  // a chart still switching symbol (what it shows is not what it is set to): the button's painted root would be stale too
+  if (cell.cfg.root !== rootOfCell(cell)) { D().toast('err', 'This chart changed symbol — nothing sent'); return true; }
+  symbolAction(cell, id, rootOfCell(cell));
+  return true;
+}
+
 /* A line may be moved / closed only while every one of its legs is on an account the desk lists as tradable. */
 const NOT_TRADABLE = "That line's account can't trade from the chart right now";
 
@@ -724,7 +737,7 @@ function mount(pg) {
   }
 }
 
-window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, addExit, confirm, busy, flatBusy,
+window.HBTradeUI = { mount, placeOrder, symbolAction, hotkey, flattenAccount, cancelOrder, closeLine, moveLine, addExit, confirm, busy, flatBusy,
   sending, onBusyChange, onTradeChange, effectiveMode, liveCue, lineMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, botKill,
   killBusy, accountRows, toggleAccount, pickAlgo, armPending, paintDeskStatus, replayEnded, resumeLive,
   replayDestroyed, gridRebuilt };

@@ -802,3 +802,64 @@ test('Data tab: with no job ever run, active() finds nothing and the form starts
   assert.equal(box.querySelector('.set-job').hidden, true);
   assert.equal(findByOwnText(box, 'button', 'Start export').disabled, false);
 });
+
+/* ---- 2026-10-28 chart hotkeys: the Keys tab (owner D2: off, every key empty, set one by one) ---- */
+test('Keys tab: off and empty at first; the switch and a recorded key save at once, Esc cancels, doubles and reserved keys are refused', () => {
+  const store = {};
+  global.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } };
+  global.window.HBTradePure = T;
+  const listeners = [];
+  global.document.addEventListener = (type, fn, cap) => listeners.push({ type, fn, cap });
+  global.document.removeEventListener = (type, fn) => { const i = listeners.findIndex((l) => l.fn === fn); if (i >= 0) listeners.splice(i, 1); };
+  try {
+    const cell = makeCell('time:60');
+    cell.cfg.root = 'NQ'; cell.cfg.trade = { accounts: [] }; cell.cfg.algo = null;
+    const { box } = openTrading(cell, { tab: 'keys' });
+    assert.equal(findText(box, 'KEYS') != null, true);
+    const keysSwitch = descend(box, (c) => c.attrs && c.attrs['aria-label'] === 'Keys on');
+    assert.ok(keysSwitch);
+    assert.equal(keysSwitch.attrs['aria-checked'], 'false');
+    const labels = (g) => T.HOTKEY_ACTIONS.filter((a) => a[2] === g).map((a) => a[1]);
+    assert.deepEqual(labels('trade'), ['Flatten this chart', 'Cancel all orders on this chart']);
+    assert.equal(labels('trade').every((l) => findText(box, l) != null), true, 'Charts lists the trading keys');
+    assert.equal(labels('replay').some((l) => findText(box, l) != null), false, '... and none of the replay ones');
+    assert.deepEqual(T.loadHotkeys(), { on: false, map: {} }, 'opening the tab saves nothing');
+
+    keysSwitch.onclick();
+    assert.deepEqual(T.loadHotkeys(), { on: true, map: {} }, 'on, still no key');
+
+    const setBtn = (label) => descend(box, (c) => c.attrs && c.attrs['aria-label'] === `${label}: set the key`);
+    const press = (e) => { const l = listeners.find((x) => x.type === 'keydown' && x.cap); assert.ok(l, 'recording listens in the capture phase'); const ev = { preventDefault() {}, stopPropagation() {}, ...e }; l.fn(ev); };
+    setBtn('Flatten this chart').onclick();
+    assert.equal(setBtn('Flatten this chart').textContent, 'Press the key…');
+    press({ code: 'ControlLeft', key: 'Control', ctrlKey: true });                          // a modifier alone: still waiting
+    assert.equal(listeners.length, 1);
+    press({ code: 'KeyZ', key: 'z', ctrlKey: true });                                        // undo's chord: refused, still recording
+    assert.equal(T.loadHotkeys().map.flatten, undefined);
+    assert.equal(listeners.length, 1);
+    press({ code: 'KeyF', key: 'f', ctrlKey: true, shiftKey: true });
+    assert.equal(T.loadHotkeys().map.flatten, 'Ctrl+Shift+KeyF');
+    assert.equal(setBtn('Flatten this chart').textContent, 'Ctrl + Shift + F');
+    assert.equal(listeners.length, 0, 'recording ended');
+
+    setBtn('Cancel all orders on this chart').onclick();
+    press({ code: 'KeyF', key: 'f', ctrlKey: true, shiftKey: true });                      // already Flatten's
+    assert.equal(T.loadHotkeys().map['cancel-symbol'], undefined);
+    press({ code: 'Escape', key: 'Escape' });
+    assert.equal(listeners.length, 0);
+    assert.equal(setBtn('Cancel all orders on this chart').textContent, 'Not set');
+
+    const clear = descend(box, (c) => c.attrs && c.attrs['aria-label'] === 'Flatten this chart: clear the key');
+    clear.onclick();
+    assert.deepEqual(T.loadHotkeys(), { on: true, map: {} });
+    keysSwitch.onclick();
+    assert.deepEqual(T.loadHotkeys(), { on: false, map: {} });
+
+    // the Backtest tab (no accounts on that page): the replay keys, and no trading key
+    const bt = (() => { const { host } = makeHost(cell, []); const b = new FakeEl('div'); Object.assign(host, { tab: 'keys' }); SD.mount(b, host); return b; })();
+    assert.equal(labels('replay').every((l) => findText(bt, l) != null), true);
+    assert.equal(labels('trade').some((l) => findText(bt, l) != null), false);
+  } finally {
+    delete global.window.HBTradePure; delete global.document.addEventListener; delete global.document.removeEventListener; delete global.localStorage;
+  }
+});

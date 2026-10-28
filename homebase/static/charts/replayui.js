@@ -307,6 +307,21 @@ function step(cell) {
   cell.host.send(R.ctlOp(cell.id, 'step'));
 }
 
+/* The replay hotkeys (HBTrade.HOTKEY_ACTIONS, off until the owner sets them): the same controls as the bar's buttons -- the
+   Speed menu's next step, Back one bar, the practice Flatten -- on a replaying chart only. Replay and practice only: nothing
+   here reaches the desk or a real order. True when it acted. */
+function hotkey(cell, id) {
+  const s = cell && cell.replay && sessions.get(cell);
+  if (!s) return false;
+  if (id === 'replay-back') backOneBar(cell);
+  else if (id === 'replay-flatten') flattenPractice(cell);
+  else if (id === 'replay-faster' || id === 'replay-slower') {
+    const i = R.SPEED_MENU.indexOf(s.speed), to = R.SPEED_MENU[i + (id === 'replay-faster' ? -1 : 1)];
+    if (i >= 0 && to !== undefined) cell.host.send(R.ctlOp(cell.id, 'speed', { speed: to }));
+  } else return false;
+  return true;
+}
+
 /* ---- "pick a start": click a point on the selected chart; its bar's ET date + time is the start ----
    The resolution itself (clientX -> a chart-local x -> coordinateToLogical -> the bar) is pure past the DOM
    read, so it lives in replay.js (clampLogical/barAt) -- Select-bar below shares this exact function rather
@@ -1018,5 +1033,5 @@ function mount(pg) {
 }
 
 window.HBReplayUI = { mount, overlay: (cell, pg) => new Overlay(cell, pg), onState, onError, onBarUpdate,
-  cellDestroyed, onReconnect, togglePlay, step, disarmPick, guardSymbolChange, exitReplay, doStart };
+  cellDestroyed, onReconnect, togglePlay, step, hotkey, disarmPick, guardSymbolChange, exitReplay, doStart };
 })();
