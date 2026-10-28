@@ -26,7 +26,7 @@ from press_trig import PressTrig  # noqa: E402
 
 def box(a, tf: str) -> dict:
     return {"tf": tf, "sess": a.sess, "hold_to": "session", "stop_mode": a.stop, "stop_val": a.stop_val, "tgt_r": a.tgt, "lvl": a.lvl,
-            "t_end": a.t_end, "max_tr": a.max_tr}
+            "t_end": a.t_end, "max_tr": a.max_tr, "vw18": a.vwap, "ema": "with" if a.ema else "off", "ema_len": a.ema or 21, "t_start": a.t_start}
 
 
 def main(argv=None) -> int:
@@ -38,7 +38,10 @@ def main(argv=None) -> int:
     ap.add_argument("--tgt", type=float, default=0.5)
     ap.add_argument("--stop", default="own", choices=("own", "atr"), help="own = the signal candle's extreme x stop-val; atr = stop-val x ATR(14) of the bar")
     ap.add_argument("--stop-val", type=float, default=1.0)
+    ap.add_argument("--t-start", default="", help="no entries before this ET clock time (default: from the 18:00 open)")
     ap.add_argument("--t-end", default="15:00")
+    ap.add_argument("--vwap", default="off", choices=("off", "with"), help="with = longs only above, shorts only below the VWAP anchored at 18:00")
+    ap.add_argument("--ema", type=int, default=0, help="N = longs only above, shorts only below the N EMA of the bar closes (0 = off)")
     ap.add_argument("--max-tr", type=int, default=20)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--days", type=int, default=0, help="a smoke run on the first N in-sample days (0 = all)")
@@ -59,10 +62,11 @@ def main(argv=None) -> int:
         n = hmwf.numbers(x, days)
         print({k: (round(v, 3) if isinstance(v, float) else v) for k, v in n.items()})
         for r in LB.per_year(x, days):
-            print(f"   {r['period']}: {r['trades']} trades, net {r['net']:,.0f}, win {r['win']:.1%}, PF {r['pf']}, Sharpe {r['sharpe']}")
+            win = f"{r['win']:.1%}" if r["win"] is not None else "-"
+            print(f"   {r['period']}: {r['trades']} trades, net {r['net']:,.0f}, win {win}, PF {r['pf']}, Sharpe {r['sharpe']}")
         if a.out:
             tag = "" if a.stop == "own" and a.stop_val == 1.0 else f"-{a.stop}{a.stop_val:g}"
-            S.write_bundle(res, W / "engine" / "out" / "press_trig" / f"{a.root}-tf{tf}-l{a.lvl:g}-r{a.tgt:g}{tag}", f"press_trig-{a.root}-tf{tf}")
+            S.write_bundle(res, W / "engine" / "out" / "press_trig" / f"{a.root}-tf{tf}-l{a.lvl:g}-r{a.tgt:g}{tag}{'-vw18' if a.vwap != 'off' else ''}{f'-ema{a.ema}' if a.ema else ''}{f'-from{a.t_start}' if a.t_start else ''}", f"press_trig-{a.root}-tf{tf}")
     return 0
 
 

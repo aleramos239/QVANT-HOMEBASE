@@ -14,15 +14,15 @@ DISP = {"atr": "body at least k x the 1-minute ATR, k = 1 / 1.5 / 2",
         "wick": "it closes past the previous 1-minute candle's wick and its body is at least k x the previous candle's body, k = 1.5 / 2 / 3"}
 old = hm.explain
 hm.explain = lambda name, sp: (
-    f"{sp['run']['fixed'].get('gtf', 15)}-minute fair value gaps (overnight ones count). Price taps into a live gap on the {sp['home']['bar'] if 'home' in sp else sp['card']['home']['bar']}-minute chart; then a {sp['card']['home']['bar']}-minute displacement candle "
+    f"{(str(sp['run']['fixed']['gtf2']) + '- and ') if sp['run']['fixed'].get('gtf2') else ''}{sp['run']['fixed'].get('gtf', 15)}-minute fair value gaps (overnight ones count{'; one trade at a time' if sp['run']['fixed'].get('gtf2') else ''}). Price taps into a live gap on the {sp['home']['bar'] if 'home' in sp else sp['card']['home']['bar']}-minute chart; then a {sp['card']['home']['bar']}-minute displacement candle "
     f"({DISP[sp['run']['fixed'].get('disp', 'atr')]}) pushes back the gap's way and {TXT[sp['run']['fixed']['close']]} -> market entry with the gap. "
-    f"A gap-size candle that closes through the gap (inversion) kills it: no trade. Own stop = the low (high) of the tap. Each gap trades once; "
+    f"A gap-size candle that closes through the gap (inversion) kills it: no trade. Own stop = the low (high) of {'the displacement candle' if sp['run']['fixed'].get('stop_at') == 'candle' else 'the tap'}. Each gap trades once; "
     f"entries {sp['run']['fixed'].get('start', '09:30')}-15:00 ET, up to 3 a day, flat 15:58." if sp["run"]["family"] == "fvg_tap_disp" else old(name, sp))
 items = [hm.analyse(n) for n in NAMES]
 body = "".join(hm.page(a) for a in items)
 HEAD = ("<h1>15-min FVG tap + 1-min displacement: both heat maps</h1>" + f"<div class=sub>Displacement: {DISP[hm.SPECS[NAMES[0]]['run']['fixed'].get('disp', 'atr')]}.</div>"
         + "<div class=sub>Top: displacement must close beyond the gap. Bottom: may close inside it. hm40, 3:1 in-sample months only, 1 NQ. Test months not read, nothing picked.</div>"
-        ) if len(NAMES) == 2 else ("<h1>FVG tap + displacement: no window (entries 00:00-15:00, flat 15:58)</h1>"
-        + "<div class=sub>Four heat maps: ATR displacement (out, in), then wick displacement (out, in). Gap size and trade bar are in each title. hm40, 3:1 in-sample months only, 1 NQ. Test months not read, nothing picked.</div>")
+        ) if len(NAMES) == 2 and "stop_at" not in hm.SPECS[NAMES[0]]["run"]["fixed"] and hm.SPECS[NAMES[0]]["run"]["fixed"].get("gtf", 15) == 15 else ("<h1>FVG tap + displacement: " + ({"18:00": "from 6pm (entries 18:00 the evening before to 15:00, flat 15:58)", "00:00": "no window (entries 00:00-15:00, flat 15:58)"}.get(hm.SPECS[NAMES[0]]["run"]["fixed"].get("start"), "entries 09:30-15:00, flat 15:58") if len({hm.SPECS[n]["run"]["fixed"].get("start") for n in NAMES}) == 1 else "entries start as each title says") + "</h1>"
+        + "<div class=sub>Heat maps, in the order of the titles (close out / in, stop at the tap or at the displacement candle where the name says so). Gap size and trade bar are in each title. hm40, 3:1 in-sample months only, 1 NQ. Test months not read, nothing picked.</div>")
 (OUT / PAGE).write_text(hm.wrap(HEAD + body, "fvg tap disp heat maps"))
 print({a["name"]: (a["summ"]["green"], a["summ"]["net"]) for a in items}, (OUT / PAGE).stat().st_size)

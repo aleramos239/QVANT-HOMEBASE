@@ -10,6 +10,9 @@ bars (ATR = the 5-minute ATR14); everything below that says "1-minute bar" then 
 THE RULE (fixed here, before any run):
   * THE GAP: three `gtf`-minute bars (15 = the owner's), built from the day's 1-minute bars on the ET clock grid. UP gap: bar 3's low
     above bar 1's high -> the zone bar 1's high (bottom) .. bar 3's low (top). DOWN the mirror. Known at bar 3's close.
+  * gtf2 (the owner, 2026-10-28: "add 30m fvgs as well as the 1 hour fvgs, just make sure only 1 trade at a time"): 0 = off; else gaps of
+    BOTH sizes are live at once (gtf and gtf2); a gap is killed by a close of its OWN size. One position at a time is the engine's
+    (fam_signal runs only when flat); two gaps hitting on one bar = one trade, both spent.
   * INVERSED = DEAD: a `gtf` bar that closes below an up gap's bottom (above a down gap's top) kills it for the day.
   * THE TAP: a 1-minute bar trades into a live gap (an up gap: its low at or below the top). The tap stays open until a 1-minute bar
     closes back out on the trade side (above an up gap's top); then a new tap is needed.
@@ -23,11 +26,14 @@ THE RULE (fixed here, before any run):
     size"): the displacement bar closes beyond the PREVIOUS 1-minute bar's wick (above its high for an up gap, below its low for a down
     gap) and its body, the gap's way, is at least k x the previous bar's body (k 2 = the owner's). Replaces the ATR test.
   * THE OWN STOP (stop_mode own / struct): the far end of the tap -- the lowest low (up gap) from the tap's first bar through the trigger
-    bar. hm40 also runs ATR stops (ATR14 of the 1-minute bars).
+    bar (stop_at = tap). stop_at = candle (the owner, 2026-10-28: "test the candle extreme as the stop"): the trigger (displacement)
+    bar's own low (high for a down gap) alone. hm40 also runs ATR stops (ATR14 of the 1-minute bars).
+  * gtf 1 with tf 1 (the owner, 2026-10-28: "1 minute time frame with 1 minute fvg, the fvg can not get inversed or it doesnt trade"):
+    1-minute gaps; a 1-minute close through the gap kills it, as for every size.
   * WINDOW: ONE instance `start` -> 15:58 (fvg_odir's way); entries `start` .. 15:00 (start 09:30, or 00:00 = the owner's "no window
     to trade, trade until 3pm", 2026-10-27; or 18:00 = the owner's "from 6pm to 3pm flat at 4pm": the evening of the day before
     is the same held segment, the bars and gaps run on through midnight); gaps are built from every 1-minute bar of the trade
-    date the engine replays (from 00:00 ET), so an overnight gap counts. max_tr = trades a day (one position at a time).
+    date the engine replays (from 00:00 ET), so an overnight gap counts. max_tr = trades a day (one position at a time; 3 by default, the owner 2026-10-28: "remove the trade limit" = 1000).
 
 MY PICKS, NOT THE OWNER'S WORDS (he may change each): displacement = body >= k x the 1-minute ATR14 (k is the main setting); the stop
 under the tap's low; market at the trigger close; entries 09:30-15:00; overnight gaps count; a gap trades once.
@@ -45,10 +51,10 @@ OPEN, LAST, END_S = 34200, 54000, 57480     # 09:30, 15:00, 15:58 ET, seconds af
 
 
 class FvgTapDisp(Template):
-    """fvg_tap_disp (module docstring). Per day: gaps = [side, top, bot, tap_extreme | None, spent], HB = closed gtf bars (h, l, c)."""
-    DEFAULTS = {"k": 1.0, "close": "out", "gtf": 15, "max_tr": 3, "disp": "atr", "start": "09:30"}
-    SCHEMA = {"k": ("float", 0.0, 10.0), "close": ("choice", ("out", "in")), "gtf": ("int", 1, 240),
-              "disp": ("choice", ("atr", "wick")), "start": ("choice", ("09:30", "00:00", "18:00"))}
+    """fvg_tap_disp (module docstring). Per day: gaps = [side, top, bot, tap_extreme | None, spent, gap size], HB = {gap size: closed bars (h, l, c)}."""
+    DEFAULTS = {"k": 1.0, "close": "out", "gtf": 15, "gtf2": 0, "max_tr": 3, "disp": "atr", "start": "09:30", "stop_at": "tap"}
+    SCHEMA = {"k": ("float", 0.0, 10.0), "close": ("choice", ("out", "in")), "gtf": ("int", 1, 240), "gtf2": ("int", 0, 240),
+              "disp": ("choice", ("atr", "wick")), "start": ("choice", ("09:30", "00:00", "18:00")), "stop_at": ("choice", ("tap", "candle")), "max_tr": ("int", 1, 1000)}
     SCREEN_TFS = ("1", "5")
     ONE_INSTANCE_PASSES = ("nyam", "mid", "pm")
     FEATURES = ()
@@ -66,7 +72,7 @@ class FvgTapDisp(Template):
         return ["t"] if "nyam" in ids else []
 
     def fam_day(self, ctx):
-        self.gaps, self.HB, self.sig = [], [], None
+        self.gaps, self.HB, self.sig = [], {}, None
 
     def fam_update(self, ctx):
         self.sig = None
@@ -77,7 +83,7 @@ class FvgTapDisp(Template):
             po, ph, pl, pc = (self.O[-2], self.H[-2], self.L[-2], self.C[-2]) if len(self.C) > 1 else (None,) * 4
         hits = []
         for g in self.gaps:
-            sd, top, bot, ext, spent = g
+            sd, top, bot, ext, spent = g[:5]
             if spent:
                 continue
             near, far = (top, bot) if sd > 0 else (bot, top)
@@ -98,24 +104,27 @@ class FvgTapDisp(Template):
                 g[3] = None                                                    # closed back out without displacement: the tap is over
         if hits:
             g = hits[-1]                                                       # the newest gap
-            self.sig = ("long" if g[0] > 0 else "short", g[3], hits)
-        step = int(self.p["gtf"]) * 60
-        if (s + 60) % step == 0:
-            self._htf_close(s + 60 - step)
+            ext = (l if g[0] > 0 else h) if self.p["stop_at"] == "candle" else g[3]
+            self.sig = ("long" if g[0] > 0 else "short", ext, hits)
+        for tf in {int(self.p["gtf"]), int(self.p["gtf2"])} - {0}:               # gtf2 (the owner, 2026-10-28: 30m + 1h gaps): a second gap size
+            step = tf * 60
+            if (s + 60) % step == 0:
+                self._htf_close(s + 60 - step, tf)
 
-    def _htf_close(self, start):
+    def _htf_close(self, start, tf):
         xs = [m for m in self.M if m[0] >= start]
         h, l, c = max(m[2] for m in xs), min(m[3] for m in xs), xs[-1][4]
-        for g in self.gaps:                                                    # inversion kills the gap
-            if (g[0] > 0 and c < g[2]) or (g[0] < 0 and c > g[1]):
+        for g in self.gaps:                                                    # inversion kills the gap (a close of its own size)
+            if g[5] == tf and ((g[0] > 0 and c < g[2]) or (g[0] < 0 and c > g[1])):
                 g[4] = True
-        self.HB.append((h, l, c))
-        if len(self.HB) >= 3:
-            (h1, l1, _), _, (h3, l3, _) = self.HB[-3:]
+        hb = self.HB.setdefault(tf, [])
+        hb.append((h, l, c))
+        if len(hb) >= 3:
+            (h1, l1, _), _, (h3, l3, _) = hb[-3:]
             if l3 > h1:
-                self.gaps.append([1, l3, h1, None, False])
+                self.gaps.append([1, l3, h1, None, False, tf])
             elif h3 < l1:
-                self.gaps.append([-1, l1, h3, None, False])
+                self.gaps.append([-1, l1, h3, None, False, tf])
 
     def fam_signal(self, ctx):
         if self.sig is None or (ctx.now_ns - self.t0) // 1_000_000_000 > LAST:

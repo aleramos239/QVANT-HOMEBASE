@@ -107,3 +107,29 @@ def test_start_1800_trades_in_the_evening_and_through_midnight():
         tape = S.Tape("NQ", D, "NQM3", t.ts, t.px, t.size)
         S.run_session(st, tape, daily=list(DAILY), on_error="raise", window=st.eve_window, segment="eve")
         assert [x[0] for x in cls.log] == [want]
+
+
+def test_gtf2_adds_a_second_gap_size_and_a_gap_dies_only_by_a_close_of_its_own_size():
+    g = GAP + [TAP, bar(15012.0, 15030.0)] + rest(30, 15030.0)
+    assert play(g, gtf=60) == []                                              # no 1-hour gap yet at 09:50
+    assert play(g, gtf=60, gtf2=15) == [(sec(9, 52), "long", 15030.0, 15008.0)]
+    assert play(g, gtf=15, gtf2=15) == play(g, gtf=15)                         # the same size twice = one set of gaps
+    dead = GAP[:-5] + rest(14, 15005.0) + [bar(15005.0, 14995.0)] + [(14995.0, 15009.0, 14994.0, 15008.0, 40), bar(15008.0, 15030.0)]
+    assert play(dead + rest(20, 15030.0), gtf=60, gtf2=15) == []              # the 15-minute close through it kills the 15-minute gap
+
+
+def test_one_minute_gaps_and_the_candle_extreme_stop_and_inversion():
+    # 09:35-09:37 leave a 1-minute UP gap 15001 .. 15006; 20 quiet minutes; 09:58 taps to 15004 and closes inside; 09:59 displaces from 15005 (low 15004.5)
+    core = [(15000.0, 15001.0, 14999.0, 15000.0, 40), (15000.0, 15012.0, 15000.0, 15011.0, 40), (15011.0, 15013.0, 15006.0, 15012.0, 40)] \
+        + rest(20, 15012.0) + [(15012.0, 15013.0, 15004.0, 15005.0, 40), (15005.0, 15020.0, 15004.5, 15019.0, 40)] + rest(30, 15019.0)
+    g = rest(35, 15000.0) + core
+    one = {"gtf": 1}
+    assert play(g, **one) == [(sec(10, 0), "long", 15019.0, 15004.0)]                       # the tap's low
+    assert play(g, stop_at="candle", **one) == [(sec(10, 0), "long", 15019.0, 15004.5)]      # the displacement candle's low
+    assert play(mirror(g), stop_at="candle", **one) == [(sec(10, 0), "short", 14981.0, 14995.5)]
+    dead = rest(35, 15000.0) + core[:3] + rest(10, 15012.0) + [(15012.0, 15012.0, 15000.0, 15000.5, 40)] + rest(9, 15012.0) + core[23:]   # a 1-minute close under the bottom 15001
+    assert play(dead + rest(30, 15019.0), **one) == []
+
+
+def test_the_trade_limit_can_be_lifted_to_1000():
+    assert F.FvgTapDisp({**BASE, "max_tr": 1000}).p["max_tr"] == 1000

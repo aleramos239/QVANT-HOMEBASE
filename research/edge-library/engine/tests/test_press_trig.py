@@ -44,3 +44,15 @@ def test_the_stop_sits_at_the_signal_candles_other_extreme(monkeypatch):
     t = trades(monkeypatch, at, moves())
     assert len(t) == 1 and t[0]["side"] == "long"
     assert (t[0]["sl"], t[0]["tp"]) == (14990.0, 15005.0)               # the candle's low; a target of 0.5 x the 10-point stop
+
+
+def test_vw18_filter_blocks_longs_below_and_shorts_above_the_vwap(monkeypatch):
+    # the day trades at 15000 (VWAP ~15000), then one candle closes at 15000 -> pressure +30 / -30 is read with close == VWAP: neither side passes
+    assert trades(monkeypatch, 30.0, moves(), vw18="with") == []
+    assert trades(monkeypatch, -30.0, moves(), vw18="with") == []
+
+
+def test_no_entry_before_t_start(monkeypatch):
+    at = lambda b: 30.0 if b == 9 * 3600 + 36 * 60 else None            # noqa: E731  one signal, at 09:36
+    assert trades(monkeypatch, at, moves(), t_start="09:45") == []
+    assert [t["side"] for t in trades(monkeypatch, at, moves(), t_start="09:30")] == ["long"]
