@@ -133,7 +133,7 @@ function eqChart(name) {
   const days = EQ[name] && EQ[name].days;
   if (!days) return `<div class="eq"><div class="eq-ph"></div></div>`;
   const ks = Object.keys(days).sort();
-  if (ks.length < 2) return `<div class="eq-empty">Not enough live days yet for a curve.</div>`;
+  if (ks.length < 2) return `<div class="eq-empty">Not enough Desk days yet for a curve.</div>`;
   let cum = 0;
   const vals = ks.map(k => (cum += (days[k].net || 0), cum));
   const notes = ks.map(k => { const t = days[k].trades || 0, w = days[k].wins || 0; return t ? `${t} trade${t === 1 ? "" : "s"} · ${w} win${w === 1 ? "" : "s"}` : ""; });
@@ -275,10 +275,10 @@ function stratView(name) {
       fig("After fees", usdS(sum("net")), "The total the curve shows")
     : fig("Before fees", usdS(lv ? lv.net : 0), "Every closed trade of this strategy, on every account, before commissions");
   const figs = lv && lv.trades
-    ? `<div class="figs">${money}${fig("Win rate", lv.win_rate + "%")}${fig("Trades", lv.trades)}${fig("Avg per trade", usd(lv.avg_trade), "Before fees, per trade")}${fig("Avg slip", (lv.avg_slip_pts ?? "—") + " pts")}</div>`
-    : `<div class="eq-empty">No live trades yet.</div>`;
+    ? `<div class="figs">${money}${fig("Win rate", lv.win_rate == null ? "—" : Math.round(lv.win_rate) + "%")}${fig("Trades", lv.trades)}${fig("Avg per trade", usd(lv.avg_trade), "Before fees, per trade")}${fig("Avg slip", (lv.avg_slip_pts ?? "—") + " pts")}</div>`
+    : `<div class="eq-empty">No Desk trades yet.</div>`;
   const links = `<div class="qlinks">${s.research && s.research.rows ? `<button class="btn btn-quiet btn-sm" onclick="openRes('${name}')">Old backtest (before 3:1)</button>` : ""}
-    <button class="btn btn-quiet btn-sm" onclick="openLive('${name}')">Live calendar</button>${actBtn("s:" + name)}</div>`;
+    <button class="btn btn-quiet btn-sm" onclick="openLive('${name}')">Desk calendar</button>${actBtn("s:" + name)}</div>`;
   const accts = ST.accounts || {}, asg = (ST.book && ST.book[name]) || [];
   const rows = asg.map(a => acctRow(a.account, {qty: a.qty, strategy: name})).join("");
   const free = Object.keys(accts).filter(id => !asg.some(a => a.account === id));

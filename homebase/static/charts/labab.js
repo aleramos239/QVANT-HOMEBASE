@@ -51,12 +51,12 @@ const METRICS = [
   ['largest_loss', 'Largest loss', 'money', 1], ['days', 'Days traded', 'int', 0],
 ];
 const PROP = [['eval_pass_p', 'Pass the eval', 'pct', 1], ['bust_p', 'Bust', 'pct', -1], ['median_days_to_pass', 'Days to pass', 'int', -1],
-  ['funded_payout_p', 'Funded payout', 'pct', 1], ['funded_expected_cheque', 'Expected cheque', 'money', 1]];
+  ['funded_payout_p', 'Funded payout', 'pct', 1], ['funded_expected_cheque', 'Expected payout', 'money', 1]];
 function fmt(v, kind) {
   if (v == null || !Number.isFinite(v)) return '—';
   if (kind === 'money') return money(v);
-  if (kind === 'pctv') return `${v.toFixed(1)} %`;
-  if (kind === 'pct') return `${Math.round(v * 100)} %`;
+  if (kind === 'pctv') return `${Math.round(v)}%`;
+  if (kind === 'pct') return `${Math.round(v * 100)}%`;
   if (kind === 'int') return String(Math.round(v));
   return v.toFixed(2);
 }
@@ -215,7 +215,7 @@ function paint() {
   if (!el) return;
   el.innerHTML = `<div class="mix-in">
     <div class="mix-head"><h2>Compare two runs</h2><span class="mix-sub">B against A: green where B is better</span>
-      <button class="hb-ib mix-x" data-act="close" aria-label="Close" title="Close (Esc)">✕</button></div>
+      <button class="hb-ib mix-x" data-act="close" aria-label="Close" title="Close (Esc)">${window.HBIcons.x}</button></div>
     <div class="ab-picks">${picker('A')}<button class="btn btn-sm btn-outline" data-act="swap" title="Swap A and B">⇅</button>${picker('B')}</div>
     <section class="mix-out">${err ? `<p class="mix-err">${esc(err)}</p>` : busy ? '<p class="mix-note">Loading…</p>' : got ? report(got.a, got.b) : `<p class="mix-note">${esc(why || 'Pick two windows to compare.')}</p>`}</section></div>`;
 }

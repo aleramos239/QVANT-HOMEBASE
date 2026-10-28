@@ -19,10 +19,10 @@ const CATS = [
     ['trades', 'Trades', 'int', ''], ['qty_avg', 'Average size', 'num', 'Contracts per trade']]],
   ['winloss', 'Wins and losses', [
     ['wins', 'Winning trades', 'int', ''], ['losses', 'Losing trades', 'int', ''], ['flat', 'Break-even trades', 'int', ''],
-    ['win_rate', 'Win rate', 'pct', ''], ['avg_win', 'Average win', 'usd', ''], ['avg_loss', 'Average loss', 'usd', ''],
+    ['win_rate', 'Win rate', 'wr', ''], ['avg_win', 'Average win', 'usd', ''], ['avg_loss', 'Average loss', 'usd', ''],
     ['payoff', 'Average win : loss', 'ratio', ''], ['median_win', 'Median win', 'usd', ''], ['median_loss', 'Median loss', 'usd', ''],
     ['largest_win', 'Largest win', 'usd', ''], ['largest_loss', 'Largest loss', 'usd', ''],
-    ['breakeven_wr', 'Win rate needed to break even', 'pct', 'From the average win and loss'], ['kelly', 'Kelly fraction', 'pct', 'Win rate − (1−win rate) / payoff']]],
+    ['breakeven_wr', 'Win rate needed to break even', 'wr', 'From the average win and loss'], ['kelly', 'Kelly fraction', 'pct', 'Win rate − (1−win rate) / payoff']]],
   ['risk', 'Risk and drawdown', [
     ['max_dd', 'Max drawdown', 'usd', 'Closed trades, peak to trough'], ['max_dd_pct', 'Max drawdown %', 'pct', 'Of the peak balance'],
     ['max_runup', 'Max run-up', 'usd', 'Trough to peak'], ['recovery', 'Recovery factor', 'num', 'Net / max drawdown'],
@@ -51,8 +51,8 @@ const CATS = [
     ['avg_month', 'Average month', 'usd', ''], ['best_month', 'Best month', 'usd', ''], ['worst_month', 'Worst month', 'usd', ''],
     ['month_trades', 'Trades a month', 'num', '']]],
   ['sides', 'Long and short', [
-    ['long_n', 'Long trades', 'int', ''], ['long_net', 'Long net', 'usd', ''], ['long_wr', 'Long win rate', 'pct', ''], ['long_pf', 'Long profit factor', 'num', ''],
-    ['short_n', 'Short trades', 'int', ''], ['short_net', 'Short net', 'usd', ''], ['short_wr', 'Short win rate', 'pct', ''], ['short_pf', 'Short profit factor', 'num', '']]],
+    ['long_n', 'Long trades', 'int', ''], ['long_net', 'Long net', 'usd', ''], ['long_wr', 'Long win rate', 'wr', ''], ['long_pf', 'Long profit factor', 'num', ''],
+    ['short_n', 'Short trades', 'int', ''], ['short_net', 'Short net', 'usd', ''], ['short_wr', 'Short win rate', 'wr', ''], ['short_pf', 'Short profit factor', 'num', '']]],
   ['costs', 'Costs', [
     ['fee_trade', 'Fee per trade', 'cost', ''], ['fee_share', 'Fees as a share of gross profit', 'pct', ''], ['net_gross', 'Net of fees / gross', 'pct', '']]],
 ];
@@ -168,10 +168,11 @@ const fmt = {
   usd: (v) => (v == null ? '—' : `${v < 0 ? '−' : v > 0 ? '+' : ''}$${Math.abs(Math.round(v)).toLocaleString('en-US')}`),
   cost: (v) => (v == null ? '—' : `$${Math.abs(Math.round(v)).toLocaleString('en-US')}`),
   pct: (v) => (v == null ? '—' : `${v.toFixed(1)}%`),
+  wr: (v) => (v == null ? '—' : `${Math.round(v)}%`),            // a win rate: whole, like everywhere else
   num: (v) => (v == null ? '—' : v === Infinity ? '∞' : v.toFixed(2)),
   int: (v) => (v == null ? '—' : Math.round(v).toLocaleString('en-US')),
   ratio: (v) => (v == null ? '—' : v === Infinity ? '1 : ∞' : `1 : ${(1 / v).toFixed(2)}`.replace(/^1 : /, v >= 1 ? '' : '1 : ')),
-  secs: (v) => { if (v == null) return '—'; if (v < 90) return `${Math.round(v)} s`; if (v < 5400) return `${(v / 60).toFixed(1)} min`; return `${(v / 3600).toFixed(1)} h`; },
+  secs: (v) => { if (v == null) return '—'; const s = Math.round(v); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s` : `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`; },
   date: (v) => v || '—',
   text: (v) => v || '—',
 };

@@ -245,7 +245,7 @@ function hostFor(id) {
     styleDefault(type) { return drawStyleDefaults.get(type) || null; },
     colorFor(cell) {                                                  // the colour set for the timeframe it is drawn on
       const s = cell.spec(), c = tfColors[s];
-      if (c) sbNote(`Drawn on ${C.specLabel(s)}: its colour (rail: Colours by timeframe)`);
+      if (c) sbNote(`Drawn on ${C.specLabel(s)}: its color (rail: Colors by timeframe)`);
       return c || null;
     },
     onChartMenu(cell, at) { chartMenu(cell, at); },
@@ -1478,7 +1478,7 @@ function positionDialog(cell, d) {
     const row = mk('div', 'field'), lab = mk('label', '', label), box2 = mk('span', 'pos-look');
     const b = mk('button', 'swatch'), dot = mk('i'), reset = mk('button', 'btn btn-ghost', 'Theme');
     b.type = 'button'; reset.type = 'button';
-    b.setAttribute('aria-label', `${label} colour`);
+    b.setAttribute('aria-label', `${label} color`);
     b.append(dot);
     const paint = () => { dot.style.background = look[key] || fallback; };
     b.onclick = () => colorSwatchMenu(b, () => look[key] || fallback, (c) => { look[key] = c; paint(); });
@@ -1549,7 +1549,7 @@ function positionDialog(cell, d) {
       field(label, c, `pos-${key}`);
     }
   }
-  const foot = mk('div', 'dlg-foot'), cancel = mk('button', 'btn btn-ghost', 'Cancel'), ok = mk('button', 'btn btn-primary', 'OK');
+  const foot = mk('div', 'dlg-foot'), cancel = mk('button', 'btn btn-ghost', 'Cancel'), ok = mk('button', 'btn btn-primary', 'Save');
   cancel.type = 'button';
   ok.type = 'button';
   cancel.onclick = closeDialog;
@@ -1689,7 +1689,7 @@ function drawToolbarButtons(cell, root, d) {
     wrap.append(tpl, mk('span', 'dtb-sep'));
   }
   const sw = mk('button', 'dtb-swatch'), swi = mk('i');
-  sw.type = 'button'; sw.title = 'Colour'; sw.setAttribute('aria-label', 'Colour');
+  sw.type = 'button'; sw.title = 'Color'; sw.setAttribute('aria-label', 'Color');
   swi.style.background = d.color || '#2962FF';
   sw.append(swi);
   sw.onclick = () => colorSwatchMenu(sw,
@@ -1939,13 +1939,13 @@ function drawingSettingsDialog(cell, d0) {
       rows.push(mk('div', 'set-cap', 'NOTE'));
       rows.push(row('Text', textCtl(work.style.text, (v) => setStyle({ text: v }, false))));
       rows.push(row('Font size', numberCtl(work.style.fontSize, 10, 28, (v) => setStyle({ fontSize: v }))));
-      rows.push(row('Text colour', colorCtl(() => work.style.textColor, (c) => setStyle({ textColor: c }))));
+      rows.push(row('Text color', colorCtl(() => work.style.textColor, (c) => setStyle({ textColor: c }))));
       rows.push(row('Bold', sw('bold')));
       rows.push(row('Border', colorCtl(() => work.color, (c) => set({ color: c }))));
       rows.push(row('Fill', colorCtl(() => window.HBDrawings.fillOf(work.style, work.color, cell.P), (c) => setStyle({ fillColor: c }))));
     } else if (tab === 'style') {
       rows.push(mk('div', 'set-cap', 'LINE'));
-      rows.push(row(type === 'fib' ? 'Trend colour' : 'Colour', colorCtl(() => work.color, (c) => set({ color: c }))));
+      rows.push(row(type === 'fib' ? 'Trend color' : 'Color', colorCtl(() => work.color, (c) => set({ color: c }))));
       rows.push(row('Width', numberCtl(work.style.width, 1, 8, (v) => setStyle({ width: v }))));
       rows.push(row('Style', selectCtl(work.style.lineStyle, LINE_CHOICES, (v) => setStyle({ lineStyle: v }))));
       if (type === 'channel') {
@@ -2018,7 +2018,7 @@ function drawingSettingsDialog(cell, d0) {
       rows.push(mk('div', 'set-cap', 'TEXT'));
       rows.push(row('Text', textCtl(work.style.text, (v) => setStyle({ text: v }, false))));      // typing never rebuilds the field it is typed in
       rows.push(row('Font size', numberCtl(work.style.fontSize, 10, 28, (v) => setStyle({ fontSize: v }))));
-      rows.push(row('Colour', colorCtl(() => work.style.textColor, (c) => setStyle({ textColor: c }))));
+      rows.push(row('Color', colorCtl(() => work.style.textColor, (c) => setStyle({ textColor: c }))));
       rows.push(row('Bold', sw('bold')));
       if (DS.LABEL_POS[type]) {
         const posChoices = DS.LABEL_POS[type].map((p) => [p, p[0].toUpperCase() + p.slice(1)]);
@@ -2043,7 +2043,7 @@ function drawingSettingsDialog(cell, d0) {
       if (isDefault) drawStyleDefaults.set(type, payload);
     },
   });
-  const grow = mk('span', 'grow'), cancel = button('btn btn-ghost', 'Cancel'), ok = button('btn btn-solid', 'OK');
+  const grow = mk('span', 'grow'), cancel = button('btn btn-ghost', 'Cancel'), ok = button('btn btn-solid', 'Save');
   cancel.onclick = () => closeDialog();
   ok.onclick = () => {
     done = true;
@@ -2567,7 +2567,7 @@ function objectsDialog() {
   }
   const done = button('btn btn-solid', 'Done');
   done.onclick = closeDialog;
-  const byTf = button('btn btn-ghost', 'Colours by timeframe…');
+  const byTf = button('btn btn-ghost', 'Colors by timeframe…');
   byTf.onclick = () => { closeDialog(); tfColorsDialog(); };
   foot.append(byTf, mk('span', 'grow'), done);
   render();
@@ -2600,15 +2600,15 @@ let tfColors = loadTfColors();
 function saveTfColors() { try { localStorage.setItem(TF_COLORS_KEY, JSON.stringify(tfColors)); } catch (_) { /* stays for this page */ } }
 
 function tfColorsDialog() {
-  const box = openDialog('Colours by timeframe', 'small');
+  const box = openDialog('Colors by timeframe', 'small');
   const specs = tfSpecs();
   const list = mk('div', 'tf-colors'), foot = mk('div', 'dlg-foot');
-  box.append(mk('div', 'dlg-msg', 'A new drawing takes the colour of the timeframe it is drawn on and keeps it, so a line from the 1h reads differently on the 5m. Pick any colour per timeframe; None = the usual blue.'));
+  box.append(mk('div', 'dlg-msg', 'A new drawing takes the color of the timeframe it is drawn on and keeps it, so a line from the 1h reads differently on the 5m. Pick any color per timeframe; None = the usual blue.'));
   function render() {
     list.replaceChildren(...specs.map((s) => {
       const row = mk('div', 'field'), lab = mk('label', '', C.specLabel(s)), ctl = mk('span', 'pos-look');
       const sw = button('swatch'), dot = mk('i'), clear = button('btn btn-ghost', 'None');
-      sw.setAttribute('aria-label', `${C.specLabel(s)} colour`);
+      sw.setAttribute('aria-label', `${C.specLabel(s)} color`);
       sw.append(dot);
       const paint = () => { dot.style.background = tfColors[s] || 'transparent'; clear.hidden = !tfColors[s]; };
       sw.onclick = () => colorSwatchMenu(sw, () => tfColors[s] || '#2962FF', (c) => { tfColors[s] = c; saveTfColors(); paint(); });
@@ -2966,8 +2966,8 @@ async function init() {
     if (anchor) {
       const b = mk('button', 'rail-btn');
       b.type = 'button'; b.id = 'railTfColors';
-      b.title = 'Colours by timeframe: a drawing takes the colour of the timeframe it is drawn on';
-      b.setAttribute('aria-label', 'Colours by timeframe');
+      b.title = 'Colors by timeframe: a drawing takes the color of the timeframe it is drawn on';
+      b.setAttribute('aria-label', 'Colors by timeframe');
       b.append(icon('paintbrush'));
       b.onclick = tfColorsDialog;
       anchor.after(b);

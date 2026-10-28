@@ -160,8 +160,8 @@ function mount(box, host) {
         }
         const sw = button('swatch'), dot = mk('i');
         dot.style.background = colourOf(i);
-        sw.title = `Line ${i + 1} colour` + (i === 0 ? ' (its bands follow)' : '');
-        sw.setAttribute('aria-label', `Line ${i + 1} colour`);
+        sw.title = `Line ${i + 1} color` + (i === 0 ? ' (its bands follow)' : '');
+        sw.setAttribute('aria-label', `Line ${i + 1} color`);
         sw.append(dot);
         sw.onclick = () => host.toggleMenu(sw, 'menu-swatch', (m) => {
           const grid = mk('div', 'sw-grid');
@@ -185,7 +185,7 @@ function mount(box, host) {
       }
       if (more().length < C.VWAP_MORE_MAX) {
         const add = button('btn btn-ghost vl-add', '+ Add line');
-        add.title = 'A second VWAP line in this indicator, with its own anchor and colour';
+        add.title = 'A second VWAP line in this indicator, with its own anchor and color';
         add.onclick = () => {
           const used = new Set([vals.anchor === 'custom' ? vals.customTime : vals.anchor, ...more().map((l) => (l.anchor === 'custom' ? l.customTime : l.anchor))]);
           const next = ['09:30', '18:00', '02:00', '16:00'].find((h) => !used.has(h)) || '09:30';
@@ -463,7 +463,7 @@ function mount(box, host) {
         name.oninput = () => { b.name = name.value; preview(); };
         const sw = button('swatch'), dot = mk('i');
         dot.style.background = colorOf(b, i);
-        sw.title = 'Box colour'; sw.setAttribute('aria-label', `Box ${i + 1} colour`);
+        sw.title = 'Box color'; sw.setAttribute('aria-label', `Box ${i + 1} color`);
         sw.append(dot);
         sw.onclick = () => host.toggleMenu(sw, 'menu-swatch', (m) => {
           const grid = mk('div', 'sw-grid');
@@ -549,11 +549,11 @@ function mount(box, host) {
       row.append(name, ctl);
       rows.push(row);
     });
-    const crow = mk('div', 'set-row'), cname = mk('div', 'set-name', 'Colour'), cctl = mk('div', 'set-ctl');
+    const crow = mk('div', 'set-row'), cname = mk('div', 'set-name', 'Color'), cctl = mk('div', 'set-ctl');
     const sw = button('swatch'), dot = mk('i');
     dot.style.background = opts.refColor || '#787B86';
-    sw.title = 'Level colour';
-    sw.setAttribute('aria-label', 'Level colour');
+    sw.title = 'Level color';
+    sw.setAttribute('aria-label', 'Level color');
     sw.append(dot);
     sw.onclick = () => host.toggleMenu(sw, 'menu-swatch', (m) => {
       const grid = mk('div', 'sw-grid');
@@ -588,7 +588,7 @@ function mount(box, host) {
     // one row a line: colour (its opacity is in the colour's popover), width, style, and a "more" for the rest
     const sw = button('swatch'), i = mk('i');
     i.style.background = C.lineColor(line);
-    sw.title = `${name.textContent} colour and opacity`;
+    sw.title = `${name.textContent} color and opacity`;
     sw.setAttribute('aria-label', sw.title);
     sw.setAttribute('aria-haspopup', 'dialog');
     sw.append(i);
@@ -663,7 +663,7 @@ function mount(box, host) {
       opRow.append(mk('span', '', 'Opacity'), op, pct);
       const hexRow = mk('div', 'sw-row'), hex = mk('input', 'sw-hex');
       hex.type = 'text'; hex.maxLength = 7; hex.spellcheck = false;
-      hex.setAttribute('aria-label', 'Hex colour');
+      hex.setAttribute('aria-label', 'Hex color');
       const takeHex = () => {
         const v = hex.value.trim();
         if (!/^#[0-9A-Fa-f]{6}$/.test(v)) { err.textContent = 'Use #RRGGBB'; err.hidden = false; return; }
@@ -698,7 +698,7 @@ function mount(box, host) {
     preview();
   }
 
-  const cancel = button('btn btn-ghost', 'Cancel'), ok = button('btn btn-primary', 'OK'), grow = mk('span', 'grow');
+  const cancel = button('btn btn-ghost', 'Cancel'), ok = button('btn btn-primary', 'Save'), grow = mk('span', 'grow');
   const tpl = button('btn btn-ghost tpl-btn'), chev = mk('span', 'icw sm');
   chev.innerHTML = I.chevron;
   tpl.append(mk('span', '', 'Template'), chev);

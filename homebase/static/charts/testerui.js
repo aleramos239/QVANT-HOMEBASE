@@ -563,7 +563,7 @@ function openInputsDialog() {
   for (const inp of schema.inputs) fields.appendChild(inputsDialogRow(inp, draft));
   fields.appendChild(page.mk('div', 'set-cap', 'PROP EVAL'));
   fields.appendChild(propRulesRow(draft));
-  const foot = page.mk('div', 'dlg-foot'), cancel = page.mk('button', 'btn btn-ghost', 'Cancel'), ok = page.mk('button', 'btn btn-primary', 'OK');
+  const foot = page.mk('div', 'dlg-foot'), cancel = page.mk('button', 'btn btn-ghost', 'Cancel'), ok = page.mk('button', 'btn btn-primary', 'Save');
   cancel.type = 'button';
   ok.type = 'button';
   cancel.onclick = page.closeDialog;
@@ -1568,7 +1568,7 @@ function buildGrid() {
     return;
   }
   const cost = `qty ${grid.qty} · ${Tr.money(grid.commission)}/RT · ${grid.slippage_ticks} tick slippage`;
-  heatGridEl.appendChild(page.mk('div', 'tst-kv-line', `${grid.strategy_name || grid.strategy} · ${grid.range.label} · ${cost} · colour = net $, Sharpe = traded days`));
+  heatGridEl.appendChild(page.mk('div', 'tst-kv-line', `${grid.strategy_name || grid.strategy} · ${grid.range.label} · ${cost} · color = net $, Sharpe = traded days`));
   for (const p of X.heatPanels(grid)) {
     if (p.title) heatGridEl.appendChild(page.mk('div', 'set-cap', p.title));
     const t = page.mk('table', 'tst-heat-table'), thead = page.mk('thead'), htr = page.mk('tr');

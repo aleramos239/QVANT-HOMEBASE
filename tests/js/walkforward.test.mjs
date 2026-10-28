@@ -53,10 +53,10 @@ test('wfLooksText: cells x the selection-month count the server gives (review M5
 
 test('etaText rounds to what a person reads', () => {
   assert.equal(X.etaText(null), '');
-  assert.equal(X.etaText(20), '<1 min left');
-  assert.equal(X.etaText(150), '~3 min left');
-  assert.equal(X.etaText(4800), '~1 h 20 min left');
-  assert.equal(X.etaText(7200), '~2 h left');
+  assert.equal(X.etaText(20), '<1m left');
+  assert.equal(X.etaText(150), '~3m left');
+  assert.equal(X.etaText(4800), '~1h 20m left');
+  assert.equal(X.etaText(7200), '~2h left');
 });
 
 test('wfProgress: every state, progress fraction, ETA and the 9:30 pause', () => {
@@ -65,7 +65,7 @@ test('wfProgress: every state, progress fraction, ETA and the 9:30 pause', () =>
   assert.equal(X.wfProgress({ status: 'queued', done: 0, total: 4, progress: 0, paused: 'paused for the 9:30 window' }).text,
     'Queued · 0 / 4 cells · paused for the 9:30 window');
   assert.deepEqual(X.wfProgress({ status: 'running', done: 1, total: 4, progress: 0.375, eta_s: 150 }),
-    { text: 'Running · 1 / 4 cells · 38% · ~3 min left', frac: 0.375, final: false });
+    { text: 'Running · 1 / 4 cells · 38% · ~3m left', frac: 0.375, final: false });
   assert.deepEqual(X.wfProgress({ status: 'selecting', done: 4, total: 4, progress: 1 }),
     { text: 'Selecting and stitching…', frac: null, final: false });
   assert.deepEqual(X.wfProgress({ status: 'done', done: 4, total: 4, looks_added: 180 }),
@@ -141,7 +141,7 @@ test('wfStepRows: one row per monthly step, dollars and Sharpe both sides, the c
   const rows = X.wfStepRows(RESULT, AXES);
   assert.equal(rows.length, 3);
   assert.deepEqual(rows[0].cells, ['2022-01', '2022-02 → 2022-04', 'Entry offset (pts) 10 · Stop loss (pts) 5',
-    '+$500', '5', '1.23', `${M}$480`, '7', '60.0%', '1.50', '1.23', `${M}$250`]);
+    '+$500', '5', '1.23', `${M}$480`, '7', '60%', '1.50', '1.23', `${M}$250`]);
   assert.equal(rows[0].stitched, true);
   assert.equal(rows[0].isTone, 'up');
   assert.equal(rows[0].oosTone, 'down');

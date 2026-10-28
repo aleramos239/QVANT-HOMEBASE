@@ -1063,7 +1063,7 @@ function allMetricsDialog() {
     const none = (k, i) => k === 'unseen' && !sets[i].trades;
     let body = '';
     if (st.view === 'year') {
-      const rows = AM.yearly(trades.filter((t) => !st.side || t.side === st.side), cap), keys = [['trades', 'int'], ['net', 'usd'], ['win_rate', 'pct'], ['profit_factor', 'num'], ['expectancy', 'usd'], ['max_dd', 'usd'], ['sharpe', 'num'], ['month_wr', 'pct']];
+      const rows = AM.yearly(trades.filter((t) => !st.side || t.side === st.side), cap), keys = [['trades', 'int'], ['net', 'usd'], ['win_rate', 'wr'], ['profit_factor', 'num'], ['expectancy', 'usd'], ['max_dd', 'usd'], ['sharpe', 'num'], ['month_wr', 'pct']];
       const lab = { trades: 'Trades', net: 'Net', win_rate: 'Win rate', profit_factor: 'Profit factor', expectancy: 'Avg trade', max_dd: 'Max drawdown', sharpe: 'Sharpe', month_wr: 'Good months' };
       body = `<table class="am-t am-y"><thead><tr><th>Year</th>${keys.map(([k]) => `<th>${lab[k]}</th>`).join('')}</tr></thead><tbody>${rows.map((y) =>
         `<tr><th>${esc(y.year)}${y.unseen && !wf ? '*' : ''}</th>${keys.map(([k, u]) => cell(u, y[k], toneOf(u, y[k]))).join('')}</tr>`).join('')}</tbody></table>
@@ -2536,7 +2536,7 @@ function oosHtml(T) {
     return `${head}${perYearHtml(cell ? [cell] : [], 'in-sample, as set')}<div class="rs-hero"><div class="rs-net"><i>${net > 0 ? '+' : net < 0 ? MINUS : ''}$</i>${esc(Math.abs(Math.round(net)).toLocaleString('en-US'))}</div></div>
       <div class="rs-take">${esc(`${(oo.months || []).length} test months · ${rec.trades ?? 0} trades · after fees.`)}</div>
       ${WFEQ ? EQ_BOX : ''}
-      <div class="rs-trio"><div><b>${esc(X.num(rec.pf, 2, true))}</b><span>Profit factor</span></div><div><b>${esc(X.rate(rec.win_rate))}</b><span>Win rate</span></div><div><b>${esc(X.num(rec.sharpe))}</b><span>Sharpe</span></div></div>
+      <div class="rs-trio"><div><b>${esc(X.num(rec.pf, 2, true))}</b><span>Profit factor</span></div><div><b>${esc(X.wrate(rec.win_rate))}</b><span>Win rate</span></div><div><b>${esc(X.num(rec.sharpe))}</b><span>Sharpe</span></div></div>
       ${row ? `<div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr>${X.WF_FIXED_COLS.map((c) => `<th>${esc(c[1])}</th>`).join('')}</tr></thead><tbody><tr>${row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr></tbody></table></div>` : ''}
       ${realHtml(realRead(res, sid), sid)}
       ${bt ? `<div class="rs-gh">Block by block</div><div class="wf-scroll"><table class="heat-tbl wf-steps"><thead><tr>${bt.head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${bt.rows.map((x) => `<tr>${x.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : ''}`;
@@ -2561,7 +2561,7 @@ function propHtml(r) {
     const h = p.headline || {}, pc = (v) => (v == null ? '—' : `${Math.round(v * 100)}%`);
     return `<div class="rs-gh">More numbers · Prop sim${p.rules && p.rules.label ? ` · ${esc(p.rules.label)}` : ''} · not one of the six lines</div><div class="rs-group">${wfKv('Passes the eval', pc(h.eval_pass_p))}${wfKv('Busts the eval', pc(h.bust_p))}
       ${wfKv('Days to pass', h.median_days_to_pass == null ? '—' : String(Math.round(h.median_days_to_pass)))}${wfKv('Gets a payout', pc(h.funded_payout_p))}
-      ${wfKv('Expected cheque', h.funded_expected_cheque == null ? '—' : money0(h.funded_expected_cheque))}</div>`;
+      ${wfKv('Expected payout', h.funded_expected_cheque == null ? '—' : money0(h.funded_expected_cheque))}</div>`;
   }
   return `<div class="rs-gh">More numbers · Prop sim · not one of the six lines</div><div class="rs-group"><button class="rs-row" data-act="propsim"${r.propBusy ? ' disabled' : ''}><span>${r.propBusy ? 'Running the prop sim…' : 'Run the prop sim'}</span><span>›</span></button>
     ${r.propErr ? `<div class="heat-err">${esc(r.propErr)}</div>` : ''}</div>`;
@@ -2605,7 +2605,7 @@ function wfSplitHtml(r) {
     ${row('Net / month', (s) => (pm(s) == null ? '—' : money0(pm(s))), pm)}
     ${row('Total net', (s) => money0(s.stats.net_profit || 0), (s) => s.stats.net_profit)}
     ${row('Profit factor', (s) => X.num(s.stats.profit_factor, 2, true))}
-    ${row('Win rate', (s) => X.rate(s.stats.win_rate))}
+    ${row('Win rate', (s) => X.wrate(s.stats.win_rate))}
     ${row('Max drawdown', (s) => (s.stats.max_drawdown == null ? '—' : money0(s.stats.max_drawdown)))}</div>`;
 }
 /* What to trade now: the best of the searched settings on the last 3 whole months -- the setting the Desk would tell the owner
@@ -2744,14 +2744,14 @@ function wfResHtml(f) {
       <div class="rs-kv wf-kv2 wf-kvh"><span></span><span>In</span><span>Out</span></div>
       ${row('Months', (x) => (ov(x) ? '—' : String(x.n_months || 0)))}${row('Net / month', (x) => money0(pmn(x) || 0), pmn)}${row('Total net', (x) => (ov(x) ? '—' : money0(net(x) || 0)), (x) => (ov(x) ? null : net(x)))}
       ${row('Trades', (x) => (ov(x) ? '—' : String(x.stats.trades ?? '—')))}${row('Profit factor', (x) => X.num(x.stats.profit_factor, 2, true))}
-      ${row('Win rate', (x) => X.rate(x.stats.win_rate))}${row('Realized RR', (x) => rr(x.stats))}
+      ${row('Win rate', (x) => X.wrate(x.stats.win_rate))}${row('Realized RR', (x) => rr(x.stats))}
       ${row('Max drawdown', (x) => (x.stats.max_drawdown == null ? '—' : money0(x.stats.max_drawdown)), (x) => x.stats.max_drawdown)}
       ${row('Sharpe', (x) => X.num(x.stats.sharpe))}</div>
       ${wfSplitHtml(r)}${wfPickRows(r, axes)}${wfStepsHtml(r, axes)}
       <div class="heat-foot">${esc(r.n_cells > 1 ? `${r.n_cells} settings searched · ${r.looks} looks counted` : 'The strategy as set: nothing searched')}</div>`;
   }
   return `${head}
-    <div class="rs-trio"><div><b>${esc(X.num(s.profit_factor, 2, true))}</b><span>Profit factor</span></div><div><b>${esc(X.rate(s.win_rate))}</b><span>Win rate</span></div><div><b>${esc(rr(s))}</b><span>Realized RR</span></div><div><b>${esc(X.num(s.sharpe))}</b><span>Sharpe</span></div></div>
+    <div class="rs-trio"><div><b>${esc(X.num(s.profit_factor, 2, true))}</b><span>Profit factor</span></div><div><b>${esc(X.wrate(s.win_rate))}</b><span>Win rate</span></div><div><b>${esc(rr(s))}</b><span>Realized RR</span></div><div><b>${esc(X.num(s.sharpe))}</b><span>Sharpe</span></div></div>
     ${side === 'is' ? '' : wfSplitHtml(r)}
     <div class="rs-gh">Per month</div><div class="rs-group">
       ${wfKv('Net / month', money0(pm.net_profit || 0), wfTone(pm.net_profit))}${wfKv('Trades / month', X.num(pm.trades, 1))}
@@ -2939,8 +2939,8 @@ function rulesHtml(f, meta) {
     <div class="grid">
       ${sizes.length ? sel('bar_minutes', 'Signal bar', [[0, `Strategy's own${own}`], ...sizes.map((m) => [m, `${m} minute${m === 1 ? '' : 's'}`])], 'The candle size the strategy reads its signals on') : ''}
       ${time('entry_from', 'Trade from (NY)', 'No entry before this time')}
-      ${time('entry_to', 'Trade until (NY)', 'No new entry from this time; an order still waiting is cancelled, an open trade is left alone')}
-      ${time('flat_at', 'Flat at (NY)', 'Cancels everything and closes what is open at this time; no entry after it')}
+      ${time('entry_to', 'Last entry (NY)', 'No new entry from this time; an order still waiting is cancelled, an open trade is left alone')}
+      ${time('flat_at', 'Flat by (NY)', 'Cancels everything and closes what is open at this time; no entry after it')}
       ${sel('direction', 'Direction', [['both', 'Both'], ['long', 'Long only'], ['short', 'Short only']])}
       ${num('max_trades', 'Trades a day', 'The most entries in a day')}
       ${num('stop_wins', 'Stop after wins', 'No new entry once the day has this many winning trades')}

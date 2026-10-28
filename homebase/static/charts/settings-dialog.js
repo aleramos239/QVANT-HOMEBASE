@@ -44,7 +44,7 @@ const TABS = [
     ['CANDLES', [
       { label: 'Chart type', select: { key: 'chartType',
         choices: [['candles', 'Candles'], ['heikin', 'Heikin Ashi'], ['bars', 'Bars (OHLC)'], ['line', 'Line (close)']] } },
-      { label: 'Colour bars based on previous close', check: 'prevClose' },
+      { label: 'Color bars based on previous close', check: 'prevClose' },
       { label: 'Body', check: 'body', colors: [['bodyUp', 'up'], ['bodyDown', 'down']] },
       { label: 'Borders', check: 'borders', colors: [['borderUp', 'up'], ['borderDown', 'down']] },
       { label: 'Wick', check: 'wick', colors: [['wickUp', 'up'], ['wickDown', 'down']] },
@@ -115,9 +115,9 @@ const TABS = [
         choices: [['both', 'Ticker, interval'], ['ticker', 'Ticker'], ['interval', 'Interval'], ['description', 'Description']] } },
     ]],
     ['SCALES', [
-      { label: 'Text colour', colors: [['scaleText', '']] },
+      { label: 'Text color', colors: [['scaleText', '']] },
       { label: 'Text size', select: { key: 'scaleFont', choices: FONT_SIZES, parse: asNumber } },
-      { label: 'Lines colour', colors: [['scaleLines', '']] },
+      { label: 'Lines color', colors: [['scaleLines', '']] },
     ]],
     ['TOOL LABELS', [
       { label: 'Show the numbers on tools', select: { key: 'toolLabels', choices: [
@@ -827,7 +827,7 @@ function mount(box, host) {
     if (r.dot) { const d = mk('i', 'set-dot'); d.style.background = r.dot; name.append(d); }
     name.append(mk('span', '', r.label));
     for (const [key, what] of r.colors || []) {
-      const b = button('swatch'), i = mk('i'), tip = `${r.label}${what ? ` ${what}` : ''} colour`;
+      const b = button('swatch'), i = mk('i'), tip = `${r.label}${what ? ` ${what}` : ''} color`;
       b.title = tip;
       b.setAttribute('aria-label', tip);
       b.setAttribute('aria-haspopup', 'dialog');
@@ -952,7 +952,7 @@ function mount(box, host) {
       opRow.append(mk('span', '', 'Opacity'), op, pct);
       const hexRow = mk('div', 'sw-row'), hex = mk('input', 'sw-hex'), def = button('sw-default', 'Default');
       hex.type = 'text'; hex.maxLength = 7; hex.spellcheck = false;
-      hex.setAttribute('aria-label', 'Hex colour');
+      hex.setAttribute('aria-label', 'Hex color');
       const takeHex = () => {
         const v = hex.value.trim();
         if (!/^#[0-9A-Fa-f]{6}$/.test(v)) { err.textContent = 'Use #RRGGBB'; err.hidden = false; return; }
@@ -1074,7 +1074,7 @@ function mount(box, host) {
   }
 
   /* ---- footer ---- */
-  const grow = mk('span', 'grow'), cancel = button('btn btn-ghost', 'Cancel'), ok = button('btn btn-solid', 'OK');
+  const grow = mk('span', 'grow'), cancel = button('btn btn-ghost', 'Cancel'), ok = button('btn btn-solid', 'Save');
   cancel.onclick = () => host.cancel();
   ok.onclick = () => {
     flush();

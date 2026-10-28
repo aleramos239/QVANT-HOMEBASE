@@ -76,7 +76,7 @@
     const setupBox = el('div', { class: 'hb-box', id: 'hbSetup' });
     const figsBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbFigs' });
     let figsSec = null;      // hidden when it has nothing: a Lab strategy's backtest is its 3:1 block below (owner 2026-10-18)
-    const figsH = el('div', { class: 'hb-isec-h', text: 'Live results' });      // "Backtest" for a Lab one
+    const figsH = el('div', { class: 'hb-isec-h', text: 'Desk results' });      // "Backtest" for a Lab one
     // a Lab strategy's research (the page's own .labres blocks): its saved run (3:1 test months, or the old record), and the prop sim
     const unseenH = el('div', { class: 'hb-isec-h' }), unseenBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbUnseen' });
     const propH = el('div', { class: 'hb-isec-h', text: 'Prop sim' }), propBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbProp' });
@@ -157,7 +157,7 @@
         if (c.self_fire && hm(c.fire_et)) rows.push(row('Fires', hm(c.fire_et) + ' ET'));
       }
       if (hm(c.cancel_et)) rows.push(row('Cancel unfilled', hm(c.cancel_et) + ' ET'));
-      if (hm(c.flat_et)) rows.push(row('Flat', hm(c.flat_et) + ' ET'));
+      if (hm(c.flat_et)) rows.push(row('Flat by', hm(c.flat_et) + ' ET'));
       if (Array.isArray(c.only_dates) && c.only_dates.length) rows.push(row('Only on', c.only_dates.slice(0, 2).join(', ') + (c.only_dates.length > 2 ? ' +' + (c.only_dates.length - 2) : '')));
       rows.push(row('Signal', c.kind === 'bars' ? 'Price-action rule' : c.self_fire ? 'Fires itself' : 'Nothing fires it'));
       if (c.shadow) rows.push(row('Mode', 'Shadow (journal only)'));
@@ -308,10 +308,10 @@
         if (v === 'strat') {
           // the page just rebuilt #viewStrat: take this render's figures, links and actions into the inspector
           const figs = $(':scope > .figs', vStrat), links = $(':scope > .qlinks', vStrat), acts = $(':scope > .sd-actions', vStrat);
-          // "No live trades yet." stands where the figures would be (the curve's own empty note stays in the content)
-          const none = [...vStrat.children].find((n) => n.classList.contains('eq-empty') && /No live trades/.test(n.textContent)) || null;
+          // "No Desk trades yet." stands where the figures would be (the curve's own empty note stays in the content)
+          const none = [...vStrat.children].find((n) => n.classList.contains('eq-empty') && /No Desk trades/.test(n.textContent)) || null;
           if (figs || none || links || acts) {
-            figsBox.replaceChildren(...(figs ? [figs] : none ? [el('div', { class: 'hb-row hb-row-note', text: 'No live trades yet.' })] : []));
+            figsBox.replaceChildren(...(figs ? [figs] : none ? [el('div', { class: 'hb-row hb-row-note', text: 'No Desk trades yet.' })] : []));
             figsSec.hidden = !figsBox.childElementCount;
             if (none && !figs) none.remove();
             linksBox.replaceChildren(...(links ? [links] : []));
@@ -331,7 +331,7 @@
             res.remove();
           }
           unseenSec.hidden = propSec.hidden = !name || unseenSec.dataset.for !== name;      // never one strategy's research under another
-          figsH.textContent = grp ? (figs && figs.dataset.h) || 'Combined' : l || dl ? 'Backtest' : 'Live results';
+          figsH.textContent = grp ? (figs && figs.dataset.h) || 'Combined' : l || dl ? 'Backtest' : 'Desk results';
           if (grp) setupGroup(grp); else if (l) setupLab(l); else if (dl) setupDeskLab(name, dl); else setup(name);
           tb.title(t ? t.textContent : 'Strategy', sd ? sd.textContent : '');
         } else if (v === 'activity') {

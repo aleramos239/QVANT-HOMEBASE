@@ -8,8 +8,8 @@
 const KEY = 'hb.labMix';
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const money = (v) => (v == null ? '—' : `${v < 0 ? '−' : ''}$${Math.abs(Math.round(v)).toLocaleString('en-US')}`);
-const pct = (v) => (v == null ? '—' : `${Math.round(v * 100)} %`);     // a 0..1 odds
-const pctv = (v) => (v == null ? '—' : `${Math.round(v)} %`);         // already a percent (win rate)
+const pct = (v) => (v == null ? '—' : `${Math.round(v * 100)}%`);     // a 0..1 odds
+const pctv = (v) => (v == null ? '—' : `${Math.round(v)}%`);         // already a percent (win rate)
 const num = (v, d = 2) => (v == null ? '—' : Number(v).toFixed(d));
 
 let st = (() => { try { return { picks: {}, rule: '', keepOnly: true, q: '', ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch (_) { return { picks: {}, rule: '', keepOnly: true, q: '' }; } })();
@@ -69,7 +69,7 @@ function paint() {
   const n = picked().length;
   el.innerHTML = `<div class="mix-in">
     <div class="mix-head"><h2>Group builder</h2><span class="mix-sub">Each strategy's latest run to 2025-06-30, as one account · old runs that may hold test months</span>
-      <button class="hb-ib mix-x" data-act="close" aria-label="Close" title="Close (Esc)">✕</button></div>
+      <button class="hb-ib mix-x" data-act="close" aria-label="Close" title="Close (Esc)">${window.HBIcons.x}</button></div>
     <div class="mix-body">
       <aside class="mix-side">
         <input class="mix-q" data-q type="search" placeholder="Find a strategy" value="${esc(st.q)}" aria-label="Find a strategy">
@@ -91,7 +91,7 @@ function report(r) {
     tile('Profit factor', num(g.profit_factor)), tile('Max drawdown', money(g.max_drawdown), 'dn'), tile('Worst day', money(g.worst_day), 'dn'),
     tile('Days', g.days ?? '—'), tile('Days together', g.together_days ?? '—')].join('');
   const prop = p ? `<h3>${esc(p.account || 'Prop sim')}</h3><div class="mix-tiles">${[tile('Pass the eval', pct(p.eval_pass_p)), tile('Bust', pct(p.bust_p), 'dn'),
-    tile('Days to pass (median)', p.median_days_to_pass ?? '—'), tile('Funded payout', pct(p.funded_payout_p)), tile('Expected cheque', money(p.funded_expected_cheque))].join('')}</div>` : '';
+    tile('Days to pass (median)', p.median_days_to_pass ?? '—'), tile('Funded payout', pct(p.funded_payout_p)), tile('Expected payout', money(p.funded_expected_cheque))].join('')}</div>` : '';
   const names = r.members.map((m) => list.find((s) => s.id === m.name)?.name || m.name);
   const mrows = r.members.map((m, i) => { const s = m.summary || {}; return `<tr><td>${esc(names[i])}</td><td>×${esc(m.size)}</td><td class="${s.net >= 0 ? 'up' : 'dn'}">${money(s.net)}</td><td>${s.trades ?? '—'}</td><td>${pctv(s.win_rate)}</td><td>${num(s.profit_factor)}</td><td class="dn">${money(s.max_drawdown)}</td></tr>`; }).join('');
   return `<p class="mix-note">Build days ${esc(r.window.start)} → ${esc(r.window.end)} (the days every member's run covers)</p>

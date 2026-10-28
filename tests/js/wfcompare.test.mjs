@@ -80,7 +80,7 @@ test('wfCompareTable: one column per scheme, the dollar metrics of the stitched 
   assert.equal(row('net')[1].text, `${M}$1,234.50`);
   assert.equal(row('net')[1].tone, 'down');
   assert.equal(row('trades')[2].text, '103');
-  assert.equal(row('win_rate')[0].text, '51.3%');
+  assert.equal(row('win_rate')[0].text, '51%');
   assert.equal(row('pf')[0].text, '∞');                       // no losing trade: the capped PF
   assert.equal(row('pf')[1].text, '1.40');
   assert.equal(row('avg_trade')[1].text, `${M}$12.20`);
