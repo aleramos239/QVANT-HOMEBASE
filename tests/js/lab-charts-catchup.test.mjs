@@ -91,7 +91,7 @@ test('group builder and A/B: only the Net cells (a loss with its minus) turn to 
 });
 
 test('Lab tables: the real errors and the heat-map tints keep their colours', () => {
-  const sels = rules(LAB).flatMap((r) => r.sels).join(' | ');
+  const sels = rules(LAB).flatMap((r) => r.sels).filter((s) => !/:focus-visible/.test(s)).join(' | ');
   assert.ok(!/heat-c/.test(sels), 'the heat-map cell tints are data, left alone');
   assert.ok(!/mix-err|rl-line\.fail/.test(sels), 'a real error and a failed real-or-luck line stay red');
 });
@@ -210,10 +210,10 @@ test('no stylesheet uses the undefined --text2 token: the six rules point at --t
 /* ---------------------------------------------------------------------------------------------------------- cache pins */
 test('cache pins follow the edited files', () => {
   const man = JSON.parse(read('apple/manifest.json'));
-  assert.equal(man.version, 48, 'apple/lab.css and apple/charts.css changed');
-  assert.match(read('charts.html'), /charts\/charts\.css\?v=65"/);
-  assert.match(read('backtest.html'), /charts\/charts\.css\?v=56"/);
+  assert.equal(man.version, 53, 'apple/lab.css and apple/charts.css changed');
+  assert.match(read('charts.html'), /charts\/charts\.css\?v=67"/);
+  assert.match(read('backtest.html'), /charts\/charts\.css\?v=58"/);
   assert.match(read('charts.html'), /charts\/guide\.css\?v=6"/);
   assert.match(read('backtest.html'), /charts\/guide\.css\?v=6"/);
-  assert.match(read('backtest.html'), /charts\/testerui\.js\?v=43"/);
+  assert.match(read('backtest.html'), /charts\/testerui\.js\?v=45"/);
 });

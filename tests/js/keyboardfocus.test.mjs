@@ -183,7 +183,7 @@ function labMenus() {
       return e;
     } };
   const ctx = vm.createContext({ document: doc, window: { HBChartMenu: { step: createRequire(import.meta.url)('../../homebase/static/charts/chartmenu.js').step } },
-    innerWidth: 1400, innerHeight: 900, root: { querySelectorAll: () => [] } });
+    innerWidth: 1400, innerHeight: 900, root: { querySelectorAll: () => [] }, SP: null });
   vm.runInContext(`${code}\nglobalThis.api = { menu, dialog, closeMenu, closeDialog, open: () => !!menuEl, sheet: () => !!overlay, items: () => menuEl.items };`, ctx);
   const key = (k, target = { closest: () => null }) => { const e = { key: k, target, prevented: false, preventDefault() { this.prevented = true; } };
     for (const [t, f] of handlers) if (t === 'keydown') f(e); return e; };
@@ -314,9 +314,9 @@ test('reduced motion: the Charts and Lab switches, the run-settings chevron, the
 
 test('the pins follow: every edited script and skin file has its new version', () => {
   const man = JSON.parse(rd('apple/manifest.json'));
-  assert.equal(man.version, 49);
-  assert.match(rd('backtest.html'), /charts\/lab\.js\?v=134"/);
-  assert.match(rd('backtest.html'), /charts\/lab\.css\?v=86"/);
-  assert.match(rd('backtest.html'), /charts\/charts\.css\?v=56"/);
-  assert.match(rd('charts.html'), /charts\/charts\.css\?v=65"/);
+  assert.equal(man.version, 53);
+  assert.match(rd('backtest.html'), /charts\/lab\.js\?v=137"/);
+  assert.match(rd('backtest.html'), /charts\/lab\.css\?v=88"/);
+  assert.match(rd('backtest.html'), /charts\/charts\.css\?v=58"/);
+  assert.match(rd('charts.html'), /charts\/charts\.css\?v=67"/);
 });
