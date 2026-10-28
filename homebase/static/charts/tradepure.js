@@ -31,7 +31,7 @@ const Pos = need('HBPosition', './position.js');
 
 const MINUS = '−';
 const PREFS_KEY = 'hb_trade_prefs';
-const QTY_MAX = 10000;   // a sanity clamp only: the desk's limits decide
+const QTY_MAX = 10000;   // a sanity clamp only: the desk sets no size limit
 
 const int = (v, lo, hi, dflt) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; };
 const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
