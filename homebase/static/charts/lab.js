@@ -3184,7 +3184,7 @@ function promoteToDesk(b) {
     <p>Lands OFF, no account.</p><p>Trade rules are not applied on the Desk.</p>
     <div class="bp-f"><label for="pdTo">Which Desk</label><select id="pdTo"><option value="mac">This Mac</option><option value="both">This Mac and the VPS</option><option value="vps">The VPS (this Mac keeps an OFF copy)</option></select>
     <small>The VPS one lands OFF there too, with no account: set its accounts and limits on that Desk.</small></div>
-    <div class="bp-f"><label for="pdSaid">Your words, that it goes on the Desk</label><textarea id="pdSaid" maxlength="400"></textarea></div>
+    <div class="bp-f"><label for="pdSaid">Your words, that it goes on the Desk</label><textarea id="pdSaid" maxlength="400"></textarea><small>The button turns on once you have written something.</small></div>
     <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go" disabled>Put it on the Desk</button></div>`);
   const ta = $('#pdSaid', d), go = $('[data-x="go"]', d);
   ta.focus();

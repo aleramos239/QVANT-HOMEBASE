@@ -227,7 +227,7 @@ test('Put it on the Desk: the confirm shows the verdict and the six lines of the
   const ran = (inputs) => ({ run: { inputs, qty: 1, commission: 4, slippage_ticks: 1, range: { kind: 'wf_is' } } });
   const said = { value: '' }, go = { disabled: null };      // the sheet's words box and its Put it on the Desk button
   const c = vm.createContext({ X, C, RL, esc: (t) => String(t == null ? '' : t), closeDialog() {}, paintRes() {}, paintLib() {}, log() {}, loadDesk: async () => {},
-    $: (sel) => (sel === '#pdSaid' ? Object.assign(said, { focus() {}, addEventListener(t, fn) { said.input = fn; } }) : sel === '[data-x="go"]' ? go : null),
+    $: (sel) => (sel === '#pdSaid' ? Object.assign(said, { focus() {}, addEventListener(t, fn) { said.input = fn; } }) : sel === '[data-x="go"]' ? go : sel === '#pdTo' ? { value: 'mac' } : null),
     S: { run: { key: 'd:x', rid: 'r1', bundle: ran({ len: 5 }) }, tries: {}, three: { draft_x: { oos: { result: res, set: '' } } }, wf: {} },
     buf: () => null, formOf: () => f, shaNow: (code) => (code === 'saved code' ? 'sha1' : ''),
     dialog: (html) => { const d = { html, on: null, addEventListener(t, fn) { d.on = fn; } }; dialogs.push(d); return d; },
@@ -235,7 +235,7 @@ test('Put it on the Desk: the confirm shows the verdict and the six lines of the
   vm.runInContext(`${code}\nObject.assign(globalThis, { promoteToDesk, setKey });`, c);
   c.S.three.draft_x.oos.set = c.setKey(f);                 // the one-box record was opened for these settings
   const press = (x) => dialogs.at(-1).on({ target: { closest: () => ({ dataset: { x } }) } });
-  const POST = [['POST', '/api/tester/desklab/promote', { name: 'x', run_id: 'r1', owner_said: 'put x on the desk' }]];   // whatever the dialog says
+  const POST = [['POST', '/api/tester/desklab/promote', { name: 'x', run_id: 'r1', owner_said: 'put x on the desk', to: 'mac' }]];   // whatever the dialog says
   c.promoteToDesk({ key: 'd:x', name: 'x' });
   const h = dialogs[0].html;
   assert.match(h, /<label for="pdSaid">Your words, that it goes on the Desk<\/label><textarea id="pdSaid" maxlength="400"><\/textarea>/);

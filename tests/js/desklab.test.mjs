@@ -342,7 +342,7 @@ test('the Lab asks the Desk list, promotes and removes by name, and never on a t
   assert.ok(LABDESK.length > 1500, 'the section is there');
   const urls = [...new Set([...LAB.matchAll(/['"`](\/api\/tester\/desklab[^'"`$?]*)/g)].map((m) => m[1]))].sort();
   assert.deepEqual(urls, ['/api/tester/desklab', '/api/tester/desklab/promote', '/api/tester/desklab/remove']);
-  assert.match(LAB, /send\('POST', '\/api\/tester\/desklab\/promote', \{ name: b\.name, run_id: r\.rid, owner_said: said \}\)/);
+  assert.match(LAB, /send\('POST', '\/api\/tester\/desklab\/promote', \{ name: b\.name, run_id: r\.rid, owner_said: said, to \}\)/);
   assert.match(LAB, /send\('POST', '\/api\/tester\/desklab\/remove', \{ name \}\)/);
   assert.doesNotMatch(LABDESK, /setInterval|setTimeout/, 'asked when the list opens and after each action only: nothing polls, hidden or not');
   assert.doesNotMatch(LAB, /:8850/, 'the Desk is reached through the page switcher\'s own link');

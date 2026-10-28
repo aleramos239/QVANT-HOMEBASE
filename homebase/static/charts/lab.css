@@ -221,6 +221,7 @@ body.lab-page { background: var(--panel) !important; }
 .lab-dlg h2 { margin: 0 0 6px; font-size: var(--hb-fs-title); font-weight: 600; letter-spacing: -.02em; }
 .lab-dlg p { margin: 0 0 14px; color: var(--hb-fg2); font-size: var(--hb-fs-body); line-height: 1.5; }
 .lab-dlg textarea { width: 100%; min-height: 84px; padding: 10px 12px; border: 0; border-radius: 12px; background: var(--hb-fill); color: var(--hb-fg); font-size: var(--hb-fs-body); resize: vertical; outline: none; }
+.lab-dlg .btn:disabled { opacity: .4; cursor: default; }      /* a Desk dialog's button that waits for words must look like it waits */
 .lab-dlg textarea:focus { box-shadow: 0 0 0 1.5px var(--hb-accent); }
 .lab-dlg input { width: 100%; height: var(--hb-h-lg); padding: 0 12px; border: 0; border-radius: 12px; background: var(--hb-fill); color: var(--hb-fg); font-size: var(--hb-fs-body); outline: none; }
 .lab-dlg h2 + input { margin-top: 8px; }
