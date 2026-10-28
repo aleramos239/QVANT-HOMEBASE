@@ -103,3 +103,18 @@ test('Pivot HL and Fractals: the help says a bar that is both draws both arrows,
 test('Bollinger Bandwidth: the help says the width is a percent of the middle line, as TradingView plots it', () => {
   assert.match(G.get('tv_bbw').what, /\bpercent\b/);
 });
+
+test('CVD, Volume Delta and Up/Down Volume say candle direction, the rule the code uses, not tick sides', () => {
+  for (const id of ['tv_cvd', 'tv_vdelta', 'tv_updown']) {
+    const e = G.get(id), text = [e.what, ...e.see, ...e.read, ...e.use, e.watch].join(' ');
+    assert.match(text, /candle/i, id);
+    assert.doesNotMatch(text, /uptick|downtick|buy volume minus sell volume/i, id);
+  }
+  assert.match(G.get('tv_cvd').watch, /Cumulative delta/, 'points to the real trade sides');
+  assert.match(G.get('tv_vdelta').watch, /Delta/, 'points to the real trade sides');
+});
+
+test('the order-flow marks that read the candle in progress say so, and none claims to never repaint', () => {
+  for (const id of ['stoprun', 'exhaust', 'dturn', 'dstr']) assert.match(G.get(id).watch, /close|progress|forming/i, `${id}: watch warns about the open candle`);
+  assert.doesNotMatch(G.get('exhaust').read.join(' '), /never repaints/);
+});

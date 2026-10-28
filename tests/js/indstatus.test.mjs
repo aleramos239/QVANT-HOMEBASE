@@ -195,3 +195,13 @@ test('notes: headlines bolts outside the burst markets, the bar-length limit, cs
   assert.equal(S.of(a, facts([bar(0)], { indicators: [a, b] })).text, 'No open gap in view');
   assert.equal(S.of(b, facts([bar(0)], { indicators: [{ ...a, visible: false }, b] })).text, 'No open gap in view', 'a hidden first one does not count');
 });
+
+test('opening range: bars longer than the window are said plainly, even when a value draws', () => {
+  const sv = { 'orb:5': 100, 'orb:15': 100 };
+  const bars = [bar(0, { sv }), bar(1, { sv })];
+  const t = S.of(inst('orb', { minutes: 5, start: '09:30' }), facts(bars, { barMs: 15 * 60000 }));
+  assert.equal(t.tone, 'warn');
+  assert.match(t.text, /longer than the 5 minutes/);
+  assert.equal(S.of(inst('orb', { minutes: 15, start: '09:30' }), facts(bars, { barMs: 15 * 60000 })), null, 'a bar as long as the window is fine');
+  assert.equal(S.of(inst('orb', { minutes: 5, start: '09:30' }), facts(bars, { barMs: 60000 })), null);
+});

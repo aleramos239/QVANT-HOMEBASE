@@ -48,6 +48,8 @@ function of(inst, f) {
     const min = p.minBarPx == null || !Number.isFinite(+p.minBarPx) ? 34 : +p.minBarPx;
     return f.spacing > 0 && f.spacing < min ? warn('Zoom in to see the stats') : null;
   }
+  // a bar counts when it STARTS inside the window (studies_ta.py), so a longer bar draws its whole range
+  if (id === 'orb' && f.barMs > (p.minutes || 15) * 60000) return warn(`Bars are longer than the ${p.minutes || 15} minutes: it draws the range of the whole first bar`);
   if (['orb', 'noise', 'topen'].includes(id) && f.barMs > FIVE_MIN) {
     const key = need('HBCatalog', './catalog.js').serverKey(inst);
     if (!visible(f).some((b) => b.sv && b.sv[key] != null)) return warn('Needs bars of 5 minutes or less (a bar must start within 5 minutes of the time)');

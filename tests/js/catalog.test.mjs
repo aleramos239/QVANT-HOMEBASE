@@ -204,7 +204,7 @@ test('legend labels', () => {
   assert.equal(C.label(C.instance('footprint', { imbalance: 0 })), 'Footprint');
   assert.equal(C.label(C.instance('bigprints')), 'Big prints ≥25');
   assert.equal(C.label(C.instance('bigorders')), 'Big orders 5×');
-  assert.equal(C.label(C.instance('imbalance')), 'Book imbalance (live)');
+  assert.equal(C.label(C.instance('imbalance')), 'Book imbalance (live gauge)');
   assert.equal(C.label(C.instance('heatmap')), 'Liquidity heatmap');
   assert.equal(C.label(C.instance('cumdelta')), 'Cumulative delta');
   assert.equal(C.label(C.instance('levels')), 'Session levels');
@@ -1484,7 +1484,8 @@ test('picker catalog fixes: server clamps, labels, descriptions', () => {
   assert.deepEqual(C.clampParams('rvol', {}), { days: 14, need: 10 });
   assert.equal(C.def('sess').lines.find((l) => l.part === 'lo').dash, 'dashed');
   assert.equal(C.def('mwabs').name, 'Absorption (tape)');
-  assert.equal(C.def('tv_corr').name, 'Correlation (TV)');
+  assert.equal(C.def('tv_corr').name, 'Trend Strength Index (TV)');   // the guide's name; the line is no longer called TSI, the name of another study
+  assert.equal(C.def('tv_corr').lines[0].label, 'Trend strength');
   assert.match(C.def('tv_vdelta').desc, /candle colour/);
   assert.match(C.def('tv_cvd').desc, /candle colour/);
   assert.match(C.def('tv_updown').desc, /candle direction/);
@@ -1502,4 +1503,20 @@ test('adx legend values follow the colours the user gave the lines', () => {
   const bar = { sv: { 'adx:14': { adx: 25, pdi: 30, mdi: 10 } } };
   const inst = { ...C.instance('adx'), style: { adx: { color: '#111111' }, pdi: { color: '#222222' } } };
   assert.deepEqual(C.legendValues(inst, bar, colors, 0.25).map((x) => x.color), ['#111111', '#222222', '#F23645']);
+});
+
+test('2026-10-27 wording: names told apart, ids and saved layouts untouched', () => {
+  assert.equal(C.def('absorb').name, 'Absorption (book)');
+  assert.equal(C.def('mwabs').name, 'Absorption (tape)');
+  assert.equal(C.def('imbalance').name, 'Book imbalance (live gauge)');
+  assert.equal(C.def('bkimb').name, 'Book imbalance (over time)');
+  const g = C.def('noise').params.find((q) => q.key === 'anchor').choices.find((c) => c[0] === 'globex');
+  assert.equal(g[1], 'Overnight 01:00 ET', 'the value stays globex, only the words change');
+  // a layout saved before the rename keeps its ids and params
+  const m = C.migrate({ root: 'NQ', spec: 'time:60', indicators: [
+    { uid: 'a', id: 'imbalance', params: { levels: '5' } }, { uid: 'b', id: 'absorb', params: {} }, { uid: 'c', id: 'tv_corr', params: { length: 20 } }] });
+  assert.deepEqual(m.indicators.map((x) => x.id), ['imbalance', 'absorb', 'tv_corr']);
+  assert.equal(m.indicators[0].params.levels, '5');
+  assert.equal(m.indicators[2].params.length, 20);
+  assert.equal(C.label(m.indicators[0]), 'Book imbalance (live gauge)');
 });

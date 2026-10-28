@@ -633,3 +633,12 @@ test('an overlay with colour rows has a Style tab of colours only: no eye, width
   }
   assert.ok(tabsOf(openStyle('rsi')).includes('Style'));
 });
+
+test('VWAP header does not claim every line restarts daily; the RTH anchor says it runs to 5 pm', () => {
+  const { box } = openVwap();
+  const head = find(pane(box), (n) => n._class === 'vl-head')[0];
+  assert.doesNotMatch(head.textContent, /every day/);
+  assert.match(head.textContent, /week/);
+  const sel = find(pane(box), (n) => n.tagName === 'select')[0];
+  assert.equal(sel.children.find((o) => o.value === 'rth').textContent, 'RTH (9:30 am to 5 pm)');
+});

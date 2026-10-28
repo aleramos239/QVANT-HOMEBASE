@@ -254,7 +254,7 @@ G.add({
       'A filled marker followed by more candles beyond the line: the break may be real.',
       'A bigger number means more force behind the break.',
     ],
-    watch: 'About 21 a day on NQ 1m at defaults. A burst through a level is a fact; what follows is not.',
+    watch: 'About 21 a day on NQ 1m at defaults. Filled or hollow is final only when the candle closes.',
   },
   exhaust: {
     what: 'Marks a big one-sided push to a new extreme that went nowhere and was then given back.',
@@ -267,14 +267,14 @@ G.add({
       'The push candle makes a new 20-candle extreme with delta (buys minus sells) 4 times the usual or more.',
       'The next 3 candles make no new extreme, and the last closes back past the push candle\'s midpoint.',
       'The aggressive side spent its effort and price would not follow: that side looks exhausted.',
-      'The mark appears on that third candle after the push, so it never repaints earlier.',
+      'The mark appears on that third candle after the push, and it is final when that candle closes.',
     ],
     use: [
       'Red arrow near a rally high: the buyers ran out. The idea fails if price trades back above the cap.',
       'Green arrow near a selloff low: the sellers ran out. The idea fails below the cap.',
       'It is best at a level you already watch. Alone it is a weak clue.',
     ],
-    watch: 'It confirms 3 candles late, so part of the turn has already happened. About 4 a day on NQ 1m at defaults.',
+    watch: 'It confirms 3 candles late. On the third candle the mark can come and go until it closes. About 4 a day on NQ 1m at defaults.',
   },
   bigtrades: {
     what: 'Shows each market order of at least your minimum size (25 by default) as a bubble, sized by its contracts.',
@@ -409,7 +409,7 @@ G.add({
       'A strong candle that breaks a level is a move with order flow behind it.',
       'A strong candle with little price movement can mean the other side absorbed it.',
     ],
-    watch: 'Follows ATAS Delta Strength. It needs the delta high and low, which candles stored before the update do not have.',
+    watch: 'Follows ATAS Delta Strength. Needs the delta high and low (older candles lack them). A candle in progress can still change.',
   },
   mwabs: {
     what: 'Marks an imbalance that price then walked away from, with a line back to where it formed.',
