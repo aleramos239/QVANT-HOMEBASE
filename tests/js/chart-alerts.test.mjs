@@ -122,3 +122,18 @@ test('the toolbar has the sound button (Charts), in the Apple skin\'s panels gro
   assert.match(rd('charts.html'), /id="tbSound"[^>]*aria-pressed="false"/);
   assert.match(rd('apple/charts.js'), /'tbOrder', 'tbDom', 'tbTape', 'tbSound'/);
 });
+
+test('an alert drawing\'s settings dialog does not open while the chart replays (it would save the replay\'s price or direction)', () => {
+  const said = [], toasts = [];
+  let opened = 0, orig = { id: 'a', type: 'hline', alert: { dir: 'up', fired: false }, points: [{ p: 100 }] };
+  const fn = build('drawingSettingsDialog', ['drawings', 'sbNote', 'window', 'openDialog'],
+    [{ list: () => [orig] }, (t) => said.push(t), { HBDeskClient: { toast: (k, t) => toasts.push(t) } }, () => { opened++; throw new Error('opened'); }]);
+  fn({ cfg: { root: 'NQ' }, replay: {} }, { id: 'a' });
+  assert.equal(opened, 0);
+  assert.match(said[0], /cannot be set or moved while the chart replays/);
+  assert.equal(toasts.length, 1);
+  // live chart: it goes on to open; a plain line (no alert) in a replay is not an alert
+  assert.throws(() => fn({ cfg: { root: 'NQ' } }, { id: 'a' }));
+  orig = { ...orig, alert: undefined };
+  assert.throws(() => fn({ cfg: { root: 'NQ' }, replay: {} }, { id: 'a' }));
+});

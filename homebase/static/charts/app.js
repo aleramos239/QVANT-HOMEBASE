@@ -1770,6 +1770,11 @@ function drawingSettingsDialog(cell, d0) {
   const root = cell.dc ? cell.dc.root : cell.cfg.root;
   const orig = drawings.list(root).find((x) => x.id === d0.id);
   if (!orig) return;
+  if (orig.alert && cell.replay) {   // its price and direction would be saved from the replay's old prices, for the live symbol
+    const why = 'Alerts cannot be set or moved while the chart replays. Leave the replay first.';
+    sbNote(why); window.HBDeskClient?.toast('err', why);
+    return;
+  }
   const type = orig.type, has = (k) => DS.FIELDS[type].includes(k);
   const atOpen = { color: orig.color || '#2962FF', style: DS.normalize(type, orig.style), vis: DS.normalizeVis(orig.vis), alert: orig.alert,
     points: orig.points.map((p) => ({ ...p })) };
