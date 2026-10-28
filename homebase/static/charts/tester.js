@@ -253,7 +253,7 @@ function dur(s) {
   if (s == null || !Number.isFinite(s)) return '—';
   s = Math.round(s);
   if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`;
   return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
 }
@@ -466,7 +466,7 @@ function intDelta(v) { return v == null || !Number.isFinite(v) ? '—' : SIGNCH(
 const CMP_ROWS = [
   ['net', 'Net profit', (c) => c.net_profit, signed, (v) => signed(v), true],
   ['pf', 'Profit factor', (c) => c.profit_factor, (v) => num(v, 2, true), (v) => numDelta(v, 2), true],
-  ['wr', 'Win rate', (c) => c.win_rate, wrate, rateDelta, true],
+  ['wr', 'Win rate', (c) => c.win_rate == null ? null : Math.round(c.win_rate), wrate, (v) => numDelta(v, 0) + '%', true],   // whole percent, so the delta adds up
   ['sharpe', 'Sharpe', (c) => c.sharpe, (v) => num(v), (v) => numDelta(v), true],
   ['maxdd', 'Max drawdown', (c) => c.max_drawdown, (v) => Tr.money(v), (v) => signed(v), true],
   ['avg', 'Avg trade', (c) => c.avg_trade, signed, (v) => signed(v), true],
@@ -884,11 +884,11 @@ function wfLooksText(cells, nSteps, penalty = 1) {
 }
 function etaText(s) {
   if (s == null || !Number.isFinite(s)) return '';
-  if (s < 60) return '<1 min left';
+  if (s < 60) return '<1m left';
   const m = Math.round(s / 60);
-  if (m < 60) return `~${m} min left`;
+  if (m < 60) return `~${m}m left`;
   const h = Math.floor(m / 60), r = m % 60;
-  return r ? `~${h} h ${r} min left` : `~${h} h left`;
+  return r ? `~${h}h ${String(r).padStart(2, '0')}m left` : `~${h}h left`;
 }
 function wfProgress(st) {
   const s = st && st.status, n = `${int(st && st.done)} / ${int(st && st.total)} cells`, pause = st && st.paused ? ` · ${st.paused}` : '';

@@ -275,7 +275,7 @@ function stratView(name) {
       fig("After fees", usdS(sum("net")), "The total the curve shows")
     : fig("Before fees", usdS(lv ? lv.net : 0), "Every closed trade of this strategy, on every account, before commissions");
   const figs = lv && lv.trades
-    ? `<div class="figs">${money}${fig("Win rate", Math.round(lv.win_rate) + "%")}${fig("Trades", lv.trades)}${fig("Avg per trade", usd(lv.avg_trade), "Before fees, per trade")}${fig("Avg slip", (lv.avg_slip_pts ?? "—") + " pts")}</div>`
+    ? `<div class="figs">${money}${fig("Win rate", lv.win_rate == null ? "—" : Math.round(lv.win_rate) + "%")}${fig("Trades", lv.trades)}${fig("Avg per trade", usd(lv.avg_trade), "Before fees, per trade")}${fig("Avg slip", (lv.avg_slip_pts ?? "—") + " pts")}</div>`
     : `<div class="eq-empty">No Desk trades yet.</div>`;
   const links = `<div class="qlinks">${s.research && s.research.rows ? `<button class="btn btn-quiet btn-sm" onclick="openRes('${name}')">Old backtest (before 3:1)</button>` : ""}
     <button class="btn btn-quiet btn-sm" onclick="openLive('${name}')">Desk calendar</button>${actBtn("s:" + name)}</div>`;

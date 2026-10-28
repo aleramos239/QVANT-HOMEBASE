@@ -155,7 +155,7 @@ test('a win rate prints as 58% (whole, no space) in every Lab table and tile', (
   const mix = read('charts/labmix.js');
   assert.ok(mix.includes('`${Math.round(v * 100)}%`') && mix.includes('`${Math.round(v)}%`') && !/\} %`/.test(mix));
   const strat = read('desk/strategy.js');
-  assert.ok(strat.includes('fig("Win rate", Math.round(lv.win_rate) + "%")'));
+  assert.ok(strat.includes('Math.round(lv.win_rate) + "%"'));
   const am = read('charts/allmetrics.js');
   for (const k of ['win_rate', 'breakeven_wr', 'long_wr', 'short_wr']) assert.match(am, new RegExp(`\\['${k}', '[^']+', 'wr'`), k);
   assert.ok(read('charts/lab.js').includes("['win_rate', 'wr']"));
@@ -166,6 +166,32 @@ test('durations read "3m 04s", "2h 05m", "5m ago": no spaced unit words', () => 
   assert.deepEqual([[0, 30000], [0, 5 * 60000], [0, 3 * 3600000], [0, 2 * 86400000]].map(([a, b]) => L.ago(a, b)), ['30s ago', '5m ago', '3h ago', '2d ago']);
   assert.deepEqual([45, 90, 184, 9000, 12600].map((s) => AM.format('secs', s)), ['45s', '1m 30s', '3m 04s', '2h 30m', '3h 30m']);
   assert.equal(AM.format('secs', null), '—');
+  const T = require('../../homebase/static/charts/tester.js');
+  assert.deepEqual([45, 184, 9000].map(T.dur), ['45s', '3m 04s', '2h 30m'], 'the tester prints the same as the metrics table');
+  assert.deepEqual([20, 150, 4800, 7380, 7200].map(T.etaText), ['<1m left', '~3m left', '~1h 20m left', '~2h 03m left', '~2h left']);
+});
+
+test('the compare table win-rate delta is whole percent, like its two sides', () => {
+  const T = require('../../homebase/static/charts/tester.js');
+  const row = (a, b) => T.compareRows({ summary: { all: { win_rate: a } } }, { summary: { all: { win_rate: b } } }).find((r) => r.key === 'wr');
+  const r = row(50, 54.2);
+  assert.deepEqual([r.a, r.b, r.delta], ['50%', '54%', '+4%']);
+  assert.equal(row(54, 50).delta.replace(/[^\d]/g, ''), '4');
+});
+
+test('a missing win rate on the strategy page reads a dash, not 0%', () => {
+  assert.ok(read('desk/strategy.js').includes('lv.win_rate == null ? "—" : Math.round(lv.win_rate) + "%"'));
+});
+
+test('the Mac-skin inspector names the flat time "Flat by" like every other screen', () => {
+  const d = read('apple/desk.js');
+  assert.ok(d.includes("row('Flat by', ") && !d.includes("row('Flat', "));
+});
+
+test('the paper-account trash keeps its 18px-wide hit box and turns --neg on hover', () => {
+  const s = read('desk/settings.js');
+  assert.ok(/class="paper-rm"[^>]*padding:2px 4px/.test(s));
+  assert.ok(/\.paper-rm:hover\s*\{\s*color:\s*var\(--neg\)/.test(read('index.html')));
 });
 
 test('an empty Desk archive says "No archived strategies yet."', () => {

@@ -61,7 +61,7 @@ function paperRow(a) {
     <span class="spacer"></span>
     <span class="kvi">${usd(a.balance)}</span>
     <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}">${pnl > 0 ? "+" : ""}${usd(pnl)}</span>
-    ${a.removable ? `<button class="paper-rm" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;padding:0 2px;display:inline-flex"
+    ${a.removable ? `<button class="paper-rm" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;padding:2px 4px;display:inline-flex"
       data-paper-id="${esc(a.id)}" title="Remove this paper account" aria-label="Remove this paper account"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#ic-trash"/></svg></button>` : ""}
   </div>`;
 }

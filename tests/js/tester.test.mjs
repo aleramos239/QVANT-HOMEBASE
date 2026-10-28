@@ -229,7 +229,7 @@ test('compareRows: net/PF/WR/Sharpe/maxDD/avg/trades/green years/prop pass, A vs
   const byKey = Object.fromEntries(rows.map((r) => [r.key, r]));
   assert.deepEqual(byKey.net, { key: 'net', label: 'Net profit', a: '+$12,345.50', b: '+$9,000', delta: `${M}$3,345.50`, better: 'a' });
   assert.deepEqual(byKey.pf, { key: 'pf', label: 'Profit factor', a: '1.88', b: '1.50', delta: `${M}0.38`, better: 'a' });
-  assert.deepEqual(byKey.wr, { key: 'wr', label: 'Win rate', a: '54%', b: '50%', delta: `${M}4.2%`, better: 'a' });
+  assert.deepEqual(byKey.wr, { key: 'wr', label: 'Win rate', a: '54%', b: '50%', delta: `${M}4%`, better: 'a' });
   assert.deepEqual(byKey.sharpe, { key: 'sharpe', label: 'Sharpe', a: '1.23', b: '1.00', delta: `${M}0.23`, better: 'a' });
   // maxDD is <= 0: A (−$4,210) is LESS bad than B (−$6,000), so A is still "better" here
   assert.deepEqual(byKey.maxdd, { key: 'maxdd', label: 'Max drawdown', a: `${M}$4,210`, b: `${M}$6,000`, delta: `${M}$1,790`, better: 'a' });
