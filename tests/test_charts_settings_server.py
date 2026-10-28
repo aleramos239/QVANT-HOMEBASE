@@ -161,7 +161,7 @@ def test_refused_while_the_desk_reports_a_bot_working(tmp_path):
                 "nq930": {"accounts": {"acct1": {"status": busy_status}}}}}}
             r = c.put("/api/settings", json={"md": "live"})
             assert r.status_code == 423, busy_status
-            assert "09:35" in r.json()["detail"]
+            assert r.json()["detail"] == "Not while a bot is working (or the desk cannot be reached) — try again when it has finished."
             assert c.get("/api/settings").json()["md"] == "demo"
         # a calm status (idle/done, never in BOT_BUSY_STATUSES) does not refuse -- one switch
         # only, since the I3 cooldown (its own test below) refuses a second in quick succession
@@ -347,6 +347,17 @@ def test_m2_get_settings_carries_an_accounts_block(tmp_path, monkeypatch):
     with TestClient(app, base_url=BASE_URL) as c:
         d = c.get("/api/settings").json()
         assert d["accounts"] == {"live": "···885", "demo": None}      # last 3 characters only; None passes through
+
+
+def test_get_settings_says_which_login_this_machine_is_pinned_to(tmp_path, monkeypatch):
+    """The Desk's Settings dialog greys the login pick out when HOMEBASE_CHARTS_MD_ONLY pins it (the PUT would 409)."""
+    monkeypatch.delenv("HOMEBASE_CHARTS_MD_ONLY", raising=False)
+    with TestClient(app_with(tmp_path, {"demo": FakeMdWS()}), base_url=BASE_URL) as c:
+        assert c.get("/api/settings").json()["pinned"] is None
+    monkeypatch.setenv("HOMEBASE_CHARTS_MD_ONLY", "demo")
+    with TestClient(app_with(tmp_path, {"demo": FakeMdWS()}), base_url=BASE_URL) as c:
+        d = c.get("/api/settings").json()
+        assert d["pinned"] == "demo" and d["md"] == "demo"
 
 
 # ---- M6 / M-d: the file is written first and put back on failure; never a second switch ----
@@ -547,7 +558,7 @@ def test_a_refusal_after_the_origin_check_is_still_readable_by_the_desk_page(tmp
         link_box[0].state = {"bot": {"strategies": {"nq930": {"accounts": {"acct1": {"status": "live"}}}}}}
         r = c.put("/api/settings", json={"md": "live"}, headers=desk)
         assert r.status_code == 423 and r.headers["access-control-allow-origin"] == "http://localhost:8850"
-        assert "09:35" in r.json()["detail"]
+        assert "a bot is working" in r.json()["detail"]
 
 
 def test_no_other_route_gained_cors(tmp_path):

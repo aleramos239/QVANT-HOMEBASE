@@ -49,12 +49,12 @@ def register(app, *, settings_store, feed, clock, roots, link, log, md_switch_ti
         """None, or the one sentence the Settings dialog shows: refused while the desk reports a bot
         actually working (any status, any strategy -- not just today's booked ones)."""
         if bot_placing():
-            return "Not while the 9:30 bot is working — try after 09:35."
+            return "Not while a bot is working (or the desk cannot be reached) — try again when it has finished."
         return None
 
     @app.get("/api/settings")
     async def get_settings(request: Request, response: Response):
-        """{"md": ..., "accounts": {"live": "···885"|None, "demo": "···021"|None}}. `accounts`
+        """{"md": ..., "pinned": "live"|"demo"|None, "accounts": {"live": "···885"|None, "demo": "···021"|None}}. `accounts`
         (review M2) is read from the desk's own config + token files at request time, masked to
         the last 3 characters -- never the settings file, never hard-coded (the Apex login has
         already changed once). None means that login currently has no valid md token, i.e. a
@@ -70,6 +70,7 @@ def register(app, *, settings_store, feed, clock, roots, link, log, md_switch_ti
         if getattr(feed, "switch_in_progress", False):
             d["md"] = feed.md_env   # the file already names the target; the feed is not there yet
         d["clock"] = settings_store.clock()
+        d["pinned"] = md_only()      # the one login this machine may use (HOMEBASE_CHARTS_MD_ONLY), or None: the dialog greys the pick
         try:
             accts = T.accounts_by_env()
         except Exception:  # noqa: BLE001 — a broken config must never break the dialog, only omit the note

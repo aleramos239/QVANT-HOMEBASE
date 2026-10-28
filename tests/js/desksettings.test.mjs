@@ -381,20 +381,69 @@ test('the chart-trading switch never asks when turning OFF -- the safer directio
   assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ url: '/api/chart-trading', body: { enabled: false } }]);
 });
 
-test('1.1: the ON confirm names the machine, says no size limit, and never says "at most"', async () => {
-  for (const [machine, where] of [['server', /^Chart pages on the SERVER · Chicago can then place REAL orders on the accounts you tick there\. No size limit\./],
-                                  ['mac', /^Chart pages on this Mac can then place REAL orders on the accounts you tick there\. No size limit\./],
-                                  [null, /^Chart pages can then place REAL orders on the accounts you tick there\. No size limit\./]]) {
+test('1.1: the ON confirm names the machine and says what the desk really limits (no desk size limit, no daily cap, no day-lock)', async () => {
+  for (const [machine, where] of [['server', /^Chart pages on the SERVER · Chicago can then place REAL orders on the accounts you tick there\. /],
+                                  ['mac', /^Chart pages on this Mac can then place REAL orders on the accounts you tick there\. /],
+                                  [null, /^Chart pages can then place REAL orders on the accounts you tick there\. /]]) {
     const { api, els, confirms, posts } = load({ machine });
     api.renderSettings();
     api.ST = { armed: false, chart_trading: { enabled: false, max_order_qty: 10, max_position_qty: 20 } };
     await els.ctSwitch.onclick();
     assert.equal(confirms.length, 1, 'ON still asks');
     assert.match(confirms[0].body, where);
-    assert.match(confirms[0].body, /No size limit\./);
-    assert.doesNotMatch(confirms[0].body, /at most|per order|per position|undefined|LIVE accounts/, 'it trades ticked demo and paper accounts too');
+    assert.match(confirms[0].body, /The desk sets no size limit \(a chart's order panel stops at 1000 contracts\), no daily trade cap and no day-lock: those bind the bots only\./);
+    assert.doesNotMatch(confirms[0].body, /No size limit\.|at most|per order|per position|undefined|LIVE accounts/, 'it trades ticked demo and paper accounts too');
     assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ url: '/api/chart-trading', body: { enabled: true } }], 'same body as before');
   }
+});
+
+test('the 1000 contracts the confirm names is the chart order panel\'s own ceiling', () => {
+  const trade = readFileSync(new URL('../../homebase/static/charts/trade.js', import.meta.url), 'utf8');
+  assert.match(trade, /const PANEL_QTY_MAX = 1000;/);
+});
+
+test('CHART TRADING shows, read only, what a chart order is and is not checked against (the desk code today)', () => {
+  const { api, els } = load();
+  api.renderSettings();
+  const html = els.settingsTrading.innerHTML;
+  assert.match(html, /Checked on every chart order: at least 1 contract; at most 5 actions a second on an account; the account connected and on its own broker account; stops, targets and limits on the right side of the price; a bot's symbol is locked while the bot works\./);
+  assert.match(html, /Not limited: contracts per order or held, trades a day, the day-lock \(those bind the bots only\)\./);
+  assert.match(html, /With it OFF, new orders are refused; cancel, flatten and protective exits still work\./);
+  assert.doesNotMatch(html, /<input|ctSave|Save limits/, 'display only: no edit field');
+});
+
+test('CHART TRADING lists the connected accounts from the desk status, read only', () => {
+  const { api, els } = load();
+  api.ST = { armed: false, chart_trading: { enabled: true },
+             accounts: { a: { label: 'Apex 1', env: 'demo', connected: true }, b: { label: 'Gone', env: 'live', connected: false },
+                         c: { label: 'Lucid', env: 'live', connected: true } } };
+  api.renderSettings();
+  assert.equal(els.ctAccts.textContent, 'Connected broker accounts: Apex 1 (demo) · Lucid (live). Each chart uses the ones ticked on it.');
+  api.ST = { armed: false, chart_trading: { enabled: true }, accounts: {} };
+  api.renderSettings();
+  assert.equal(els.ctAccts.textContent, 'No broker account is connected. Each chart uses the ones ticked on it.');
+});
+
+test('MARKET DATA: a machine pinned to one login says so, and the other login cannot be picked', async () => {
+  const { api, els } = load({
+    fetchAnswers: { [`${CHART}/api/settings`]: { body: { md: 'demo', pinned: 'demo', accounts: { live: null, demo: null } } } },
+  });
+  api.openSettings();
+  await tick();
+  const html = els.settingsMarketData.innerHTML;
+  assert.match(html, /This machine's charts use the Apex \(demo\) login only; it cannot be switched here\./);
+  assert.ok((html.match(/disabled/g) || []).length >= 3, 'both login buttons and Apply are disabled');
+});
+
+test('MARKET DATA: not pinned, no pinned note, and the switch rules are stated', async () => {
+  const { api, els } = load({
+    fetchAnswers: { [`${CHART}/api/settings`]: { body: { md: 'demo', pinned: null, accounts: { live: null, demo: null } } } },
+  });
+  api.openSettings();
+  await tick();
+  const html = els.settingsMarketData.innerHTML;
+  assert.doesNotMatch(html, /login only/);
+  assert.match(html, /Refused while a bot is working, and at most one switch every 10 minutes\./);
 });
 
 test('1.1: cancelling the ON confirm posts nothing', async () => {
