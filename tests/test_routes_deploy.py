@@ -112,3 +112,14 @@ def test_the_route_is_read_only(tmp_path, monkeypatch):
     assert sorted(p.name for p in tmp_path.rglob("*")) == before
     assert calls and all(c[:3] == ["git", "-C", str(repo)] and c[3] in ("log", "rev-list") for c in calls)
     assert TestClient(app).post("/api/deploy-status").status_code == 405
+
+
+def test_a_doubled_waits_prefix_from_the_copy_time_gate_reads_plain(tmp_path):
+    w = WAIT.replace("-- waits: no:", "-- waits: waits: no:")
+    d = deploy.read(*setup(tmp_path, [SHIP, w]), fake_git())
+    assert d["reason"] == "a Lab strategy (lab_nq_x) is booked on an account: a restart would end its day"
+
+
+def test_a_long_wait_keeps_the_last_shipped_row_found(tmp_path):
+    d = deploy.read(*setup(tmp_path, [SHIP] + [WAIT] * 400), fake_git())    # ~130 KB of waits after it
+    assert d["state"] == "waiting" and d["server"]["hash"] == "e48e1e6d" and d["ahead"] == 3

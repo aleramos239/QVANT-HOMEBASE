@@ -36,8 +36,22 @@ def _git(repo: Path, *args: str) -> str | None:
     return r.stdout.strip() if r.returncode == 0 else None
 
 
+def _last_shipped(log: Path):
+    """The newest "-- shipped" row of the whole log, for a wait that has pushed it out of the tail."""
+    row = None
+    try:
+        with open(log, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                m = LINE.match(line.rstrip("\n"))
+                if m and m.group(2) and "-- shipped" in m.group(3):
+                    row = m.groups()
+    except OSError:
+        pass
+    return row
+
+
 def plain(why: str) -> str:
-    why = re.sub(r"^no: ", "", why.strip())
+    why = re.sub(r"^(?:waits: )*no: ", "", why.strip())
     for pat, to in WORDS:
         m = re.search(pat, why)
         if m:
@@ -68,7 +82,7 @@ def read(repo: Path, state: Path, plist: Path, git=_git) -> dict:
         return {**out, "reason": "main could not be read"}
     main, _, subject = head.partition("\t")
     out["main"] = {"hash": main[:8], "subject": subject[:120]}
-    shipped = next((r for r in reversed(rows) if "-- shipped" in r[2] and r[1]), None)
+    shipped = next((r for r in reversed(rows) if "-- shipped" in r[2] and r[1]), None) or _last_shipped(log)
     if shipped:
         out["server"] = {"hash": shipped[1], "time": shipped[0]}
         n = git(repo, "rev-list", "--count", f"{shipped[1]}..{main}")
