@@ -61,7 +61,7 @@ test('5.9 Charts does not load the lens glass; the Lab still does, and the skin 
 test('5.3 the chart lines pass "2+ accounts here" into the chip text', () => {
   const TL = rd('charts/tradelines.js');
   assert.match(TL, /this\.named = window\.HBTradeUI\.tradeOf\(this\.cell\)\.accounts\.length > 1 \|\| new Set\(groups\.flatMap/);
-  assert.match(TL, /T\.lineText\(it\.g, q \? q\.last : null, this\.cell\.tick, !!this\.named\)/);
+  assert.match(TL, /T\.lineText\(it\.g, q \? q\.last : null, this\.cell\.tick, !!this\.named, /);
 });
 
 test('5.4 the button and the ENTRY tag read their words from the send\'s own qty and accounts; the sends are untouched', () => {
@@ -224,7 +224,7 @@ test('5.12 run: a chip whose order the desk said is not working reads so and gre
   const props = {};
   const chip = { ...fakeEl('div'), text: fakeEl('span'), style: { setProperty: (k, v) => { props[k] = v; } } };
   const g = { kind: 'sl', side: 'Sell', qty: 1, price: 29990, legs: [{ account: 'sim041', order_id: '7', who: '…041' }] };
-  const ov = { root: 'NQ', named: false, cell: { tick: 0.25, P: { up: 'U', down: 'D', accent: 'A', text2: 'G' } } };
+  const ov = { root: 'NQ', named: false, items: new Map(), cell: { tick: 0.25, P: { up: 'U', down: 'D', accent: 'A', text2: 'G' } } };
   const paint = ctx.O.paint.bind(ov);
   paint({ g: { ...g, gone: true }, chip });
   assert.match(chip.text.textContent, / · not working$/);
