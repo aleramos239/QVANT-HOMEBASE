@@ -8,7 +8,7 @@ compares it with the median 30 s move of its trailing 60 minutes; a burst
 fires at 4x the median AND at least 8 ticks, then a 120 s refractory holds
 that root quiet. `near_news()` links a fired burst to nearby headlines.
 `ReactionTracker` remembers every news item and, once 5 minutes have passed
-its `t_ms`, measures how far NQ/ES/GC/CL/BTC moved at +10s/+1m/+5m.
+its `t_ms`, measures how far NQ/ES/GC moved at +10s/+1m/+5m.
 
 Storage lives in its own `bursts/` and `reactions/` subfolders below the
 news folder (never loose files beside news's own `<date>.jsonl` day files --
@@ -80,6 +80,10 @@ class BurstDetector:
         self._bucket_order: deque[int] = deque()
         self._last_fire_ms: Optional[int] = None
         self._last_ratio: Optional[float] = None
+        # the history excludes the current bucket, so it (and its median) only changes when the bucket does
+        self._hist_bucket: Optional[int] = None
+        self._hist_n = 0
+        self._hist_med = 0.0
 
     def push(self, ts_ms: int, price: float) -> Optional[dict]:
         self._win.append((ts_ms, price))
@@ -96,13 +100,16 @@ class BurstDetector:
         while self._bucket_order and self._bucket_order[0] < cutoff:
             self._buckets.pop(self._bucket_order.popleft(), None)
 
-        hist = [abs(v[1] - v[0]) / self.tick_size for k, v in self._buckets.items() if k != bucket]
-        if len(hist) < WARMUP_BUCKETS or len(self._win) < 2:
+        if bucket != self._hist_bucket:
+            hist = [abs(v[1] - v[0]) / self.tick_size for k, v in self._buckets.items() if k != bucket]
+            self._hist_bucket, self._hist_n = bucket, len(hist)
+            self._hist_med = median(hist) if len(hist) >= WARMUP_BUCKETS else 0.0
+        if self._hist_n < WARMUP_BUCKETS or len(self._win) < 2:
             self._last_ratio = None
             return None                                     # not enough LIVE history in the lookback yet
         cur_from, cur_to = self._win[0][1], self._win[-1][1]
         move_ticks = abs(cur_to - cur_from) / self.tick_size
-        med = median(hist)
+        med = self._hist_med
         self._last_ratio = round(move_ticks / med, 3) if med > 0 else None
         if move_ticks < TICKS_MIN:
             return None

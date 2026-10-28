@@ -415,3 +415,79 @@ def test_prune_old_deletes_files_past_retention_by_their_date_name():
         now_ms = int(dt.datetime(2026, 9, 26, tzinfo=dt.timezone.utc).timestamp() * 1000)
         prune_old(folder, now_ms, retention_days=90)
         assert not old.exists() and recent.exists()
+
+
+# ---- the median is worked out once per 30 s bucket, not on every tick (same results as before) ----
+
+class _OldPushDetector(BurstDetector):
+    """BurstDetector.push exactly as it was: the history list and its median rebuilt on every tick."""
+
+    def push(self, ts_ms, price):
+        import homebase.charts.bursts as B
+        self._win.append((ts_ms, price))
+        while self._win and self._win[0][0] <= ts_ms - B.WINDOW_MS:
+            self._win.popleft()
+        bucket = ts_ms // B.WINDOW_MS
+        b = self._buckets.get(bucket)
+        if b is None:
+            self._buckets[bucket] = [price, price]
+            self._bucket_order.append(bucket)
+        else:
+            b[1] = price
+        cutoff = (ts_ms - B.LOOKBACK_MS) // B.WINDOW_MS
+        while self._bucket_order and self._bucket_order[0] < cutoff:
+            self._buckets.pop(self._bucket_order.popleft(), None)
+        hist = [abs(v[1] - v[0]) / self.tick_size for k, v in self._buckets.items() if k != bucket]
+        if len(hist) < B.WARMUP_BUCKETS or len(self._win) < 2:
+            self._last_ratio = None
+            return None
+        cur_from, cur_to = self._win[0][1], self._win[-1][1]
+        move_ticks = abs(cur_to - cur_from) / self.tick_size
+        med = B.median(hist)
+        self._last_ratio = round(move_ticks / med, 3) if med > 0 else None
+        if move_ticks < B.TICKS_MIN:
+            return None
+        if med <= 0 or move_ticks / med < B.RATIO_MIN:
+            return None
+        if self._last_fire_ms is not None and ts_ms - self._last_fire_ms < B.REFRACTORY_MS:
+            return None
+        self._last_fire_ms = ts_ms
+        return {"t_ms": ts_ms, "dir": "up" if cur_to > cur_from else "down",
+                "move_ticks": round(move_ticks, 3), "ratio": round(move_ticks / med, 3),
+                "from_px": cur_from, "to_px": cur_to}
+
+
+def _ticks(seed, n=6000):
+    """Busy and quiet stretches, spikes, a halt (a 40 minute gap), and a few ticks slightly out of order."""
+    import random
+    rnd, ts, px, out = random.Random(seed), 0, 1000.0, []
+    for i in range(n):
+        ts += rnd.choice([40, 250, 900, 4_000, 20_000]) if i != n // 2 else 40 * MIN
+        px += rnd.choice([0, 0.25, -0.25, 0.5, -0.5]) * (12 if rnd.random() < 0.01 else 1)
+        out.append((ts - (rnd.randrange(1, 9_000) if rnd.random() < 0.02 else 0), px))
+    return out
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3, 4])
+def test_cached_median_gives_the_same_bursts_and_ratios_as_the_old_per_tick_median(seed):
+    old, new = _OldPushDetector(0.25), BurstDetector(0.25)
+    fired = 0
+    for ts, px in _ticks(seed):
+        a, b = old.push(ts, px), new.push(ts, px)
+        assert a == b
+        assert old.ratio_now() == new.ratio_now()
+        fired += a is not None
+    assert fired > 0                    # the stream does fire bursts: the comparison is not vacuous
+
+
+def test_the_median_is_taken_once_per_bucket_not_once_per_tick(monkeypatch):
+    import homebase.charts.bursts as B
+    calls = []
+    real = B.median
+    monkeypatch.setattr(B, "median", lambda xs: calls.append(len(xs)) or real(xs))
+    det = BurstDetector(tick_size=1.0)
+    ts, _ = feed_baseline(det, 2.0, 1.0, n_buckets=60)
+    calls.clear()
+    for i in range(500):                # 500 ticks inside one fresh bucket
+        det.push(ts + i, 1000.0 + (i % 3))
+    assert len(calls) == 1

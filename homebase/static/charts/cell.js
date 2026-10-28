@@ -1583,26 +1583,26 @@ class Cell {
 
   drawMarkers() {
     if (!this.markers) return;
-    const prints = this.visible('bigprints'), mins = prints.map((x) => x.params.min), P = this.P, big = [];
-    if (mins.length) {
-      const min = Math.min(...mins), scale = prints.some((x) => x.params.scale) && window.HBFlowMath;
-      const pick = prints.find((x) => x.params.min === min) || prints[0], only = pick.params.side;   // buy / sell / all
-      const text = pick.params.labels !== false, pp = pick.params;
+    const P = this.P, big = [];
+    for (const pick of this.visible('bigprints')) {   // each instance draws with its OWN settings and keeps its own newest 600
+      const pp = pick.params, min = pp.min, only = pp.side, mine = [];   // side: buy / sell / all
+      const scale = pp.scale && window.HBFlowMath, text = pp.labels !== false;
       const shape = oneOf(pp.shape, ['circle', 'square', 'arrowUp', 'arrowDown'], 'circle');
       const cBuy = C.styleColor(pick, 'buy', P.up), cSell = C.styleColor(pick, 'sell', P.down);
       const sizing = { markerMin: pp.markerMin, markerMax: pp.markerMax, fullAt: pp.fullAt };   // flowmath's markerSize: undefined = its own
       for (const b of this.bars) {
         for (const [, , size, side] of (b.big || [])) {
           if (size < min || (only === 'buy' && side <= 0) || (only === 'sell' && side > 0)) continue;
-          big.push({ time: b.tt, position: side > 0 ? 'belowBar' : 'aboveBar',
+          mine.push({ time: b.tt, position: side > 0 ? 'belowBar' : 'aboveBar',
             color: side > 0 ? cBuy : cSell, shape, size: scale ? scale.markerSize(size, min, true, sizing) : num(pp.markerMin, 0.6, 0.5, 3), text: text ? String(size) : '' });
         }
       }
+      big.push(...mine.slice(-600));
     }
     const extra = [];
     for (const k in this.extMarkers) extra.push(...this.extMarkers[k]);
     const placed = window.HBDrawings.placeMarkers(this.bars, extra, this.barMs());
-    this.markers.setMarkers([...big.slice(-600), ...this.studyMarks(), ...placed].sort((a, b) => a.time - b.time));
+    this.markers.setMarkers([...big, ...this.studyMarks(), ...placed].sort((a, b) => a.time - b.time));
   }
 
   /* The markers of the studies that are drawn as markers (a catalog definition's `marks`: delta divergence). The
