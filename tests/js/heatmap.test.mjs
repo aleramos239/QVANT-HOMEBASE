@@ -86,7 +86,7 @@ test('the Max cells warning only speaks above 120 (hm40 x 3), and uses a measure
   assert.equal(X.cellsWarning(120, 12), '');
   assert.equal(X.cellsWarning(121, null),
     '121 cells — above 120 a grid can run for hours; only 4 cells run at a time');
-  assert.equal(X.cellsWarning(240, 30), '240 cells ≈ 30m 0s at 30s a cell, 4 at a time');
+  assert.equal(X.cellsWarning(240, 30), '240 cells ≈ 30m 00s at 30s a cell, 4 at a time');
   assert.equal(X.cellsWarning(400, 0), '400 cells — above 120 a grid can run for hours; only 4 cells run at a time');
 });
 
