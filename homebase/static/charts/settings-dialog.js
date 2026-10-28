@@ -158,7 +158,7 @@ const TABS = [
     // 2026-10-28 (owner D3): off (0) until set -- then a chart click, the menu and the order panel start with a stop this many ticks away
     ['DEFAULT STOP', [
       { label: 'Stop for this symbol', pref: { key: 'defStop', kind: 'perRoot', min: 0, max: 10000, note: 'ticks (0 = no stop)' } },
-      { caption: 'Every chart on this symbol. 0 keeps orders as they are: no stop unless you add one, and the Buy / Sell block says NAKED.' },
+      { caption: 'Every chart on this symbol. 0 keeps orders as they are: no stop unless you add one.' },
     ]],
     // owner D6 (2026-10-28): off by default; the Buy / Sell, the confirm and LIVE's arm are the same whether it is on or off
     ['QUICK SETUP', [

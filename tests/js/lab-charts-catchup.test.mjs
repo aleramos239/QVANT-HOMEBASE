@@ -211,8 +211,8 @@ test('no stylesheet uses the undefined --text2 token: the six rules point at --t
 test('cache pins follow the edited files', () => {
   const man = JSON.parse(read('apple/manifest.json'));
   assert.equal(man.version, 55, 'apple/lab.css and apple/charts.css changed');
-  assert.match(read('charts.html'), /charts\/charts\.css\?v=69"/);
-  assert.match(read('backtest.html'), /charts\/charts\.css\?v=60"/);
+  assert.match(read('charts.html'), /charts\/charts\.css\?v=70"/);
+  assert.match(read('backtest.html'), /charts\/charts\.css\?v=61"/);
   assert.match(read('charts.html'), /charts\/guide\.css\?v=6"/);
   assert.match(read('backtest.html'), /charts\/guide\.css\?v=6"/);
   assert.match(read('backtest.html'), /charts\/testerui\.js\?v=45"/);

@@ -685,10 +685,6 @@ body[data-cursor-style="dot"] .panel[data-cursor="crosshair"] .chart * {
 .tr-lbl { display: inline-flex; align-items: center; gap: 4px; }
 .tr-live { flex: none; padding: 0 3px; border-radius: 3px; background: #FFFFFF; color: var(--down); font-size: 9px;
   font-weight: 700; line-height: 12px; letter-spacing: .04em; }
-/* 2026-10-28 (owner D3): NAKED -- no stop goes with a click; under the block, out of the flow so nothing moves */
-.tr-naked { position: absolute; left: 0; bottom: 100%; margin-bottom: 2px; padding: 0 4px; border-radius: 3px; background: var(--warn);
-  color: #000; font-size: 9px; font-weight: 700; line-height: 12px; letter-spacing: .04em; pointer-events: auto; cursor: help; }
-.tr-naked[hidden] { display: none; }
 .tr-mid { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
 .tr-qty { width: 48px; height: 22px; text-align: center; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); font-size: 12px; }
 /* the chart's trading accounts beside the block, "…047 DEMO" (Task 2); dimmed when not trading right now */

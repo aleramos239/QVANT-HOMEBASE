@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import { createRequire } from 'node:module';
 
 /* Chart review package 3 (2026-10-28, owner D3: "tag now, auto available but OFF"):
-     (a) a NAKED tag on the chart's Buy/Sell block while the click would send no stop (display only);
+     (a) (the NAKED tag on the Buy/Sell block was removed, owner 2026-10-28);
      (b) an optional default stop in ticks per symbol, OFF until set in Settings > Trading.
    With the setting off, every pref, order body and page below is exactly what it was. */
 const require = createRequire(import.meta.url);
@@ -135,37 +135,4 @@ test('ON: an order that brings its own exits (the order panel) is not touched', 
   UI.placeOrder({ cell: cellOf(), root: 'NQ', side: 'Buy', type: 'Market', qty: 1, surface: 'panel', exits: { sl: null, tp: null } });
   await flush();
   assert.equal('sl_price' in desk.sent[0].body, false, 'the panel decided: no stop');
-});
-
-/* ---------- the NAKED tag on the block (tradelines.js paintBlock, lifted and run) ---------- */
-const TL_SRC = rd('charts/tradelines.js');
-const lift = (src, name) => { const m = new RegExp(`^(async )?function ${name}\\(`, 'm').exec(src); return src.slice(m.index, src.indexOf('\n}\n', m.index) + 2); };
-const method = (name) => { const i = TL_SRC.indexOf(`\n  ${name}(`); assert.ok(i >= 0); return TL_SRC.slice(i + 1, TL_SRC.indexOf('\n  }\n', i) + 4); };
-const fakeEl = (tagName) => ({ tagName, className: '', textContent: '', title: '', hidden: false, disabled: false, children: [],
-  classList: { on: new Set(), toggle(c, v) { if (v) this.on.add(c); else this.on.delete(c); }, contains(c) { return this.on.has(c); } },
-  append(...k) { this.children.push(...k); }, replaceChildren(...k) { this.children = k; }, blur() {} });
-function block(prefs) {
-  const w = { HBDeskClient: { state: STATE, prefs: { qty: 1, ...prefs }, qtyFor: () => 1, gate: () => null },
-    HBTradeUI: { tradeOf: () => ({ accounts: ['sim041'] }), liveCue: () => [], busy: () => false, flatBusy: () => false, sending: () => null } };
-  const ctx = vm.createContext({ window: w, T, document: { createElement: fakeEl, activeElement: null } });
-  vm.runInContext(`${lift(TL_SRC, 'mk')} globalThis.O = { ${method('paintBlock')} };`, ctx);
-  const ov = { cell: { cfg: {}, replay: false }, root: 'NQ', block: fakeEl('div'), qty: fakeEl('input'), sellBtn: fakeEl('button'),
-    buyBtn: fakeEl('button'), flatBtn: fakeEl('button'), sellSub: fakeEl('span'), buySub: fakeEl('span'), sellLive: fakeEl('span'),
-    buyLive: fakeEl('span'), naked: fakeEl('span') };
-  ov.paintBlock = ctx.O.paintBlock.bind(ov);
-  ov.paintBlock({ mode: 'on', accounts: ['sim041'] });
-  return ov;
-}
-
-test('NAKED tag: shown while no stop goes with the click, gone when the symbol has a default stop; display only', () => {
-  const off = block({});
-  assert.equal(off.naked.hidden, false);
-  assert.equal(off.buyBtn.disabled, false, 'it never blocks a click');
-  assert.equal(block({ defStop: { ES: 10 } }).naked.hidden, false, 'a default for ANOTHER symbol does not count');
-  assert.equal(block({ defStop: { NQ: 20 } }).naked.hidden, true, 'a stop goes with it: no tag');
-});
-
-test('the NAKED tag is built once in the block, after the buttons, and styled without moving the block', () => {
-  assert.match(TL_SRC, /this\.naked = mk\('span', 'tr-naked', 'NAKED'\)/);
-  assert.match(rd('charts/charts.css'), /\.tr-naked \{[^}]*position: absolute/);
 });

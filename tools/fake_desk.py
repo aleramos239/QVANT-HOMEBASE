@@ -60,7 +60,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from homebase.desk import bothistory
+from homebase.desk import bothistory, dayopen
 from homebase.contracts import point_value, round_to_tick
 from homebase.paths import state_dir
 from homebase.desk.trading import (Refused, check_prices, exit_levels, parse_cancel, parse_exits, parse_modify,
@@ -1056,7 +1056,8 @@ class LabRig:
                 m = {"connected": False, "error": f"metrics: {e}"}
             accounts[aid] = {"label": a.label or a.account_name or aid,
                              "env": "paper" if a.paper else "live" if a.live else "demo", "cooldown_s": 0, **m,
-                             "day": engine.day_view(aid)}      # as the real route: the day take in force, the day's closed P&L, the lock
+                             "day": engine.day_view(aid),      # as the real route: the day take in force, the day's closed P&L, the lock
+                             "day_pnl": dayopen.day_pnl(self.root / "day_open.json", aid, m.get("balance"), engine._today())}
         recs = self.journal_cache.records(self.root / "journal.jsonl")
         if recs is not self._live["recs"]:
             self._live.update(recs=recs, live=live_metrics(recs))

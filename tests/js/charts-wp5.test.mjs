@@ -180,7 +180,7 @@ function overlayOn({ ticked, mode, gate = null, qty = 1, quick }) {
   vm.runInContext(`${lift(TL_SRC, 'mk')} globalThis.O = { ${method('trade')}, ${method('paintBlock')}, ${method('paintAccts')} };`, ctx);
   const ov = { cell: { cfg: {}, replay: false }, root: 'NQ', page: { chartSettings: (c, tab) => calls.push(['settings', tab]) },
     block: fakeEl('div'), accts: fakeEl('div'), qty: fakeEl('input'), sellBtn: fakeEl('button'), buyBtn: fakeEl('button'),
-    flatBtn: fakeEl('button'), sellSub: fakeEl('span'), buySub: fakeEl('span'), sellLive: fakeEl('span'), buyLive: fakeEl('span'), naked: fakeEl('span') };
+    flatBtn: fakeEl('button'), sellSub: fakeEl('span'), buySub: fakeEl('span'), sellLive: fakeEl('span'), buyLive: fakeEl('span') };
   for (const k of ['trade', 'paintBlock', 'paintAccts']) ov[k] = ctx.O[k].bind(ov);
   return { ov, calls, sent };
 }
