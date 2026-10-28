@@ -85,16 +85,8 @@
         const w = Math.max(270, Math.round(dock.getBoundingClientRect().width));
         if (w !== dockW) { dockW = w; H.style.setProperty('--a-insp-w', w + 'px'); }
       }
-      fit();
+      A.fit(open ? dockW : undefined);       // the switcher is centred on the window, or flows when the inspector leaves it no room (shell.js)
     }
-    // the page switcher is centred on the window; when a wide inspector leaves no room for that, it takes its place in the row
-    function fit() {
-      const W = window.innerWidth, zone = isOpen() ? dockW : tb.insp.offsetWidth;
-      const need = W / 2 + (sw ? sw.offsetWidth / 2 : 0) + 12, room = W - zone - 8 - panels.offsetWidth;
-      const tight = need > room;
-      if (H.classList.contains('hb-c-tight') !== tight) H.classList.toggle('hb-c-tight', tight);
-    }
-    window.addEventListener('resize', fit);
     if (dock) {
       dock.classList.add('hb-insp');
       new MutationObserver(syncDock).observe(dock, { attributes: true, attributeFilter: ['hidden', 'style', 'class'] });

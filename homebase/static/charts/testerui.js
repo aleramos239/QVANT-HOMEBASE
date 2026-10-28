@@ -1222,7 +1222,8 @@ function tradeTable(trades, root_, onPick) {
   TRADE_COLS.forEach(([key, label, num]) => {
     const th = page.mk('th', num ? 'num' : '');
     if (key) {
-      const b = page.mk('button', 'sort-th', label + (sortCol === key ? (sortDir === 1 ? ' ▲' : ' ▼') : ''));
+      const b = page.mk('button', 'sort-th', label);
+      if (sortCol === key) b.appendChild(page.icon(sortDir === 1 ? 'chevronUp' : 'chevron'));
       b.type = 'button';
       b.onclick = () => { sortDir = sortCol === key ? -sortDir : 1; sortCol = key; refreshContent(); };
       th.appendChild(b);
