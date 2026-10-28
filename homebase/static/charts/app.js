@@ -2150,7 +2150,7 @@ function chartMenu(cell, at) {
   if (i < 0) return;
   select(i);
   const root = cell.shown ? cell.shown.root : cell.cfg.root;
-  const ctx = { cell, root, price: at.price, tick: cell.tick, nDrawings: drawings.list(root).length,
+  const ctx = { cell, root, price: at.price, tick: cell.tick, nDrawings: drawings.removable(root).length,
     nIndicators: cell.cfg.indicators.length, allDrawingsHidden: drawingsHidden,
     allIndicatorsHidden: cell.cfg.indicators.length > 0 && cell.cfg.indicators.every((x) => x.visible === false) };
   const m = openMenu(null, 'menu-chart', { at });
@@ -2349,6 +2349,7 @@ function drawingClipboard(e, c) {
   if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || !c || !c.dc || (e.code !== 'KeyC' && e.code !== 'KeyV')) return false;
   const root = c.dc.root;
   if (e.code === 'KeyC') {
+    if (String(window.getSelection() || '')) return false;   // text selected on the page: that copy is the browser's
     const d = c.dc.copySelected();
     if (!d) return false;
     e.preventDefault();
@@ -2496,7 +2497,7 @@ function disarm() {
 function clearDrawings() {
   const c = cur(), btn = $('#railClear');
   if (!c) return;
-  const root = c.shown ? c.shown.root : c.cfg.root, n = drawings.list(root).length;
+  const root = c.shown ? c.shown.root : c.cfg.root, n = drawings.removable(root).length;
   if (btn.classList.contains('arm') && root === armRoot) { disarm(); drawings.clear(root); return; }
   disarm();
   if (!n) { showTip(btn, `No drawings on ${root}`); armTimer = setTimeout(disarm, 1500); return; }

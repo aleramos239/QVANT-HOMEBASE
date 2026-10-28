@@ -17,7 +17,9 @@ const lift = (name) => {
 const key = (code, o = {}) => ({ code, altKey: false, metaKey: false, ctrlKey: false, shiftKey: false, repeat: false, prevented: false,
   preventDefault() { this.prevented = true; }, ...o });
 
+let selected = '';   // the page's text selection, as window.getSelection() would give it
 function page({ stay = false, hidden = false } = {}) {
+  selected = '';
   const log = [], store = {};
   const dc = (list) => ({ root: 'NQ', sel: null, refreshed: 0, selected: null, pasted: [],
     copySelected() { return this.selected; }, paste(d) { this.pasted.push(d); return d.alert ? null : { ...d, id: 'new' }; },
@@ -25,7 +27,7 @@ function page({ stay = false, hidden = false } = {}) {
   const cells = [{ dc: dc() }, { dc: dc() }, { dc: null }];
   const ctx = vm.createContext({ C, cells, log, store, localStorage: { setItem: (k, v) => { store[k] = v; } },
     setTool: (t) => log.push(['setTool', t]), pickTool: (t) => log.push(['pickTool', t]), sbNote: (t) => log.push(['note', t]),
-    markDirty: () => log.push(['dirty']), menuEl: null, hotkeyBox: null,
+    markDirty: () => log.push(['dirty']), menuEl: null, hotkeyBox: null, window: { getSelection: () => ({ toString: () => selected }) },
     $: () => ({ setAttribute() {}, title: '' }), drawingsPatch: [] });
   vm.runInContext(`let stayDrawing = ${stay}, drawingsHidden = ${hidden}, copiedDrawing = null; const STAY_KEY = 'hb_stay_draw';
     ${lift('toolDone')}
@@ -104,4 +106,20 @@ test('the Objects list: Delete is off for a locked drawing, Hide / Show is there
   assert.match(SRC, /drawingsHidden: \(\) => drawingsHidden/);
   assert.match(SRC, /toolDone,/);
   assert.match(SRC, /allDrawingsHidden: drawingsHidden/);
+});
+
+test('Cmd+C leaves the browser copy alone while text is selected on the page', () => {
+  const p = page();
+  p.cells[0].dc.selected = { id: 'a', type: 'trend', points: [] };
+  selected = 'a line of the journal';
+  const e = key('KeyC', { metaKey: true });
+  assert.equal(p.api.drawingClipboard(e, p.cells[0]), false);
+  assert.equal(e.prevented, false);
+  assert.equal(p.api.copied, null);
+});
+
+test('Remove all counts and clears only the drawings that can go (not locked, not hidden)', () => {
+  assert.match(SRC, /drawings\.removable\(root\)\.length/);
+  assert.match(SRC, /nDrawings: drawings\.removable\(root\)\.length/);
+  assert.doesNotMatch(SRC, /\bn = drawings\.list\(root\)\.length/);
 });

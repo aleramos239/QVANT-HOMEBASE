@@ -1031,3 +1031,15 @@ test('zoneAt: plot, price axis (right), time axis (below), nowhere (negative) --
   assert.equal(D.zoneAt({ x: 520, y: 320 }, 500, 300), 'price', 'the corner counts as the price axis');
   assert.equal(D.zoneAt({ x: -1, y: 10 }, 500, 300), null);
 });
+
+test('removable / clear: Remove all leaves a locked or hidden drawing alone', async () => {
+  const s = new D.Store({ fetchFn: fakeFetch(() => null) });
+  await s.ensure('NQ');
+  s.add('NQ', H1);
+  s.add('NQ', { ...H2, id: 'lk', locked: true });
+  s.add('NQ', { ...H2, id: 'hd', hidden: true });
+  assert.deepEqual(s.removable('NQ').map((d) => d.id), ['h1']);
+  s.clear('NQ');
+  assert.deepEqual(s.list('NQ').map((d) => d.id), ['lk', 'hd']);
+  assert.deepEqual(s.removable('NQ'), []);
+});

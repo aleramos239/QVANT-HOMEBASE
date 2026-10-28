@@ -421,7 +421,9 @@ class Store {
     const rest = list.filter((x) => x !== d);
     this.set(root, where === 'front' ? [...rest, d] : [d, ...rest]);
   }
-  clear(root) { this.set(root, []); }
+  /* What Remove all may take: a locked drawing stays (as for Delete), and so does a hidden one (the user cannot see it). */
+  removable(root) { return this.list(root).filter((d) => !d.locked && !d.hidden); }
+  clear(root) { this.set(root, this.list(root).filter((d) => d.locked || d.hidden)); }
 
   /* Every change is one undo step (the list before it), up to UNDO_MAX; a new change drops the redo steps. The steps live
      as long as the page: a reload starts clean. */
