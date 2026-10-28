@@ -31,7 +31,9 @@ def make_lifespan(*, cfg, engine, adapters, acct_status, timer, level_timer, des
                         if m.get("balance") is not None and m.get("account"):
                             equity.record_equity(_equity_path(), str(m["account"]), float(m["balance"]),
                                                  engine.now_et().date().isoformat())
-                            dayopen.note(state_dir() / "day_open.json", aid, m["balance"], engine._today())
+                            day = engine._today()
+                            dayopen.note(state_dir() / "day_open.json", aid, m["balance"], day,
+                                         dayopen.prior_close(equity.equity_by_day(_equity_path(), str(m["account"])), day))
                 except Exception:  # noqa: BLE001 — snapshots must never crash
                     pass
             await asyncio.sleep(EQUITY_INTERVAL_S)
