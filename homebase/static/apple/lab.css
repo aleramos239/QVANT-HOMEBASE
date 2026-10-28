@@ -387,7 +387,7 @@ html.hb-apple .lab-dlg .acts .btn { min-width: 76px; }
 
 /* ---- the full report under the chart (the chart shell's Strategy Tester): flat, on the window ------------------------------ */
 html.hb-apple #lab .lab-chart > .bpanel { margin: 0; border-radius: 0; background: var(--a-window); box-shadow: 0 -1px 0 var(--a-sep); }
-html.hb-apple #lab .bp-bar { height: 36px; padding: 0 8px; border-top: 0; background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+html.hb-apple #lab .bp-bar { height: 36px; padding: 0 12px 0 14px; border-top: 0; background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 html.hb-apple #lab .bpanel.open .bp-bar { border-bottom-color: var(--a-sep); }
 html.hb-apple #lab .bp-tabs, html.hb-apple #lab .tst-tabs { align-items: center; gap: 2px; overflow: auto hidden; scrollbar-width: none; }
 html.hb-apple #lab .bp-tab, html.hb-apple #lab .tst-tab, html.hb-apple #lab .tst-hide { flex: none; white-space: nowrap; }
@@ -397,8 +397,8 @@ html.hb-apple #lab .bp-tab[aria-selected="true"], html.hb-apple #lab .tst-tab.ac
 html.hb-apple #lab .bp-toggle, html.hb-apple #lab .tst-icon-btn { width: 24px; height: 24px; border-radius: 6px; color: var(--a-label-2); }
 html.hb-apple #lab .bp-toggle:hover, html.hb-apple #lab .tst-icon-btn:hover { background: var(--a-fill); color: var(--a-label); }
 html.hb-apple #lab .tst-sticky { background: var(--a-window); border-top: 0; -webkit-backdrop-filter: none; backdrop-filter: none; }
-html.hb-apple #lab .tst-tabs { height: 36px; padding: 0 8px; border-bottom-color: var(--a-sep); }
-html.hb-apple #lab .tst-content { padding: 14px 16px; font-size: 13px; line-height: 16px; color: var(--a-label); }
+html.hb-apple #lab .tst-tabs { height: 36px; padding: 0 12px 0 14px; border-bottom-color: var(--a-sep); }
+html.hb-apple #lab .tst-content { padding: 14px 20px; font-size: 13px; line-height: 16px; color: var(--a-label); }
 html.hb-apple #lab .tst-tile { border-left-color: var(--a-sep); }
 html.hb-apple #lab .tst-tile-v { font-size: 17px; line-height: 22px; font-weight: 700; letter-spacing: normal; color: var(--a-label); }
 html.hb-apple #lab .tst-tile-l, html.hb-apple #lab .tst-tile-s, html.hb-apple #lab .tst-caveat, html.hb-apple #lab .tst-kv-line { margin-top: 2px; font-size: 11px; line-height: 14px; color: var(--a-label-2); }
@@ -414,13 +414,16 @@ html.hb-apple #lab .bp-table { font-size: 12px; line-height: 15px; font-variant-
 html.hb-apple #lab .bp-table th { height: 24px; padding: 0 10px; background: var(--a-window); color: var(--a-label-2); font-size: 11px; line-height: 14px; font-weight: 590; border-bottom: 1px solid var(--a-sep); }
 html.hb-apple #lab .bp-table th button { font: inherit; color: inherit; letter-spacing: normal; cursor: default; }
 html.hb-apple #lab .bp-table td { height: 24px; padding: 0 10px; border-bottom: 1px solid var(--a-group-sep); }
+/* the report's content is already 20 in: its tables start on that edge, as the Charts panel's do (cells 20 in) */
+html.hb-apple #lab .tst-content .bp-table th:first-child, html.hb-apple #lab .tst-content .bp-table td:first-child { padding-left: 0; }
+html.hb-apple #lab .tst-content .bp-table th:last-child, html.hb-apple #lab .tst-content .bp-table td:last-child { padding-right: 0; }
 /* a result in the report: green only for a profit, a loss is ink with its minus sign */
 html.hb-apple #lab .bpanel .up { color: var(--a-green); }
 html.hb-apple #lab .bpanel .down { color: var(--a-label); }
 html.hb-apple #lab .bp-table tr:hover td { background: transparent; }
 html.hb-apple #lab .bp-table tr.sel td { background: var(--a-sel); }
 html.hb-apple #lab .bp-table tfoot td { background: var(--a-group); border-top: 1px solid var(--a-sep); font-weight: 590; }
-html.hb-apple #lab .bp-empty { padding: 20px 16px; font-size: 13px; line-height: 16px; color: var(--a-label-2); }
+html.hb-apple #lab .bp-empty { padding: 20px; font-size: 13px; line-height: 16px; color: var(--a-label-2); }
 
 /* ---- the chart shell's own menus, dialogs and toasts ------------------------------------------------------------------------ */
 html.hb-apple .lab-page .menu { padding: 5px; border: 0; border-radius: 13px; background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-menu-shadow);
@@ -450,6 +453,21 @@ html.hb-apple .lab-page .toast { padding: 9px 9px 9px 14px; border: 0; border-ra
   font-size: 13px; line-height: 16px; font-weight: 400; color: var(--a-label); }
 html.hb-apple .lab-page .toast.err { color: var(--a-red-text); }
 html.hb-apple .lab-page .toast-x { border-radius: 10px; color: var(--a-label-2); }
+
+/* ---- the 3:1 result, the per-year row, Adjust metrics and the group builder: a profit is green, a loss is ink and prints its own minus -- */
+/* (the heat-map tints, a failed real-or-luck line and .mix-err are data or real errors and keep their colours) */
+html.hb-apple #labRes #wfRes .up, html.hb-apple #labRes #wfRes .rs-kv b.up, html.hb-apple .rl-years .up, html.hb-apple .am-t td.up, html.hb-apple .mix .up { color: var(--a-green); }
+html.hb-apple #labRes #wfRes .down, html.hb-apple #labRes #wfRes .rs-kv b.down, html.hb-apple .rl-years .down, html.hb-apple .am-t td.dn, html.hb-apple .mix .dn { color: var(--a-label); }
+
+/* ---- the group builder, A/B and Adjust metrics sheets: one 20 edge, the other Lab tables' 10 cells ---------------------------------- */
+html.hb-apple .mix { background: var(--a-scrim); }
+html.hb-apple .mix-in { background: var(--a-window); box-shadow: var(--a-sheet-shadow); -webkit-backdrop-filter: none; backdrop-filter: none; }
+html.hb-apple .mix-head { padding: 14px 20px; }
+html.hb-apple .mix-out { padding: 14px 20px 24px; }
+html.hb-apple .ab-picks { padding: 10px 20px; }
+html.hb-apple .am-t th, html.hb-apple .am-t td, html.hb-apple .mix-t th, html.hb-apple .mix-t td { padding: 4px 10px; }
+html.hb-apple .am-t th:first-child, html.hb-apple .am-t td:first-child, html.hb-apple .mix-t th:first-child, html.hb-apple .mix-t td:first-child { padding-left: 0; }
+html.hb-apple .am-t th:last-child, html.hb-apple .am-t td:last-child, html.hb-apple .mix-t th:last-child, html.hb-apple .mix-t td:last-child { padding-right: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   html.hb-apple #lab, html.hb-apple .hb-tb-scrim, html.hb-apple #labLib.hb-side, html.hb-apple #labRes.hb-insp { transition: none; }

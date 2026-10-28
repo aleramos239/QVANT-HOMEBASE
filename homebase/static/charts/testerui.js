@@ -602,7 +602,7 @@ function recentRunRow(r) {
     line.textContent = `${stratName} · ${rangeLabel} · ${r.status}`;
   }
   b.appendChild(line);
-  if (r.holdout) b.appendChild(page.mk('span', 'env live', 'Test days'));   // this run read the test days
+  if (r.holdout) b.appendChild(page.mk('span', 'tst-badge', 'Test days'));   // this run read the test days
   if (done) b.onclick = () => { page.closeMenu(); loadRecentRun(r.id); };
   if (!done || labMode) return b;      // only a finished run has a report to compare (none in the Lab's Report)
   const row = page.mk('div', 'menu-row');
