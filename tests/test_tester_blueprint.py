@@ -96,17 +96,39 @@ def test_a_page_can_only_look_a_heat_map_a_pick_or_the_test_months_start_from_a_
     """S1: the route runs only the tools that read what is saved. Every other tool is refused before the toolkit is started,
     whatever owner_said a page puts in."""
     assert set(tester_api.BP_PAGE_TOOLS) == {"blueprint_blocks", "blueprint_status", "blueprint_heatmap", "blueprint_mc"}
-    assert {s["name"] for s in blueprint_tools.SPECS} - set(tester_api.BP_PAGE_TOOLS) == WRITES       # a new tool is refused until listed
+    assert set(tester_api.BP_PAGE_WRITES) == {"blueprint_card", "blueprint_code_check"}     # WP4: they save a card / a check and start nothing
+    assert {s["name"] for s in blueprint_tools.SPECS} - set(tester_api.BP_PAGE_TOOLS) - set(tester_api.BP_PAGE_WRITES) \
+        == WRITES - set(tester_api.BP_PAGE_WRITES)       # a new tool is refused until listed
     said = {"owner_said": "run it"}
     for tool, args in {"blueprint_wf_oos": {"name": "nq_orb_pre", "box": 1, **said}, "blueprint_wf": {"name": "nq_orb_pre", **said},
-                       "blueprint_wf_pick": {"name": "nq_orb_pre", "box": 1}, "blueprint_card": {"name": "x1", "card": {}, "settings": {}},
-                       "blueprint_code_check": {"name": "nq_orb_pre", "looked": True}, "blueprint_eval_card": {"name": "nq_orb_pre"},
+                       "blueprint_wf_pick": {"name": "nq_orb_pre", "box": 1}, "blueprint_eval_card": {"name": "nq_orb_pre"},
                        "blueprint_sim": {"name": "nq_orb_pre", "account": "a", "attempts": 1, "fee_budget": 1},
                        "blueprint_portfolio": {"names": ["a1", "b1"], "account": "a"}}.items():
         r = run(c, tool, args)
         assert r.status_code == 403 and r.json()["detail"].startswith(f"{tool} cannot be run from a page: here you can only look"), tool
     assert run(c, "blueprint_heatmap", {"name": "nq_orb_pre"}).json()["text"].endswith("\nRAN heatmap nq_orb_pre --root=" + str(ideastore.ideas_root()) + " --json")
     assert run(c, "blueprint_mc", {"name": "nq_orb_pre"}).json()["text"].endswith("\nRAN mc nq_orb_pre --root=" + str(ideastore.ideas_root()) + " --json")
+
+
+def test_the_page_writes_a_card_and_runs_the_code_check_through_the_same_tools_and_never_on_the_server(c, ideas_root, monkeypatch):
+    """WP4: the idea card form and the code check button post the two tools a chat has (no run, no heat map, no owner_said);
+    the card is written with the hm40 exits by the tool itself; the trading server (no_backtests) refuses both, read only."""
+    card = {"why": "w", "loser": "l", "home": {"market": "NQ", "session": "nyam", "bar": "5"}, "neighbors": [], "main_setting": "or_min",
+            "sides": "both", "sides_why": "", "loses_when": "x"}
+    settings = {"family": "orb", "params": {"or_min": ["5", "15", "30"]}}
+    r = run(c, "blueprint_card", {"name": "nq_orb_pre", "card": card, "settings": settings})
+    assert r.status_code == 200 and r.json()["ok"] is True and "RAN card nq_orb_pre --spec=-" in r.json()["text"]
+    r = run(c, "blueprint_code_check", {"name": "nq_orb_pre"})
+    assert r.status_code == 200 and f"RAN code-check nq_orb_pre --root={ideas_root}" in r.json()["text"]
+    r = run(c, "blueprint_code_check", {"name": "nq_orb_pre", "looked": True})
+    assert "--looked" in r.json()["text"]
+    assert run(c, "blueprint_code_check", {"name": "nq_orb_pre", "run_id": "r1"}).status_code == 400       # bp-2: not offered any more
+    monkeypatch.setattr(tester_api, "backtests_off", lambda: True)
+    for tool, args in {"blueprint_card": {"name": "nq_orb_pre", "card": card, "settings": settings},
+                       "blueprint_code_check": {"name": "nq_orb_pre"}}.items():
+        r = run(c, tool, args)
+        assert r.status_code == 409 and "read only" in r.json()["detail"] and "Mac" in r.json()["detail"], tool
+    assert run(c, "blueprint_heatmap", {"name": "nq_orb_pre"}).status_code == 200           # looking is still allowed there
 
 
 def test_the_pipeline_refuses_while_it_is_switched_off(tmp_path, monkeypatch):

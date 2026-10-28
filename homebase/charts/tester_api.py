@@ -39,7 +39,8 @@
                                           definitions every chat has (claude_mcp.blueprint_tools.SPECS)
     POST /api/tester/blueprint/run       {tool, args} -> {ok, text}: that tool run as a chat runs it (the research
                                           toolkit bp.py as a child process; it saves in the app itself). Only the
-                                          tools that read (BP_PAGE_TOOLS); any other is a 403
+                                          tools that read (BP_PAGE_TOOLS) and the card and the code check
+                                          (BP_PAGE_WRITES: 409 on the trading server); any other is a 403
     GET  /api/tester/blueprint/board     every saved idea with its stage on the 3:1 route and its next step: {ideas: [{name,
                                           status, next, job, wf: {stage, box}}], machine_runs} (bp.py status, kept BOARD_CACHE_S)
     POST /api/tester/blueprint/step      {step: table | pick | oos, name, owner_said, box?, reads_test_months_once?}: the in-sample
@@ -223,7 +224,7 @@ from ..backtest.runner import RunManager, _run_propsim, default_base, read_json
 from ..backtest.stats import montecarlo
 from ..backtest import walkforward
 from ..backtest.walkforward import WalkForwardManager
-from ..backtest.slots import Slots
+from ..backtest.slots import Slots, backtests_off
 from ..backtest.tape import CACHE, TapeStore
 from ..claude_mcp import blueprint_tools, pipeline_tools
 from ..claude_mcp.client import ToolError
@@ -289,6 +290,8 @@ class _Blueprint(pipeline_tools.PipelineMixin, blueprint_tools.BlueprintMixin):
 
 # what POST /blueprint/run may run: the tools that only read what is saved and start nothing (S1)
 BP_PAGE_TOOLS = ("blueprint_blocks", "blueprint_status", "blueprint_heatmap", "blueprint_mc")
+# ... and the two that save a card / a code check and start no run (WP4): not on the trading server, which is read only
+BP_PAGE_WRITES = ("blueprint_card", "blueprint_code_check")
 
 
 _HOST_RE = re.compile(r"^(127\.0\.0\.1|localhost)(:\d+)?$", re.IGNORECASE)
@@ -373,9 +376,11 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         tool, args = body.get("tool"), body.get("args", {})
         if set(body) - {"tool", "args"} or not isinstance(tool, str) or tool not in bp_specs or not isinstance(args, dict):
             raise HTTPException(400, "{tool: one of " + ", ".join(bp_specs) + ", args: {...}}")
-        if tool not in BP_PAGE_TOOLS:     # a page may only look: a heat map, the test months or a pick start from a chat (S1)
+        if tool not in BP_PAGE_TOOLS + BP_PAGE_WRITES:     # a page may only look: a heat map, the test months or a pick start from a chat (S1)
             raise HTTPException(403, f"{tool} cannot be run from a page: here you can only look ("
-                                     + ", ".join(BP_PAGE_TOOLS) + "). Ask for it in a chat, in your own words.")
+                                     + ", ".join(BP_PAGE_TOOLS) + ") or write the card and run the code check. Ask for it in a chat, in your own words.")
+        if tool in BP_PAGE_WRITES and backtests_off():
+            raise HTTPException(409, "This is the trading server and it is read only here: write the card and run the code check on the Mac.")
         if Slots().quiet():       # a quiet window of the tester: nothing is started from the page then
             raise HTTPException(409, "paused for a quiet window of the tester (tester_slots.json): run it later")
         fn = getattr(box, f"t_{tool}")

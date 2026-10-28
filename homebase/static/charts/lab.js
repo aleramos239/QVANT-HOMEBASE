@@ -721,13 +721,15 @@ document.addEventListener('keydown', (e) => {
 async function newMenu(anchor) {
   const r = await send('GET', '/api/tester/drafts/templates');
   const ts = (r.ok && r.json) || [];
-  menu(anchor, `<button data-pick="form"><b>Fill in a form</b><small>Pick a market, an entry rule, a stop and a target. No code.</small></button><hr>
+  menu(anchor, `<button data-pick="form"><b>Fill in a form</b><small>Pick a market, an entry rule, a stop and a target. No code.</small></button>
+    <button data-pick="card"><b>Write an idea card</b><small>Why it should make money, who loses, its main setting. Saves the card; runs nothing.</small></button><hr>
     <button data-pick="paste"><b>Paste a script</b><small>Insert Python from your clipboard or an editor</small></button>
     <button data-pick="file"><b>Open a .py file…</b><small>Load a script from disk</small></button><hr>
     <h6>Start from a template</h6>${ts.map((t) => `<button data-pick="t:${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc(t.blurb)}</small></button>`).join('')}
     ${S.groups ? '<hr><button data-pick="group"><b>New group…</b><small>A section of this list to keep strategies under</small></button>' : ''}`,
   async (pick) => {
     if (pick === 'form') return formOpen(anchor);
+    if (pick === 'card') return cardSheet();
     if (pick === 'paste') return pasteScript();
     if (pick === 'file') return $('#labFile').click();
     if (pick === 'group') return nameGroup();
@@ -742,13 +744,15 @@ function moreMenu(anchor) {
   const formRow = '<button class="row" data-pick="form"><span>Edit in the form…</span></button>';
   const known = draft && !lockedNow && fmRead.code === code && !!fmRead.got;          // the form's read of this code, when it is already in
   menu(anchor, `${draft ? `<button class="row" data-pick="save"${!lockedNow && (isDirty(b) || b.kind === 'new') ? '' : ' disabled'}><span>Save</span><kbd>⌘S</kbd></button>${known ? formRow : ''}
-      <button class="row" data-pick="review"${saved ? '' : ' disabled'}><span>Request a review…</span></button><hr>` : ''}
+      <button class="row" data-pick="review"${saved ? '' : ' disabled'}><span>Request a review…</span></button>
+      ${saved && /BLUEPRINT RECORD/.test(code) ? '<button class="row" data-pick="bccheck"><span>Run the code check…</span></button>' : ''}<hr>` : ''}
     <button class="row" data-pick="ref"><span>Scripting reference</span></button>
     ${saved ? '<hr><button class="row" data-pick="delete"><span>Delete…</span></button>' : ''}`,
   (pick) => {
     if (pick === 'save') save(b);
     else if (pick === 'form') formEdit(anchor, b);
     else if (pick === 'review') reviewDialog();
+    else if (pick === 'bccheck') checkSheet(b);
     else if (pick === 'ref') referenceDialog();
     else if (pick === 'delete') deleteDialog(b.name);
   });
@@ -756,6 +760,100 @@ function moreMenu(anchor) {
     const mine = menuEl;
     formRead(code).then((got) => { if (got && menuEl === mine && mine.isConnected && !mine.querySelector('[data-pick="form"]') && buf() === b && b.code === code) mine.querySelector('[data-pick="save"]').insertAdjacentHTML('afterend', formRow); });
   }
+}
+/* ---- the idea card and the code check, by click (the blueprint's phases 0 and 1) ----
+   Both post the SAME tools a chat has, through the one route that lets a page write them (the card, the code check). Neither starts a
+   run, a heat map or the test months: the card saves the card and its Lab draft, the check reads trades already stored. The server's
+   refusal (a card that is not whole, the trading server being read only) shows in the sheet in its own words. */
+async function bcRun(tool, args) {
+  const r = await send('POST', '/api/tester/blueprint/run', { tool, args });
+  return { ok: r.ok && !!r.json && r.json.ok !== false, text: r.ok ? String((r.json && r.json.text) || '') : String(r.error || '') };
+}
+const bcPars = (text) => String(text).split('\n').map((l) => `<p>${esc(l)}</p>`).join('');
+function cardSheet() {
+  const F = S.bcForm || (S.bcForm = C.bcForm());      // what was typed survives a sheet closed by mistake
+  let busy = false;
+  const d = dialog('<h2>Write an idea card</h2>');
+  d.classList.add('wide', 'pl-dlg');
+  const pick = (k, opts, first) => `<select id="bc_${k}" data-bc="${k}">${first ? `<option value=""${F[k] ? '' : ' selected'}>Choose…</option>` : ''}${opts.map(([v, t]) => `<option value="${esc(v)}"${v === F[k] ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
+  const text = (k) => `<input id="bc_${k}" data-bc="${k}" value="${esc(F[k])}" spellcheck="false" autocomplete="off">`;
+  const field = (k, label, control, help = '') => `<div class="bp-f pl-f"><label for="bc_${k}">${esc(label)}</label>${control}${help ? `<small>${esc(help)}</small>` : ''}</div>`;
+  const sync = () => {
+    const needs = C.bcNeeds(F, takenNames()), go = $('[data-x="go"]', d);
+    if (!go) return;
+    go.disabled = busy || needs.length > 0;
+    $('#bcNeed', d).textContent = needs.length ? `Still needed: ${needs.join('; ')}.` : '';
+  };
+  d.innerHTML = `<h2 id="labDlgTitle">Write an idea card</h2>
+    <div class="pl-body" tabindex="-1"><div class="bp-form">
+      ${field('name', 'Name', text('name'), 'Small letters, numbers and _ , a letter first. For example: nq_orb_pre')}
+      ${field('why', 'Why should it make money?', text('why'), 'One sentence.')}
+      ${field('loser', 'Who loses?', text('loser'), 'The other side of the trade.')}
+      <div class="pl-two">${field('market', 'Market', pick('market', C.PL_MARKETS.map((m) => [m, m]), true))}
+        ${field('session', 'Time of day', pick('session', C.PL_SESSIONS, true), 'New York time.')}</div>
+      ${field('bar', 'Bar size (minutes)', pick('bar', C.BC_BARS.map((m) => [m, m])))}
+      ${field('family', 'Entry rule', text('family'), 'What starts a trade, by its name in the Arsenal tab. For example: orb')}
+      ${field('main_setting', 'Its main setting', text('main_setting'), 'The one setting of that rule to try several values of. For example: or_min')}
+      ${field('values', 'Its values', text('values'), '3 or 4, separated by commas. For example: 5, 15, 30')}
+      ${field('neighbors', 'Where else it should work', text('neighbors'), 'Optional, separated by commas: other bar sizes, times of day or markets.')}
+      ${field('sides', 'Sides', pick('sides', C.PL_SIDES), 'Both = it may buy and it may sell.')}
+      ${field('sides_why', 'Why both sides, or one?', text('sides_why'), 'One sentence.')}
+      ${field('loses_when', 'When should it lose?', text('loses_when'), 'Optional: a stretch or kind of market where it must lose money.')}
+    </div></div>
+    <div class="pl-foot"><p class="pl-tip">The exits are the standard heat-map table (hm40). Saving writes the card only: nothing runs.</p>
+      <p class="err pl-pre" id="bcErr" role="alert" hidden></p>
+      <small class="pl-help pl-need" id="bcNeed"></small>
+      <div class="acts"><button class="btn btn-outline" data-x="cancel">Cancel</button><button class="btn btn-default" data-x="go" aria-describedby="bcNeed">Save the card</button></div></div>`;
+  d.querySelector('input').focus({ preventScroll: true });
+  sync();
+  const edit = (e) => { const k = e.target.dataset && e.target.dataset.bc; if (k) { F[k] = e.target.value; sync(); } };
+  d.addEventListener('input', edit);
+  d.addEventListener('change', edit);
+  d.addEventListener('click', async (e) => {
+    const x = e.target.closest('[data-x]'), k = x && x.dataset.x;
+    if (!x || busy) return;
+    if (k === 'cancel') return closeDialog();
+    if (k === 'open') { const name = x.dataset.name; closeDialog(); return selectDraft(name); }
+    if (k !== 'go' || C.bcNeeds(F, takenNames()).length) return;
+    busy = true; x.disabled = true; x.textContent = 'Saving…'; $('#bcErr', d).hidden = true;
+    const r = await bcRun('blueprint_card', C.bcBody(F));
+    busy = false;
+    if (!d.isConnected) return;
+    if (!r.ok) { x.textContent = 'Save the card'; sync(); const err = $('#bcErr', d); err.textContent = r.text || 'It was not saved.'; err.hidden = false; return; }
+    const name = C.bcBody(F).name;
+    S.bcForm = null;
+    loadLists();
+    d.innerHTML = `<h2 id="labDlgTitle">Card saved</h2><div class="pl-body" tabindex="-1"><div class="bp-form">${bcPars(C.bcSaid(r.text))}</div></div>
+      <div class="pl-foot"><div class="acts"><button class="btn btn-outline" data-x="cancel">Close</button><button class="btn btn-default" data-x="open" data-name="${esc(name)}">Open it</button></div></div>`;
+    d.focus({ preventScroll: true });
+  });
+}
+/* The code check of an idea on file (the open record draft's name): its six lines and the 3 trades to look at on the chart. Then "I looked
+   at them" asks the check again with looked: the owner's own click says the trades sit where the card says. */
+function checkSheet(b) {
+  const name = b.name;
+  let busy = false;
+  const d = dialog('<h2>Code check</h2>');
+  d.classList.add('wide', 'pl-dlg');
+  const paint = (res) => {
+    const done = res && res.ok && C.bcPassed(res.text);
+    d.innerHTML = `<h2 id="labDlgTitle">Code check · ${esc(name)}</h2>
+      <div class="pl-body" tabindex="-1"><div class="bp-form">${res ? bcPars(res.ok ? C.bcLines(res.text) : C.bcRefused(res.text))
+        : '<p>Do the trades do what the card says? Six lines are read on the in-sample months, and 3 trades are named for you to look at on the chart. It runs no backtest.</p>'}</div></div>
+      <div class="pl-foot">${res && res.ok && !done ? '<p class="pl-tip">Next: look at the 3 trades named above on the chart, then press "I looked at them".</p>' : ''}
+        <div class="acts"><button class="btn btn-outline" data-x="cancel">Close</button>${res && res.ok && !done ? '<button class="btn btn-outline" data-x="looked">I looked at them</button>' : ''}<button class="btn btn-default" data-x="go">${res ? 'Run it again' : 'Run the code check'}</button></div></div>`;
+    d.focus({ preventScroll: true });
+  };
+  paint(null);
+  d.addEventListener('click', async (e) => {
+    const x = e.target.closest('[data-x]'), k = x && x.dataset.x;
+    if (!x || busy) return;
+    if (k === 'cancel') return closeDialog();
+    busy = true; x.disabled = true; x.textContent = 'Checking…';
+    const r = await (k === 'looked' ? bcRun('blueprint_code_check', { name, looked: true }) : bcRun('blueprint_code_check', { name }));
+    busy = false;
+    if (d.isConnected) paint(r);
+  });
 }
 async function referenceDialog() {
   const r = await send('GET', '/api/tester/drafts/reference');
@@ -3179,7 +3277,8 @@ function paintRes() {
   } else if (r && r.st && (r.st.status === 'error' || r.st.status === 'cancelled')) {
     main = `<div class="rs-empty"><h3>${r.st.status === 'cancelled' ? 'Cancelled' : 'The run failed'}</h3><p>${esc(r.st.error || (r.st.status === 'cancelled' ? 'Run it again when you are ready.' : 'See the line under the editor.'))}</p></div>`;
   } else if (b.kind !== 'builtin' && b.kind !== 'pipe' && /BLUEPRINT RECORD/.test(b.code || '')) {
-    main = `<div class="rs-empty"><h3>A written record</h3><p>This file is the card and verdict of an idea the research engine already ran. It places no trades here, so Run has nothing to run. Run shows the idea's saved research-engine run when one with trades exists.</p></div>`;
+    main = `<div class="rs-empty"><h3>A written record</h3><p>This file is the card and verdict of an idea the research engine already ran. It places no trades here, so Run has nothing to run. Run shows the idea's saved research-engine run when one with trades exists.</p>
+      ${b.kind === 'draft' ? '<p><button class="btn btn-sm btn-outline" data-act="bccheck">Run the code check…</button></p>' : ''}</div>`;
   } else if (T) {
     main = threeEmpty(T);
   } else {
@@ -3200,6 +3299,7 @@ function act(name, el) {
   else if (name === 'more') moreMenu(el);
   else if (name === 'paste') pasteScript();
   else if (name === 'run') run();
+  else if (name === 'bccheck') { if (b) checkSheet(b); }
   else if (name === 'cancel') cancelRun();
   else if (name === 'heatrun') heatRun();
   else if (name === 'wfpick') wfPick(Number(el.dataset.i));

@@ -294,7 +294,8 @@ const PIPE = LAB.slice(LAB.indexOf('/* ---- the strategy pipeline in the sidebar
 test('the view switcher lists two views: Strategies, Arsenal (Queue and Book hidden: the pipeline is off, owner 2026-10-20)', () => {
   assert.match(LAB, /const VIEWS = \[\['lib', 'Strategies'\], \['tk', 'Arsenal'\]\], PIPE_TABS = \[\];/);
   assert.doesNotMatch(LAB, /payMain|paySide|loadPayout|'pp'/, 'no Payout page');
-  assert.doesNotMatch(LAB, /'Blueprint'|'Guide'|\/api\/tester\/blueprint/, 'the Blueprint and Guide views are gone, with what only they called');
+  // (WP4, 2026-10-27: the idea card sheet and the code check post to /blueprint/run, labcard.test.mjs pins that one route)
+  assert.doesNotMatch(LAB, /'Blueprint'|'Guide'|\/api\/tester\/blueprint(?!\/run)/, 'the Blueprint and Guide views are gone, with what only they called');
   assert.match(LAB, /if \(VIEW_IDS\.includes\(v\)\) S\.view = v;/, 'a stored view that is no longer listed opens Strategies');
 });
 
