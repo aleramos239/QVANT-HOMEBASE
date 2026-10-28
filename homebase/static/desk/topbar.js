@@ -306,6 +306,7 @@ function outOfTodaysFire(name, st) {
 }
 function readinessShown(r, st) {
   if (!r || !Array.isArray(r.checks) || !st) return r;
+  const extra = preopenChecks();
   let changed = false;
   const checks = r.checks.map(c => {
     if (!c || (c.level !== "bad" && c.level !== "warn") || !/^no signal/.test(String(c.detail || ""))
@@ -315,7 +316,43 @@ function readinessShown(r, st) {
     changed = true;
     return {...c, level: "info", detail: why};
   });
-  return changed ? {...r, checks, ready: !checks.some(c => c && c.level === "bad")} : r;
+  if (!changed && !extra.length) return r;
+  const all = checks.concat(extra);
+  return {...r, checks: all, ready: !all.some(c => c && c.level === "bad")};
+}
+
+/* ---- the pre-open check, in the same list ----
+   GET /api/preopen-check is tools/preopen_check.py (read-only: thin candles, depth behind the clock, load, clock, power) as
+   the Mac's Desk last ran it. Only its warn and bad rows join the list, as "Pre-open: <name>", and only while the result is
+   under 15 minutes old; nothing else about the page's readiness changes. A plain read never starts a run: the page asks for
+   one every 5 minutes on weekdays 07:45-09:00 ET (never the minutes before the open), and Settings > Health has a button.
+   Where it cannot run (the server) the route says so once and the page stops asking. */
+const PREOPEN_FRESH_MS = 15 * 60 * 1000;
+function preopenChecks() {
+  const p = window.PREOPEN;
+  if (!p || !p.available || !Array.isArray(p.checks) || Date.now() - p.got > PREOPEN_FRESH_MS) return [];
+  return p.checks.filter(c => c && (c.level === "warn" || c.level === "bad"))
+    .map(c => ({level: c.level, label: "Pre-open: " + c.label, detail: c.detail}));
+}
+function preopenWindow(et) {
+  const m = /^(\d{4}-\d\d-\d\d)T(\d\d):(\d\d)/.exec(String(et || ""));
+  if (!m) return false;
+  const day = new Date(m[1] + "T12:00:00Z").getUTCDay(), min = +m[2] * 60 + +m[3];
+  return day >= 1 && day <= 5 && min >= 465 && min < 540;
+}
+async function loadPreopen(run) {
+  if (DEMO) return;
+  try {
+    const r = await fetch("/api/preopen-check" + (run ? "?run=1" : ""));
+    if (!r.ok) return;
+    const p = await r.json();
+    window.PREOPEN = {...p, got: Date.now() - (p.age_s || 0) * 1000};
+  } catch (_) {}
+}
+function preopenTick() {
+  const p = window.PREOPEN;
+  if (document.hidden || !preopenWindow(ST && ST.et_now) || (p && p.available === false)) return;
+  loadPreopen(!p || !p.available || Date.now() - p.got > 240000);
 }
 
 /* ---- the desk's notices ----

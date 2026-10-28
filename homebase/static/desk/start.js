@@ -12,6 +12,7 @@ window.addEventListener("hashchange", () => {      // a link to a Lab strategy o
 if (!DEMO) {
   setInterval(() => { if (!document.hidden) loadDeskLab(); }, 5000);
   setInterval(loadDeskRes, 60000);      // a new saved run shows within a minute
+  loadPreopen(false); setInterval(preopenTick, 60000);   // the pre-open check's last result, then a fresh run in the 07:45-09:00 ET window
   setInterval(loadDeskGroups, 30000);   // a group changed from another window shows within half a minute
   setInterval(loadDeskGroupRes, 60000); // (asked only while a group's page is open)
   document.addEventListener("visibilitychange", () => { if (!document.hidden) loadDeskLab(); });

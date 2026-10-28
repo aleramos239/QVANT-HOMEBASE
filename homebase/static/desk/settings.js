@@ -286,6 +286,86 @@ async function applyMd() {
   renderMarketData();
 }
 
+/* ---- Health (read-only): the data watchdog, the tick archive, the pre-open check and a log tail ----
+   GET /api/health (the files the tick job writes), GET /api/logs/<name> (the end of one service log, secrets masked; the
+   name is a key the server knows, never a path) and GET /api/preopen-check. Nothing here changes anything: the one button
+   asks the Mac's Desk to run its read-only pre-open check. Where a file is not on this machine (the server) the card says so. */
+let HEALTH_SIG = "", HEALTH_BUSY = false, HEALTH_LOG = {name: "", text: ""}, HEALTH_LAST = null, HEALTH_POLL = null;
+const etHM = (iso) => hbClock(new Date(iso).toLocaleTimeString("en-GB", {timeZone: "America/New_York", hour: "2-digit", minute: "2-digit"}));
+function healthWords(m) {
+  return {fine: "fine", closed: "closed", late: "late " + m.minutes + " min", silent: "silent " + m.minutes + " min",
+          thin: "thin: " + m.share + "% of its ticks"}[m.state] || m.state;
+}
+const healthCounts = (o) => Object.entries(o).filter(([, v]) => v).map(([k, v]) => v + " " + k.replace(/_/g, " ")).join(" · ");
+function healthTable(w, c) {
+  const roots = [...new Set([...(w.available ? w.markets.map(m => m.root) : []), ...(c.available ? Object.keys(c.roots) : [])])];
+  if (!roots.length) return "";
+  const rows = roots.map(r => {
+    const m = w.available && w.markets.find(x => x.root === r), n = c.available && c.roots[r];
+    return `<tr><td style="padding:2px 12px 2px 0">${esc(r)}</td>
+      <td style="padding:2px 12px 2px 0;${m && !["fine", "closed"].includes(m.state) ? "color:var(--destructive)" : ""}">${m ? esc(healthWords(m)) : "-"}</td>
+      <td style="color:var(--muted-foreground)">${n ? esc(healthCounts(n)) : "-"}</td></tr>`;
+  }).join("");
+  return `<table style="font-size:12.5px;margin-top:8px"><tr style="color:var(--muted-foreground)"><td style="padding-right:12px">Market</td>
+    <td style="padding-right:12px">Live feed</td><td>Tick archive (sessions)</td></tr>${rows}</table>`;
+}
+function healthPreopen() {
+  const p = window.PREOPEN;
+  if (p && p.available === false) return `<p class="mcap">Pre-open check: ${esc(p.reason)}</p>`;
+  const rows = p && p.available && p.checks ? p.checks.filter(c => c.level !== "ok") : [];
+  const said = !p || !p.available || p.at === null ? "Not run yet"
+    : rows.length ? rows.length + " to look at" : "All clear";
+  return `<p class="wnote" style="margin-top:12px">Pre-open check: ${esc(said)}
+      <button class="btn btn-outline btn-sm" type="button" onclick="runPreopen()" ${HEALTH_BUSY ? "disabled" : ""}>${HEALTH_BUSY ? "Running…" : "Run now"}</button></p>`
+    + rows.map(c => `<p class="mcap${c.level === "bad" ? " warn" : ""}" style="margin-top:2px"><b>${esc(c.label)}</b> ${esc(c.detail)}</p>`).join("");
+}
+function renderHealth(h) {
+  const root = $("#settingsHealth");
+  if (!root) return;
+  HEALTH_LAST = h;
+  const w = (h && h.watch) || {available: false, reason: "Could not read it"}, c = (h && h.coverage) || {available: false, reason: "Could not read it"};
+  const first = !w.available ? w.reason : w.stale ? `Not checked since ${etHM(w.at_utc)} ET: the tick job has not finished a run since. Last reading: ${w.line}`
+    : w.line;
+  const cov = !c.available ? c.reason : healthCounts(c.classes)
+    + (c.lost_hours ? ` · ${c.lost_hours} h lost` : "") + ` (report ${etHM(c.at_utc)} ET)`;
+  const logs = h && h.logs && h.logs.length ? `<p class="wnote" style="margin-top:12px">Logs
+      <select class="hb-field" onchange="showLog(this.value)" aria-label="Log"><option value="">pick one</option>${h.logs.map(l =>
+        `<option value="${esc(l.name)}"${l.name === HEALTH_LOG.name ? " selected" : ""}>${esc(l.label)}</option>`).join("")}</select></p>
+      <pre id="hlLogText" style="font-size:10.5px;white-space:pre-wrap;max-height:200px;overflow:auto;margin:6px 0 0">${esc(HEALTH_LOG.text)}</pre>` : "";
+  const html = `<div class="slabel" style="margin-top:14px">HEALTH</div>
+    <p class="wnote" style="margin-top:4px;color:var(--foreground)">${esc(first)}</p>
+    <p class="mcap">Tick archive: ${esc(cov)}</p>${healthTable(w, c)}${healthPreopen()}${logs}`;
+  if (html === HEALTH_SIG) return;             // unchanged: keep the pick and the log where they are
+  HEALTH_SIG = html;
+  root.innerHTML = html;
+}
+async function loadHealth() {
+  if (DEMO) return;
+  try {
+    const r = await fetch("/api/health");
+    renderHealth(r.ok ? await r.json() : null);
+  } catch (_) { renderHealth(null); }
+}
+async function showLog(name) {
+  if (!name) { HEALTH_LOG = {name: "", text: ""}; return renderHealth(HEALTH_LAST); }
+  HEALTH_LOG = {name, text: "loading…"};
+  const pre = $("#hlLogText");
+  if (pre) pre.textContent = HEALTH_LOG.text;
+  try {
+    const r = await fetch("/api/logs/" + encodeURIComponent(name) + "?lines=200");
+    const d = await r.json();
+    HEALTH_LOG.text = d.available ? d.lines.join("\n") : d.reason || "Could not read it";
+  } catch (_) { HEALTH_LOG.text = "Could not read it"; }
+  const out = $("#hlLogText");
+  if (out) { out.textContent = HEALTH_LOG.text; out.scrollTop = out.scrollHeight; }
+  HEALTH_SIG = "";                             // the next repaint carries this text
+}
+async function runPreopen() {
+  HEALTH_BUSY = true; renderHealth(HEALTH_LAST);
+  await loadPreopen(true);
+  HEALTH_BUSY = false; renderHealth(HEALTH_LAST);
+}
+
 /* ---- Server updates (read-only): which commit the Chicago server runs and why a ship waits ----
    GET /api/deploy-status reads the Mac's vpssync log; this card only shows it. It has no button: nothing here ships or
    restarts anything. On the server's own Desk the route answers available:false and the card says so. */
@@ -334,6 +414,9 @@ function openSettings() {
   loadDeploy();
   clearInterval(DEPLOY_POLL);
   DEPLOY_POLL = setInterval(loadDeploy, 60000);              // while Settings is open
+  loadHealth();
+  clearInterval(HEALTH_POLL);
+  HEALTH_POLL = setInterval(loadHealth, 60000);
 }
 function closeSettings() {
   hideOverlay("settingsOverlay");
@@ -341,6 +424,8 @@ function closeSettings() {
   MD_POLL = null;
   clearInterval(DEPLOY_POLL);
   DEPLOY_POLL = null;
+  clearInterval(HEALTH_POLL);
+  HEALTH_POLL = null;
 }
 $("#settingsOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeSettings();
