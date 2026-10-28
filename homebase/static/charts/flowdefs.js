@@ -86,7 +86,7 @@ const ta = [
 ];
 
 const catalog = [
-  { id: 'absorb', group: 'Book (L2)', name: 'Absorption', desc: 'Heavy volume traded into a resting level that held, marked by the side that held',
+  { id: 'absorb', group: 'Book (L2)', name: 'Absorption (book)', desc: 'Heavy volume traded into a resting level that held, marked by the side that held',
     params: [{ key: 'multiple', label: 'Level at least (x median)', type: 'num', min: 4, max: 50, step: 0.5, def: 4 }, SECONDS,
       SIDE, { ...LABELS, def: false }, MSIZE] },
   { id: 'pulled', group: 'Book (L2)', name: 'Pulled liquidity', desc: 'A big resting order withdrawn as price came toward it',

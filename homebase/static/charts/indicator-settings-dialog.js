@@ -23,7 +23,7 @@ const LINE_LABEL = { vwap: { main: 'VWAP', band1: 'Band 1', band2: 'Band 2', ban
   volume: { up: 'Up bars', down: 'Down bars' }, delta: { up: 'Buying (up)', down: 'Selling (down)' } };
 const VWAP_NEW_COLORS = ['#2962FF', '#FF6D00', '#00897B', '#E91E63', '#00BCD4'];
 const VWAP_OWN = new Set(['anchor', 'customTime', 'more']);   // the VWAP's lines editor draws these
-const VWAP_ANCHOR_NAMES = [['eth', 'Session (6 pm)'], ['rth', 'RTH (9:30 am)'], ['custom', 'Custom time'], ['week', 'Week'], ['month', 'Month']];
+const VWAP_ANCHOR_NAMES = [['eth', 'Session (6 pm)'], ['rth', 'RTH (9:30 am to 5 pm)'], ['custom', 'Custom time'], ['week', 'Week'], ['month', 'Month']];
 const SHAPE_NAMES = { line: 'Line', steps: 'Steps', curved: 'Curved' };
 
 function mk(tag, cls, text) {
@@ -118,7 +118,7 @@ function mount(box, host) {
     };
     const draw = () => {
       host.closeMenu();
-      const items = [mk('label', 'vl-head', 'VWAP lines: each restarts at its own time every day')];
+      const items = [mk('label', 'vl-head', 'VWAP lines: each restarts at its own anchor: the session, a set time, a week or a month')];
       for (let i = 0; i <= more().length; i++) {
         const obj = i === 0 ? vals : more()[i - 1];
         const item = mk('div', 'vl-item'), row = mk('div', 'vl-row'), err = mk('div', 'dlg-err');

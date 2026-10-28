@@ -212,8 +212,8 @@ const TV_DEFS = [
     [TV_LEN(21)], TV_ONE('DPO'), { pane: 'own', refs: [0] }),
   tvDef('massindex', 'Mass Index', 'Sums how wide the bar range is versus its own average, to spot a reversal bulge',
     [TV_LEN(10)], TV_ONE('Mass Index'), { pane: 'own', refs: [27, 26.5], short: 'Mass Index' }),
-  tvDef('corr', 'Correlation', 'How straight price runs with time over N bars: 1 up, -1 down, 0 none',
-    [TV_LEN(14, 2)], TV_ONE('TSI', TA_BLUE), { pane: 'own', refs: [0], short: 'Correlation' }),
+  tvDef('corr', 'Trend Strength Index', 'Correlation of price with time over N bars (how straight it runs): 1 up, -1 down',
+    [TV_LEN(14, 2)], TV_ONE('Trend strength', TA_BLUE), { pane: 'own', refs: [0], short: 'Trend Strength' }),
   // ---- momentum ----
   tvDef('rsi', 'RSI', 'Relative strength: how strongly the last N values moved up versus down, 0 to 100',
     [TV_LEN(14, 1, 1000), TV_SRC], TV_ONE('RSI', TA_VIOLET), { pane: 'own', refs: [70, 30] }),
@@ -470,7 +470,7 @@ const TA_DEFS = [
     lines: [TA_LINE('hi', 'High', TA_DOWN, 1, 'solid', TA_LVL), TA_LINE('lo', 'Low', TA_UP, 1, 'solid', TA_LVL)] },
   { id: 'noise', group: 'Ranges & structure', name: 'Noise band', key: (p) => `noise:${p.k}:${p.anchor}`,
     params: [{ key: 'k', label: 'Multiplier', type: 'num', min: 0.05, max: 3, step: 0.05, def: 0.3 },
-      { key: 'anchor', label: 'Anchor', type: 'choice', def: 'rth', choices: [['rth', 'RTH open 09:30'], ['globex', 'Globex open 01:00']] }],
+      { key: 'anchor', label: 'Anchor', type: 'choice', def: 'rth', choices: [['rth', 'RTH open 09:30'], ['globex', 'Overnight 01:00 ET']] }],
     label: (p) => `Noise band ${p.k} ${p.anchor}`, desc: 'The open plus or minus k times the daily ATR: moves beyond it are not noise',
     lines: [TA_LINE('up', 'Upper', TA_UP, 1, 'solid', TA_LVL), TA_LINE('dn', 'Lower', TA_DOWN, 1, 'solid', TA_LVL)] },
   { id: 'rvol', group: 'Volume & profile', name: 'Relative volume', pane: 'own', key: (p) => `rvol:${p.days}:${p.need}`,
@@ -592,7 +592,7 @@ const CATALOG = [
     { key: 'minSeconds', label: 'Ended ones that stood at least (seconds)', type: 'int', min: 3, max: 600, def: 5 },   // bookflow.py shows none younger than 3 s
     { key: 'history', label: 'Keep ended orders on the chart', type: 'bool', def: true },
     { key: 'width', label: 'Line thickness', type: 'choice', def: '2', choices: [['1', 'Thin'], ['2', 'Normal'], ['4', 'Thick']] }] },
-  { id: 'imbalance', group: 'Book (L2)', name: 'Book imbalance (live)', params: [], desc: 'Bid vs ask size resting in the top 10 book levels, as a gauge in the legend' },
+  { id: 'imbalance', group: 'Book (L2)', name: 'Book imbalance (live gauge)', params: [], desc: 'Bid vs ask size resting in the top 10 book levels, as a gauge in the legend' },
   { id: 'heatmap', group: 'Book (L2)', name: 'Liquidity heatmap', desc: 'Resting book size at each price over time, behind the candles; optional trade bubbles', params: [
     { key: 'map', label: 'Show the heatmap', type: 'bool', def: true },
     { key: 'bubbles', label: 'Trade bubbles', type: 'bool', def: false },

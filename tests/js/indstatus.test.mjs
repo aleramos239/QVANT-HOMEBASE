@@ -195,3 +195,19 @@ test('notes: headlines bolts outside the burst markets, the bar-length limit, cs
   assert.equal(S.of(a, facts([bar(0)], { indicators: [a, b] })).text, 'No open gap in view');
   assert.equal(S.of(b, facts([bar(0)], { indicators: [{ ...a, visible: false }, b] })).text, 'No open gap in view', 'a hidden first one does not count');
 });
+
+test('opening range: a window that is not a whole number of bars is said plainly, even when a value draws', () => {
+  const sv = { 'orb:5': 100, 'orb:15': 100, 'orb:30': 100 };
+  const bars = [bar(0, { sv }), bar(1, { sv })];
+  const t = S.of(inst('orb', { minutes: 5, start: '09:30' }), facts(bars, { barMs: 15 * 60000 }));
+  assert.equal(t.tone, 'warn');
+  assert.match(t.text, /5 minutes/);
+  assert.match(t.text, /15 minutes/);
+  const odd = S.of(inst('orb', { minutes: 20, start: '09:30' }), facts(bars, { barMs: 15 * 60000 }));
+  assert.equal(odd.tone, 'warn', 'a 20 minute window on 15 minute bars draws 30 minutes');
+  assert.match(odd.text, /20 minutes/);
+  assert.match(odd.text, /30 minutes/);
+  assert.equal(S.of(inst('orb', { minutes: 30, start: '09:30' }), facts(bars, { barMs: 15 * 60000 })), null, 'whole bars are fine');
+  assert.equal(S.of(inst('orb', { minutes: 15, start: '09:30' }), facts(bars, { barMs: 15 * 60000 })), null, 'a bar as long as the window is fine');
+  assert.equal(S.of(inst('orb', { minutes: 5, start: '09:30' }), facts(bars, { barMs: 60000 })), null);
+});
