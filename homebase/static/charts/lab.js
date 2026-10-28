@@ -3118,9 +3118,7 @@ async function loadDesk() {
   const was = key(S.desk);
   S.desk = new Map((r.json.strategies || []).filter((x) => x && x.name).map((x) => [x.name, x]));
   S.deskBuiltins = new Set((Array.isArray(r.json.builtins) ? r.json.builtins : []).filter((x) => typeof x === 'string'));      // the built-ins the Desk itself runs
-  const shut = typeof r.json.promote_refused === 'string' ? r.json.promote_refused : '', shutWas = S.deskShut;
-  S.deskShut = shut;                                  // why no promote can pass now (S4), '' when one may
-  if (key(S.desk) === was && shut === shutWas) return;                   // nothing changed: the page stays as it is (a field being typed in is not rebuilt)
+  if (key(S.desk) === was) return;                   // nothing changed: the page stays as it is (a field being typed in is not rebuilt)
   paintLib(); paintRes();
   if (buf() && buf().kind === 'draft') paintEditor();          // its lock may have changed (promoted, or taken off the Desk)
 }
@@ -3132,10 +3130,9 @@ function deskState(b) {
   /* the hash only tells the same code on the Desk from other code; it never gates Promote -- the Desk judges the run when it is asked */
   /* a written record's run is the research engine's, not the file's code: the Desk would refuse it (the file places no orders) */
   if (r && r.record) return { label: 'Promote to Desk', hint: RECORD_NO_DESK, disabled: true, action: null };
-  return C.promoteState({ kind: 'draft', dirty, hasRun: !!(r && r.bundle && r.rid), row: (S.desk && S.desk.get(b.name)) || null, sha, shut: S.deskShut });
+  return C.promoteState({ kind: 'draft', dirty, hasRun: !!(r && r.bundle && r.rid), row: (S.desk && S.desk.get(b.name)) || null, sha });
 }
 const REMOVE_TIP = 'Takes it off the Desk. Its history is kept.';
-const NO_BACK = 'It cannot go back on the Desk from the Lab today. To put it back later, archive it on the Desk instead.';      // while no promote can pass (S4)
 const RECORD_NO_DESK = 'Cannot go on the Desk: this file is a written record and places no orders. Rebuild the idea as a real strategy first.';
 /* The hint of the row, as a line under the group: what a keyboard or a screen reader reaches (the row's title is for the mouse). */
 function deskNote(b) {
@@ -3147,7 +3144,7 @@ function deskRows(b) {
   if (!st) return '';
   const on = !!(S.desk && S.desk.has(b.name));
   return `<button class="rs-row" data-act="deskgo" data-fk="deskgo" aria-describedby="deskHint" title="${esc(st.hint)}"${st.disabled ? ' aria-disabled="true"' : ''}${S.deskBusy ? ' disabled' : ''}><span>${esc(st.label)}</span><span>›</span></button>`
-    + (on ? `<button class="rs-row" data-act="deskoff" data-fk="deskoff" title="${esc(REMOVE_TIP + (S.deskShut ? ' ' + NO_BACK : ''))}"${S.deskBusy ? ' disabled' : ''}><span>Remove from Desk</span><span>›</span></button>` : '');
+    + (on ? `<button class="rs-row" data-act="deskoff" data-fk="deskoff" title="${esc(REMOVE_TIP)}"${S.deskBusy ? ' disabled' : ''}><span>Remove from Desk</span><span>›</span></button>` : '');
 }
 function deskGo() {
   const b = buf(), st = deskState(b);
@@ -3173,17 +3170,9 @@ function promoteRecord(f, r, b) {
   const ran = setKey({ ...f, inputs: m.inputs || {}, controls: (m.controls && m.controls.rules) || {}, qty: m.qty, commission: m.commission, slippage_ticks: m.slippage_ticks });
   return ran === T.oos.set ? T.oos.result : null;
 }
-/* Put it on the Desk: first what the six lines say of it (plan 4.7), then the owner's own words (S4: the server refuses a promote
-   without them, and unless the six lines all PASS, shown as it says); Not yet, or no words, sends nothing. While the server says
-   no promote can pass (S.deskShut) the row is grey with that sentence; a press that still gets here (the answer came after the
-   row was drawn) is told the same sentence, with no words box: words cannot help. */
+/* Put it on the Desk: first what the six lines say of it (plan 4.7, shown only: no line blocks a promote, owner 2026-10-28), then the
+   owner's own words (the server refuses a promote without them); Not yet, or no words, sends nothing. */
 function promoteToDesk(b) {
-  if (S.deskShut) {
-    const d = dialog(`<h2>Put ${esc(b.name)} on the Desk?</h2><p>${esc(S.deskShut)}</p>
-      <div class="acts"><button class="btn btn-outline" data-x="cancel">Close</button></div>`);
-    d.addEventListener('click', (e) => { if (e.target.closest('[data-x]')) closeDialog(); });
-    return;
-  }
   const r = S.run && S.run.key === b.key ? S.run : null;
   if (!r || !r.rid || !r.bundle || r.grid) return;      // a heat-map cell has no run of its own to promote
   const f = formOf(b), sid = f ? f.strategy : '', w = sid && S.wf[sid], rd = realRead(promoteRecord(f, r, b), sid);
@@ -3221,7 +3210,7 @@ function deskOffDialog() {
   const b = buf();
   if (!b || b.kind !== 'draft' || S.deskBusy) return;
   const name = b.name;
-  const d = dialog(`<h2>Remove ${esc(name)} from the Desk?</h2><p>Its history is kept.</p>${S.deskShut ? `<p>${NO_BACK}</p>` : ''}
+  const d = dialog(`<h2>Remove ${esc(name)} from the Desk?</h2><p>Its history is kept.</p>
     <div class="acts"><button class="btn btn-outline" data-x="cancel">Keep it</button><button class="btn btn-default" data-x="go">Remove</button></div>`);
   d.addEventListener('click', async (e) => {
     const x = e.target.closest('[data-x]');

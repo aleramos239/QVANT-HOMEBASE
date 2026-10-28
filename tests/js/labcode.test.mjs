@@ -197,18 +197,6 @@ test('promoteState: the hash never gates Promote (a saved draft with a finished 
   assert.equal(L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: null, sha: 'aa' }).disabled, false);
 });
 
-test('promoteState: while the server refuses every promote (S4), every row but "On the Desk" is disabled and says why', () => {
-  const shut = 'Nothing new can go on the Desk yet: two of the six real-or-luck lines cannot pass in the Lab.';
-  const st = (x) => ({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: null, sha: 'aa', shut, ...x }) });
-  assert.deepEqual(st({}), { label: 'Promote to Desk', hint: shut, disabled: true, action: null });
-  assert.deepEqual(st({ hasRun: false }), { label: 'Promote to Desk', hint: shut, disabled: true, action: null }, 'never "run a backtest first": no run fixes it');
-  assert.deepEqual(st({ dirty: true }), { label: 'Promote to Desk', hint: shut, disabled: true, action: null });
-  assert.deepEqual(st({ row: { sha256: 'bb' } }), { label: 'Promote again', hint: shut, disabled: true, action: null });
-  assert.deepEqual(st({ row: { sha256: 'aa' } }), { label: 'On the Desk', hint: 'Open it on the Desk page.', disabled: false, action: 'open' });
-  assert.equal(st({ shut: '' }).action, 'promote', 'no reason given: the row works as before');
-  assert.equal(st({ shut: undefined }).action, 'promote');
-});
-
 test('promoteState: a built-in strategy (or a script not saved yet) has no such row', () => {
   assert.equal(L.promoteState({ kind: 'builtin', dirty: false, hasRun: true, row: null, sha: 'aa' }), null);
   assert.equal(L.promoteState({ kind: 'new', dirty: true, hasRun: true, row: null, sha: '' }), null);

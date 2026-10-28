@@ -652,8 +652,7 @@ function plExecSaid(name, j, shown) {
 }
 /* ---- Promote to Desk (2026-10-09): the row under a finished run of a draft ----
    `row` = this draft's record on the Desk (GET /desklab) or null; `sha` = the hash of the open code ('' when it cannot be worked out);
-   `hasRun` = a finished run of this draft is open; `dirty` = unsaved edits; `shut` = the server's reason no promote can pass now
-   (GET /desklab promote_refused, S4), '' when it may: while shut, every row but "On the Desk" is disabled and says why.
+   `hasRun` = a finished run of this draft is open; `dirty` = unsaved edits.
    Returns {label, hint, disabled, action: 'promote' | 'open' | null}, or null where there is no such row (a built-in, or a script
    not saved yet).
 
@@ -671,11 +670,10 @@ function plExecSaid(name, j, shown) {
    The hash only tells "same code" from "other code". It never gates Promote: with a saved draft and a finished run open the row is
    enabled, and the Desk is the authority -- it refuses a run of other code in words (shown as the error line). */
 function promoteState(state) {
-  const { kind, dirty, hasRun, row, sha, shut } = state || {};
+  const { kind, dirty, hasRun, row, sha } = state || {};
   if (kind !== 'draft') return null;
   if (row && sha && row.sha256 === sha) return { label: 'On the Desk', hint: 'Open it on the Desk page.', disabled: false, action: 'open' };
   const label = row ? 'Promote again' : 'Promote to Desk';
-  if (typeof shut === 'string' && shut) return { label, hint: shut, disabled: true, action: null };      // no run can fix it: said first
   if (dirty || !hasRun) return { label, hint: 'Run a backtest of this exact code first.', disabled: true, action: null };
   const hint = !row ? 'Puts it on the Desk, switched off. It places no orders.'
     : sha ? 'The Desk runs an older version. Promoting again puts this one there, switched off.' : 'Promoting again puts this one there, switched off.';

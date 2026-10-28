@@ -190,9 +190,8 @@ test('the words the page shows, exactly', () => {
   assert.equal(D.GONE, 'That strategy is not on the Desk any more.');
   assert.equal(D.EMPTY_DAY, 'Nothing yet today.');
   assert.equal(D.ACCOUNTS_CAPTION, 'Accounts come with the Desk update. Until then it runs in shadow.');
-  const noBack = 'It cannot go back on the Desk from the Lab today. To put it back later, Archive it instead.';      // S4: promote is refused
-  assert.deepEqual({ ...D.removeAsk('nq_orb') }, { title: 'Remove nq_orb from the Desk?', body: 'Its history is kept. ' + noBack });
-  assert.deepEqual({ ...D.removeAskDesk('NQ ORB') }, { title: 'Remove NQ ORB from the Desk?', body: 'Its history is kept. Its accounts come off. ' + noBack });
+  assert.deepEqual({ ...D.removeAsk('nq_orb') }, { title: 'Remove nq_orb from the Desk?', body: 'Its history is kept.' });
+  assert.deepEqual({ ...D.removeAskDesk('NQ ORB') }, { title: 'Remove NQ ORB from the Desk?', body: 'Its history is kept. Its accounts come off.' });
 });
 
 /* ---- the page (index.html): what it may call, and that nothing from the network reaches a template raw ---- */
@@ -308,7 +307,7 @@ test('the page: "Today, in shadow", the size in the net\'s tooltip, and "rebuilt
 test('removeLabRow (the Lab page\'s Remove) renders only once the desk\'s status is in, like its neighbours', async () => {
   // S4 moved it out of desk/views.js (its removeDeskLab is left there, unused): the Lab page's button calls removeLabRow
   assert.match(LABVIEW, /onclick="removeLabRow\(/);
-  assert.match(LABVIEW, /title="Takes it off the Desk\. Its history is kept\. It cannot go back from the Lab today; Archive keeps it to restore\.">Remove from Desk/);
+  assert.match(LABVIEW, /title="Takes it off the Desk\. Its history is kept\. Archive keeps it to restore from the Desk\.">Remove from Desk/);
   assert.doesNotMatch(HTML.replace(/async function removeDeskLab\(/, ''), /removeDeskLab\(/, 'nothing calls removeDeskLab any more');
   const fn = HTML.slice(HTML.indexOf('async function removeLabRow'), HTML.indexOf("/* The chart service's delete"));
   assert.ok(fn.length > 200 && /is off the Desk\. Its history is kept, and it is still in the Lab\./.test(fn));

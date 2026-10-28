@@ -182,7 +182,7 @@ function labDeskView(name, s) {
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat(${jsArg(name)})" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       ${deskMachine() === "server" ? "" : `<button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>`}
       <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(lab.name || "")}, ${jsArg(name)})"${busy || ro || !lab.name ? " disabled" : ""} title="Off the Desk, switched off, its accounts off, and kept. Restore it from Archive any time.">Archive</button>
-      <button class="btn btn-outline btn-sm" onclick="removeLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Takes it off the Desk. Its history is kept. It cannot go back from the Lab today; Archive keeps it to restore.">Remove from Desk</button>
+      <button class="btn btn-outline btn-sm" onclick="removeLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Takes it off the Desk. Its history is kept. Archive keeps it to restore from the Desk.">Remove from Desk</button>
       <button class="btn btn-outline btn-sm" onclick="deleteLabStrat(${jsArg(name)}, ${jsArg(lab.name || "")})"${busy || ro || !lab.name ? " disabled" : ""} title="Takes it off the Desk and deletes its shadow and day history for good. Its Lab draft stays.">Delete</button></div>`;
 }
 /* The Limits dialog: filled when it opens, never while it is open. Save posts exactly what the fields say, after the same checks the Desk makes. */

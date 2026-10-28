@@ -283,18 +283,6 @@ test('Put it on the Desk: the confirm shows the verdict and the six lines of the
   }
   sent.length = 0; press('go'); await new Promise((r) => setImmediate(r));
   assert.deepEqual(JSON.parse(JSON.stringify(sent)), POST);                // the same request, whatever the dialog says
-  // S4: while the server says no promote can pass, a press that still reaches the sheet is told why: no words box, nothing to send
-  const shut = 'Nothing new can go on the Desk yet: two of the six real-or-luck lines cannot pass in the Lab.', n = dialogs.length;
-  c.S.deskShut = shut; sent.length = 0;
-  c.promoteToDesk({ key: 'd:x', name: 'x' });
-  const sh = dialogs.at(-1).html;
-  assert.equal(dialogs.length, n + 1);
-  assert.match(sh, /Put x on the Desk\?/);
-  assert.ok(sh.includes(shut), sh);
-  assert.ok(!/pdSaid|data-x="go"|six lines of this run/.test(sh), 'no words box, no Put it button, no verdict to hope on');
-  press('go'); await new Promise((r) => setImmediate(r));
-  assert.deepEqual(sent, []);
-  c.S.deskShut = '';
 });
 
 test('words (plan 4.10): a 3:1 run\'s All metrics says In-sample or Test months; the prop sim is not one of the six lines', () => {

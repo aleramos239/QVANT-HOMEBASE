@@ -537,10 +537,8 @@
     return on ? "ON: it runs in shadow" : "OFF: it does nothing";
   }
   // the confirm dialog's lines: "Remove <name> from the Desk? Its history is kept. ..."
-  // NO_BACK: while desklab_unproven() refuses every promote (S4), a removed strategy cannot come back from the Lab; Archive can
-  var NO_BACK = "It cannot go back on the Desk from the Lab today. To put it back later, Archive it instead.";
   function removeAsk(name) {
-    return { title: "Remove " + name + " from the Desk?", body: "Its history is kept. " + NO_BACK };
+    return { title: "Remove " + name + " from the Desk?", body: "Its history is kept." };
   }
 
 
@@ -883,7 +881,7 @@
     return Array.isArray(book) && book.length > 0 ? switchOff(n) : n + " is OFF: it does nothing.";
   }
   function removeAskDesk(name) {
-    return { title: "Remove " + name + " from the Desk?", body: "Its history is kept. Its accounts come off. " + NO_BACK };
+    return { title: "Remove " + name + " from the Desk?", body: "Its history is kept. Its accounts come off." };
   }
   function switchOff(n) { return n + " is OFF. Unfilled orders are cancelled. An open position keeps its stop and is closed at the flat time. It trades again from the next session."; }
   // The toast after a switch-on: stopped for today first (the ruling), then with accounts, then shadow.
