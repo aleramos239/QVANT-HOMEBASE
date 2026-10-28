@@ -171,6 +171,13 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .panel[data-cursor="crosshair"] .chart * { cursor: crosshair !important; }
 .panel[data-cursor="pointer"] .chart * { cursor: pointer !important; }
 .panel[data-cursor="grabbing"] .chart * { cursor: grabbing !important; }
+/* the mouse pointer setting (rail, under the cursor tool): cross is the default above; dot and arrow replace the crosshair over the plot
+   and while a drawing tool is picked -- never the grab / hand / resize cursors */
+body[data-cursor-style="arrow"] .panel[data-zone="pane"]:not([data-cursor="pointer"]):not([data-cursor="grabbing"]) .chart *,
+body[data-cursor-style="arrow"] .panel[data-cursor="crosshair"] .chart * { cursor: default !important; }
+body[data-cursor-style="dot"] .panel[data-zone="pane"]:not([data-cursor="pointer"]):not([data-cursor="grabbing"]) .chart *,
+body[data-cursor-style="dot"] .panel[data-cursor="crosshair"] .chart * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Ccircle cx='8' cy='8' r='3' fill='%23131722' stroke='%23fff' stroke-width='1.5'/%3E%3C/svg%3E") 8 8, default !important; }
 .panel[data-op-grab] .chart * { cursor: ns-resize !important; }   /* over an order-panel preview line: drag it */
 .panel[data-op-click] .chart * { cursor: pointer !important; }    /* over its ENTRY tag: click to send */
 
@@ -1382,8 +1389,9 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 
 /* ---- 2026-10-11: the objects list (every drawing on the symbol) ---- */
 .obj-list { display: flex; flex-direction: column; gap: 2px; max-height: 52vh; overflow: auto; padding: 8px 12px; }
-.obj-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; border-radius: 6px; }
+.obj-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 6px; border-radius: 6px; }
 .obj-row:hover { background: var(--hover); }
+.obj-row.off .obj-name { opacity: .5; }
 .obj-name { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 8px; text-align: left;
   color: var(--text); background: none; border: 0; cursor: pointer; }
 .obj-type { font-size: 14px; }

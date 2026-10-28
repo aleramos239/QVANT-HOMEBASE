@@ -1245,8 +1245,8 @@ class Controller {
   paste(d) {
     const c = cloned(d, this.cell.tick, this.ctx());
     if (!c) return null;
-    this.host.drawings.add(this.root, c);
     this.sel = c.id;
+    this.host.drawings.add(this.root, c);   // every chart of this symbol refreshes, with the clone selected
     return c;
   }
 
