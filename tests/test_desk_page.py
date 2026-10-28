@@ -208,7 +208,7 @@ DESK_PINS = {
     "desk/book.js": (6, "9f4b0590651ec010"),
     "desk/settings.js": (7, "a50305e081b453a7"),
     "desk/popups.js": (3, "d7d287520e1471a9"),
-    "desk/start.js": (1, "5b20467b07f10f65"),
+    "desk/start.js": (2, "4ba84d0381586902"),
 }
 
 
