@@ -221,6 +221,7 @@ test('deskSaid: the lines after a promote, in the words of the page', () => {
   assert.deepEqual(L.deskSaid({ ok: true }), ['On the Desk, switched off. Turn it on there to run it in shadow.']);
   assert.deepEqual(L.deskSaid({ ok: true, notes: 'x' }), ['On the Desk, switched off. Turn it on there to run it in shadow.'], 'notes is a list or nothing');
   assert.deepEqual(L.deskSaid({ ok: true, notes: [1, null, ''] }), ['On the Desk, switched off. Turn it on there to run it in shadow.']);
+  assert.deepEqual(L.deskSaid({ ok: true, vps: ['x: SENT.', 7, ''] }).slice(1), ['x: SENT.'], 'the VPS lines come after, strings only');
 });
 
 

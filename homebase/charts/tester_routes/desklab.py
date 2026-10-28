@@ -38,11 +38,28 @@ ARCHIVE_GROUP = "Archive"     # the Lab group an archived strategy's draft is fi
 DESKGROUP_ACTIONS = ("create", "rename", "kind", "delete", "move")
 DESKLAB_ALIVE_S = 20     # the Lab-strategy runner is alive while its heartbeat is at most this old
 DESKLAB_TAKE_OFF = "Take its accounts off on the Desk first."   # Promote again / Remove while the desk has it booked
+DESKLAB_TO = ("mac", "vps", "both")   # where Promote puts it: "vps" and "both" also send the record to the server's Desk (OFF, no account)
 DESKLAB_PROP = "lucid-pro-50k-no-dll@2026-10-11"   # the account every Desk panel's prop sim is scored on (the pipeline's account; owner 2026-10-11)
 DESKLAB_SHADOW_DAYS = 800    # the shadow calendar: about three years of session days
 DESKLAB_DAYS = 10        # day summaries shown under each promoted strategy ...
 DESKLAB_DAY_KEYS = ("date", "state", "why", "net", "match")      # ... each cut to these and `rebuilt` (no order or trade rows)
 DESKLAB_BLOCKS = 256     # card blocks kept per service (one per Desk strategy and month: ~20 KB each, curves included)
+
+
+def send_to_vps(name: str) -> list[str]:
+    """Send the promoted record to the server's Desk, the way deploy/linux/send_strategy.py does (same checks, never --replace):
+    the lines to show. Nothing here raises: a server that cannot take it is a line, and the Mac's record stays."""
+    import importlib.util
+    from pathlib import Path
+    try:
+        path = Path(__file__).resolve().parents[3] / "deploy" / "linux" / "send_strategy.py"
+        spec = importlib.util.spec_from_file_location("send_strategy", path)
+        ss = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ss)
+        why = ss.server_ready()
+        return [f"Not sent to the VPS: {why}"] if why else ss.send(name, go=True)[1]
+    except Exception as e:      # ssh missing, a timeout, the script gone: the promote on this Mac already happened
+        return [f"Not sent to the VPS: {type(e).__name__}: {e}"]
 
 
 def register(r: APIRouter, ctx) -> Callable[[], None]:
@@ -512,7 +529,7 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
 
     @r.post("/desklab/{what}")
     async def desklab_write(what: str, request: Request):
-        """promote {name, run_id, owner_said}: a draft that was backtested goes on the Desk, frozen. remove {name}: its record goes
+        """promote {name, run_id, owner_said, to?}: a draft that was backtested goes on the Desk, frozen. remove {name}: its record goes
         (the history stays). onoff {name, on}: the runner hosts it or leaves it be. A refusal the page may read is answered
         with its own words ({ok: false, detail})."""
         watch_guard(request)
@@ -544,6 +561,11 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
                 keys = keys | {"builtin"}
             if what == "open" and wf is not None:
                 keys = keys | {"wf"}
+            to = body.get("to") if what == "promote" and isinstance(body, dict) else None
+            if to is not None and to not in DESKLAB_TO:
+                raise HTTPException(400, "to: mac, vps or both")
+            if to is not None:
+                keys = keys | {"to"}
             draft = body.get("draft") if what == "delete" and isinstance(body, dict) else None
             if draft is not None and draft is not True:
                 raise HTTPException(400, "draft: true")
@@ -563,6 +585,8 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
             try:
                 if what == "promote":
                     done = await asyncio.to_thread(desklab_promote, name, body["run_id"])
+                    if to in ("vps", "both"):
+                        done["vps"] = await asyncio.to_thread(send_to_vps, name)
                 elif what == "remove":
                     done = await asyncio.to_thread(desklab_remove, name)
                 elif what == "delete":

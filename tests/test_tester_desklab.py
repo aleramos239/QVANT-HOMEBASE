@@ -983,3 +983,25 @@ def test_the_shadow_calendar_shows_a_booked_days_shadow_copy_never_its_real_trad
     store.put_shadow_day("nq_bars", a_day("2026-09-28", sha256="other", promoted_utc="old", trades=[real]), at / "elsewhere")
     days = c.get("/api/tester/desklab/shadow", params={"name": "nq_bars"}, headers=DESK).json()["days"]
     assert [(d["date"], d["trades"], d["net"]) for d in days] == [("2026-09-28", [paper], -12.0)]
+
+
+def test_promote_can_also_send_to_the_vps_only_when_asked(c, drafts_dir, make_run, monkeypatch):
+    from homebase.charts.tester_routes import desklab
+    sent = []
+    monkeypatch.setattr(desklab, "send_to_vps", lambda name: sent.append(name) or ["SENT"])
+    draft(drafts_dir)
+    rid = make_run()
+    body = {"name": "nq_bars", "run_id": rid, "owner_said": SAID}
+    url = "/api/tester/desklab/promote"
+    assert c.post(url, json={**body, "to": "nowhere"}).status_code == 400 and not sent        # nothing written, nothing sent
+    assert "vps" not in c.post(url, json=body).json() and not sent                              # default: this Mac only
+    assert "vps" not in c.post(url, json={**body, "to": "mac"}).json() and not sent
+    assert c.post(url, json={**body, "to": "both"}).json()["vps"] == ["SENT"] and sent == ["nq_bars"]
+    assert c.post(url, json={**body, "to": "vps"}).json()["vps"] == ["SENT"] and sent == ["nq_bars"] * 2
+
+
+def test_send_to_vps_never_raises_and_says_why(monkeypatch):
+    from homebase.charts.tester_routes import desklab
+    monkeypatch.setenv("HOMEBASE_SERVER", "root@invalid.invalid")
+    out = desklab.send_to_vps("nq_nothere")
+    assert len(out) == 1 and out[0].startswith("Not sent to the VPS")

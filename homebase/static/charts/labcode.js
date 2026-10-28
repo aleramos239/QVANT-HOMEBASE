@@ -684,7 +684,8 @@ function promoteState(state) {
 /* The lines after a promote went through: that it is on the Desk and off, then one for each thing the Desk would refuse on an account. */
 function deskSaid(answer) {
   const notes = Array.isArray(answer && answer.notes) ? answer.notes.filter((n) => typeof n === 'string' && n) : [];
-  return ['On the Desk, switched off. Turn it on there to run it in shadow.', ...notes.map((n) => `The Desk would refuse: ${n}`)];
+  const vps = Array.isArray(answer && answer.vps) ? answer.vps.filter((n) => typeof n === 'string' && n) : [];
+  return ['On the Desk, switched off. Turn it on there to run it in shadow.', ...notes.map((n) => `The Desk would refuse: ${n}`), ...vps];
 }
 
 /* ---- the strategy form ("Fill in a form"): the pure half ----

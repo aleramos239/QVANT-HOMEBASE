@@ -3193,21 +3193,23 @@ function promoteToDesk(b) {
     ${rd ? `<p>The six lines of this run's own settings (its in-sample months and test months, as set):</p><p><b>${esc(rd.verdict.word)}</b>: ${esc(rd.verdict.why)}</p><div class="rl">${rd.lines.map((x) => `<div class="rl-line ${x.ok === true ? 'pass' : x.ok === false ? 'fail' : 'wait'}"><b>${word(x)}</b><span>${esc(x.line)}: ${esc(x.said)}</span></div>`).join('')}</div>`
     : `<p>No in-sample record of this run's own settings and code is open: the six lines are not read.</p>${tp != null ? `<p>Your pick in the in-sample table, box ${esc(X.boxNo(tp))}, is not matched to this run.</p>` : ''}`}
     <p>Lands OFF, no account.</p><p>Trade rules are not applied on the Desk.</p>
+    <div class="bp-f"><label for="pdTo">Which Desk</label><select id="pdTo"><option value="mac">This Mac</option><option value="both">This Mac and the VPS</option><option value="vps">The VPS (this Mac keeps an OFF copy)</option></select>
+    <small>The VPS one lands OFF there too, with no account: set its accounts and limits on that Desk.</small></div>
     <div class="bp-f"><label for="pdSaid">Your words, that it goes on the Desk</label><textarea id="pdSaid" maxlength="400"></textarea></div>
     <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go" disabled>Put it on the Desk</button></div>`);
   const ta = $('#pdSaid', d), go = $('[data-x="go"]', d);
   ta.focus();
   ta.addEventListener('input', () => { go.disabled = !ta.value.trim(); });
   d.addEventListener('click', (e) => {
-    const x = e.target.closest('[data-x]'), said = ta.value.trim();
+    const x = e.target.closest('[data-x]'), said = ta.value.trim(), to = $('#pdTo', d).value;
     if (!x) return;
     closeDialog();
-    if (x.dataset.x === 'go' && said) promoteGo(b, r, said);      // no words: nothing is sent
+    if (x.dataset.x === 'go' && said) promoteGo(b, r, said, to);      // no words: nothing is sent
   });
 }
-async function promoteGo(b, r, said) {
+async function promoteGo(b, r, said, to) {
   S.deskBusy = true; S.deskErr = ''; paintRes();
-  const a = await send('POST', '/api/tester/desklab/promote', { name: b.name, run_id: r.rid, owner_said: said });
+  const a = await send('POST', '/api/tester/desklab/promote', { name: b.name, run_id: r.rid, owner_said: said, to });
   S.deskBusy = false;
   const j = a.json || {};
   if (!a.ok || j.ok === false) { S.deskErr = String(j.detail || a.error || 'It did not work.'); log(`<span class="err">${esc(S.deskErr)}</span>`); }
