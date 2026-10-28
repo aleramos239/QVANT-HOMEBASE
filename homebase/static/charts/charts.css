@@ -567,6 +567,8 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .bp-fq-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
 .bp-fq-select { height: 26px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 12px; }
 .bp-table tfoot td { font-weight: 600; background: var(--grid); border-top: 1px solid var(--border); border-bottom: none; }
+.bp-jbar { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.bp-jr input.bp-fq-select { width: 100%; min-width: 120px; }
 .bp-fq-compare { padding: 8px 10px; color: var(--text-2); font-size: 12px; }
 .env { padding: 0 5px; border-radius: 4px; font-size: 11px; line-height: 16px; background: var(--hover); color: var(--text-2); }
 .env.live { background: var(--down-soft); color: var(--down); font-weight: 600; }

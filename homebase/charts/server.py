@@ -46,6 +46,7 @@ from .desk import Fanout, Quotes, register as register_desk
 from .export import export_router
 from .refresh import refresh_router
 from .history import History
+from .journal import Notes as JournalNotes, record_carried as journal_record_carried, record_fill as journal_record_fill
 from .hub import Hub, Stream
 from .known import Known
 from . import lagwatch
@@ -425,6 +426,13 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                                             send=runner_send, clock=lambda: clock() / 1000.0, log=log)
     conns: set[Conn] = set()
     desk_fan = Fanout()                   # desk events fanned out to every page, bounded per page
+    journal_dir = sd / "journal"          # the chart journal's own files: the fill log and the notes (never the desk's journal)
+
+    def desk_publish(msg: dict) -> None:
+        desk_fan.publish(msg)
+        if not replay:
+            journal_record_fill(journal_dir / "fills", msg)       # a copy of each fill, for the Fills tab's past days
+            journal_record_carried(journal_dir / "fills", msg, int(time.time() * 1000))    # and a position open before it began
 
     def fan(msg: dict) -> None:
         for c in list(conns):
@@ -435,9 +443,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     # the desk link: never in replay (a replayed price must never reach an order); a replay may link to the
     # FAKE desk only (browser checks, python -m homebase.charts --replay … --fake-desk PORT)
     if replay:
-        link = fake_desk_factory(desk_fan.publish) if fake_desk_factory is not None else None
+        link = fake_desk_factory(desk_publish) if fake_desk_factory is not None else None
     else:
-        link = desk_factory(desk_fan.publish) if desk_factory is not None else None
+        link = desk_factory(desk_publish) if desk_factory is not None else None
     if link is not None:
         desk_fan.hello = link.hello
     start_last: dict[str, int | None] = {}
@@ -1075,6 +1083,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     routes.drawings.register(app, drawings_path=drawings_path, templates_path=templates_path, presets_store=presets_store,
                              known_root=known_root)
     routes.events.register(app, paper=paper, cal=cal, news=news)
+    routes.journal.register(app, journal_path=kd / "journal.jsonl", fills_dir=journal_dir / "fills",
+                            notes=JournalNotes(journal_dir / "notes.json"), browser_write_ok=browser_write_ok)
 
     # the liquidity heatmap's and the book indicators' histories (routes/depthbook.py): their workers live here, the
     # lifespan shuts them down
