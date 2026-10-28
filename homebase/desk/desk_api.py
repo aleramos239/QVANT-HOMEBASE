@@ -9,7 +9,8 @@
   * every route needs X-Homebase-Key = the hex secret in
     homebase/.state/desk.key (created 0600 at startup); a browser cannot send
     that header cross-origin without a preflight this app never answers.
-POST /api/chart-trading is the desk page's own switch + limits: an allowed
+POST /api/chart-trading is the desk page's own switch (the two old size-limit fields are still stored and echoed,
+but no order is checked against them): an allowed
 Host, JSON only, and an Origin (when present) on the same allowlist
 (netguard: loopback + cfg.allowed_hosts).
 

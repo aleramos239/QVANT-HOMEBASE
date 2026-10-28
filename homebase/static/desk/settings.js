@@ -113,7 +113,11 @@ function buildTrading() {
       <button class="switch" id="ctSwitch" role="switch" aria-label="Chart trading" aria-checked="false"
         title="OFF — the chart page cannot trade"></button>
       <span class="nm" id="ctState" style="font-size:13px">Off</span>
-    </div>`;
+    </div>
+    <p class="wnote" id="ctAccts"></p>
+    <p class="wnote">Checked on every chart order: at least 1 contract; at most 5 actions a second on an account; the account connected and on its own broker account; stops, targets and limits on the right side of the price; a bot's symbol is locked while the bot works.</p>
+    <p class="wnote">Not limited: contracts per order or held, trades a day, the day-lock (those bind the bots only).</p>
+    <p class="wnote">With it OFF, new orders are refused; cancel, flatten and protective exits still work.</p>`;
   tradingEls = {sw: $("#ctSwitch")};
   // The switch's handler -- wired here, not at page load (the id exists only once Settings has been opened).
   // The old hidden limit inputs are gone: no order path reads the per-order / per-position limits.
@@ -133,12 +137,15 @@ function renderChartTrading(ct) {
   sw.title = ct.enabled ? "ON — the chart page can place real orders"
                         : "OFF — the chart page cannot trade";
   $("#ctState").textContent = ct.enabled ? "On — the chart page can place orders" : "Off";
+  const on = Object.values((ST && ST.accounts) || {}).filter(a => a && a.connected).map(a => `${a.label} (${a.env})`);
+  $("#ctAccts").textContent = (on.length ? "Connected broker accounts: " + on.join(" · ") + "." : "No broker account is connected.")
+    + " Each chart uses the ones ticked on it.";
 }
 async function setChartTrading(enabled) {
   if (switchBounced("chartTrading")) return;         // a double-click is one flip
   const where = machineWords();                       // "on the SERVER · Chicago" / "on this Mac" / "" (unknown)
   if (needsConfirm("chartTrading", enabled) && !await confirmDlg("Turn chart trading ON?",
-      `Chart pages${where ? " " + where : ""} can then place REAL orders on the accounts you tick there. No size limit. A bot's symbol stays locked on its accounts while the bot is working. Kill turns it off.`,
+      `Chart pages${where ? " " + where : ""} can then place REAL orders on the accounts you tick there. The desk sets no size limit (a chart's order panel stops at 1000 contracts), no daily trade cap and no day-lock: those bind the bots only. A bot's symbol stays locked on its accounts while the bot is working. Kill turns it off.`,
       "Turn on", false)) { refresh(); return; }
   try {
     const r = await post("/api/chart-trading", {enabled});
@@ -205,7 +212,7 @@ function marketDataSection() {
   const rows = MD_CHOICES.map((c) => {
     const acct = MD.accounts && MD.accounts[c.value];
     return `<button type="button" class="${MD_STAGED === c.value ? "sel" : ""}" data-md="${c.value}"
-      ${MD_BUSY ? "disabled" : ""}>${esc(c.label)}${acct ? ` (${esc(acct)})` : ""}</button>`;
+      ${MD_BUSY || MD.pinned ? "disabled" : ""}>${esc(c.label)}${acct ? ` (${esc(acct)})` : ""}</button>`;
   }).join("");
   const notes = [];
   if (MD_FEED && MD_FEED.md_mismatch) notes.push(esc(MD_FEED.md_mismatch));
@@ -221,6 +228,8 @@ function marketDataSection() {
     <p class="wnote" style="margin-top:0">Fill charts from</p>
     <div class="seg">${rows}</div>
     <p class="wnote">Only the live login carries Level 2 (depth, DOM ladder, heatmap).</p>
+    ${MD.pinned ? `<p class="mcap warn">This machine's charts use the ${esc(labelOfMd(MD.pinned))} login only; it cannot be switched here.</p>`
+      : `<p class="wnote">Refused while a bot is working, and at most one switch every 10 minutes.</p>`}
     ${MD_ERR ? `<p class="mcap warn" role="alert">${esc(MD_ERR)}</p>` : ""}
     ${notes.length ? `<p class="mcap warn">${notes.join(" ")}</p>` : ""}
     ${seat}
