@@ -1,7 +1,8 @@
 /* Homebase Charts — HBLinkWatch (D11, 2026-10-27): a toast, and an optional alarm, when the chart service, the Desk
    link or the prices stop. The toast is always there and stays until the link is back; the alarm is a sound picked in
    Settings > Sounds ("Connection lost", "Connection lost, position open": both Off until picked), repeated every 15 s
-   until nothing is down, the stronger one if a position was open when it dropped. Display and sound only: it sends
+   until nothing is down, the stronger one if a position was open when it dropped. Stale prices ring once and do not
+   repeat: the stale rule has no exchange-holiday model, and the alarm has no mute. Display and sound only: it sends
    nothing. Fed by app.js (service, feed) and HBDeskClient (desk). Browser only. */
 (() => {
 'use strict';
@@ -17,14 +18,14 @@ function make({ toast, dismiss, sound, positionOpen, every, cancel }) {
     strong = strong || pos;
     open.set(key, toast('warn', text(pos)));
     ring();
-    if (!timer) timer = every(ring, REPEAT_MS);
+    if (key !== 'feed' && !timer) timer = every(ring, REPEAT_MS);
   }
   function end(key, text) {
     if (!open.has(key)) return;
     dismiss(open.get(key));
     open.delete(key);
     toast('ok', text);
-    if (!open.size && timer) { cancel(timer); timer = null; strong = false; }
+    if (timer && ![...open.keys()].some((k) => k !== 'feed')) { cancel(timer); timer = null; strong = false; }
   }
   const held = (pos) => (pos ? ' A position was open: check it another way.' : '');
   return {
@@ -40,12 +41,17 @@ function make({ toast, dismiss, sound, positionOpen, every, cancel }) {
   };
 }
 
+// a position open on the Desk's own accounts; the PAPER book lives in the chart service and is no reason to escalate
+function deskPosition(st, isPaper) {
+  return !!st && (st.accounts || []).some((a) => !isPaper(a.id) && (a.positions || []).some((p) => p.net));
+}
+
 function mount() {
   const D = window.HBDeskClient, S = window.HBSounds;
   if (!D) return;
   const w = make({
     toast: D.toast, dismiss: D.dismiss, sound: (k) => S && S.event(k),
-    positionOpen: () => { const st = D.state || D.heldState; return !!st && (st.accounts || []).some((a) => (a.positions || []).some((p) => p.net)); },
+    positionOpen: () => deskPosition(D.state || D.heldState, window.HBTrade.isPaperId),
     every: (fn, ms) => setInterval(fn, ms), cancel: clearInterval,
   });
   D.on((why) => { if (why.has('state')) w.desk(D.down); });
@@ -58,6 +64,6 @@ function mount() {
   window.HBLinkWatch.service = w.service;
   window.HBLinkWatch.feed = w.feed;
 }
-window.HBLinkWatch = { make };
+window.HBLinkWatch = { make, deskPosition };
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();

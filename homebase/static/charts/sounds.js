@@ -57,8 +57,9 @@ function audio() {
 // a browser only lets a page make sound after the viewer has pressed something on it
 document.addEventListener('pointerdown', () => audio(), { once: true, capture: true });
 
-/* cj-6: sounds are on but the page has not been pressed yet, so the browser still keeps them silent. */
-function locked() { return cfg.on && (!ctx || ctx.state !== 'running'); }
+/* cj-6: a connection alarm is picked but the page has not been pressed yet, so the browser still keeps it silent.
+   Fill sounds are not asked about: placing the order took a click. */
+function locked() { return cfg.on && ['link', 'linkpos'].some((k) => cfg.events[k] !== 'off') && (!ctx || ctx.state !== 'running'); }
 
 /* One sound, now, at `volume` (0..1). */
 function play(name, volume = cfg.volume) {

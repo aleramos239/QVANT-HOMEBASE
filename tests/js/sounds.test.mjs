@@ -58,9 +58,13 @@ test('sounds: the connection alarms and "problem" are Off until a sound is picke
   assert.ok(S.SOUNDS.some((s) => s[0] === 'siren'), 'the stronger tone is in the list');
 });
 
-test('sounds: locked() is true only when sounds are on and the page has not been pressed yet (cj-6)', () => {
+test('sounds: locked() is true only when sounds are on, a connection alarm is picked and the page has not been pressed yet (cj-6)', () => {
   const { S } = load();
   assert.equal(S.locked(), false, 'off: nothing to unlock');
   S.set({ on: true });
+  assert.equal(S.locked(), false, 'fill sounds only: a fill needs a click to place the order, so no sticky warning on every load');
+  S.set({ events: { link: 'siren' } });
   assert.equal(S.locked(), true);
+  S.set({ events: { link: 'off', linkpos: 'siren' } });
+  assert.equal(S.locked(), true, 'either alarm counts');
 });

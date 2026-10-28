@@ -34,7 +34,7 @@ let layout = { grid: 4, sizes: null, cells: [], name: '', dirty: false };
 let cells = [];
 let selected = 0;
 let nextId = 1;
-let statusAt = 0, statusLine = '';
+let statusAt = 0, statusLine = '', mdSeenUp = false;   // mdSeenUp: the market-data feed was up on this page (the prices alarm waits for it)
 let menuEl = null, menuAnchor = null;
 let menuNeedsMaterialize = false;   // true right after openMenu(), consumed by the FIRST placeMenu() that follows
 let customWait = null;   // {cell, spec, err}: a custom interval sent from the open interval menu, awaiting the server
@@ -2635,7 +2635,10 @@ function showStatus(s) {
   recEl.classList.toggle('warn', !!(rec && rec.buffered >= C.REC_BUSY));
   statusLine = feed.textContent;
   // cj-4: the markets on these charts that are open and silent too long (the amber text above), for the optional alarm
-  if (s.mode === 'live') window.HBLinkWatch?.feed?.((f.stale || []).filter((r) => cells.some((c) => c.cfg && c.cfg.root === r)));
+  if (s.mode === 'live') {
+    mdSeenUp = mdSeenUp || (s.connected && !s.error);   // a page that never saw the feed up stays quiet while it connects
+    if (mdSeenUp) window.HBLinkWatch?.feed?.((f.stale || []).filter((r) => cells.some((c) => c.cfg && c.cfg.root === r)));
+  }
   for (const c of cells) c.setToday(s.data && s.data.today);   // today's hours still short of their ticks: a light band
 }
 

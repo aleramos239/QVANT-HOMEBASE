@@ -69,6 +69,23 @@ test('prices: stale markets alarm, an empty list is back; the alarm runs while a
   assert.equal(timers.size, 0);
 });
 
+test('prices: the stale-prices alarm rings once -- no exchange holiday model, so it never repeats on its own (review round 2)', () => {
+  const { w, log, timers, tick } = load();
+  w.feed(['NQ']);
+  assert.deepEqual(sounds(log), ['link']);
+  assert.equal(timers.size, 0, 'no repeating timer for prices alone');
+  w.feed(['NQ']);
+  assert.deepEqual(sounds(log), ['link'], 'the same stale list again does not ring');
+  w.service(false);                                  // a real outage still repeats
+  assert.equal(timers.size, 1);
+  w.service(true);
+  assert.equal(timers.size, 0, 'the prices toast alone does not keep the alarm running');
+  tick();
+  assert.deepEqual(sounds(log), ['link', 'link']);
+  w.feed([]);
+  assert.deepEqual(log.at(-1).slice(1), ['ok', 'Prices are back.']);
+});
+
 test('a position that opened after the first drop makes the next drop of the same episode strong', () => {
   const { w, log, setPos } = load();
   w.service(false);
@@ -82,9 +99,22 @@ test('the page wires it: app.js tells the client and the watch about the socket 
   const APP = rd('charts/app.js'), HTML = rd('charts.html');
   assert.match(APP, /ws\.onopen = \(\) => \{\n    statusAt = Date\.now\(\);\n    window\.HBDeskClient\?\.socket\(true\); window\.HBLinkWatch\?\.service\?\.\(true\);/);
   assert.match(APP, /ws\.onclose = \(\) => \{\n    window\.HBDeskClient\?\.socket\(false\); window\.HBLinkWatch\?\.service\?\.\(false\);/);
-  assert.match(APP, /if \(s\.mode === 'live'\) window\.HBLinkWatch\?\.feed\?\.\(\(f\.stale \|\| \[\]\)\.filter\(\(r\) => cells\.some\(\(c\) => c\.cfg && c\.cfg\.root === r\)\)\);/);
+  assert.match(APP, /mdSeenUp = mdSeenUp \|\| \(s\.connected && !s\.error\);/);
+  assert.match(APP, /if \(mdSeenUp\) window\.HBLinkWatch\?\.feed\?\.\(\(f\.stale \|\| \[\]\)\.filter\(\(r\) => cells\.some\(\(c\) => c\.cfg && c\.cfg\.root === r\)\)\);/);
   assert.ok(HTML.indexOf('/charts/deskclient.js') < HTML.indexOf('/charts/linkwatch.js') && HTML.indexOf('/charts/sounds.js') < HTML.indexOf('/charts/linkwatch.js'));
   assert.doesNotMatch(rd('backtest.html'), /linkwatch/);
+});
+
+test('positionOpen counts the Desk\'s accounts only: a PAPER position is no reason for the strong tone (review round 2)', () => {
+  const win = {};
+  vm.runInNewContext(readFileSync(new URL('../../homebase/static/charts/linkwatch.js', import.meta.url), 'utf8'),
+    { window: win, document: { readyState: 'complete', addEventListener() {} } });
+  const isPaper = (id) => /^paper/.test(id), pos = (id, net) => ({ id, positions: [{ net }] });
+  const open = win.HBLinkWatch.deskPosition;
+  assert.equal(open(null, isPaper), false);
+  assert.equal(open({ accounts: [pos('paper', 2)] }, isPaper), false, 'paper only');
+  assert.equal(open({ accounts: [pos('paper-2', 1), pos('sim041', 0)] }, isPaper), false, 'flat on the Desk');
+  assert.equal(open({ accounts: [pos('paper', 2), pos('sim041', -1)] }, isPaper), true);
 });
 
 test('it never sends: no fetch, no send, no desk action in the file', () => {

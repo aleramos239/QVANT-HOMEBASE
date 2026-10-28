@@ -1362,8 +1362,10 @@ function feedSummary(s, weekday, minutes) {
   const title = [roots.map(([r, x]) => `${r} ${x.error ? `unavailable: ${x.error}`
     : !open(r) ? 'closed' : age(x) == null ? 'no ticks yet'
     : fmtAge(age(x)) + (behind(r, x) ? `, ${lateMin(x.late_s)}m late` : '')}`).join('  ·  '), watch].filter(Boolean).join('  —  ');
-  if (s.error || recErr) return { dot: 'bad', text: s.error || `recorder: ${recErr}`, textClass: 'bad', title };
-  if (!s.connected) return { dot: 'bad', text: 'connecting…', textClass: '', title };
+  // `stale`: the page's feed alarm. The feed itself gone (an error, not connected) means every open market has no prices
+  const gone = !!s.error || !s.connected, names = (gone ? live : stale).map(([r]) => r);
+  if (s.error || recErr) return { dot: 'bad', text: s.error || `recorder: ${recErr}`, textClass: 'bad', title, stale: names };
+  if (!s.connected) return { dot: 'bad', text: 'connecting…', textClass: '', title, stale: names };
   const late = feedLate ? [`late ${lateMin(feedLate)} min`]
     : roots.filter(([r, x]) => behind(r, x)).slice(0, 2).map(([r, x]) => `${r} late ${lateMin(x.late_s)} min`);
   const warn = refused.length > 0 || stale.length > 0 || late.length > 0 || thin;
@@ -1372,7 +1374,7 @@ function feedSummary(s, weekday, minutes) {
     ...late, ...(thin ? ['thin feed'] : []),
     ...silent.slice(0, 2).map(([r]) => `${r} no ticks yet`)].join(' · ') || (roots.length ? 'feeds ok' : '');
   const dot = warn || (rec && rec.buffered >= REC_BUSY) ? 'warn' : silent.length ? '' : 'ok';
-  return { dot, text, textClass: warn ? 'warn' : '', title, stale: stale.map(([r]) => r) };   // `stale`: the page's feed alarm
+  return { dot, text, textClass: warn ? 'warn' : '', title, stale: names };
 }
 
 /* W1 (2026-09-28): which status-bar segments step out so the rest fits `avail` px. `items`, in bar order:

@@ -81,6 +81,25 @@ test('c-30: the PAPER book lives in the chart service -- while only the Desk is 
   assert.ok(marks.every(([p, nl]) => nl === !p), JSON.stringify(marks));
 });
 
+test('c-30 (review round 2): the BOT lines are marked too when the chart service socket is down -- grey, "not live"; in colour when live', () => {
+  const run = (stale) => {
+    const lines = [], P = { text2: 'G' }, ctx = vm.createContext({ window: { HBDeskClient: { stale } } });
+    vm.runInContext(`globalThis.O = { ${method('paintBotLines')} };`, ctx);
+    const ov = { botItems: new Map(), layer: { appendChild() {} }, buildChip: () => ({ ...fakeEl('div'), text: fakeEl('span'), btn: fakeEl('button'), classList: { add() {} } }),
+      cell: { P, candles: { createPriceLine: (o) => { lines.push(o); return { applyOptions: (x) => Object.assign(o, x) }; }, removePriceLine() {} } } };
+    ctx.O.paintBotLines.call(ov, [{ key: 'b1', price: 30010, color: 'C', text: 'SL 30010' }]);
+    return { chip: [...ov.botItems.values()][0].chip, line: lines[0], again: () => ctx.O.paintBotLines.call(ov, [{ key: 'b1', price: 30010, color: 'C', text: 'SL 30010' }]) };
+  };
+  const live = run(null);
+  assert.equal(live.chip.text.textContent, 'SL 30010');
+  assert.equal(live.line.color, 'C');
+  const held = run('service');
+  assert.equal(held.chip.text.textContent, 'SL 30010 · not live');
+  assert.equal(held.line.color, 'G');
+  held.again();
+  assert.equal(held.chip.text.textContent, 'SL 30010 · not live', 'a repaint does not stack the mark');
+});
+
 test('c-30: lineColor greys a stale line', () => {
   assert.equal(T.lineColor({ kind: 'sl', stale: true }, { down: 'D', text2: 'G' }), 'G');
   assert.equal(T.lineColor({ kind: 'sl' }, { down: 'D', text2: 'G' }), 'D');

@@ -508,8 +508,9 @@ class Overlay {
 
   /* read-only: no drag, no × -- the bot owns them (the desk also refuses a change to a bot's order) */
   paintBotLines(lines) {
-    const seen = new Set();
-    for (const g of lines) {
+    const seen = new Set(), dead = !!window.HBDeskClient.stale;   // c-30: the chart service socket is down: the last lines, marked
+    for (const raw of lines) {
+      const g = dead ? { ...raw, color: this.cell.P.text2 || '#787B86', text: `${raw.text} · not live` } : raw;
       seen.add(g.key);
       let it = this.botItems.get(g.key);
       if (!it) {

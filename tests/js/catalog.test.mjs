@@ -551,7 +551,7 @@ test('status: not connected reads "connecting…", never "feeds ok"', () => {
 
 test('status: an error is red and says what failed', () => {
   const f = C.feedSummary({ connected: false, error: 'chart service unreachable — retrying' }, ...WED_10);
-  assert.deepEqual(f, { dot: 'bad', text: 'chart service unreachable — retrying', textClass: 'bad', title: '' });
+  assert.deepEqual(f, { dot: 'bad', text: 'chart service unreachable — retrying', textClass: 'bad', title: '', stale: [] });
   const feed = C.feedSummary(live({ NQ: tick(1) }, { error: 'Refused: every symbol refused' }), ...WED_10);
   assert.deepEqual([feed.dot, feed.text, feed.textClass], ['bad', 'Refused: every symbol refused', 'bad']);
   const rec = C.feedSummary(live({ NQ: tick(1) }, { recorder: { written: 0, buffered: 0, error: 'disk full' } }), ...WED_10);
@@ -1508,5 +1508,9 @@ test('status: feedSummary names the stale open markets in `stale` (cj-4: the pag
   assert.deepEqual(C.feedSummary(live({ NQ: tick(180), ES: tick(2), YM: tick(360) }), ...WED_10).stale, ['YM', 'NQ'], 'stalest first, as the text');
   assert.deepEqual(C.feedSummary(live({ NQ: tick(2) }), ...WED_10).stale, []);
   assert.deepEqual(C.feedSummary(live({ NQ: tick(180000) }), ...SAT_NOON).stale, [], 'a closed market is never stale');
-  assert.equal(C.feedSummary({ ...live({ NQ: tick(500) }), connected: false }, ...WED_10).stale, undefined);
+  // the feed itself gone is the worst stale: every open market is named (cj-4, review round 2) -- the alarm must not read it as "fresh"
+  assert.deepEqual(C.feedSummary({ ...live({ NQ: tick(500), ES: tick(2), BTC: tick(1) }), connected: false }, ...WED_10).stale, ['NQ', 'ES', 'BTC']);
+  assert.deepEqual(C.feedSummary({ ...live({ NQ: tick(2) }), connected: false }, ...SAT_NOON).stale, [], 'closed markets are not named');
+  assert.deepEqual(C.feedSummary({ ...live({ NQ: tick(2) }), error: 'md login refused' }, ...WED_10).stale, ['NQ']);
+  assert.deepEqual(C.feedSummary({ ...live({ NQ: tick(2), YM: tick(400) }), recorder: { error: 'disk full' } }, ...WED_10).stale, ['YM'], 'a recorder error is not lost prices');
 });
