@@ -537,6 +537,11 @@ class BlueprintMixin:
         r = self._bp(["blockcode"])
         return {k: r[k] for k in ("groups", "sources", "counts") if k in r}
 
+    def idea_board(self) -> list:
+        """Not a tool: the Lab's idea board. Every idea on file as `bp.py status` lists it: {name, status, phase, round, group, runs,
+        next, job, wf}; wf = {stage, box} for an idea on the 3:1 route (stage: card | table | pick | test | done | used)."""
+        return self._bp(["status"]).get("ideas") or []
+
     # ---- phase 0: the card
 
     def t_blueprint_card(self, name: str, card: dict, settings: dict) -> str:

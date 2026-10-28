@@ -40,6 +40,11 @@
     POST /api/tester/blueprint/run       {tool, args} -> {ok, text}: that tool run as a chat runs it (the research
                                           toolkit bp.py as a child process; it saves in the app itself). Only the
                                           tools that read (BP_PAGE_TOOLS); any other is a 403
+    GET  /api/tester/blueprint/board     every saved idea with its stage on the 3:1 route and its next step: {ideas: [{name,
+                                          status, next, job, wf: {stage, box}}], machine_runs} (bp.py status, kept BOARD_CACHE_S)
+    POST /api/tester/blueprint/step      {step: table | pick | oos, name, owner_said, box?, reads_test_months_once?}: the in-sample
+                                          table, the owner's pick, the test months of a saved idea -- only on the owner's own typed
+                                          words, passed on as typed; oos also needs reads_test_months_once; never on the server
     GET  /api/tester/pipeline            the strategy pipeline as the Lab shows it (its Queue, Book and Guide):
                                           {runner: {running, paused}, counts: {label: n}, ideas: [the toolkit's state
                                           rows, each with the page's `label`], book: [the book cards], stages: [{n,
@@ -238,6 +243,9 @@ from .tester_routes.desklab import (ARCHIVE_GROUP, DESKGROUP_ACTIONS, DESKLAB_AC
 from .tester_routes.jobs import MC_CACHE    # noqa: F401
 from .tester_routes.lab import NOT_TRASHED, ON_THE_DESK, _STRATEGIES_DIR, builtin_source    # noqa: F401
 
+BOARD_CACHE_S = 10.0     # the idea board (one `bp.py status` of every idea) is kept this long; a step of an idea drops it
+BP_STEPS = ("table", "pick", "oos")       # what POST /blueprint/step starts: the in-sample table, the owner's pick, the test months
+BP_SAID_MAX = 400        # the owner's words, as long as the Lab's other words boxes (maxlength 400)
 PIPE_CACHE_S = 2.0       # the pipeline's Queue / Book answer is kept this long: a page asks every 5 s, and several may be open
 pipe_clock = time.monotonic      # ... by this clock (a test moves it)
 CURVE_CACHE_S = 30.0     # an idea's equity curve is kept this long
@@ -379,6 +387,59 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             return {"ok": True, "tool": tool, "text": fn(**args)}
         except ToolError as e:    # a refusal of the toolkit (or a bad input): the tool's own words, nothing was changed
             return {"ok": False, "tool": tool, "text": str(e)}
+
+    # ---- the idea board and the three steps of a saved idea: every one only on the owner's own words ----------------
+    board: dict = {"at": None, "ideas": None, "error": None}
+    board_lock = threading.Lock()
+
+    @r.get("/blueprint/board")
+    def blueprint_board():
+        """Every idea on file with where it stands on the 3:1 route and its next step (one `bp.py status`, kept BOARD_CACHE_S), and
+        whether this machine may start the steps: the trading server only shows (no_backtests, owner 2026-10-24)."""
+        with board_lock:
+            if board["at"] is None or pipe_clock() - board["at"] >= BOARD_CACHE_S:
+                try:
+                    got = {"ideas": box.idea_board(), "error": None}
+                except ToolError as e:
+                    got = {"ideas": None, "error": str(e)}
+                board.update(got, at=pipe_clock())
+            if board["error"] is not None:
+                raise HTTPException(503, board["error"])
+            return {"ideas": board["ideas"], "machine_runs": not slots.backtests_off()}
+
+    @r.post("/blueprint/step")
+    def blueprint_step(request: Request, body: dict):
+        """{step: table | pick | oos, name, owner_said, box?, reads_test_months_once?}: the tools a chat has (blueprint_wf,
+        blueprint_wf_pick, blueprint_wf_oos), started from the board. /blueprint/run stays look-only (S1): this is a separate door
+        that opens ONLY with the owner's own typed words, which go on exactly as typed. The test months also need
+        reads_test_months_once: true (one read, never again). Never on the trading server."""
+        write_ok(request)
+        json_body(request)
+        step_, said = body.get("step"), body.get("owner_said")
+        if step_ not in BP_STEPS or set(body) - {"step", "name", "owner_said", "box", "reads_test_months_once"}:
+            raise HTTPException(400, "{step: " + " | ".join(BP_STEPS) + ", name, owner_said, box?, reads_test_months_once?}")
+        if not isinstance(said, str) or not said.strip() or len(said) > BP_SAID_MAX:
+            raise HTTPException(400, f"owner_said: your own words that say to do it (1 to {BP_SAID_MAX} characters). Nothing was started.")
+        if step_ == "oos" and body.get("reads_test_months_once") is not True:
+            raise HTTPException(400, "This reads the test months once and cannot be taken back: reads_test_months_once must be true. Nothing was started.")
+        if slots.backtests_off():
+            raise HTTPException(409, slots.NO_BACKTESTS)
+        if Slots().quiet():
+            raise HTTPException(409, "paused for a quiet window of the tester (tester_slots.json): run it later")
+        name, bx = body.get("name"), body.get("box")
+        try:
+            if step_ == "table":
+                text = box.t_blueprint_wf(owner_said=said, name=name)
+            elif step_ == "pick":
+                text = box.t_blueprint_wf_pick(name=name, box=bx)
+                ideastore.append_log(name, "pick_said", box=bx, said=said)      # his words stay with the pick (the tool has no place for them)
+            else:
+                text = box.t_blueprint_wf_oos(name=name, box=bx, owner_said=said)
+        except ToolError as e:      # a refusal of the toolkit (or a bad input): the tool's own words, nothing was started
+            return {"ok": False, "step": step_, "text": str(e)}
+        finally:
+            board["at"] = None
+        return {"ok": True, "step": step_, "text": text}
 
     # ---- the strategy pipeline in the Lab: its Queue, its Book and its Guide (claude_mcp.pipeline_tools) -----------
     pipe_cache: dict = {"at": None, "body": None, "error": None}
