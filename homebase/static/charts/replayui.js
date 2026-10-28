@@ -26,6 +26,7 @@ const R = window.HBReplay;
 const M = window.HBSpring;   // the feel pass (2026-09-28): the control bar's own materialize()/dematerialize()
 
 const sessions = new WeakMap();   // Cell -> {pending, ov, date, cursorMs, speed, playing, done}
+const liveCells = new Set();       // the cells in `sessions` (a WeakMap cannot be walked: the pagehide save needs them)
 let page = null;
 let armed = null;      // {cell, cleanup()}: "pick a start" mode is on, or null
 let selArmed = null;   // {cell, cleanup()}: Select bar (Task 2) is armed on an already-replaying chart, or null
@@ -89,6 +90,7 @@ function doStart(cell, date, time) {
   // history for THIS date has loaded); qty: the practice block's own quantity field, 1 by default.
   sessions.set(cell, { pending: true, ov: null, sim: null, feed: null, lastPrice: null,
     qty: 1, ...cell.replay });
+  liveCells.add(cell);
   // M3 (final review): cell.replay is set ABOVE, before the send, so T.replayGuard refuses every real order
   // from this instant -- an exit, a reconnect or a `stopped` before the first replay_state cannot open a gap.
   refreshOverlays(cell);
@@ -111,6 +113,13 @@ function savePracticeSession(cell, s) {
   } catch (_) { /* storage off: the session just is not logged */ }
 }
 
+/* A reload or closing the tab runs none of the end-of-session paths above: save the open sessions then too
+   (review cj-34). Not when the page is only going into the back/forward cache (it may come back and save again). */
+function savePracticeOnPageHide(e) {
+  if (e.persisted) return;
+  for (const c of liveCells) savePracticeSession(c, sessions.get(c));
+}
+
 /* Every end of a session comes through here, saying whether the USER chose it (fix round 1, Important 2): an end
    they did not choose latches the chart until "Resume live trading", and any end makes the next real order
    confirm (HBTradeUI.replayEnded) -- the practice block sat exactly where the real Buy/Sell block reappears. */
@@ -124,7 +133,7 @@ function exitReplay(cell) {
 function clearSession(cell, involuntary) {
   if (selArmed && selArmed.cell === cell) disarmSelectBar();
   savePracticeSession(cell, sessions.get(cell));
-  sessions.delete(cell);
+  sessions.delete(cell); liveCells.delete(cell);
   cell.replay = null;
   window.HBTradeUI?.replayEnded(cell, involuntary);
   refreshOverlays(cell);
@@ -146,7 +155,7 @@ function onState(cell, msg) {
   // server ended it (end of data, a crashed stream, its own reset): involuntary
   if (parsed.stopped) { const was = sessions.get(cell); clearSession(cell, !(was && was.userExit)); return; }
   let s = sessions.get(cell);
-  if (!s) { s = { pending: false, ov: null, sim: null, feed: null, lastPrice: null, qty: 1 }; sessions.set(cell, s); }
+  if (!s) { s = { pending: false, ov: null, sim: null, feed: null, lastPrice: null, qty: 1 }; sessions.set(cell, s); liveCells.add(cell); }
   s.pending = false;
   s.date = parsed.date; s.cursorMs = parsed.cursorMs; s.speed = parsed.speed; s.playing = parsed.playing; s.done = parsed.done;
   cell.replay = { date: s.date, cursorMs: s.cursorMs, speed: s.speed, playing: s.playing, done: s.done };
@@ -173,7 +182,7 @@ function onState(cell, msg) {
 function onError(cell, msg) {
   if (!cell || !msg) return;
   if (msg.op === 'replay_start') {
-    sessions.delete(cell); cell.replay = null;
+    sessions.delete(cell); liveCells.delete(cell); cell.replay = null;
     window.HBTradeUI?.replayEnded(cell, true);   // an error end is never the user's choice
     refreshOverlays(cell);
   }
@@ -252,7 +261,7 @@ function cellDestroyed(cell) {
   if (selArmed && selArmed.cell === cell) disarmSelectBar();
   savePracticeSession(cell, s);
   try { cell.host.send(R.stopOp(cell.id)); } catch (_) { /* the connection is already gone */ }
-  sessions.delete(cell);
+  sessions.delete(cell); liveCells.delete(cell);
   cell.replay = null;
   // held by grid position (HBTradeUI.replayDestroyed): a layout load rebuilds from new configs, so a flag on this
   // cell's config alone would be lost; buildGrid re-applies it to the chart that takes this position
@@ -739,7 +748,11 @@ class Overlay {
   buildPractice(s) {
     if (!s.sim || this.prBlock) return;
     const cell = this.cell;
-    this.bar.append(mk('span', 'rb-div'), mk('span', 'pr-tag', 'PRACTICE'));
+    // a time chart only shows finished bars: fills follow an open-low-high-close path, exact only on a tick chart (review cj-39)
+    const approx = !/^tick:/.test(String(cell.spec ? cell.spec() : ''));
+    const tag = mk('span', 'pr-tag', approx ? 'PRACTICE · bar path, approximate' : 'PRACTICE');
+    if (approx) tag.title = 'Practice fills follow a bar path (open, low, high, close). Exact only on a tick chart.';
+    this.bar.append(mk('span', 'rb-div'), tag);
     const sellBtn = mk('button', 'rb-side rb-sell'), sellPx = mk('span', 'tr-px', '—');
     sellBtn.type = 'button';
     sellBtn.title = 'Practice: sell at the market';
@@ -763,7 +776,11 @@ class Overlay {
     flattenBtn.title = 'Practice: close the open position';
     flattenBtn.onclick = () => flattenPractice(cell);
     const pnl = mk('span', 'rb-pnl');
-    this.bar.append(sellBtn, qty, buyBtn, flattenBtn, pnl);
+    const resultsBtn = mk('button', 'rb-flatten', 'Results');
+    resultsBtn.type = 'button';
+    resultsBtn.title = 'Practice results: every trade, R, the curve, and the saved log';
+    resultsBtn.onclick = () => this.toggleResults(s);
+    this.bar.append(sellBtn, qty, buyBtn, flattenBtn, pnl, resultsBtn);
     this.prBlock = sellBtn;   // a truthy marker: "the practice block exists" (existing call sites check this)
     this.prQty = qty; this.prSellPx = sellPx; this.prBuyPx = buyPx;
     this.prSellBtn = sellBtn; this.prBuyBtn = buyBtn; this.prFlattenBtn = flattenBtn; this.prPnl = pnl;
@@ -793,6 +810,97 @@ class Overlay {
     this.prPnl.textContent = `Open ${T.usd(s.sim.openPnl(last)) ?? '$0'} · Realized `
       + `${T.usd(s.sim.realizedPnl()) ?? '$0'} · ${n} trade${n === 1 ? '' : 's'}`;
     this.refreshPracticeLines(s);
+    this.refreshResults(s);
+  }
+
+  /* The Results panel (review cj-40/cj-41): this session's trades with R and the running curve, then the saved
+     log (hb.practice) with a CSV download. Read-only, practice book only. Rebuilt only when the trade count
+     changes (this runs on every bar) or the panel is opened. */
+  toggleResults(s) {
+    if (this.prResults) { this.prResults.remove(); this.prResults = null; return; }
+    this.prResults = mk('div', 'pr-results');
+    this.cell.el.appendChild(this.prResults);
+    this.prResultsN = -1;
+    this.refreshResults(s);
+  }
+
+  refreshResults(s) {
+    if (!this.prResults || !s.sim || this.prResultsN === s.sim.trades.length) return;
+    this.prResultsN = s.sim.trades.length;
+    const T = window.HBTrade || window.HBTradePure, Cat = window.HBCatalog, tick = this.cell.tick, box = this.prResults;
+    const st = R.practiceStats(s.sim.trades);
+    const pct = (w) => (w == null ? '—' : `${Math.round(w * 100)}%`);
+    const head = mk('div', 'pr-res-h');
+    head.append(mk('b', null, 'This session'), mk('span', null, `${st.n} trade${st.n === 1 ? '' : 's'} · win ${pct(st.winRate)} · net `
+      + `${T.usd(st.net) ?? '$0'} · avg ${R.fmtR(st.avgR)}`));
+    const close = mk('button', 'tl-x', '×');
+    close.type = 'button'; close.setAttribute('aria-label', 'Close'); close.onclick = () => this.toggleResults(s);
+    head.appendChild(close);
+    box.replaceChildren(head);
+    if (st.n > 1) box.appendChild(this.curveSvg(st.curve));
+    const tbl = mk('table', 'pr-res-t');
+    tbl.appendChild(this.resRow(['Time', 'Side', 'Entry', 'Exit', 'Net', 'R'], 'th'));
+    s.sim.trades.forEach((t) => {
+      const c = R.fmtCursorCompact(t.entryMs);
+      const row = this.resRow([c ? c.hm : '', `${t.side === 'long' ? 'Long' : 'Short'} ${t.qty}`, Cat.fmtPrice(t.entryPrice, tick),
+        Cat.fmtPrice(t.exitPrice, tick), T.usd(t.net) ?? '$0', R.fmtR(t.r)], 'td');
+      row.classList.add(t.net >= 0 ? 'up' : 'dn');
+      tbl.appendChild(row);
+    });
+    box.appendChild(tbl);
+    if (!st.n) box.appendChild(mk('div', 'pr-res-n', 'No closed trades yet.'));
+    box.appendChild(this.logSection());
+  }
+
+  resRow(cells, tag) {
+    const tr = mk('tr');
+    for (const c of cells) tr.appendChild(mk(tag, null, c));
+    return tr;
+  }
+
+  /* The running net after each trade as one line (0 at the start); plain SVG, the page's own text colour. */
+  curveSvg(curve) {
+    const W = 300, H = 56, pts = [0, ...curve], lo = Math.min(...pts), hi = Math.max(...pts), span = hi - lo || 1;
+    const d = pts.map((v, i) => `${i ? 'L' : 'M'}${(i / (pts.length - 1) * W).toFixed(1)},${(H - 3 - (v - lo) / span * (H - 6)).toFixed(1)}`).join('');
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('class', 'pr-res-c');
+    const zero = (H - 3 - (0 - lo) / span * (H - 6)).toFixed(1);
+    svg.innerHTML = `<line x1="0" x2="${W}" y1="${zero}" y2="${zero}" stroke="currentColor" stroke-opacity=".25"/>`
+      + `<path d="${d}" fill="none" stroke="currentColor" stroke-width="1.5"/>`;
+    return svg;
+  }
+
+  /* The saved practice sessions, newest first (last 10 listed; the CSV holds all of them). localStorage read in its own try/catch. */
+  logSection() {
+    const T = window.HBTrade || window.HBTradePure, wrap = mk('div', 'pr-res-log');
+    let list = null;
+    try { list = JSON.parse(localStorage.getItem(R.PRACTICE_KEY) || 'null'); } catch (_) { list = null; }
+    list = Array.isArray(list) ? list.filter((x) => x && Array.isArray(x.trades)) : [];
+    const head = mk('div', 'pr-res-h');
+    head.appendChild(mk('b', null, `Saved practice log (${list.length})`));
+    if (list.length) {
+      const dl = mk('button', 'rb-flatten', 'Download CSV');
+      dl.type = 'button';
+      dl.onclick = () => {   // only on this click: a plain text file of the saved log, nothing leaves the page
+        const a = mk('a');
+        a.href = URL.createObjectURL(new Blob([R.practiceCsv(list)], { type: 'text/csv' }));
+        a.download = 'practice-log.csv';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      };
+      head.appendChild(dl);
+    }
+    wrap.appendChild(head);
+    if (!list.length) { wrap.appendChild(mk('div', 'pr-res-n', 'Nothing saved yet. A session with trades is saved when it ends.')); return wrap; }
+    const tbl = mk('table', 'pr-res-t');
+    tbl.appendChild(this.resRow(['Day', 'Market', 'Trades', 'Win', 'Net'], 'th'));
+    for (const x of list.slice(-10).reverse()) {
+      const st = R.practiceStats(x.trades);
+      tbl.appendChild(this.resRow([x.date || '', x.root || '', String(st.n), st.winRate == null ? '—' : `${Math.round(st.winRate * 100)}%`, T.usd(st.net) ?? '$0'], 'td'));
+    }
+    wrap.appendChild(tbl);
+    return wrap;
   }
 
   practiceColor(g) {
@@ -929,6 +1037,7 @@ class Overlay {
   destroyPractice() {
     if (this.prDragging && this.prEndDrag) this.prEndDrag();
     if (this.prLayer) this.prLayer.remove();
+    if (this.prResults) { this.prResults.remove(); this.prResults = null; }
     if (this.prItems) { for (const it of this.prItems.values()) { try { this.cell.candles.removePriceLine(it.line); } catch (_) { /* chart already gone */ } } }
   }
 
@@ -1004,6 +1113,7 @@ class Overlay {
 function mount(pg) {
   page = pg;
   registerPracticeMenu();
+  window.addEventListener('pagehide', savePracticeOnPageHide);
   const btn = document.getElementById('tbReplay');
   if (!btn) return;
   // 2026-09-27 TV-parity plan, Task 1: clicking Bar Replay enters with Select bar already active (armPick),

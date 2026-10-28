@@ -496,3 +496,61 @@ test('backOnePick: the bar before the LAST one; null with fewer than two bars', 
   assert.equal(R.backOnePick([]), null);
   assert.equal(R.backOnePick(null), null);
 });
+
+/* ---- 2026-10-28 practice results (chart review D14): R per trade, session stats + curve, the saved log's CSV ---- */
+function twoTrades() {
+  const sim = new R.PracticeSim(0.25, 20, { commissionRt: 4, slippageTicks: 0 });
+  sim.enter(1, 'market', null, 1, 19990, 20020);   // long 20000, stop 10 pts away = $200 risk
+  sim.feed([20000], 1000);
+  sim.feed([20020.25], 2000);                      // TP: gross +400, net +396 = 1.98 R
+  sim.enter(-1, 'market', null, 1);                // no stop -> no R
+  sim.feed([20010], 3000);
+  sim.feed([20015], 4000);
+  sim.flatten();
+  sim.feed([20015], 5000);                         // short 20010 -> 20015: gross -100, net -104
+  return sim;
+}
+
+test('PracticeSim trades carry risk $ (entry to the first stop) and R = net / risk; no stop = null', () => {
+  const t = twoTrades().trades;
+  assert.equal(t.length, 2);
+  assert.equal(t[0].risk, 200);
+  assert.equal(t[0].r, 1.98);
+  assert.equal(t[1].risk, null);
+  assert.equal(t[1].r, null);
+});
+
+test('practiceStats: count, wins, win rate, net, average R (only trades with an R), running curve', () => {
+  const s = R.practiceStats(twoTrades().trades);
+  assert.deepEqual([s.n, s.wins, s.winRate, s.net, s.avgR], [2, 1, 0.5, 292, 1.98]);
+  assert.deepEqual(s.curve, [396, 292]);
+  const e = R.practiceStats([]);
+  assert.deepEqual([e.n, e.winRate, e.net, e.avgR, e.curve], [0, null, 0, null, []]);
+  assert.deepEqual(R.practiceStats(null).curve, []);
+});
+
+test('fmtR: signed, two decimals, a dash when there is no R', () => {
+  assert.equal(R.fmtR(1.98), '+1.98R');
+  assert.equal(R.fmtR(-0.5), '-0.50R');
+  assert.equal(R.fmtR(null), '—');
+});
+
+test('practiceCsv: one header, one row per trade of every saved session; junk entries skipped', () => {
+  const sim = twoTrades();
+  const csv = R.practiceCsv([R.practiceSession('2024-03-08', 'NQ', sim), null, { trades: 'x' }]);
+  const lines = csv.split('\n');
+  assert.equal(lines[0], 'date,root,side,qty,entry_et,entry_price,exit_et,exit_price,exit_reason,net,r');
+  assert.equal(lines.length, 3);
+  assert.match(lines[1], /^2024-03-08,NQ,long,1,1969-12-31 19:00:01 ET,20000,.*,20020,tp,396,1\.98$/);
+  assert.match(lines[2], /,short,1,.*,20010,.*,20015,flat,-104,$/);
+  assert.equal(R.practiceCsv([]), lines[0]);
+  assert.equal(R.practiceCsv(null), lines[0]);
+});
+
+test('results source: the log and its CSV stay inside the practice book (no desk client, no order send)', () => {
+  const ui = readFileSync(new URL('../../homebase/static/charts/replayui.js', import.meta.url), 'utf8');
+  assert.match(ui, /practiceCsv/);
+  assert.match(ui, /bar path, approximate/);
+  assert.match(ui, /addEventListener\('pagehide'/);
+  assert.doesNotMatch(ui.slice(ui.indexOf('toggleResults(s) {'), ui.indexOf('practiceColor(g)')), /HBTradeUI|fetch\(|\/api\//);
+});

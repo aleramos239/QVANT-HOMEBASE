@@ -317,6 +317,6 @@ test('the pins follow: every edited script and skin file has its new version', (
   assert.equal(man.version, 54);
   assert.match(rd('backtest.html'), /charts\/lab\.js\?v=138"/);
   assert.match(rd('backtest.html'), /charts\/lab\.css\?v=89"/);
-  assert.match(rd('backtest.html'), /charts\/charts\.css\?v=58"/);
-  assert.match(rd('charts.html'), /charts\/charts\.css\?v=67"/);
+  assert.match(rd('backtest.html'), /charts\/charts\.css\?v=59"/);
+  assert.match(rd('charts.html'), /charts\/charts\.css\?v=68"/);
 });

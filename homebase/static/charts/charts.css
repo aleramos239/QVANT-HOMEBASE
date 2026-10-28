@@ -982,6 +982,20 @@ body[data-cursor-style="dot"] .panel[data-cursor="crosshair"] .chart * {
 .pr-tag { align-self: center; margin-right: 2px; padding: 2px 6px; border-radius: 4px; background: var(--warn);
   color: #131722; font-size: 10px; font-weight: 700; letter-spacing: .04em; white-space: nowrap; }
 .tr-buy:disabled, .tr-sell:disabled { opacity: .5; cursor: default; filter: none; }
+.pr-results { position: absolute; left: 50%; bottom: 52px; z-index: 6; transform: translateX(-50%); width: 340px; max-height: 60%;
+  overflow: auto; padding: 8px; border-radius: 8px; background: var(--panel); color: var(--text); box-shadow: var(--shadow-menu);
+  font-size: 12px; font-variant-numeric: tabular-nums; }
+.pr-results .pr-res-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.pr-results .pr-res-h span { color: var(--text-2); }
+.pr-results .pr-res-c { display: block; width: 100%; height: 56px; margin: 4px 0; color: var(--text-2); }
+.pr-results .pr-res-t { width: 100%; border-collapse: collapse; }
+.pr-results .pr-res-t th { text-align: left; color: var(--text-2); font-weight: 500; }
+.pr-results .pr-res-t td, .pr-results .pr-res-t th { padding: 2px 4px; white-space: nowrap; }
+.pr-results .pr-res-t tr.up td:nth-last-child(-n+2) { color: #089981; }
+.pr-results .pr-res-t tr.dn td:nth-last-child(-n+2) { color: #F23645; }
+.pr-results .tl-x { --c: var(--text-2); height: 20px; border-radius: 4px; }
+.pr-results .pr-res-n { color: var(--text-2); padding: 4px 0; }
+.pr-results .pr-res-log { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
 /* ---- Task 1 (TV-parity plan): practice trading merged into the SAME floating control bar, TradingView-style
    -- compact Buy/Sell (the legend slot's own .tr-buy/.tr-sell are 38px tall, sized for the chart corner; the
    control bar is 24px, so these are their own smaller variant, same colours). ---- */
