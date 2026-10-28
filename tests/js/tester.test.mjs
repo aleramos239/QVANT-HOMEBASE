@@ -165,7 +165,7 @@ test('progress text and fraction', () => {
 
 test('Overview tiles, badges and the prop block', () => {
   assert.deepEqual(X.tiles(RUN).map((t) => [t.label, t.value, t.sub]), [
-    ['Net P&L', '+$12,345.50', '+24.69%'], ['Max drawdown', `${M}$4,210`, `${M}8.42%`], ['Win rate', '54.2%', '13/24'],
+    ['Net P&L', '+$12,345.50', '+24.69%'], ['Max drawdown', `${M}$4,210`, `${M}8.42%`], ['Win rate', '54%', '13/24'],
     ['Profit factor', '1.88', ''], ['Sharpe', '1.23', 'traded days'], ['Avg trade', '+$514.40', ''], ['Risk : reward', 'RR 1:1.44', ''],
     ['t-stat', '2.35', '']]);
   assert.deepEqual(X.badges(RUN).map((b) => [b.text, b.tone]), [['Tick replay', 'info'], ['517 of 520 sessions', 'warn'],
@@ -179,7 +179,7 @@ test('Overview tiles, badges and the prop block', () => {
   const prop ={ rules: { id: 'lucid-pro-50k@2026-09-27', name: 'LucidPro 50K', confirmed: false, label: 'LucidPro 50K · unconfirmed rules' }, caveat: 'c',
     headline: { eval_pass_p: 0.4312, eval_pass_ci: [0.424, 0.438], bust_p: 0.31, median_days_to_pass: 17.5, funded_expected_cheque: 1648.2 } };
   assert.deepEqual(X.propView(prop).tiles.map((t) => [t.label, t.value, t.sub]), [['Eval pass', '43.1%', '95% CI 42.4–43.8%'],
-    ['Bust', '31.0%', ''], ['Median days to pass', '18', ''], ['Funded: expected cheque', '$1,648.20', '']]);
+    ['Bust', '31.0%', ''], ['Median days to pass', '18', ''], ['Funded: expected payout', '$1,648.20', '']]);
   assert.equal(X.propView(prop).unconfirmed, true);
   assert.deepEqual(X.propView({ error: 'bad file', rules: { name: 'x', confirmed: true } }), { message: 'Prop eval failed: bad file', rules: { name: 'x', confirmed: true }, unconfirmed: false });
   assert.deepEqual(X.propView(null), { message: 'No prop-eval result in this run', rules: null, unconfirmed: false });
@@ -229,7 +229,7 @@ test('compareRows: net/PF/WR/Sharpe/maxDD/avg/trades/green years/prop pass, A vs
   const byKey = Object.fromEntries(rows.map((r) => [r.key, r]));
   assert.deepEqual(byKey.net, { key: 'net', label: 'Net profit', a: '+$12,345.50', b: '+$9,000', delta: `${M}$3,345.50`, better: 'a' });
   assert.deepEqual(byKey.pf, { key: 'pf', label: 'Profit factor', a: '1.88', b: '1.50', delta: `${M}0.38`, better: 'a' });
-  assert.deepEqual(byKey.wr, { key: 'wr', label: 'Win rate', a: '54.2%', b: '50.0%', delta: `${M}4.2%`, better: 'a' });
+  assert.deepEqual(byKey.wr, { key: 'wr', label: 'Win rate', a: '54%', b: '50%', delta: `${M}4.2%`, better: 'a' });
   assert.deepEqual(byKey.sharpe, { key: 'sharpe', label: 'Sharpe', a: '1.23', b: '1.00', delta: `${M}0.23`, better: 'a' });
   // maxDD is <= 0: A (−$4,210) is LESS bad than B (−$6,000), so A is still "better" here
   assert.deepEqual(byKey.maxdd, { key: 'maxdd', label: 'Max drawdown', a: `${M}$4,210`, b: `${M}$6,000`, delta: `${M}$1,790`, better: 'a' });

@@ -333,7 +333,7 @@
       { k: "Sharpe", v: sh === null ? DASH : sh.toFixed(2) },
     ];
   }
-  var PROP_ROWS = ["Passes the eval", "Busts the eval", "Days to pass", "Gets a payout", "Expected cheque"];
+  var PROP_ROWS = ["Passes the eval", "Busts the eval", "Days to pass", "Gets a payout", "Expected payout"];
   // "+$118,301" -> "+$118k", "−$5,865" -> "−$5.9k": three columns of dollars fit the inspector (Both, owner 2026-10-24)
   function shortUsd(s) {
     var m = /^([+\u2212-]?)\$([\d,]+)$/.exec(text(s)), n = m ? +m[2].replace(/,/g, "") : 0;
@@ -724,7 +724,7 @@
       { k: "Trades a day", v: trades === null ? DASH : String(trades) },
       { k: "Most contracts per account", v: qty === null ? DASH : String(qty) },
       { k: "Most at risk per trade", v: risk === null ? DASH : money(risk) },
-      { k: "No new trade after", v: HHMM.test(text(l.last_entry_et)) ? clock(l.last_entry_et) + " ET" : DASH },
+      { k: "Last entry", v: HHMM.test(text(l.last_entry_et)) ? clock(l.last_entry_et) + " ET" : DASH },
       { k: "Flat by", v: HHMM.test(text(l.flat_et)) ? clock(l.flat_et) + " ET" : DASH },
     ];
   }
@@ -952,8 +952,8 @@
       ["Trades a day", l[0].v],
       ["Most contracts", l[1].v],
       ["Most at risk", l[2].v],
-      ["No new trade after", l[3].v],
-      ["Flat", l[4].v],
+      ["Last entry", l[3].v],
+      ["Flat by", l[4].v],
     ];
     return [
       ["Instrument", text(c.symbol) || DASH],

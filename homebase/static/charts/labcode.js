@@ -143,7 +143,7 @@ function statusOf(v) {
 const lineCount = (t) => String(t || '').split('\n').length;
 function ago(ms, now) {
   const s = Math.max(0, Math.round((now - ms) / 1000));
-  return s < 5 ? 'just now' : s < 60 ? `${s} s ago` : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`;
+  return s < 5 ? 'just now' : s < 60 ? `${s}s ago` : s < 3600 ? `${Math.floor(s / 60)}m ago` : s < 86400 ? `${Math.floor(s / 3600)}h ago` : `${Math.floor(s / 86400)}d ago`;
 }
 
 /* ---- the library's groups ---- */
@@ -504,7 +504,7 @@ function plCanSend(F, rules, indicators) {
 }
 
 /* -- the book -- */
-const plPct = (v) => (plNum(v) == null ? DASH : `${Math.round(v * 100)} %`);                 // a share 0 .. 1 -> "58 %"
+const plPct = (v) => (plNum(v) == null ? DASH : `${Math.round(v * 100)}%`);                 // a share 0 .. 1 -> "58%"
 const plMoney = (v) => (plNum(v) == null ? DASH : `${v < 0 ? '−' : ''}$${Math.abs(Math.round(v)).toLocaleString('en-US')}`);
 const plText = (v) => (v == null || v === '' ? DASH : String(v));
 const plCap = (v) => { const t = plText(v); return t.charAt(0).toUpperCase() + t.slice(1); };

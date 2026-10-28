@@ -235,15 +235,15 @@ const BOOK = { name: 'fvg_open', sub: 'fvg_open_a5', family: 'fvg', source: 'own
   stages: { 1: { passed: true, result: 'strict', text: 'a5 moved on' }, 0: { passed: true, result: 'pass', text: 'the card is whole' }, 6: { passed: true, result: 'proven on history', text: 'PROVEN (4.1-4.9)' } } };
 
 test('percent and money as a person reads them; what is missing shows a dash', () => {
-  assert.deepEqual([0.584, 0.52, 0, 1, 0.004].map(L.plPct), ['58 %', '52 %', '0 %', '100 %', '0 %']);
+  assert.deepEqual([0.584, 0.52, 0, 1, 0.004].map(L.plPct), ['58%', '52%', '0%', '100%', '0%']);
   assert.deepEqual([null, undefined, 'x', NaN].map(L.plPct), ['—', '—', '—', '—']);
   assert.deepEqual([88357.2, -812.4, 0, null].map(L.plMoney), ['$88,357', '−$812', '$0', '—']);
 });
 
 test('a book card in the list: its label, where it trades, the two 30-day odds on the pipeline\'s own account, and four facts', () => {
   assert.deepEqual(L.plBookCard(BOOK), { name: 'fvg_open', label: 'Stands alone', tone: 'ok', sub: 'NQ · New York morning · 5-minute bars', account: 'LucidPro 50K',
-    rows: [['Pass the eval in 30 days', '58 %'], ['Full payout in 30 days', '52 %'], ['Hours it trades', '09:31 – 11:42'], ['Winning months', '31 of 45'],
-      ['Biggest day, share of profit', '12 %'], ['Trades under 5 seconds, share of profit', '0 %']] });
+    rows: [['Pass the eval in 30 days', '58%'], ['Full payout in 30 days', '52%'], ['Hours it trades', '09:31 – 11:42'], ['Winning months', '31 of 45'],
+      ['Biggest day, share of profit', '12%'], ['Trades under 5 seconds, share of profit', '0%']] });
   const helper = L.plBookCard({ ...BOOK, label: 'helper', prop: { x: { name: 'LucidPro 50K', confirmed: false, eval: 0.3, payout: 0.1 } } });
   assert.deepEqual([helper.label, helper.tone, helper.account], ['Helper', '', 'LucidPro 50K (rules not confirmed)']);
   const bare = L.plBookCard({ name: 'x' });
@@ -258,17 +258,17 @@ test('a book card of the one pipeline (2026-10-18): its tag and its unseen-day n
     worst_drawdown_r: 6.5, biggest_day_share: 0.08, month_wr: { lowest: 0.31, median: 0.55, months: 12 } };
   const card = { name: 'x', market: 'NQ', session: 'nyam', bar: '5', hours: ['09:31', '11:42'], tag: 'live+prop', numbers: { build: { ...u, sharpe: 0.9 }, unseen: u } };
   assert.deepEqual(L.plBookCard(card), { name: 'x', label: 'Live + Prop', tone: 'ok', sub: 'NQ · New York morning · 5-minute bars', account: '',
-    rows: [['Win rate', '55 %'], ['Reward-to-risk (realized)', '1.20'], ['Sharpe', '1.40'], ['Months positive', '70 %'], ['Hours it trades', '09:31 – 11:42'], ['Worst drawdown', '6.5R']] });
+    rows: [['Win rate', '55%'], ['Reward-to-risk (realized)', '1.20'], ['Sharpe', '1.40'], ['Months positive', '70%'], ['Hours it trades', '09:31 – 11:42'], ['Worst drawdown', '6.5R']] });
   assert.deepEqual([L.plBookCard({ ...card, tag: 'live' }).label, L.plBookCard({ ...card, tag: 'live' }).tone], ['Live', '']);
   const full = L.plBookFull(card, []);
   assert.deepEqual(full.numbers.map((n) => n.name), ['Build days', 'Unseen days']);
-  assert.deepEqual(Object.fromEntries(full.numbers[1].rows)['Breakeven win rate'], '45 %');
+  assert.deepEqual(Object.fromEntries(full.numbers[1].rows)['Breakeven win rate'], '45%');
   assert.deepEqual(Object.fromEntries(full.numbers[0].rows).Sharpe, '0.90');
   assert.deepEqual(L.plBookFull({ ...card, numbers: { unseen: {} } }, []).numbers[0].rows.every(([, v]) => v === '—'), true, 'a number missing shows —');
   assert.deepEqual(L.plBookFull(BOOK, []).numbers, [], 'an older card has no numbers, only its accounts');
   const wf = L.plBookFull({ ...card, walkforward: { months: 57, span: ['2022-01', '2026-09'], stood_aside: ['2023-02'], p_beat: 0.9702, next: { month: '2026-10', cell: 'k0p2_pts30-r2' } } }, []);
   assert.deepEqual(wf.numbers.map((n) => n.name), ['3:1 walk-forward', 'Build days', 'Test months'], 'the walk-forward first, its stitched months as the test');
-  assert.deepEqual(wf.numbers[0].rows, [['Test months', '57 · 2022-01 – 2026-09'], ['Months stood aside', '1'], ['Beats random entries', '97 %'], ['Box for 2026-10', 'k0p2_pts30-r2']]);
+  assert.deepEqual(wf.numbers[0].rows, [['Test months', '57 · 2022-01 – 2026-09'], ['Months stood aside', '1'], ['Beats random entries', '97%'], ['Box for 2026-10', 'k0p2_pts30-r2']]);
 });
 
 test('the whole book card: every fact, every account (one whose rules are not confirmed says so), each stage\'s first line', () => {
@@ -278,8 +278,8 @@ test('the whole book card: every fact, every account (one whose rules are not co
     fact['Worst day'], fact['Worst drawdown'], fact['Heat maps tried'], fact['Came from']],
   ['fvg', 'None', '5-minute bars', 's10_t2', '1,234', '9.3', '$72', '1.31', '$88,357', '−$812', '$1,890', '2', 'owner']);
   assert.deepEqual(full.accounts, [
-    { name: 'LucidPro 50K', rows: [['Pass the eval in 30 days', '58 % at 5 micros'], ['Full payout in 30 days', '52 % at 1 micro'], ['Label', 'Stands alone']] },
-    { name: 'Apex 300K (rules not confirmed)', rows: [['Pass the eval in 30 days', '40 % at 10 micros'], ['Full payout in 30 days', '—'], ['Label', 'Helper']] }]);
+    { name: 'LucidPro 50K', rows: [['Pass the eval in 30 days', '58% at 5 micros'], ['Full payout in 30 days', '52% at 1 micro'], ['Label', 'Stands alone']] },
+    { name: 'Apex 300K (rules not confirmed)', rows: [['Pass the eval in 30 days', '40% at 10 micros'], ['Full payout in 30 days', '—'], ['Label', 'Helper']] }]);
   assert.deepEqual(full.stages.map((s) => [s.n, s.name, s.mark.text, s.text]), [[0, 'Idea card', 'PASS', 'the card is whole'], [1, 'Raw heat map', 'PASS', 'a5 moved on'], [6, 'Unseen days', 'PASS', 'PROVEN (4.1-4.9)']],
     'in the order of the stages, each text as the server sent it');
   assert.equal(Object.fromEntries(L.plBookFull({ ...BOOK, filter: 'momentum_with' }, STAGES).facts).Indicator, 'momentum_with');
@@ -370,7 +370,7 @@ test('book results: the row line, the tiles and the curve geometry', () => {
   assert.deepEqual(L.plBookLine({ net: -500.4, trades: 1 }), { net: '−$500', tone: 'neg', rest: '1 trade' });
   assert.deepEqual(L.plBookLine({}), { net: '—', tone: '', rest: '' }, 'a card without numbers shows a dash, never $0');
   const tiles = L.plCurveTiles({ net: 39183, trades: 263, win_rate: 0.3422, avg_trade: 148.98, profit_factor: 1.373, worst_day: -1837, max_drawdown: 11502, days: 125 });
-  assert.deepEqual(tiles.map((t) => [t.k, t.v]), [['Net profit', '+$39,183'], ['Trades', '263'], ['Win rate', '34 %'], ['Average trade', '+$149'],
+  assert.deepEqual(tiles.map((t) => [t.k, t.v]), [['Net profit', '+$39,183'], ['Trades', '263'], ['Win rate', '34%'], ['Average trade', '+$149'],
     ['Profit factor', '1.37'], ['Worst day', '−$1,837'], ['Deepest drawdown', '−$11,502'], ['Days traded', '125']]);
   assert.equal(tiles[0].tone, 'pos');
   assert.ok(L.plCurveTiles(null).every((t) => t.v === '—'), 'no curve yet: dashes');

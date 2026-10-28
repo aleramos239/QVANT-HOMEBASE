@@ -152,7 +152,7 @@ test('cellView: net $ with Sharpe when done, a state word otherwise, and a crash
   assert.equal(done.sharpe, 'Sharpe 1.23');
   assert.equal(done.tone, 'up');
   assert.equal(done.state, 'done');
-  assert.match(done.title, /10 trades · WR 60\.0% · PF 1\.50 · t 2\.10 · max DD −\$400/);
+  assert.match(done.title, /10 trades · WR 60% · PF 1\.50 · t 2\.10 · max DD −\$400/);
   const loss = X.cellView({ status: 'done', summary: { net_profit: -50, sharpe: -0.5, trades: 2, skipped_by_error: 3 } });
   assert.equal(loss.net, `${M}$50`);
   assert.equal(loss.sharpe, `Sharpe ${M}0.50`);

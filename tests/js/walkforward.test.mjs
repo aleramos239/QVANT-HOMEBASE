@@ -141,7 +141,7 @@ test('wfStepRows: one row per monthly step, dollars and Sharpe both sides, the c
   const rows = X.wfStepRows(RESULT, AXES);
   assert.equal(rows.length, 3);
   assert.deepEqual(rows[0].cells, ['2022-01', '2022-02 → 2022-04', 'Entry offset (pts) 10 · Stop loss (pts) 5',
-    '+$500', '5', '1.23', `${M}$480`, '7', '60.0%', '1.50', '1.23', `${M}$250`]);
+    '+$500', '5', '1.23', `${M}$480`, '7', '60%', '1.50', '1.23', `${M}$250`]);
   assert.equal(rows[0].stitched, true);
   assert.equal(rows[0].isTone, 'up');
   assert.equal(rows[0].oosTone, 'down');

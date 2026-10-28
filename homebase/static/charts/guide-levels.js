@@ -9,9 +9,9 @@ G.add({
   events: {
     what: 'Marks scheduled news (jobs, inflation, rate decisions) on the chart: a flag for each, a line for the big ones.',
     see: [
-      'A small coloured flag along the time axis for each calendar event. Hover a flag for the names, times and numbers.',
+      'A small colored flag along the time axis for each calendar event. Hover a flag for the names, times and numbers.',
       'Red = high impact, orange = medium, yellow = low, grey = a holiday. These are the calendar\'s folders.',
-      'A vertical line in the flag colour at every red and orange event. The line can be switched off or restyled.',
+      'A vertical line in the flag color at every red and orange event. The line can be switched off or restyled.',
     ],
     read: [
       'The flag sits at the minute the number comes out. Several events at one minute share one flag.',
@@ -88,9 +88,9 @@ G.add({
   },
 
   sess: {
-    what: 'The high and low of time windows you choose, each in its own colour. Four are set up for you.',
+    what: 'The high and low of time windows you choose, each in its own color. Four are set up for you.',
     see: [
-      'For each window that is on: a solid line at its high and a dashed line at its low, in one colour.',
+      'For each window that is on: a solid line at its high and a dashed line at its low, in one color.',
       'Set up: London 02:00-05:00 blue, Asia 20:00-00:00 orange, NY AM 09:30-11:00 green, NY PM 13:30-16:00 pink.',
       'While a window is open its lines move. After it ends they stay flat for the rest of the session.',
     ],
