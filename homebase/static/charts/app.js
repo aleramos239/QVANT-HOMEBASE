@@ -17,7 +17,7 @@ const LAST_KEY = window.HB_PAGE === 'backtest' ? 'hb_backtest_last' : 'hb_charts
 const GRIDS = { 1: [1, 1], 2: [2, 1], 4: [2, 2], 6: [3, 2] };
 const GRID_NAMES = { 1: '1 chart', 2: '2 charts side by side', 4: '2 × 2 charts', 6: '3 × 2 charts' };
 const STATUS_STALE_S = 6;   // the server sends a status every 2 s: this long without one = it is stuck
-const START = [['NQ', 'time:60'], ['NQ', 'time:300'], ['ES', 'time:60'], ['YM', 'time:60'], ['NQ', 'tick:1000'], ['NQ', 'time:900']];
+const START = [['NQ', 'time:60'], ['NQ', 'time:300'], ['ES', 'time:60'], ['GC', 'time:60'], ['NQ', 'tick:1000'], ['NQ', 'time:900']];
 const ET_CLOCK = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit',
   second: '2-digit', hourCycle: 'h23' });
 const ET_PARTS = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: '2-digit',
