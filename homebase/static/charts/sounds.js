@@ -3,16 +3,20 @@
    filled, and the breakeven / trailing stop moving the stop. The sounds are made here with Web Audio (no files);
    the choice is kept in this browser (localStorage), every chart.
 
-   Fills: every fill the desk or the PAPER book reports on a listed account, not a bot's (HBDeskClient.onAnyFill,
-   HBPaperClient.onAnyFill). What it was is read from the order that filled, as last seen: a stop on the side that
+   Fills: every fill the desk or the PAPER book reports on a listed account (HBDeskClient.onAnyFill,
+   HBPaperClient.onAnyFill); a bot's fill is its own event. What it was is read from the order that filled, as last seen: a stop on the side that
    closes the position is the stop, a limit there the take profit, anything else an entry (a PAPER leg says its own
    role). Browser only. */
 (() => {
 'use strict';
 const KEY = 'hb.sounds';
 const SOUNDS = [['chime', 'Chime'], ['ding', 'Ding'], ['pop', 'Pop'], ['click', 'Click'], ['bell', 'Bell'], ['alert', 'Alert']];
-const EVENTS = [['entry', 'Entry filled'], ['tp', 'Take profit filled'], ['sl', 'Stop filled'], ['moved', 'Breakeven / trailing moved the stop']];
-const DEFAULTS = { on: false, volume: 0.6, events: { entry: 'pop', tp: 'chime', sl: 'alert', moved: 'click' } };
+// 2026-10-27: the price alert (it beeped on its own before) and four more, Off until one is chosen: a bot's fill, a new headline
+// (the News tab's filter), a burst on the chart's symbol, a red-folder event 5 and 1 minutes away
+const EVENTS = [['entry', 'Entry filled'], ['tp', 'Take profit filled'], ['sl', 'Stop filled'], ['moved', 'Breakeven / trailing moved the stop'],
+  ['priceAlert', 'Price alert'], ['bot', 'Bot fill'], ['headline', 'News headline'], ['burst', 'Fast-tape burst'], ['redFolder', 'Red-folder news soon']];
+const DEFAULTS = { on: false, volume: 0.6, events: { entry: 'pop', tp: 'chime', sl: 'alert', moved: 'click', priceAlert: 'bell',
+  bot: 'off', headline: 'off', burst: 'off', redFolder: 'off' } };
 
 /* note lists: [frequency Hz, start s, length s, wave, end frequency?] */
 const NOTES = {
@@ -32,10 +36,13 @@ function load() {
   } catch (_) { return { ...DEFAULTS, events: { ...DEFAULTS.events } }; }
 }
 function get() { return { ...cfg, events: { ...cfg.events } }; }
+const watchers = [];
+function onChange(fn) { watchers.push(fn); }   // the toolbar's mute button follows the switch, whoever moved it
 function set(patch) {
   cfg = { ...cfg, ...patch, events: { ...cfg.events, ...(patch.events || {}) } };
   cfg.volume = Math.min(1, Math.max(0, Number(cfg.volume) || 0));
   try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (_) { /* this session only */ }
+  for (const fn of watchers) fn(get());
 }
 
 let ctx = null;
@@ -93,7 +100,8 @@ function noteOrders() {
   while (kinds.size > KINDS_MAX) kinds.delete(kinds.keys().next().value);
 }
 function onFill(account, fill) {
-  if (!fill || fill.owner) return;   // a bot's own fills are the bot's business
+  if (!fill) return;
+  if (fill.owner) { event('bot'); return; }   // a bot's own fills: their own event, Off until chosen
   event(kinds.get(`${account}:${fill.order_id}`) || 'entry');
 }
 
@@ -108,5 +116,5 @@ function mount() {
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 
-window.HBSounds = { SOUNDS, EVENTS, get, set, play, event };
+window.HBSounds = { SOUNDS, EVENTS, get, set, onChange, play, event };
 })();

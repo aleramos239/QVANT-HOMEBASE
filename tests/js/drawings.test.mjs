@@ -866,3 +866,44 @@ test('zoneAt: plot, price axis (right), time axis (below), nowhere (negative) --
   assert.equal(D.zoneAt({ x: 520, y: 320 }, 500, 300), 'price', 'the corner counts as the price axis');
   assert.equal(D.zoneAt({ x: -1, y: 10 }, 500, 300), null);
 });
+
+/* ---- 2026-10-27 alerts: none is set or moved while the chart replays (a drawing is saved for the live symbol) ---- */
+test('alerts: a replaying chart sets no alert, says why, and a live one sets it (also from the right-click menu)', async (t) => {
+  withWindow(t);
+  const priced = bars.map((b) => ({ ...b, c: 880 }));
+  const R = pointerRig([], { tool: 'alert', rigBars: priced });
+  await R.store.ensure('NQ');
+  const said = [];
+  R.ctl.host.notice = (text) => said.push(text);
+  R.ctl.cell.replay = { date: '2026-10-01' };
+  await R.gesture([[120, 120]]);
+  assert.deepEqual(R.store.list('NQ'), [], 'nothing saved');
+  assert.equal(R.tool(), 'cursor', 'the tool is put down');
+  assert.match(said[0], /replay/i);
+  R.ctl.addAlert(870);
+  assert.deepEqual(R.store.list('NQ'), [], 'the menu path is blocked too');
+  assert.equal(said.length, 2);
+  R.ctl.cell.replay = null;
+  R.ctl.addAlert(870);
+  const [a] = R.store.list('NQ');
+  assert.deepEqual([a.points, a.alert], [[{ p: 870 }], { dir: 'down', fired: false }]);
+  R.done();
+});
+
+test('alerts: dragging an alert while the chart replays puts it back, unsaved', async (t) => {
+  withWindow(t);
+  const al = { id: 'al', type: 'hline', points: [{ p: 875 }], alert: { dir: 'up', fired: false } };   // y 125
+  const R = pointerRig([al], { tool: 'cursor' });
+  await R.store.ensure('NQ');
+  const said = [];
+  R.ctl.host.notice = (text) => said.push(text);
+  R.ctl.cell.replay = { date: '2026-10-01' };
+  await R.gesture([[200, 125], [200, 100]]);
+  assert.deepEqual(R.store.list('NQ'), [al]);
+  assert.equal(R.puts().length, 0);
+  assert.equal(said.length, 1);
+  R.ctl.cell.replay = null;
+  await R.gesture([[200, 125], [200, 100]]);
+  assert.equal(R.store.list('NQ')[0].points[0].p, 900, 'live: it moves');
+  R.done();
+});

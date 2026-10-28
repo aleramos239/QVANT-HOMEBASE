@@ -35,7 +35,7 @@
     if (sw) { sw.classList.add('hb-seg'); tb.center.append(sw); }
     // Order / DOM / Tape: text toggles on one platter (the page keeps their aria-pressed; the grey pill shows it)
     const panels = el('div', { class: 'hb-platter hb-c-panels', role: 'group', 'aria-label': 'Panels' });
-    for (const id of ['tbOrder', 'tbDom', 'tbTape']) {
+    for (const id of ['tbOrder', 'tbDom', 'tbTape', 'tbSound']) {
       const b = D.getElementById(id);
       if (b) { b.classList.add('hb-tbtn', 'hb-text'); panels.append(b); }
     }

@@ -236,6 +236,7 @@ function hostFor(id) {
     onDrawingSettings(cell, d) { drawingSettingsDialog(cell, d); },
     onSelectionChanged(cell, d) { syncDrawToolbar(cell, d); },
     onAlert(cell, d, price) { alertWentOff(cell, d, price); },
+    notice(text) { sbNote(text); window.HBDeskClient?.toast('err', text); },
     styleDefault(type) { return drawStyleDefaults.get(type) || null; },
     colorFor(cell) {                                                  // the colour set for the timeframe it is drawn on
       const s = cell.spec(), c = tfColors[s];
@@ -1413,20 +1414,15 @@ function settingsDialog(cell, uid, tab) {
 
 /* Double-click on a long/short box: Entry, Target, Stop (rounded to the tick) and Qty. OK checks the order for
    the type; a wrong one shows why under the fields and saves nothing. */
-/* A price alert was crossed: marked gone off (saved with the chart), said on the status bar and in a toast, a short beep, and a
-   desktop notice when the browser allows one. It never goes off twice: it is armed again from its settings or by moving it. */
+/* A price alert was crossed: marked gone off (saved with the chart), said on the status bar and in a toast, the Price alert
+   sound (Settings > Sounds: Off when sounds are), and a desktop notice when the browser allows one. It never goes off twice: it is armed again from its settings or by moving it. */
 function alertWentOff(cell, d, price) {
   const root = cell.dc ? cell.dc.root : cell.cfg.root;
   if (!patchDrawing(root, d.id, { alert: { dir: d.alert.dir, fired: true } }, true)) return;
   const text = `${C.rootName(root)} crossed ${d.points[0].p} (now ${price})`;
   sbNote(`Alert: ${text}`);
   window.HBDeskClient?.toast('ok', `Alert: ${text}`);
-  try {
-    const ac = new (window.AudioContext || window.webkitAudioContext)(), o = ac.createOscillator(), g = ac.createGain();
-    o.frequency.value = 880; g.gain.value = 0.08;
-    o.connect(g); g.connect(ac.destination);
-    o.start(); o.stop(ac.currentTime + 0.25);
-  } catch (e) { /* no sound is fine */ }
+  window.HBSounds?.event('priceAlert');
   try {
     if (window.Notification && Notification.permission === 'granted') new Notification('Price alert', { body: text });
   } catch (e) { /* the status bar and toast already said it */ }
@@ -2174,6 +2170,13 @@ function chartMenu(cell, at) {
   m.focus({ preventScroll: true });
 }
 
+/* The right-click menu's "Alert at <price>", beside Copy price. */
+function alertMenuItems(ctx) {
+  const dc = ctx.cell.dc;
+  return dc && ctx.price != null && Number.isFinite(ctx.price)
+    ? [{ text: `Alert at ${fmtPrice(ctx.price, ctx.tick)}`, run: () => dc.addAlert(ctx.price) }] : [];
+}
+
 /* An indicator's own menu: from its legend ⋯ (anchor; a second click closes it) or a right-click in its pane (at). */
 function indicatorMenu(cell, uid, { anchor = null, at = null } = {}) {
   if (anchor && menuAnchor === anchor) { closeMenu(); return; }
@@ -2402,6 +2405,16 @@ function sbNote(text) {
   noteTimer = setTimeout(() => { el.textContent = ''; el.title = ''; }, 8000);
 }
 
+/* The toolbar's Sound button (Charts only): the same switch as Settings > Sounds > Play sounds. */
+function wireSoundButton() {
+  const b = $('#tbSound'), S = window.HBSounds;
+  if (!b || !S) return;
+  const show = () => { const on = S.get().on; b.setAttribute('aria-pressed', String(on)); b.title = on ? 'Sounds on (click to mute)' : 'Sounds off (click to turn on)'; };
+  b.onclick = () => S.set({ on: !S.get().on });
+  S.onChange(show);
+  show();
+}
+
 function showTip(anchor, text) {
   const tip = $('#railTip'), r = anchor.getBoundingClientRect();
   tip.textContent = text;
@@ -2581,6 +2594,15 @@ async function loadCalendar() {
   if (window.HBNewsUI) window.HBNewsUI.refresh();      // the News tab lists the US red and orange folders
 }
 
+/* A red-folder USD event 5 minutes and 1 minute away: a toast and the Red-folder sound. Off until that sound is chosen in
+   Settings > Sounds; not in a replay (its clock is not the real one). */
+const redSaid = new Set();
+function warnRedFolder() {
+  const S = window.HBSounds;
+  if (replayClock || !S || S.get().events.redFolder === 'off') return;
+  for (const w of window.HBEvents.soon(calendar, Date.now(), redSaid)) { window.HBDeskClient?.toast('warn', w.text); S.event('redFolder'); }
+}
+
 /* Now in epoch ms: a replay's clock in a replay (so its "Next" matches its charts), else the browser's. */
 function clockMs() {
   const et = clockEt();
@@ -2701,6 +2723,7 @@ function tick() {
   const et = clockEt();
   for (const c of cells) c.tickSecond(et);
   renderNextEvent();
+  warnRedFolder();
 }
 
 /* ---- the chart service ---- */
@@ -2842,6 +2865,8 @@ async function init() {
   $('#tbGrid').onclick = () => toggleMenu($('#tbGrid'), gridMenu);
   { const g = $('#tbSettings'); if (g) g.onclick = () => chartSettings(); }   // the Lab keeps this gear; Charts has none (2026-10-26)
   $('#tbTheme').onclick = toggleTheme;
+  window.HBChartMenu.register('copy', alertMenuItems);
+  wireSoundButton();
   initRail();
   {   // the rail's own button for the colours by timeframe, beside the objects list (both pages share this file)
     const anchor = $('#railObjects');

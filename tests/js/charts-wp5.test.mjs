@@ -23,7 +23,7 @@ async function runInit({ gear }) {
     $, calls, saved,
     fetch: async () => ({ ok: false }),
     document: { querySelectorAll: () => [], addEventListener() {} },
-    window: { addEventListener() {}, HBPanel: { mount() { calls.push('HBPanel.mount'); } } },
+    window: { addEventListener() {}, HBPanel: { mount() { calls.push('HBPanel.mount'); } }, HBChartMenu: { register() {} } },
     setInterval() {},
   };
   const ctx = vm.createContext(sandbox);
