@@ -352,7 +352,7 @@ html.hb-apple .menu-row:hover { background: var(--a-accent); color: var(--a-on-a
 html.hb-apple .menu-row:hover .menu-i, html.hb-apple .menu-row:hover .menu-del { background: transparent; color: var(--a-on-accent); }
 html.hb-apple .menu-del { width: 20px; height: 20px; border-radius: 5px; color: var(--a-label-2); }
 html.hb-apple .menu-i-danger { color: var(--a-red-text); }
-html.hb-apple .menu-i-danger:hover, html.hb-apple .menu-i-danger:focus-visible { background: var(--a-red); color: var(--a-on-red); }
+html.hb-apple .menu-i-danger:hover, html.hb-apple .menu-i-danger:focus-visible { background: var(--a-red-fill); color: var(--a-on-red); }
 html.hb-apple .menu-err, html.hb-apple .hotkey-err { padding: 2px 9px 6px; font-size: 11px; line-height: 14px; color: var(--a-red-text); }
 html.hb-apple .menu-confirm { min-height: 28px; padding: 2px 4px 2px 9px; gap: 8px; }
 html.hb-apple .menu-custom { gap: 8px; padding: 3px 4px 5px; }
@@ -466,8 +466,8 @@ html.hb-apple .btn.btn-ghost, html.hb-apple .dialog.confirm .btn { background: v
 html.hb-apple .btn.btn-solid, html.hb-apple .btn.btn-primary, html.hb-apple .dialog.confirm .btn.primary.accent { background: var(--a-accent); color: var(--a-on-accent); }
 html.hb-apple .btn.btn-solid:hover, html.hb-apple .btn.btn-primary:hover, html.hb-apple .dialog.confirm .btn.primary.accent:hover { background: var(--a-accent); color: var(--a-on-accent); opacity: 1; }
 html.hb-apple .btn.btn-solid:active, html.hb-apple .btn.btn-primary:active { background: color-mix(in srgb, var(--a-accent) 86%, #000); }
-html.hb-apple .btn.btn-danger { background: var(--a-red); color: var(--a-on-red); font-weight: 590; }
-html.hb-apple .btn.btn-danger:hover { background: var(--a-red); color: var(--a-on-red); }
+html.hb-apple .btn.btn-danger { background: var(--a-red-fill); color: var(--a-on-red); font-weight: 590; }
+html.hb-apple .btn.btn-danger:hover { background: var(--a-red-fill); color: var(--a-on-red); }
 html.hb-apple .dialog.confirm .btn:not(.primary) { color: var(--a-label); }
 html.hb-apple .dialog.confirm .btn.primary.down, html.hb-apple .dialog.confirm .btn.primary.down:hover { background: var(--down); color: #fff; opacity: 1; font-weight: 590; }
 html.hb-apple .dialog.confirm .btn:disabled { opacity: .5; }

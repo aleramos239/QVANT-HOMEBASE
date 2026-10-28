@@ -60,6 +60,7 @@ html.hb-apple {
   --a-focus: rgb(72 72 74 / .5);
   --a-red: #ff383c;                        /* systemRed */
   --a-red-text: #d70015;                   /* red as text on a light surface (increased-contrast systemRed) */
+  --a-red-fill: #c4001a;                   /* red behind white text: 6.2:1 (systemRed was 3.6) -- Kill, ARMED, destructive buttons */
   --a-on-red: #ffffff;
   --a-green: #248a3d;                      /* profit, as text on a light surface (increased-contrast systemGreen) */
   --a-orange: #c93400;
@@ -120,6 +121,7 @@ html.hb-apple[data-theme="dark"] {
   --a-accent-text: #e5e5ea;
   --a-focus: rgb(209 209 214 / .55);
   --a-red: #ff4245;
+  --a-red-fill: #d92c35;                   /* 4.8:1 with white */
   --a-red-text: #ff6165;
   --a-green: #30d158;
   --a-orange: #ff9230;

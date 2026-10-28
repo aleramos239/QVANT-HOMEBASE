@@ -231,6 +231,9 @@ function confirm({ title, rows = [], note = '', warn = '', each = '', live = fal
     const box = page.openDialog(title, 'confirm');
     page.setDialogClose(() => finish(false));            // ×, backdrop, Esc (through the app's onKey)
     const body = page.mk('div', 'cf-body');
+    // which machine this acts from: the native shell's value, else the desk's (as the Desk reads it); unknown = no line
+    const where = T.machineWords(window.HB_MACHINE ?? (Dc.state && Dc.state.machine) ?? null);
+    if (where) body.append(page.mk('div', 'cf-note cf-machine', where));
     for (const r of rows) {
       const row = page.mk('div', 'cf-acct');
       // '?': an account the desk does not list (the Kill's rows, fix round 1 M1) -- never shown as DEMO

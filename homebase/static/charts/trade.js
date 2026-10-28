@@ -438,6 +438,8 @@ function tradeSpot(n, shown, replay, deskOn) {
    '?' for an env the desk did not give (an account it does not list). */
 const ENV_CHIPS = { live: 'LIVE', demo: 'DEMO', paper: 'PAPER' };
 function envChip(env) { return ENV_CHIPS[String(env || '')] || '?'; }
+/* Which machine a confirm acts from (owner, 2026-10-27). Display only: '' when unknown, never a guess. */
+function machineWords(m) { return m === 'mac' ? 'This Mac' : m === 'server' ? 'Server · Chicago' : ''; }
 
 /* A Trade-menu row's state for one chart: 'ticked', 'off', or 'unarmed' -- a LIVE account on the chart's list that
    is not armed this session (it came back with a layout): shown ticked-but-not-armed, and a click removes it. */
@@ -1744,7 +1746,7 @@ const api = { PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, r
   enterConfirms, wireSend, sendingSide, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
   migrateTicked, deskGate, armedMode, liveSendIds, liveCueTitle, replayGuard, legsWithin, lineAccounts, accountChips, tradeSpot, acctTick, hiddenCellsLoaded,
-  NO_ACCOUNTS, SYMBOL_CHANGE_ACCOUNTS_CLEARED, liveIds, liveDroppedMessage, envChip, algoBookings, algoForAccount,
+  NO_ACCOUNTS, SYMBOL_CHANGE_ACCOUNTS_CLEARED, liveIds, liveDroppedMessage, envChip, machineWords, algoBookings, algoForAccount,
   accountsForAlgo, algoTickAccounts, accountPickRows, deskStatusText, deskStatusParts,
   verifyLoaded, verifyCells, nextUnverified, unverifiedMode, CHECKING_ACCOUNTS, REPLAY_ENDED, replayHaltGuard,
   replayEndPatch, sendsWithoutConfirm, chartWhy,
