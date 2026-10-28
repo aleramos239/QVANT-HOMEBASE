@@ -55,6 +55,9 @@
   function toggle(name, want) {
     const p = PANES[name]; if (!p) return false;
     const shown = want == null ? H.classList.contains(p.cls) : !!want;      // currently off -> show
+    // a closed pane turns hidden after its slide: keyboard focus inside it goes to its button, not to the top of the page
+    const pane = shown ? null : D.querySelector(name === 'sidebar' ? '.hb-side' : '.hb-insp:not(#pdock)');
+    if (pane && p.btn && pane.contains(D.activeElement)) p.btn.focus({ preventScroll: true });
     H.classList.toggle(p.cls, !shown);
     set(name, shown ? '1' : '0');
     paint(name);

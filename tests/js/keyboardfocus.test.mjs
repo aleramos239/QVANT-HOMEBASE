@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { createRequire } from 'node:module';
 import { HTML } from './deskpage.mjs';
 
 /* Keyboard and focus (design package 3): the real stylesheets and scripts are read as text and the rules asserted.
@@ -123,6 +124,48 @@ test('Desk segmented buttons say which one is pressed: Demo/Live, market data (a
   for (const [, cls, v, rest] of btns) assert.match(rest, new RegExp(`aria-pressed="${v === 'live'}"`), `${v} (${cls})`);
 });
 
+test('Desk seg buttons keep keyboard focus after a press re-renders them (market data)', () => {
+  const f = HTML.slice(HTML.indexOf('function renderMarketData()'), HTML.indexOf('/* The clock:'));
+  const focused = [];
+  const btn = { dataset: { md: 'live' }, focus(o) { focused.push(['live', o]); }, addEventListener(t, fn) { this.click = fn; } };
+  const root = { set innerHTML(v) {}, querySelectorAll: () => [btn], querySelector: (q) => (q === 'button[data-md="live"]' ? btn : null) };
+  const ctx = vm.createContext({ $: (s) => (s === '#settingsMarketData' ? root : null), MD_REACHABLE: true, MD: { md: 'paper' }, MD_STAGED: 'paper', MD_BUSY: false, MD_ERR: '', MD_FEED: null,
+    machineWords: () => '', marketDataSection: () => '', applyMd() {} });
+  vm.runInContext(`let mdSig = null;\n${f}\nglobalThis.render = renderMarketData; globalThis.staged = () => MD_STAGED;`, ctx);
+  ctx.render();
+  btn.click();
+  assert.equal(ctx.staged(), 'live');
+  assert.equal(focused.length, 1, 'the pressed button gets the keyboard back');
+});
+
+test('Desk seg buttons keep keyboard focus when the clock choice is rebuilt', () => {
+  const f = HTML.slice(HTML.indexOf('function renderClock()'), HTML.indexOf('function renderSettings()'));
+  let got = null;
+  const btn = { dataset: { clock: '24h' }, focus() { got = '24h'; } };
+  const root = { dataset: { f: '12h' }, set innerHTML(v) {}, contains: (x) => x === btn, querySelectorAll: () => [], querySelector: (q) => (q === 'button[data-clock="24h"]' ? btn : null) };
+  const ctx = vm.createContext({ $: () => root, HBClock: { format: '24h' }, document: { activeElement: btn }, toast() {} });
+  vm.runInContext(`${f}\nglobalThis.render = renderClock;`, ctx);
+  ctx.render();
+  assert.equal(got, '24h');
+});
+
+test('closing a side pane with the keyboard inside it moves focus to its toolbar button', () => {
+  const sh = rd('apple/shell.js');
+  const code = sh.slice(sh.indexOf('const PANES = '), sh.indexOf('// narrow windows start'));
+  const cls = new Set();
+  const H = { classList: { contains: (c) => cls.has(c), toggle: (c, on) => (on ? cls.add(c) : cls.delete(c)) } };
+  const inPane = { contains: (x) => x === inside };
+  const inside = {}, btn = { focus() { btn.got = true; }, setAttribute() {} };
+  const D = { activeElement: inside, querySelector: (q) => (q === '.hb-side' ? inPane : null) };
+  const ctx = vm.createContext({ H, D, set() {}, window: { dispatchEvent() {} }, Event: function () {}, setTimeout() {} });
+  vm.runInContext(`${code}\nPANES.sidebar.btn = btn_; globalThis.toggle = toggle;`.replace('btn_', 'globalThis.btn'), Object.assign(ctx, { btn }));
+  ctx.toggle('sidebar', false);
+  assert.equal(btn.got, true);
+  btn.got = false; D.activeElement = {};
+  ctx.toggle('sidebar', true); ctx.toggle('sidebar', false);
+  assert.equal(btn.got, false, 'focus elsewhere is left alone');
+});
+
 /* ---- Lab menus: arrows and Escape ---------------------------------------------------------------------------------- */
 function labMenus() {
   const LAB = rd('charts/lab.js');
@@ -139,7 +182,7 @@ function labMenus() {
         querySelectorAll: (s) => (s === 'button' ? e.items : []), getBoundingClientRect: () => ({ left: 10, right: 60, top: 10, bottom: 30, width: 50, height: 60 }) };
       return e;
     } };
-  const ctx = vm.createContext({ document: doc, window: { HBChartMenu: { step: (i, n, k) => { if (n <= 0) return -1; if (k === 'Home') return 0; if (k === 'End') return n - 1; if (k === 'ArrowDown') return i < 0 ? 0 : (i + 1) % n; if (k === 'ArrowUp') return i < 0 ? n - 1 : (i - 1 + n) % n; return i; } } },
+  const ctx = vm.createContext({ document: doc, window: { HBChartMenu: { step: createRequire(import.meta.url)('../../homebase/static/charts/chartmenu.js').step } },
     innerWidth: 1400, innerHeight: 900, root: { querySelectorAll: () => [] } });
   vm.runInContext(`${code}\nglobalThis.api = { menu, dialog, closeMenu, closeDialog, open: () => !!menuEl, sheet: () => !!overlay, items: () => menuEl.items };`, ctx);
   const key = (k, target = { closest: () => null }) => { const e = { key: k, target, prevented: false, preventDefault() { this.prevented = true; } };
@@ -237,7 +280,8 @@ test('toast close, menu delete and the library "..." reach 28 px by an invisible
   // menu delete in the Mac skin: 20 x 20
   const del = need(ACHARTS, 'html.hb-apple .menu-del', undefined), dela = need(ACHARTS, 'html.hb-apple .menu-del::after', undefined);
   assert.deepEqual([del.d.width, del.d.height, del.d.position], ['20px', '20px', 'relative']);
-  assert.deepEqual([dela.d.content, dela.d.position, dela.d.inset], ['""', 'absolute', '-4px']);
+  // up, down and right only: the label on its left is a different action (pick), so the delete never reaches over it
+  assert.deepEqual([dela.d.content, dela.d.position, dela.d.inset], ['""', 'absolute', '-4px -4px -4px 0']);
   // library "...": 22 x 19 (rows), 28 x 28 with the extension; a section header's sits at the top edge, so it grows sideways and down only
   const more = need(ALAB, 'html.hb-apple #labLib .lb-more', undefined), morea = need(ALAB, 'html.hb-apple #labLib .lb-more::after', undefined);
   assert.deepEqual([more.d.width, more.d.height], ['22px', '19px']);
@@ -270,7 +314,7 @@ test('reduced motion: the Charts and Lab switches, the run-settings chevron, the
 
 test('the pins follow: every edited script and skin file has its new version', () => {
   const man = JSON.parse(rd('apple/manifest.json'));
-  assert.equal(man.version, 48);
+  assert.equal(man.version, 49);
   assert.match(rd('backtest.html'), /charts\/lab\.js\?v=134"/);
   assert.match(rd('backtest.html'), /charts\/lab\.css\?v=86"/);
   assert.match(rd('backtest.html'), /charts\/charts\.css\?v=56"/);

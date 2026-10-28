@@ -351,7 +351,7 @@ html.hb-apple .menu-row { padding-right: 4px; border-radius: 8px; }
 html.hb-apple .menu-row:hover { background: var(--a-accent); color: var(--a-on-accent); }
 html.hb-apple .menu-row:hover .menu-i, html.hb-apple .menu-row:hover .menu-del { background: transparent; color: var(--a-on-accent); }
 html.hb-apple .menu-del { position: relative; width: 20px; height: 20px; border-radius: 5px; color: var(--a-label-2); }
-html.hb-apple .menu-del::after { content: ""; position: absolute; inset: -4px; }   /* the click area reaches 28 px; nothing shows */
+html.hb-apple .menu-del::after { content: ""; position: absolute; inset: -4px -4px -4px 0; }   /* the click area grows up, down and right (28 tall); never left, over the label (pick); nothing shows */
 html.hb-apple .menu-i-danger { color: var(--a-red-text); }
 html.hb-apple .menu-i-danger:hover, html.hb-apple .menu-i-danger:focus-visible { background: var(--a-red); color: var(--a-on-red); }
 html.hb-apple .menu-err, html.hb-apple .hotkey-err { padding: 2px 9px 6px; font-size: 11px; line-height: 14px; color: var(--a-red-text); }

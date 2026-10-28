@@ -238,7 +238,8 @@ html.hb-apple .hb-insp { position: fixed; z-index: 20; right: 0; top: 0; bottom:
   padding: calc(var(--a-toolbar) + 4px) 11px 20px; overflow: hidden auto; overscroll-behavior: contain;
   transition: transform 320ms var(--a-spring), opacity 200ms ease; }
 html.hb-apple[data-theme="dark"] .hb-insp { box-shadow: -1px 0 0 rgb(0 0 0 / .35), inset 1px 0 0 rgb(255 255 255 / .10); }
-/* (not the Charts order dock, #pdock: it is the .hb-insp there and has its own open and close) */
+/* (not the Charts order dock, #pdock: it is the .hb-insp there and has its own open and close; the :not(#pdock) makes this
+   rule ID-weight on purpose, so a later open-state override of .hb-insp has to beat it by id too) */
 html.hb-apple.hb-insp-off .hb-insp:not(#pdock) { transform: translateX(100%); opacity: 0; pointer-events: none; visibility: hidden;
   transition: transform 320ms var(--a-spring), opacity 200ms ease, visibility 0s linear 320ms; }
 html.hb-apple.hb-insp-off .hb-tb-insp { width: auto; }
