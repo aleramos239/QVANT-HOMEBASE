@@ -30,14 +30,15 @@ PRE_GAP_S = 30                   # a pre-open run this young is the answer to "r
 PRE_DROP = {"desk readiness", "desk mode"}      # the banner already says these itself
 LEVEL = {"OK": "ok", "WARN": "warn", "FAIL": "bad"}
 
-_KEY = re.compile(r"""(\w*(?:token|password|passwd|secret|api[_-]?key|authorization)\w*["']?\s*[:=]\s*["']?)(?:Bearer\s+)?[^\s"',}&]+""", re.I)
+_KEY = re.compile(r"""(\w{0,40}(?:token|password|passwd|secret|api[_-]?key|authorization)\w{0,40}["']?\s*[:=]\s*["']?)(?:Bearer\s+)?[^\s"',}&]+""", re.I)
 _JWT = re.compile(r"eyJ[\w-]+\.[\w-]+\.[\w-]*")
 _BLOB = re.compile(r"[A-Za-z0-9]{32,}")
+MASK_CHARS = 4 * LINE_CHARS      # mask() looks at no more than this of a line: the patterns never see a 64 KB run
 
 
 def mask(line: str) -> str:
     """A log line with every secret's value replaced by ***. Words stay: 'token renewed at 17:10' is not a secret."""
-    return _BLOB.sub("***", _JWT.sub("***", _KEY.sub(r"\1***", line)))
+    return _BLOB.sub("***", _JWT.sub("***", _KEY.sub(r"\1***", line[:MASK_CHARS])))
 
 
 def _json(path: Path):

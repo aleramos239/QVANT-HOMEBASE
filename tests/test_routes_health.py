@@ -110,3 +110,15 @@ def test_preopen_one_failed_run_is_a_note_not_an_error(tmp_path, monkeypatch):
     monkeypatch.setattr(health, "run_preopen", boom)
     d = client(tmp_path).get("/api/preopen-check?run=1").json()
     assert d["available"] is True and d["checks"] == [{"level": "warn", "label": "Pre-open check", "detail": "could not run: RuntimeError: lsof gone"}]
+
+
+def test_mask_stays_fast_on_a_long_run_of_word_characters(tmp_path):
+    import time
+    for run in ("a" * 60000, "eyJ" * 20000, ("token" * 4000) + "x"):
+        t0 = time.perf_counter()
+        health.mask(run)
+        assert time.perf_counter() - t0 < 0.5, run[:6]
+    (tmp_path / "service.log").write_text("a" * 60000 + "\n")
+    t0 = time.perf_counter()
+    r = client(tmp_path).get("/api/logs/service").json()
+    assert time.perf_counter() - t0 < 0.5 and all(len(x) <= health.LINE_CHARS for x in r["lines"])
