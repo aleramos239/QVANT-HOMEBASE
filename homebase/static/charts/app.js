@@ -2970,6 +2970,7 @@ async function init() {
   for (const n of document.querySelectorAll('[data-icon]')) n.innerHTML = I[n.dataset.icon] || '';
   initPageSwitcher();
   try { const r = await fetch('/api/symbols'); if (r.ok) meta = await r.json(); } catch (_) { /* keep the fallback */ }
+  meta.roots = meta.roots.filter((r) => !['YM', 'RTY', 'SI'].includes(r));   // owner 2026-10-28: not offered in the symbol menus (the server still streams them)
   loadLast();
   $('#tbSymbol').onclick = () => toggleMenu($('#tbSymbol'), symbolMenu);
   $('#tbIntervals').onclick = () => toggleMenu($('#tbIntervals'), intervalMenu);
