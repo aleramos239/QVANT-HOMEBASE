@@ -41,12 +41,12 @@ test('HBTradePure.inferType/menuText: the Practice menu\'s fallback when trade.j
 });
 
 test('prefs: defaults, clamps, de-duplicated ticks, garbage in -> defaults', () => {
-  const dflt = { ticked: [], oneClick: false, oneClickChart: true, oneClickPanel: true, qty: 1, slTicks: 0, tpTicks: 0 };
+  const dflt = { ticked: [], oneClick: false, oneClickChart: true, oneClickPanel: true, qty: 1, slTicks: 0, tpTicks: 0, accountActions: false };
   assert.deepEqual(TP.parsePrefs(null), dflt);
   assert.deepEqual(TP.parsePrefs('garbage'), dflt);
   assert.deepEqual(TP.parsePrefs('[1]'), dflt);
   assert.deepEqual(TP.parsePrefs(JSON.stringify({ ticked: ['a', 'a', 5, ''], oneClick: true, qty: 3.6, slTicks: -2, tpTicks: '8' })),
-    { ticked: ['a'], oneClick: true, oneClickChart: true, oneClickPanel: true, qty: 4, slTicks: 0, tpTicks: 0 });
+    { ticked: ['a'], oneClick: true, oneClickChart: true, oneClickPanel: true, qty: 4, slTicks: 0, tpTicks: 0, accountActions: false });
   assert.equal(TP.prefsText({ qty: 0 }), JSON.stringify(dflt));
 });
 

@@ -111,7 +111,7 @@ def test_the_bots_day_state_locks_its_symbol_on_its_account(tmp_path, status, lo
     assert (not r["ok"]) is locked
     if locked:
         assert r["error"] == (f"{NQC} on A1 belongs to the nq930 bot right now ({status}) "
-                              "— use the desk's Kill in an emergency")
+                              "— use Kill in an emergency")
     assert order(desk, cid="c2", root="ES")["a1"]["ok"] is True
 
 
@@ -664,7 +664,7 @@ def test_an_unknown_id_bot_stop_cannot_be_cancelled_while_the_bot_is_live(tmp_pa
 
     assert c("x1", "88")["error"] == (
         f"order 88 on A1 was not placed from the chart and the nq930 bot is live in {NQC} "
-        "— it may be one of the bot's; use the desk's Kill in an emergency")
+        "— it may be one of the bot's; use Kill in an emergency")
     assert c("x2", "4242")["ok"] is True                # positively manual: still cancellable
     ads["a1"].view["orders"] = [{**stop, "symbol": None}]
     assert "was not placed from the chart" in c("x3", "88")["error"]   # unresolved contract too

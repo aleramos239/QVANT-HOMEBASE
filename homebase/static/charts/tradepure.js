@@ -54,7 +54,8 @@ function parsePrefs(text) {
   const ds = {};
   if (isObj(o.defStop)) for (const [k, v] of Object.entries(o.defStop)) { const n = Math.round(Number(v)); if (k.length >= 1 && k.length <= 16 && n >= 1) ds[k] = Math.min(10000, n); }
   return { ...(Object.keys(ds).length ? { defStop: ds } : {}), ticked, oneClick: o.oneClick === true, oneClickChart: sw(o.oneClickChart), oneClickPanel: sw(o.oneClickPanel),
-    qty: int(o.qty, 1, QTY_MAX, 1), slTicks: 0, tpTicks: 0 };
+    qty: int(o.qty, 1, QTY_MAX, 1), slTicks: 0, tpTicks: 0,
+    accountActions: o.accountActions === true };   // package 9: the panel's FLATTEN ACCOUNT / CANCEL ALL, off until switched on
 }
 const prefsText = (p) => JSON.stringify(parsePrefs(JSON.stringify(p)));
 

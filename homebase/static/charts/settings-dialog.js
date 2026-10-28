@@ -165,6 +165,11 @@ const TABS = [
       { label: 'Size per symbol, order templates, account chips', pref: { key: 'on', kind: 'switch', quick: true } },
       { caption: 'Every chart, this browser. On: each symbol keeps its own size, the order panel saves up to five templates (they only fill the form), and a chart\'s account chips tick and untick accounts. Off: one size for every symbol, and a chip opens this tab.' },
     ]],
+    // package 9: whole-account actions in the bottom panel's Accounts tab; always one confirm each, LIVE needs the arm
+    ['ACCOUNT BUTTONS', [
+      { label: 'Flatten account / Cancel all', pref: { key: 'accountActions', kind: 'switch' } },
+      { caption: 'Adds two buttons to each row of the Accounts tab. Each asks to confirm first, every time. Cancel all also cancels stops and targets.' },
+    ]],
     // 5.7 (2026-10-27): moved here from the order panel's "Chart preview" (HBOrderPanel's look, this browser's)
     ['ORDER PREVIEW', [
       { label: 'Line', look: { key: 'style', choices: [[0, 'Solid'], [2, 'Dashed'], [1, 'Dotted']] } },

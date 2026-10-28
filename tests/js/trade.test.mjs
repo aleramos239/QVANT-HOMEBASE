@@ -41,12 +41,12 @@ const PAPER_STATE = { ...STATE, accounts: [...STATE.accounts, acct('paper', 'PAP
 
 
 test('prefs: defaults, clamps, de-duplicated ticks, garbage in -> defaults', () => {
-  const dflt = { ticked: [], oneClick: false, oneClickChart: true, oneClickPanel: true, qty: 1, slTicks: 0, tpTicks: 0 };
+  const dflt = { ticked: [], oneClick: false, oneClickChart: true, oneClickPanel: true, qty: 1, slTicks: 0, tpTicks: 0, accountActions: false };
   assert.deepEqual(T.parsePrefs(null), dflt);
   assert.deepEqual(T.parsePrefs('garbage'), dflt);
   assert.deepEqual(T.parsePrefs('[1]'), dflt);
   assert.deepEqual(T.parsePrefs(JSON.stringify({ ticked: ['a', 'a', 5, ''], oneClick: true, qty: 3.6, slTicks: -2, tpTicks: '8' })),
-    { ticked: ['a'], oneClick: true, oneClickChart: true, oneClickPanel: true, qty: 4, slTicks: 0, tpTicks: 0 });
+    { ticked: ['a'], oneClick: true, oneClickChart: true, oneClickPanel: true, qty: 4, slTicks: 0, tpTicks: 0, accountActions: false });
   assert.equal(T.prefsText({ qty: 0 }), JSON.stringify(dflt));
 });
 
@@ -402,8 +402,10 @@ test('toasts: one per account from the desk, the proxy detail otherwise; fills',
     { tone: 'ok', text: '…041 · order accepted' },
     { tone: 'err', text: '…047 · chart trading is off — switch it on on the desk page' }]);
   assert.deepEqual(T.resultToasts('flatten', 504, { detail: 'no answer from the desk in 20 s — check the Orders tab before trying again' }, STATE),
-    [{ tone: 'err', text: 'no answer from the desk in 20 s — check the Orders tab before trying again' }]);
-  assert.deepEqual(T.resultToasts('order', 0, null, STATE), [{ tone: 'err', text: 'desk error (HTTP 0)' }]);
+    [{ tone: 'err', text: 'no answer from the desk in 20 s — check the Orders tab before trying again' },
+      { tone: 'warn', text: 'Result unknown, check positions before sending again' }]);   // c-43: a timeout may have placed it
+  assert.deepEqual(T.resultToasts('order', 0, null, STATE), [{ tone: 'err', text: 'desk error (HTTP 0)' },
+    { tone: 'warn', text: 'Result unknown, check positions before sending again' }]);
   assert.equal(T.fillText({ account: 'sim041', fill: { side: 'Buy', qty: 2, price: 30910.25 } }, STATE, 0.25), 'Filled 2 @ 30,910.25 · …041');
 });
 

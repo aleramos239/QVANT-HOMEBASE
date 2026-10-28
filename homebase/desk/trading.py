@@ -283,6 +283,12 @@ def parse_cancel(body) -> tuple:
     return _client_id(body), _account(body), _order_id(body)
 
 
+def parse_cancel_all(body) -> tuple:
+    """{client_id, account}: ONE account's working orders (package 9, D8). `accounts` is not accepted."""
+    body = _obj(body)
+    return _client_id(body), _account(body)
+
+
 def parse_symbol_action(body) -> tuple:
     body = _obj(body)
     return _client_id(body), _accounts(body), _root(body)
@@ -936,7 +942,7 @@ class ChartDesk:
             where = f" in {contract}" if contract else ""
             raise Refused(f"order {oid} on {label} was not placed from the chart and the {name} "
                           f"bot is {status}{where} — it may be one of the bot's; "
-                          "use the desk's Kill in an emergency")
+                          "use Kill in an emergency")
 
     def _lock(self, aid: str, contract: str, label: str, *, cancel_oid: Optional[str] = None) -> None:
         """Guard 4. A cancel by id (`cancel_oid`) skips the window, but while
@@ -949,7 +955,7 @@ class ChartDesk:
             if st is not None and st.status in BOT_BUSY:
                 if cancel_oid is None or st.status == "placing":
                     raise Refused(f"{contract} on {label} belongs to the {name} bot right now "
-                                  f"({st.status}) — use the desk's Kill in an emergency")
+                                  f"({st.status}) — use Kill in an emergency")
                 self._not_the_bots(aid, cancel_oid, label, name, st.status, contract)
             if cancel_oid is not None:
                 continue
@@ -1231,6 +1237,37 @@ class ChartDesk:
                            account=aid, order_id=oid, contract=contract, ok=r.ok, error=r.error,
                            ack_ms=self._ack_ms())
         return self._result(r.ok, oid, r.error, jerr)
+
+    async def cancel_all(self, body) -> dict:
+        """POST /api/trade/cancel-all {client_id, account}: cancel every working order of THIS account, one cancel by
+        id each (the cache's own list; never the adapter's account sweep, never a flatten, never another account).
+        cancel-by-id's guards run for EVERY order first: one bot-owned order, a contract a bot is placing, or a
+        bot-busy contract's order not placed from the chart refuses the whole action with nothing cancelled."""
+        cid, aid = parse_cancel_all(body)
+
+        async def work():
+            res = await self._one("cancel-all", cid, aid, lambda: self._cancel_all(cid, aid))
+            return self._finish("cancel-all", cid, {aid: res})
+
+        return await self._once("cancel-all", cid, work)
+
+    async def _cancel_all(self, cid: str, aid: str) -> dict:
+        ad, view, label = self._gate(aid, entry=False)
+        self._unresolved(view)                 # an order whose contract is unknown could be a bot's: nothing is cancelled
+        ids = [str(o.get("order_id")) for o in view.get("orders", [])]
+        if not ids:
+            raise Refused(f"no working orders on {label}")
+        for o in view.get("orders", []):
+            oid = str(o.get("order_id"))
+            self._not_bot_order(aid, oid)
+            self._lock(aid, o["symbol"], label, cancel_oid=oid)
+        outs = await asyncio.gather(*(_call(ad.cancel_order_by_id(i)) for i in ids))
+        bad = {i: c.error for i, c in zip(ids, outs) if not c.ok}
+        n = len(ids) - len(bad)
+        error = "; ".join(f"order {i}: {e}" for i, e in bad.items()) or None
+        jerr = self._jsafe("manual_cancel", source="chart", scope="account", client_id=cid, account=aid,
+                           order_ids=ids, ok=not bad, error=error, cancelled=n, ack_ms=self._ack_ms())
+        return {**self._result(not bad, None, error, jerr), "cancelled": n}
 
     # --- exits: add an SL and/or TP to an open position (the chart's drag handles) ---------------
     async def exits(self, body) -> dict:

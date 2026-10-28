@@ -176,8 +176,9 @@ function setInFlight(v, origin = null) {
    chart's cellGate, or the panel's accountGate) re-checked right before it goes out. buildBody(m) returns a body object, an array of bodies (sent in order), or null/undefined
    to abort silently (a specific toast — mode reason, accounts-changed, price-moved — already covers the "why").
    A second attempt while one is in flight now toasts instead of dropping silently (review item 3). `origin`: the
-   button that started it (sending()). */
-function guardedSend(action, gate, buildBody, origin = null) {
+   button that started it (sending()). `after(answers)`: called when the send is over (answers: one array per body, one answer
+   per place it went; null when nothing was sent) -- a page-only follow-up (snap a refused line back, warn), never a send. */
+function guardedSend(action, gate, buildBody, origin = null, after = null) {
   const flat = action === 'flatten';
   if (flat ? flattening : busy()) { D().toast('err', flat ? 'A flatten is already in flight' : 'Another action is in flight'); return; }
   if (flat) setFlattening(true); else setInFlight(true, origin);
@@ -186,9 +187,10 @@ function guardedSend(action, gate, buildBody, origin = null) {
     if (m.mode !== 'on') { D().toast('err', m.reason); return null; }
     const body = buildBody(m);
     if (body == null) return null;
-    if (Array.isArray(body)) return body.reduce((p, one) => p.then(() => sendRouted(action, one)), Promise.resolve());
-    return sendRouted(action, body);
-  }).catch((e) => console.error(e)).finally(() => (flat ? setFlattening(false) : setInFlight(false)));
+    const answers = [], go = (one) => sendRouted(action, one).then((a) => { answers.push(a); });
+    if (Array.isArray(body)) return body.reduce((p, one) => p.then(() => go(one)), Promise.resolve()).then(() => answers);
+    return go(body).then(() => answers);
+  }).catch((e) => { console.error(e); return null; }).then((answers) => { if (after) after(answers || null); }).catch((e) => console.error(e)).finally(() => (flat ? setFlattening(false) : setInFlight(false)));
 }
 /* The one place a gated action leaves the page (2026-09-27 accounts/paper plan, Task 2): HBTrade.routeSend splits
    it -- the desk's accounts to HBDeskClient.send, the PAPER account to HBPaperClient.send (POST /api/paper/*,
@@ -363,7 +365,12 @@ function placeOrder({ cell, root, side, type, price = null, qty, exits = undefin
     return out;
   };
   const origin = { surface, cell, side };   // fast-paper: that button reads "sending" while this order is in flight
-  if (T.sendsWithoutConfirm(D().prefs, cell.cfg, surface)) { guardedSend('order', g, send, origin); return; }   // not right after a replay
+  // c-28: leg 1 went in and leg 2 did not -- say so, with the accounts, until it is dismissed
+  const afterSplit = split ? (answers) => {
+    const ids = T.splitStranded(answers || []);
+    if (ids.length) D().toast('warn', `${ids.map((id) => acctRows([id])[0].label).join(', ')} · leg 1 is open, leg 2 was refused — check ${root}`);
+  } : null;
+  if (T.sendsWithoutConfirm(D().prefs, cell.cfg, surface)) { guardedSend('order', g, send, origin, afterSplit); return; }   // not right after a replay
   const preview = build(gate);
   // shown === gate.accounts here, so only the inferType re-check can abort a preview -- the market moved
   // between the chart-menu's right-click (where `type` was inferred) and picking the item just now.
@@ -373,7 +380,7 @@ function placeOrder({ cell, root, side, type, price = null, qty, exits = undefin
   const note = split ? [c.bracket, T.splitNote(preview, { qty: split.qty, tp: T.roundTick(split.tp, tick) }, tick)].join(' · ') : c.bracket;
   confirm({ title: c.title, rows: c.accounts.map((a) => ({ label: a.label, env: a.env })), note,
     warn: c.warn, each: c.each, live: c.live, action: side, tone: side === 'Sell' ? 'down' : 'accent', oneClickPref: T.oneClickKey(surface) })
-    .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('order', g, send, origin); } });
+    .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('order', g, send, origin, afterSplit); } });
 }
 
 function symbolAction(cell, kind, root) {
@@ -433,11 +440,13 @@ function moveLine(cell, line, price, root, tick, { onCancel, noConfirm = false }
     return line.legs.map((leg) => ({ client_id: T.clientId(), account: leg.account, order_id: leg.order_id, price: rounded }));
   };
   // noConfirm: an armed auto-breakeven firing -- agreed to when its order was placed (the owner, 2026-10-18)
-  if (noConfirm || T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend('modify', g, build); return; }
+  // c-18: a move the desk refused (or never answered) puts the line back where the desk has it
+  const snap = (answers) => { if (!T.answersOk(answers) && onCancel) onCancel(); };
+  if (noConfirm || T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend('modify', g, build, null, snap); return; }
   const title = T.actionTitle('modify', { root, line, from: line.price, to: price }, tick);
   const rows = acctRows(accountIds);
   confirm({ title, rows, action: 'Move', live: hasLive(rows) })
-    .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('modify', g, build); } else if (onCancel) onCancel(); });
+    .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('modify', g, build, null, snap); } else if (onCancel) onCancel(); });
 }
 
 /* A position chip's exit drag dropped at `price` (tradelines.js): `exits` for the WHOLE position on each of the line's
@@ -463,13 +472,25 @@ function addExit(cell, line, kind, price, root, tick, { onCancel, noConfirm = fa
     if (T.exitDropError(line, kind, at, q ? q.last : null)) { D().toast('err', 'Price moved through your stop/target — nothing sent'); return null; }
     return T.exitsBody({ clientId: T.clientId(), accounts, root, kind, price: at, expected });
   };
-  if (noConfirm || T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend('exits', g, build); return; }   // noConfirm: as moveLine's
+  // c-20 / D10: the desk cancels the old exit, then places the pair: a label for that gap (it is not reordered)
+  let gap = null;
+  const gapName = T.exitReplacing(D().state, accounts, root, line.side);
+  const withGap = (m) => {
+    const body = build(m);
+    if (body != null && gapName) gap = D().toast('warn', `${gapName[0].toUpperCase()}${gapName.slice(1)} being replaced — no ${gapName} on the desk for a moment`);
+    return body;
+  };
+  const after = (answers) => {
+    if (gap) { D().dismiss(gap); gap = null; }
+    if (!T.answersOk(answers) && onCancel) onCancel();   // c-18, as moveLine's
+  };
+  if (noConfirm || T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend('exits', g, withGap, null, after); return; }   // noConfirm: as moveLine's
   const rows = acctRows(accounts);
   const ghost = T.exitGhost(line, kind, at), usd = T.usd(T.linePnl(ghost, null));
   confirm({ title: T.exitsTitle(line, kind, at, tick), rows, note: usd ? `If it fills: ${usd}` : '', warn: T.GTC_WARN,
     each: accounts.length > 1 ? `the whole position on each of ${accounts.length} accounts` : '',
     action: kind === 'sl' ? 'Add stop' : 'Add target', tone: kind === 'sl' ? 'down' : 'accent', live: hasLive(rows) })
-    .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('exits', g, build); } else if (onCancel) onCancel(); });
+    .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('exits', g, withGap, null, after); } else if (onCancel) onCancel(); });
 }
 
 /* × on a line: flatten for a position, cancel for the rest (SL/TP/plain orders). */
@@ -501,6 +522,38 @@ function flattenAccount(account, root) {
   const title = T.actionTitle('flatten', { root }, tickFor(root));
   const rows = acctRows([account]);
   confirm({ title, rows, action: 'Flatten', live: hasLive(rows) }).then((ok) => { if (ok) guardedSend('flatten', g, build); });
+}
+
+/* Package 9 (D8): the bottom panel's FLATTEN ACCOUNT and CANCEL ALL, only while the "accountActions" switch is on (off:
+   nothing here does anything and the panel shows no button). ONE confirm each, ALWAYS (never one-click), the same
+   accountGate (desk up, LIVE needs the arm) and the same guarded send as every other action. Flatten is the existing
+   per-symbol `flatten`, once per symbol the account holds; Cancel all is the desk's one account-wide `cancel-all` (a
+   PAPER account: the paper book's own `cancel-symbol` per symbol). Neither can do the other's job. */
+function accountOf(id) { const st = D().state; return st && (st.accounts || []).find((x) => x.id === id); }
+function flattenWholeAccount(account) {
+  if (!D().prefs.accountActions) return;
+  const g = () => accountGate(account), gate = g();
+  if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
+  const a = accountOf(account), roots = T.accountRoots(a, 'positions');
+  if (!roots.length) { D().toast('err', `${T.short(a)} has no open position — nothing sent`); return; }
+  const build = () => roots.map((root) => ({ client_id: T.clientId(), accounts: [account], root }));
+  const rows = acctRows([account]);
+  confirm({ title: T.actionTitle('flatten-account', { who: T.short(a), roots }), rows, action: 'Flatten account', live: hasLive(rows), oneClickBox: false })
+    .then((ok) => { if (ok) guardedSend('flatten', g, build); });
+}
+function cancelAllOrders(account) {
+  if (!D().prefs.accountActions) return;
+  const g = () => accountGate(account), gate = g();
+  if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
+  const a = accountOf(account), roots = T.accountRoots(a, 'orders');
+  if (!roots.length) { D().toast('err', `${T.short(a)} has no working orders — nothing sent`); return; }
+  const paper = T.isPaperId(account);
+  const build = () => (paper ? roots.map((root) => ({ client_id: T.clientId(), accounts: [account], root }))
+    : { client_id: T.clientId(), account });
+  const rows = acctRows([account]);
+  confirm({ title: T.actionTitle('cancel-all', { who: T.short(a) }), rows, action: 'Cancel all orders', live: hasLive(rows), oneClickBox: false,
+    note: 'This cancels every working order, stops and targets too: an open position is left with no protection.' })
+    .then((ok) => { if (ok) guardedSend(paper ? 'cancel-symbol' : 'cancel-all', g, build); });
 }
 
 function cancelOrder(account, order_id) {
@@ -739,7 +792,7 @@ function mount(pg) {
   }
 }
 
-window.HBTradeUI = { mount, placeOrder, symbolAction, hotkey, flattenAccount, cancelOrder, closeLine, moveLine, addExit, confirm, busy, flatBusy,
+window.HBTradeUI = { mount, placeOrder, symbolAction, hotkey, flattenAccount, flattenWholeAccount, cancelAllOrders, cancelOrder, closeLine, moveLine, addExit, confirm, busy, flatBusy,
   sending, onBusyChange, onTradeChange, effectiveMode, liveCue, lineMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, botKill,
   killBusy, accountRows, toggleAccount, pickAlgo, armPending, paintDeskStatus, replayEnded, resumeLive,
   replayDestroyed, gridRebuilt };

@@ -452,6 +452,21 @@ test('Trading tab: the quick-setup switch (owner D6) starts off and flips only t
   assert.equal(quick.on, false);
 });
 
+/* Package 9: the "Account buttons" switch is off until the owner turns it on, and it is the same viewer-wide pref. */
+test('Trading tab: the ACCOUNT BUTTONS switch is off by default and flips accountActions', () => {
+  const cell = makeCell('time:60');
+  cell.cfg.root = 'NQ';
+  cell.cfg.trade = { accounts: [] };
+  cell.cfg.algo = null;
+  const prefs = { oneClick: false, oneClickChart: true, oneClickPanel: false, qty: 1, slTicks: 0, tpTicks: 0, accountActions: false };
+  const { box } = openTrading(cell, { prefs: () => prefs, setPrefs: (p) => Object.assign(prefs, p) });
+  assert.equal(findText(box, 'ACCOUNT BUTTONS') != null, true);
+  const sw = descend({ children: [box] }, (c) => c.getAttribute && c.getAttribute('aria-label') === 'Flatten account / Cancel all');
+  assert.equal(sw.getAttribute('aria-checked'), 'false');
+  sw.onclick();
+  assert.equal(prefs.accountActions, true);
+});
+
 /* S7 (2026-09-28 safety pass): the Template ▾ "Save as…" field saves once per Enter PRESS -- a held key's
    auto-repeat (e.repeat) never sends another PUT (GOTCHAS.md: a held key has sent duplicates here before). */
 test('S7: Template ▾ Save as… -- Enter saves once; a held Enter\'s repeats never save again', async () => {

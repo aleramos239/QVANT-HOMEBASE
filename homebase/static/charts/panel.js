@@ -308,6 +308,14 @@ function renderFillQuality(target) {
 
 const ACCOUNT_HEAD = [{ text: 'Account' }, { text: 'Env' }, { text: 'Connected' }, { text: 'Broker account' }, { text: 'Balance', cls: 'num' },
   { text: 'Realized P&L', cls: 'num' }, { text: 'Open P&L', cls: 'num' }, { text: 'Strategies' }, { text: 'Status' }, { text: 'Room' }];
+/* Package 9: with the Settings > Trading switch "Account buttons" on, each account row also gets FLATTEN ACCOUNT and CANCEL ALL
+   (HBTradeUI.flattenWholeAccount / cancelAllOrders -- one confirm each). Off: the table is exactly what it was. */
+const ACCOUNT_ACT_HEAD = [...ACCOUNT_HEAD, { text: '' }, { text: '' }];
+function buildAccountActRow(tr, r) {
+  buildAccountRow(tr, r);
+  actionTd(tr, 'Flatten account', () => window.HBTradeUI.flattenWholeAccount(r.id), true);
+  actionTd(tr, 'Cancel all', () => window.HBTradeUI.cancelAllOrders(r.id));
+}
 function buildAccountRow(tr, r) {
   td(tr, r.who);
   const c = el('td');
@@ -338,7 +346,10 @@ function renderAccounts(target) {
   if (!d.state) { target.replaceChildren(downDiv(d.down)); return; }
   const rows = T.accountRows(d.state, d.quotes);
   if (!rows.length) { target.replaceChildren(emptyDiv('No accounts on the desk')); return; }
-  syncTable(target, ACCOUNT_HEAD, rows, (r) => r.id, buildAccountRow, updateAccountRow);
+  const act = !!(d.prefs.accountActions && window.HBTradeUI && window.HBTradeUI.flattenWholeAccount);
+  const t = target.querySelector('table.bp-table');
+  if (t && (t.querySelectorAll('th').length > ACCOUNT_HEAD.length) !== act) target.replaceChildren();   // the switch flipped: start the table again
+  syncTable(target, act ? ACCOUNT_ACT_HEAD : ACCOUNT_HEAD, rows, (r) => r.id, act ? buildAccountActRow : buildAccountRow, updateAccountRow);
 }
 
 /* ---- the panel shell ---- */
