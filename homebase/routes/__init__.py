@@ -3,4 +3,4 @@
 Each module has `register(app, *, what it needs)` (the charts modules' pattern): the keyword arguments are exactly
 the desk state its routes read, handed over by create_app. The routes land on the app itself, as before. A route module never imports homebase.server."""
 
-from . import accounts, control, deploy, groups, lab, records, status, strategies  # noqa: F401  (create_app calls routes.<name>.register)
+from . import accounts, control, deploy, groups, health, lab, records, status, strategies  # noqa: F401  (create_app calls routes.<name>.register)
