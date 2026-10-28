@@ -45,7 +45,10 @@
       panels.classList.add('hb-platter');
       for (const b of panels.querySelectorAll('[data-panel]')) {
         const name = SYMBOL[b.dataset.panel];
-        if (name) { b.classList.add('hb-tbtn'); b.replaceChildren(sf(name)); } else b.classList.add('hb-proxy');
+        if (name) {      // the word where the window is wide (apple/lab.css), the symbol alone where it is narrow
+          b.classList.add('hb-tbtn', 'hb-text');
+          b.replaceChildren(sf(name), el('span', { class: 'hb-tb-word', text: b.getAttribute('aria-label') }));
+        } else b.classList.add('hb-proxy');
       }
       tb.right.append(panels);
     }

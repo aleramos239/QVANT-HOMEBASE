@@ -156,7 +156,7 @@ test('WP1.15 Changes (7 days): each row is old → new in words; no Put back whe
     ['APEX…048 added ×2', true],
     ['Accounts: Lucid Eval #1 ×1', false],
     ['Limits: Trades a day 2 → 3 · Most at risk per trade $300 → $450', true],
-    ['Limits set: Trades a day 2 · Most contracts per account 1 · Most at risk per trade $300 · No new trade after 11:00 ET · Flat by 15:55 ET', false],
+    ['Limits set: Trades a day 2 · Most contracts per account 1 · Most at risk per trade $300 · Last entry 11:00 ET · Flat by 15:55 ET', false],
   ]);
   const html = t.api.deskChangesHtml('s:lab_nq_orb');
   assert.match(html, /<h2>Changes \(7 days\)<\/h2>/);
@@ -314,7 +314,7 @@ test('WP1.14 a Lab strategy\'s Setup: accounts, LIVE / paper, the group\'s $ ris
   assert.equal(setupRow(html, 'Accounts'), 'Lucid Eval #1 demo ×1 · APEX…048 LIVE ×2');
   assert.equal(setupRow(html, 'LIVE / paper'), 'LIVE on 1 · demo on 1');
   assert.equal(setupRow(html, 'Size'), '$500 at risk a trade (the apex 300k group sizes it)');
-  assert.equal(setupRow(html, 'Limits'), 'Trades a day 2 · Most contracts per account 1 · Most at risk per trade $300 · No new trade after 11:00 ET · Flat by 15:55 ET');
+  assert.equal(setupRow(html, 'Limits'), 'Trades a day 2 · Most contracts per account 1 · Most at risk per trade $300 · Last entry 11:00 ET · Flat by 15:55 ET');
   assert.equal(setupRow(html, 'Window'), 'NQ · 09:25-16:00 ET · from the Lab', 'the Lab strategy\'s own spec line');
   assert.equal(setupRow(html, 'Group'), 'apex 300k (account cycle ON, next APEX…048)');
   assert.equal(setupRow(html, 'Machine'), 'the SERVER · Chicago');
@@ -462,7 +462,7 @@ test('the page: state, note, Limits, Today, Matched the backtest, Accounts, and 
   assert.match(html, /<b>Waiting for the session<\/b>/);
   assert.match(html, /From the Lab\. With no account it runs in shadow: it writes down its orders and nothing is sent\./);
   assert.match(html, /<h2>Limits<\/h2>/);
-  for (const k of ['Trades a day', 'Most contracts per account', 'Most at risk per trade', 'No new trade after', 'Flat by']) assert.match(html, new RegExp(`<span class="h">${k}</span>`), k);
+  for (const k of ['Trades a day', 'Most contracts per account', 'Most at risk per trade', 'Last entry', 'Flat by']) assert.match(html, new RegExp(`<span class="h">${k}</span>`), k);
   assert.match(html, /<span class="t net">\$300<\/span>/);
   assert.match(html, /onclick="openLabLimits\(&quot;lab_nq_orb&quot;\)">Edit limits<\/button>/);
   assert.match(html, /<h2>Today, in shadow<\/h2>/);
@@ -729,7 +729,7 @@ test('the Limits dialog is static markup, built once; no template of the page wr
     assert.equal((HTML.match(new RegExp(`id="${id}"`, 'g')) || []).length, 1, id);
   }
   const markup = HTML.slice(HTML.indexOf('<div class="overlay" id="labLimitsOverlay">'), HTML.indexOf('<div class="overlay" id="settingsOverlay">'));
-  for (const w of ['Trades a day', 'Most contracts per account', 'Most at risk per trade', 'No new trade after', 'Flat by', 'Cancel', 'Save limits']) assert.ok(markup.includes(w), w);
+  for (const w of ['Trades a day', 'Most contracts per account', 'Most at risk per trade', 'Last entry', 'Flat by', 'Cancel', 'Save limits']) assert.ok(markup.includes(w), w);
   assert.match(markup, /role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="llTitle"/);
   assert.match(markup, /id="llTrades"[^>]*data-autofocus/);
   // render() and the views never write its fields or markup
@@ -902,7 +902,7 @@ test('K: the Save button reads the numbers as numbers: 300.00, $300 or 02 is no 
   assert.equal(t.els.llSave.textContent, 'Save limits');
   fill(t, { llRisk: '', llLast: '11:30' });
   t.els.llRisk.oninput();
-  assert.equal(t.els.llSave.textContent, 'Save: At risk $300 → none · No new trade after 11:00 → 11:30');
+  assert.equal(t.els.llSave.textContent, 'Save: At risk $300 → none · Last entry 11:00 → 11:30');
   fill(t, { llRisk: '300', llLast: '11:00', llQty: '0' });
   t.els.llQty.oninput();
   assert.equal(t.els.llSave.textContent, 'Save: Contracts 1 → 0', 'a different number still shows');
@@ -980,7 +980,7 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=41"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=42"><\/script>/);
   assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=4"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));

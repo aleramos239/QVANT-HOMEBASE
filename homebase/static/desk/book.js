@@ -233,6 +233,8 @@ function setEnv(env) {
   WIZ.env = env;
   $("#envDemo").classList.toggle("sel", env === "demo");
   $("#envLive").classList.toggle("sel", env === "live");
+  $("#envDemo").setAttribute("aria-pressed", String(env === "demo"));
+  $("#envLive").setAttribute("aria-pressed", String(env === "live"));
   const n = $("#envNote");
   n.textContent = env === "live"
     ? "LIVE — real money. Orders on a live account are real. It won't trade until you assign it to a strategy."
@@ -275,7 +277,7 @@ async function loadLogins() {
       <span><span class="t">${esc(l.label)}</span><br>
       <span class="sub">${esc(l.env)}${l.in_use ? " · connected now" : ""}</span></span>
       <span class="spacer"></span>
-      <button class="x" onclick="event.stopPropagation();delLogin(${jsArg(l.key)})" title="Forget this login">&times;</button>
+      <button class="x" onclick="event.stopPropagation();delLogin(${jsArg(l.key)})" title="Forget this login"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#ic-trash"/></svg></button>
       <span class="radio"></span>
     </div>`).join("");
   if (WIZ.saved === null && d.logins.length) pickLogin(d.logins[0].key);

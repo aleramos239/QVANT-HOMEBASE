@@ -26,7 +26,7 @@ G.add({
     use: [
       'Find where the volume sat. A big orange-box row near a low can be a price buyers defended.',
       'Green lines stacked near a low can mean buyers took control. Red lines near a high, sellers.',
-      'Compare the delta under the candle with its colour. A green candle with red delta looks weak.',
+      'Compare the delta under the candle with its color. A green candle with red delta looks weak.',
       'Use it on the few candles at a level you care about, not to scan the whole chart.',
       'Settings: taller rows; other row numbers (prints, dominant %, price); the ATAS, Exocharts or Sierra imbalance rule.',
     ],
@@ -159,13 +159,13 @@ G.add({
   heatmap: {
     what: 'Paints how much size rested at each price over time, behind the candles: the book as a picture.',
     see: [
-      'Coloured blocks behind the candles. Time runs left to right, price up and down.',
+      'Colored blocks behind the candles. Time runs left to right, price up and down.',
       'Faint blue: little size waiting. Orange: more. Strong red: the most on the screen.',
       'A long horizontal streak is an order that sat at one price for a long time.',
       'Optional trade bubbles: green for buyers, red for sellers. A bigger circle is more contracts in one second.',
     ],
     read: [
-      'Colour is relative to the biggest size now on screen, so it rescales as you zoom and scroll.',
+      'Color is relative to the biggest size now on screen, so it rescales as you zoom and scroll.',
       'A bright streak under price is a wall of buyers. A bright streak above price is a wall of sellers.',
       'A streak that ends as price arrives was used up or pulled. One that holds while price bounces held.',
       'A bubble is trading that really happened. Big bubbles on a streak mean the wall is being hit.',
@@ -320,7 +320,7 @@ G.add({
     see: [
       'Letters (A, B, C...) in rows by price, docked at the right edge. Only the newest session is drawn.',
       'A row grows to the right with each slice that visited it. "Blocks" draws boxes instead of letters.',
-      'The value area is tinted and the busiest row (POC) is boxed. A price hit by one slice only has the orange colour.',
+      'The value area is tinted and the busiest row (POC) is boxed. A price hit by one slice only has the orange color.',
       'Dashed lines mark the top and bottom of the initial balance, the first two slices.',
     ],
     read: [

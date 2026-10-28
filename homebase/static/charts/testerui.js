@@ -563,7 +563,7 @@ function openInputsDialog() {
   for (const inp of schema.inputs) fields.appendChild(inputsDialogRow(inp, draft));
   fields.appendChild(page.mk('div', 'set-cap', 'PROP EVAL'));
   fields.appendChild(propRulesRow(draft));
-  const foot = page.mk('div', 'dlg-foot'), cancel = page.mk('button', 'btn btn-ghost', 'Cancel'), ok = page.mk('button', 'btn btn-primary', 'OK');
+  const foot = page.mk('div', 'dlg-foot'), cancel = page.mk('button', 'btn btn-ghost', 'Cancel'), ok = page.mk('button', 'btn btn-primary', 'Save');
   cancel.type = 'button';
   ok.type = 'button';
   cancel.onclick = page.closeDialog;
@@ -602,7 +602,7 @@ function recentRunRow(r) {
     line.textContent = `${stratName} · ${rangeLabel} · ${r.status}`;
   }
   b.appendChild(line);
-  if (r.holdout) b.appendChild(page.mk('span', 'env live', 'Test days'));   // this run read the test days
+  if (r.holdout) b.appendChild(page.mk('span', 'tst-badge', 'Test days'));   // this run read the test days
   if (done) b.onclick = () => { page.closeMenu(); loadRecentRun(r.id); };
   if (!done || labMode) return b;      // only a finished run has a report to compare (none in the Lab's Report)
   const row = page.mk('div', 'menu-row');
@@ -1222,7 +1222,8 @@ function tradeTable(trades, root_, onPick) {
   TRADE_COLS.forEach(([key, label, num]) => {
     const th = page.mk('th', num ? 'num' : '');
     if (key) {
-      const b = page.mk('button', 'sort-th', label + (sortCol === key ? (sortDir === 1 ? ' ▲' : ' ▼') : ''));
+      const b = page.mk('button', 'sort-th', label);
+      if (sortCol === key) b.appendChild(page.icon(sortDir === 1 ? 'chevronUp' : 'chevron'));
       b.type = 'button';
       b.onclick = () => { sortDir = sortCol === key ? -sortDir : 1; sortCol = key; refreshContent(); };
       th.appendChild(b);
@@ -1567,7 +1568,7 @@ function buildGrid() {
     return;
   }
   const cost = `qty ${grid.qty} · ${Tr.money(grid.commission)}/RT · ${grid.slippage_ticks} tick slippage`;
-  heatGridEl.appendChild(page.mk('div', 'tst-kv-line', `${grid.strategy_name || grid.strategy} · ${grid.range.label} · ${cost} · colour = net $, Sharpe = traded days`));
+  heatGridEl.appendChild(page.mk('div', 'tst-kv-line', `${grid.strategy_name || grid.strategy} · ${grid.range.label} · ${cost} · color = net $, Sharpe = traded days`));
   for (const p of X.heatPanels(grid)) {
     if (p.title) heatGridEl.appendChild(page.mk('div', 'set-cap', p.title));
     const t = page.mk('table', 'tst-heat-table'), thead = page.mk('thead'), htr = page.mk('tr');

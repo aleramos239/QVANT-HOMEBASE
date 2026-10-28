@@ -79,7 +79,7 @@ test('the in-sample table: win rate first, every box one row, sortable, no test-
   assert.ok(t.head.every((h) => !/test|out-of-sample|oos/i.test(`${h.key} ${h.label}`)));
   assert.deepEqual(t.rows.map((r) => r.i), [0, 1]);                       // the server's order until a header is clicked
   assert.equal(t.rows[0].label, 'Stop ATR x0.5 · Target (x stop) 0.5');
-  assert.deepEqual(t.rows[0].cells.slice(0, 4).map((c) => c.text), ['52.0%', '45.0%', '+7.0', '120']);
+  assert.deepEqual(t.rows[0].cells.slice(0, 4).map((c) => c.text), ['52%', '45%', '+7.0', '120']);
   assert.equal(t.rows[1].cells[7].text, '+$3,000');
   assert.equal(t.rows[1].cells[7].tone, 'up');
   assert.equal(t.picked, null);
@@ -110,7 +110,7 @@ test('"Run test months" is shut until a box is picked and the owner has typed hi
     'stopped: the read is used, no record');
   const done = X.wfFixedOos({ ...picked, oos: { state: 'done', cell: 1, months: ['2022-01'], record: IS(55, 800), blocks: [] } }, '');
   assert.equal(done.final, true);
-  assert.equal(done.row.cells[0].text, '55.0%');
+  assert.equal(done.row.cells[0].text, '55%');
   // the table itself never grows a test-month column, even after the read
   assert.ok(X.wfFixedTable({ ...picked, oos: { state: 'done' } }, AXES).head.every((h) => !/test|oos/i.test(h.key)));
   // lab.js sends the box's words through this, as typed, and shows the server's refusal as it is
@@ -135,7 +135,7 @@ test('the owner sees boxes 1-based (#1 ...); the server keeps its 0-based cell',
 test('block by block: a box\'s in-sample blocks, and the picked box\'s test month beside each once read', () => {
   const b = X.wfFixedBlocks(BLK, null);
   assert.deepEqual(b.head, ['Block', 'In-sample months', 'Trades', 'Win rate', 'Net']);
-  assert.deepEqual(b.rows[0].cells.map((c) => c.text), ['1', '2021-10 → 2021-12', '30', '50.0%', '+$400']);
+  assert.deepEqual(b.rows[0].cells.map((c) => c.text), ['1', '2021-10 → 2021-12', '30', '50%', '+$400']);
   assert.equal(b.rows[1].cells[4].tone, 'down');
   const notDone = { state: 'running', cell: 3 };
   assert.equal(X.wfFixedBlocks(BLK, notDone).head.length, 5);       // nothing of a test month before the read is done
@@ -145,7 +145,7 @@ test('block by block: a box\'s in-sample blocks, and the picked box\'s test mont
     { i: 1, oos: '2022-05', trades: 0, win_rate: null, net: 0 }] };
   const r = X.wfFixedBlocks(BLK, read);
   assert.deepEqual(r.head, ['Block', 'In-sample months', 'Trades', 'Win rate', 'Net', 'Test month', 'Trades', 'Win rate', 'Net']);
-  assert.deepEqual(r.rows[0].cells.slice(5).map((c) => c.text), ['2022-01', '9', '60.0%', '+$90']);
+  assert.deepEqual(r.rows[0].cells.slice(5).map((c) => c.text), ['2022-01', '9', '60%', '+$90']);
   assert.deepEqual(r.rows[1].cells.slice(5).map((c) => c.text), ['2022-05', '0', '—', '$0']);
   assert.match(LAB, /X\.wfFixedBlocks\(/);
 });
@@ -190,12 +190,12 @@ test('the in-sample table says how many boxes made money, a per-year row first, 
   assert.match(h, /Luck test: tries not counted yet/);
   assert.ok(!/\bIS\b|\bOOS\b|\bcell\b/.test(h.replace(/<[^>]+>/g, '')), 'no IS / OOS / cell on screen');
   assert.match(c.perYearHtml(res.cells, 'the average box'), /Per year · the average box.*2022 <b class="up">\+\$100<\/b>/s);
-  // the order in the result: per year, the table, its count, the six lines, then the test months
+  // the order in the result: per year, the count, the six lines (above the rows, 2026-10-27), the table, then the test months
   const w = LAB.slice(b, LAB.indexOf('\n}\n', b));
   const at = (s) => { const i = w.indexOf(s); assert.ok(i >= 0, s); return i; };
-  assert.ok(at('${perYearHtml(yc') < at('In-sample table ·'));
-  assert.ok(at('In-sample table ·') < at('boxes made money'));
+  assert.ok(at('${perYearHtml(yc') < at('boxes made money'));
   assert.ok(at('boxes made money') < at('${realHtml(rd, sid)}'));
-  assert.ok(at('${realHtml(rd, sid)}') < at('<div class="rs-gh">Test months</div>'));
+  assert.ok(at('${realHtml(rd, sid)}') < at('In-sample table ·'));
+  assert.ok(at('In-sample table ·') < at('<div class="rs-gh">Test months</div>'));
   assert.match(LAB, /perYearHtml\(cell \? \[cell\] : \[\], 'in-sample, as set'\)/);     // the test months view too
 });

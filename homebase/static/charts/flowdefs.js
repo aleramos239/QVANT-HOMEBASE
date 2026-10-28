@@ -214,7 +214,7 @@ const settings = {
       {"key": "filled", "label": "Fill the arrow", "type": "bool", "def": true},
       {"key": "gap", "label": "Distance from the bar's low/high (px)", "type": "int", "min": 0, "max": 40, "step": 1, "def": 3},
       {"key": "lineWidth", "label": "Outline width (when not filled)", "type": "num", "min": 0.5, "max": 4, "step": 0.5, "def": 1.5},
-      {"key": "run", "label": "Same-colour bars before the turn", "type": "int", "min": 1, "max": 5, "step": 1, "def": 2},
+      {"key": "run", "label": "Same-color bars before the turn", "type": "int", "min": 1, "max": 5, "step": 1, "def": 2},
     ],
   },
   dstr: {
@@ -491,7 +491,7 @@ const settings = {
       {"key": "dotSize", "label": "Dot size", "type": "num", "min": 0.2, "max": 1.5, "step": 0.05, "def": 0.35},
       {"key": "boltSize", "label": "Burst marker size", "type": "num", "min": 0.3, "max": 2, "step": 0.1, "def": 0.6},
       {"key": "boltText", "label": "Show lightning symbol", "type": "bool", "def": true},
-      {"key": "trumpHighlight", "label": "Colour Trump posts", "type": "bool", "def": true},
+      {"key": "trumpHighlight", "label": "Color Trump posts", "type": "bool", "def": true},
       {"key": "flash", "label": "Flash new headlines", "type": "bool", "def": true},
       {"key": "maxDots", "label": "Max headline dots", "type": "int", "min": 50, "max": 1000, "step": 50, "def": 300},
     ],
@@ -499,7 +499,7 @@ const settings = {
   volume: {
     params: [
       {"key": "heightPct", "label": "Height (% of pane)", "type": "int", "min": 5, "max": 60, "step": 5, "def": 20},
-      {"key": "colorBy", "label": "Colour bars by", "type": "choice", "choices": [["delta", "Delta"], ["candle", "Candle colour"]], "def": "delta"},
+      {"key": "colorBy", "label": "Color bars by", "type": "choice", "choices": [["delta", "Delta"], ["candle", "Candle color"]], "def": "delta"},
     ],
   },
   heatmap: {
@@ -517,8 +517,8 @@ const settings = {
       {"key": "bubbleLabels", "label": "Write the size inside big bubbles", "type": "bool", "def": false},
       {"key": "bubbleFront", "label": "Draw in front of the candles", "type": "bool", "def": false},
       {"key": "opacity", "label": "Whole map opacity (%)", "type": "int", "min": 10, "max": 100, "step": 5, "def": 100},
-      {"key": "fullAt", "label": "Strongest colour at (contracts, 0 = the biggest on screen)", "type": "int", "min": 0, "max": 100000, "step": 10, "def": 0},
-      {"key": "cutoff", "label": "Hide cells weaker than (% of the colour scale)", "type": "int", "min": 0, "max": 95, "step": 1, "def": 0},
+      {"key": "fullAt", "label": "Strongest color at (contracts, 0 = the biggest on screen)", "type": "int", "min": 0, "max": 100000, "step": 10, "def": 0},
+      {"key": "cutoff", "label": "Hide cells weaker than (% of the color scale)", "type": "int", "min": 0, "max": 95, "step": 1, "def": 0},
       {"key": "columnPx", "label": "Column width (pixels)", "type": "int", "min": 1, "max": 8, "step": 1, "def": 2},
     ],
   },

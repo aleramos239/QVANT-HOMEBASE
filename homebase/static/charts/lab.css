@@ -42,10 +42,13 @@ body.lab-page { background: var(--panel) !important; }
 .lab-side > .in { height: 100%; overflow-y: auto; overscroll-behavior: contain; }
 .lab-lib > .in { width: 256px; padding: 10px 8px 14px; }
 #labRes > .in { width: 348px; padding: 18px 16px 18px; }
-.lab[data-lib="0"] .lab-lib { width: 0; margin-left: 0; margin-right: 0; opacity: 0; transform: translateX(-16px); pointer-events: none; }
-.lab[data-res="0"] #labRes { width: 0; margin-left: 0; margin-right: 0; opacity: 0; transform: translateX(16px); pointer-events: none; }
+/* hidden only AFTER the slide (visibility waits 320 ms): the slide plays, and a closed pane is out of the Tab order */
+.lab[data-lib="0"] .lab-lib { width: 0; margin-left: 0; margin-right: 0; opacity: 0; transform: translateX(-16px); pointer-events: none; visibility: hidden;
+  transition: width 320ms var(--hb-spring), margin 320ms var(--hb-spring), opacity 180ms ease, transform 320ms var(--hb-spring), visibility 0s linear 320ms; }
+.lab[data-res="0"] #labRes { width: 0; margin-left: 0; margin-right: 0; opacity: 0; transform: translateX(16px); pointer-events: none; visibility: hidden;
+  transition: width 320ms var(--hb-spring), margin 320ms var(--hb-spring), opacity 180ms ease, transform 320ms var(--hb-spring), visibility 0s linear 320ms; }
 @media (max-width: 1180px) { .lab-lib, .lab-lib > .in { width: 224px; } #labRes, #labRes > .in { width: 304px; } .lab[data-lib="0"] .lab-lib, .lab[data-res="0"] #labRes { width: 0; } }
-@media (prefers-reduced-motion: reduce) { .lab-side { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .lab-side, .lab[data-lib="0"] .lab-lib, .lab[data-res="0"] #labRes { transition: none; } }
 
 /* ---- content: code | chart ---- */
 #labEd { flex: var(--lab-code, 45) 1 0; min-width: 260px; min-height: 0; display: flex; flex-direction: column; }
@@ -184,7 +187,7 @@ body.lab-page { background: var(--panel) !important; }
 .rs-bar i { display: block; height: 100%; background: var(--hb-accent); border-radius: 2px; transition: width 300ms var(--hb-spring); }
 .rs-bar.ind i { width: 38% !important; animation: rs-slide 1.2s ease-in-out infinite alternate; }
 @keyframes rs-slide { from { transform: translateX(-30%); } to { transform: translateX(170%); } }
-@media (prefers-reduced-motion: reduce) { .rs-bar.ind i { animation: none; width: 100% !important; opacity: .4; } .lab-run.busy::before { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .rs-bar i { transition: none; } .rs-bar.ind i { animation: none; width: 100% !important; opacity: .4; } .lab-run.busy::before { animation: none; } }
 
 .rs-set > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding: 0 14px; cursor: pointer; font-size: var(--hb-fs-body); }
 .rs-set > summary::-webkit-details-marker { display: none; }
@@ -203,8 +206,7 @@ body.lab-page { background: var(--panel) !important; }
 
 /* ---- menus and dialogs: glass, originating from what opened them ---- */
 .lab-menu { position: fixed; z-index: 90; min-width: 240px; padding: 6px; border-radius: 16px; background: var(--hb-glass-strong); -webkit-backdrop-filter: var(--hb-glass-blur); backdrop-filter: var(--hb-glass-blur);
-  box-shadow: var(--hb-glass-edge), 0 0 0 .5px rgb(22 23 26 / .1), 0 14px 44px rgb(22 23 26 / .18); transform-origin: var(--o, top left); animation: lab-pop 180ms var(--hb-spring); }
-@keyframes lab-pop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+  box-shadow: var(--hb-glass-edge), 0 0 0 .5px rgb(22 23 26 / .1), 0 14px 44px rgb(22 23 26 / .18); transform-origin: var(--o, top left); }
 .lab-menu button { display: flex; flex-direction: column; align-items: flex-start; width: 100%; gap: 1px; padding: 7px 11px; border: 0; border-radius: 10px; background: transparent; color: var(--hb-fg); font-size: var(--hb-fs-ui); text-align: left; cursor: pointer; }
 .lab-menu button:hover { background: var(--hb-fill-hover); }
 .lab-menu button[disabled] { opacity: .4; pointer-events: none; }
@@ -212,9 +214,9 @@ body.lab-page { background: var(--panel) !important; }
 .lab-menu small, .lab-menu kbd { font-family: var(--hb-font); font-size: var(--hb-fs-sm); color: var(--hb-fg2); }
 .lab-menu hr { border: 0; border-top: .5px solid var(--hb-hair); margin: 5px 8px; }
 .lab-menu h6 { margin: 8px 11px 3px; font-size: var(--hb-fs-cap); font-weight: 600; color: var(--hb-fg2); }
-.lab-ov { position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; background: var(--backdrop, rgb(0 0 0 / .25)); animation: lab-in 160ms ease; }
+.lab-ov { position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; background: var(--backdrop, rgb(0 0 0 / .25)); }
 .lab-dlg { width: min(480px, calc(100vw - 32px)); max-height: calc(100vh - 64px); overflow-y: auto; padding: 24px; border-radius: 26px; background: var(--hb-glass-strong); -webkit-backdrop-filter: var(--hb-glass-blur); backdrop-filter: var(--hb-glass-blur);
-  box-shadow: var(--hb-glass-edge), 0 0 0 .5px rgb(22 23 26 / .1), 0 30px 80px rgb(22 23 26 / .28); animation: lab-pop 220ms var(--hb-spring); }
+  box-shadow: var(--hb-glass-edge), 0 0 0 .5px rgb(22 23 26 / .1), 0 30px 80px rgb(22 23 26 / .28); }
 .lab-dlg.wide { width: min(720px, calc(100vw - 32px)); }
 .lab-dlg h2 { margin: 0 0 6px; font-size: var(--hb-fs-title); font-weight: 600; letter-spacing: -.02em; }
 .lab-dlg p { margin: 0 0 14px; color: var(--hb-fg2); font-size: var(--hb-fs-body); line-height: 1.5; }
@@ -231,7 +233,18 @@ body.lab-page { background: var(--panel) !important; }
 .lab-dlg code { font-family: var(--hb-mono); font-size: var(--hb-fs-sm); background: var(--hb-fill); padding: 1px 6px; border-radius: 5px; word-break: break-all; }
 .lab-dlg pre { margin: 0 0 4px; padding: 14px 16px; border-radius: 14px; background: var(--hb-fill); font-family: var(--hb-mono); font-size: 12px; line-height: 1.6; white-space: pre-wrap; color: var(--hb-fg); }
 .lab-dlg .acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-@media (prefers-reduced-motion: reduce) { .lab-menu, .lab-dlg, .lab-ov { animation: none; } }
+/* open and close ride spring.js materialize/dematerialize on [data-motion], the same shape as the Charts menu and dialog (charts.css) */
+.lab-menu, .lab-dlg { opacity: 1; transform: scale(1); filter: blur(0); transition: opacity 160ms var(--ease-spring-out), transform 160ms var(--ease-spring-out), filter 160ms var(--ease-spring-out); }
+.lab-ov { opacity: 1; transition: opacity 160ms var(--ease-spring-out); }
+.lab-menu[data-motion] { opacity: 0; transform: scale(.95); filter: blur(4px); }
+.lab-dlg[data-motion] { opacity: 0; transform: scale(.96); filter: blur(6px); }
+.lab-ov[data-motion] { opacity: 0; }
+.lab-menu[data-motion="leave"], .lab-dlg[data-motion="leave"], .lab-ov[data-motion="leave"] { transition-duration: 120ms; transition-timing-function: var(--ease-spring-in); }
+@media (prefers-reduced-motion: reduce) {
+  .lab-menu, .lab-dlg, .lab-ov { transition-property: opacity; transition-duration: 150ms; transition-timing-function: ease; }
+  .lab-menu[data-motion], .lab-dlg[data-motion] { transform: none; filter: none; }
+}
+.lab-menu small svg, .lab-dlg li i svg { width: 12px; height: 12px; vertical-align: -1px; }
 
 /* ====================================================================================================
    v3 (2026-10-01): solid surfaces, clear glass only where a control floats over content.
@@ -643,6 +656,15 @@ html.hb-apple #lab #labSplit:hover::after, html.hb-apple #lab #labSplit.drag::af
 .wf-fixed tr.sel td, .wf-fixed tr.sel th { background: var(--hb-fill); }
 .wf-sort { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; white-space: nowrap; }
 .wf-sort.on { color: var(--hb-fg); font-weight: 600; }
+.sort-th .ic { width: 10px; height: 10px; }
+.wf-arrow { display: inline-block; width: 10px; margin-left: 2px; vertical-align: -1px; } .wf-arrow svg { width: 10px; height: 10px; }
+/* the in-sample table (not the one-row test-months table): numbers right, the Box column stays put (capped, the full label is its title) when it scrolls sideways */
+.wf-is { border-spacing: 0 3px; }
+.wf-is td:nth-child(n+3), .wf-is th:nth-child(n+3) { text-align: right; }
+.wf-is td:nth-child(1), .wf-is th:nth-child(1) { width: 56px; min-width: 56px; max-width: 56px; box-sizing: border-box; }
+.wf-is td:nth-child(2), .wf-is th:nth-child(2) { position: sticky; left: 0; z-index: 1; width: 120px; min-width: 120px; max-width: 120px; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; background: var(--lab-sheet); }
+.wf-is th:nth-child(2) .wf-sort { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.wf-is tr.sel td:nth-child(2), .wf-is tr.sel th:nth-child(2) { background: linear-gradient(var(--hb-fill), var(--hb-fill)) var(--lab-sheet); }
 .wf-oos .heat-vals { width: 100%; margin: 6px 0; }
 
 /* Pipeline picker, Passed filter, WR settings */

@@ -25,7 +25,7 @@ function calView(st, pick) {
   const month = y + "-" + String(m + 1).padStart(2, "0");
   out.month = st.d.toLocaleString("en-US", {month: "long", year: "numeric"});
   out.since = !st.data ? "loading…" :
-    d.trades.length ? "since " + d.trades[0].date : st.shadow ? "no shadow trades yet" : "no live trades yet";
+    d.trades.length ? "since " + d.trades[0].date : st.shadow ? "no shadow trades yet" : "no Desk trades yet";
   let html = ["S", "M", "T", "W", "T", "F", "S"].map(x => `<div class="dow">${x}</div>`).join("");
   const first = new Date(y, m, 1), n = new Date(y, m + 1, 0).getDate();
   for (let i = 0; i < first.getDay(); i++) html += `<div class="cal-cell blank"></div>`;
@@ -212,7 +212,7 @@ function openLabLimits(name, fill) {      // fill: other limits to show (Changes
 }
 /* The Save button lists what changes, old → new, as the fields read now ("Save: Trades a day 2 → 3"); plain "Save limits" when
    nothing changes or none were set. */
-const LAB_LIM_WORDS = {trades: "Trades a day", qty: "Contracts", risk: "At risk", last: "No new trade after", flat: "Flat by"};
+const LAB_LIM_WORDS = {trades: "Trades a day", qty: "Contracts", risk: "At risk", last: "Last entry", flat: "Flat by"};
 function labLimSaveText() {
   const s = ST && ST.strategies && ST.strategies[LAB_LIM.name], old = s && s.lab && s.lab.limits;
   const was = DeskLab.limitsFields(old), show = (k, v) => v === "" ? "none" : k === "risk" ? "$" + v.replace(/^\$/, "") : v;
@@ -424,7 +424,7 @@ function archiveView() {
   }).join("");
   return `<button class="back" onclick="setView('today')">‹ Today</button>
     <div class="sd-top"><div><h1 class="sd-title">Archive</h1><div class="sp">Off the Desk and switched off. Restore puts one back, switched off, with no account.</div></div></div>
-    <div class="sec">${rows ? `<div class="agroup feed static">${rows}</div>` : `<div class="eq-empty">Nothing is archived.</div>`}</div>`;
+    <div class="sec">${rows ? `<div class="agroup feed static">${rows}</div>` : `<div class="eq-empty">No archived strategies yet.</div>`}</div>`;
 }
 /* Clear an old trade the Desk no longer owns: the Desk does it only when the account is flat and no old order is working, and says why not. */
 const LAB_CLEARING = new Map();      // "strategy@account" -> Infinity while a clear is out, then when it was answered ok

@@ -16,7 +16,7 @@ const STEPS = LAB.slice(LAB.indexOf('function realRead(res, sid)'), LAB.indexOf(
 function lab() {
   const c = vm.createContext({
     RL, S: { tries: {}, three: {}, wf: {}, stepped: {}, run: null }, shownRid: null, ti: null, paints: 0,
-    esc: (t) => String(t == null ? '' : t), ICON_LOCK: '<svg/>', paintRes() { c.paints++; },
+    esc: (t) => String(t == null ? '' : t), ICON_LOCK: '<svg/>', IC: { check: '<svg class="ck"/>' }, paintRes() { c.paints++; },
     isDirty: (b) => b.code !== b.saved, triesOf: (sid) => c.S.tries[sid] || null,
     pickedNow: (f) => { const T = c.S.three[f.strategy], w = c.S.wf[f.strategy], t = c.S.tries[f.strategy];
       return !!((T && T.oos.result && T.oos.result.lock) || (w && w.result && w.result.lock) || (t && t.locked)); },
@@ -69,8 +69,8 @@ test('picked and the test months read: the verdict shows its word, from the six 
   assert.equal(st[5].name, 'Verdict: FAKE');           // the test months lost
   const h = c.stepsHtml(DRAFT, F);
   assert.match(h, /<li class="ok word"[^>]*><i aria-hidden="true">·<\/i>Verdict: FAKE/);     // read, but not REAL: no green tick
-  assert.match(h, /<li class="ok"[^>]*><i aria-hidden="true">✓<\/i>Test months/);
-  assert.equal((h.match(/✓/g) || []).length, 4);       // idea card, table, pick, test months; the code check is not done
+  assert.match(h, /<li class="ok"[^>]*><i aria-hidden="true"><svg class="ck"\/><\/i>Test months/);
+  assert.equal((h.match(/class="ck"/g) || []).length, 4);       // idea card, table, pick, test months; the code check is not done
   // a pick, no read yet: test months are next, not run, and say so
   const d = lab();
   d.S.tries.draft_x = { n: 1, cut: false, tabled: true, locked: true };

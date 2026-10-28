@@ -81,9 +81,9 @@ test('the validation line: valid with what was found, or the line and the reason
 
 test('ago reads like a person says it', () => {
   assert.equal(L.ago(1000, 2000), 'just now');
-  assert.equal(L.ago(0, 30000), '30 s ago');
-  assert.equal(L.ago(0, 5 * 60000), '5 min ago');
-  assert.equal(L.ago(0, 3 * 3600000), '3 h ago');
+  assert.equal(L.ago(0, 30000), '30s ago');
+  assert.equal(L.ago(0, 5 * 60000), '5m ago');
+  assert.equal(L.ago(0, 3 * 3600000), '3h ago');
 });
 
 test('the library in sections: each group in its saved order with its rows, then the rest under no name', () => {

@@ -602,7 +602,7 @@ test('inShadow: the day\'s mode when the server says, else no book rows', () => 
 
 test('limitsRows: the five rows with the table\'s words; a dash for limits not set', () => {
   assert.deepEqual(D.limitsRows(LIM).map((r) => `${r.k}=${r.v}`), ['Trades a day=2', 'Most contracts per account=1', 'Most at risk per trade=$300',
-    'No new trade after=11:00 ET', 'Flat by=15:55 ET']);
+    'Last entry=11:00 ET', 'Flat by=15:55 ET']);
   assert.deepEqual(D.limitsRows({ ...LIM, max_risk_usd: 1250.5 })[2].v, '$1,250.50');
   assert.deepEqual(D.limitsRows(null).map((r) => r.v), ['—', '—', '—', '—', '—']);
   assert.deepEqual(D.limitsRows(undefined).map((r) => r.v), ['—', '—', '—', '—', '—']);
@@ -799,14 +799,14 @@ test('deskSpec: market, the session when the Lab row knows it, and where it came
 
 test('deskSetupRows: the Setup card of a Lab strategy on the Desk, in the brief\'s order and words', () => {
   const rows = D.deskSetupRows(deskStrat({ mode_today: null }), row(), []);
-  assert.deepEqual(rows.map((r) => r[0]), ['Instrument', 'Session', 'Bars', 'Trades a day', 'Most contracts', 'Most at risk', 'No new trade after', 'Flat', 'Promoted', 'Code', 'Orders']);
+  assert.deepEqual(rows.map((r) => r[0]), ['Instrument', 'Session', 'Bars', 'Trades a day', 'Most contracts', 'Most at risk', 'Last entry', 'Flat by', 'Promoted', 'Code', 'Orders']);
   assert.deepEqual(rows.map((r) => r[1]), ['NQ', '09:25-16:00 ET', '1 min', '2', '1', '$300', '11:00 ET', '15:55 ET', 'Oct 9, 2026', 'abcdef01', 'Shadow']);
   const t = (s, book) => Object.fromEntries(D.deskSetupRows(s, row(), book)).Orders;
   assert.equal(t(deskStrat({ mode_today: 'desk' }), []), 'Through the Desk');
   assert.equal(t(deskStrat({ mode_today: 'shadow' }), [{ account: 'a', qty: 1 }]), 'Shadow');
   assert.equal(t(deskStrat({ mode_today: null }), [{ account: 'a', qty: 1 }]), 'Through the Desk');
   const bare = Object.fromEntries(D.deskSetupRows(deskStrat({ limits: null, mark: null }), null, []));
-  assert.deepEqual([bare.Session, bare.Bars, bare['Trades a day'], bare['Most contracts'], bare['Most at risk'], bare['No new trade after'], bare.Flat, bare.Promoted, bare.Code],
+  assert.deepEqual([bare.Session, bare.Bars, bare['Trades a day'], bare['Most contracts'], bare['Most at risk'], bare['Last entry'], bare['Flat by'], bare.Promoted, bare.Code],
     ['—', '—', '—', '—', '—', '—', '—', '—', '—']);
   assert.deepEqual(D.deskSetupRows(null, null, []), []);
 });
@@ -1225,7 +1225,7 @@ test('results: the saved run on the unseen days and the prop sim of both runs, i
   assert.equal(full.prop.title, 'Prop sim · LucidFlex 50K');
   assert.deepEqual(full.prop.head, ['Build days', 'Test days']);
   assert.deepEqual(full.prop.rows.map((r) => [r.k, r.build, r.unseen]), [['Passes the eval', '41%', '37%'], ['Busts the eval', '63%', '63%'],
-    ['Days to pass', '13', '13'], ['Gets a payout', '33%', '33%'], ['Expected cheque', '$602', '$602']]);
+    ['Days to pass', '13', '13'], ['Gets a payout', '33%', '33%'], ['Expected payout', '$602', '$602']]);
   // no run saved on the unseen days: it says so, and that column is dashes
   const build = D.results({ unseen: null, prop: { build: head, unseen: null } });
   assert.deepEqual(build.unseen.rows, []);
@@ -1283,7 +1283,7 @@ test('a group page: the combined figures, the prop rows that fit its kind, and t
   assert.deepEqual(ev.members.map((m) => [m.label, m.build, m.unseen, m.state]), [['NQ A', '+$500', '+$700', ''], ['NQ C', '+$10', '—', 'Running the 3:1 walk-forward…']]);
   assert.deepEqual(ev.leftOut.map((x) => [x.label, x.why]), [['NQ C', 'no unseen-days run yet'], ['nq930', 'built in: it has no unseen-days run to add']]);
   const fu = D.groupPage({ id: 'g2', name: 'Funded', kind: 'funded', members: [] }, res);
-  assert.deepEqual(fu.prop.rows.map((r) => r.k), ['Gets a payout', 'Expected cheque']);
+  assert.deepEqual(fu.prop.rows.map((r) => r.k), ['Gets a payout', 'Expected payout']);
   assert.equal(D.groupPage({ id: 'g3', name: 'T', kind: 'together', members: [] }, res).prop.rows.length, 5);
   assert.equal(fu.empty, true);
 });

@@ -319,9 +319,9 @@ const TV_DEFS = [
       TA_LINE('l3', 'Lower band 3', TA_BLUE, 1, 'dashed', { tag: false, off: true })]),
   tvDef('twap', 'TWAP', 'Time-weighted average price since the session open: every bar counts the same',
     [{ ...TV_SRC, def: 'ohlc4' }], TV_ONE('TWAP', TA_VIOLET)),
-  tvDef('cvd', 'Cumulative Volume Delta', 'Running total of volume delta since the session open, estimated from candle colour',
+  tvDef('cvd', 'Cumulative Volume Delta', 'Running total of volume delta since the session open, estimated from candle color',
     [], [TA_LINE('c', 'CVD', TA_BLUE, 2, 'solid', { tag: false })], { pane: 'own', short: 'CVD' }),   // the server sends candles (o h l c); the close line for now
-  tvDef('vdelta', 'Volume Delta', 'Volume delta of each bar as bars, estimated from candle colour (up candle = buying)', [], [TV_HIST('c', 'Delta')], { pane: 'own' }),
+  tvDef('vdelta', 'Volume Delta', 'Volume delta of each bar as bars, estimated from candle color (up candle = buying)', [], [TV_HIST('c', 'Delta')], { pane: 'own' }),
   tvDef('updown', 'Up/Down Volume', 'Volume split by candle direction: up candles above zero, down candles below',
     [], [TV_HIST('up', 'Up volume', { fixed: true }), TA_LINE('down', 'Down volume', TA_DOWN, 1, 'solid', { type: 'hist', tag: false, fixed: true }),
       TA_LINE('delta', 'Delta', TA_ORANGE, 1, 'solid', { tag: false, off: true })], { pane: 'own', short: 'Up/Down Vol' }),
@@ -493,7 +493,7 @@ function lineValue(ln, v) {
 const CATALOG = [
   { id: 'volume', group: 'Volume & profile', name: 'Volume', params: [], pane: 'main',
     desc: 'Contracts traded per bar; green when buyers outweighed sellers, else red' },
-  { id: 'vwap', group: 'VWAP & levels', name: 'VWAP', desc: 'Average price since its anchor; several lines, each its own anchor and colour', params: [
+  { id: 'vwap', group: 'VWAP & levels', name: 'VWAP', desc: 'Average price since its anchor; several lines, each its own anchor and color', params: [
     { key: 'anchor', label: 'Anchor', type: 'choice',
       choices: [['eth', 'Session'], ['rth', 'RTH'], ['custom', 'Custom time'], ['week', 'Week'], ['month', 'Month']], def: 'eth' },
     { key: 'customTime', label: 'Time (ET)', type: 'time', def: '02:00' },
@@ -577,7 +577,7 @@ const CATALOG = [
     { key: 'sessions', label: 'Sessions back', type: 'int', min: 1, max: 30, def: 5 }] },
   { id: 'cstat', group: 'Order flow', name: 'Cluster statistics', params: [],
     desc: 'A strip under the candles: delta, volume, trades, delta %, delta range, seconds' },
-  { id: 'dturn', group: 'Order flow', name: 'Delta turnaround', desc: 'Arrows where the delta turned against two bars of the other colour', params: [
+  { id: 'dturn', group: 'Order flow', name: 'Delta turnaround', desc: 'Arrows where the delta turned against two bars of the other color', params: [
     { key: 'fix', label: 'Compare with the earlier bar\'s high for a down turn', type: 'bool', def: false }] },
   { id: 'dstr', group: 'Order flow', name: 'Delta strength', desc: 'Arrows on bars that closed near their own best delta', params: [
     { key: 'min', label: 'From (% of the best delta)', type: 'int', min: 1, max: 100, def: 80 },
@@ -601,7 +601,7 @@ const CATALOG = [
     { key: 'bubbleSide', label: 'Bubbles of', type: 'choice', def: 'all', choices: [['all', 'Buyers and sellers'], ['buy', 'Buyers only (lifted the offer)'], ['sell', 'Sellers only (hit the bid)']] },
     { key: 'contrast', label: 'Contrast (strong shows smaller orders too)', type: 'choice', def: 'normal',
       choices: [['soft', 'Soft'], ['normal', 'Normal'], ['strong', 'Strong']] },
-    { key: 'palette', label: 'Colours', type: 'choice', def: 'fire',
+    { key: 'palette', label: 'Colors', type: 'choice', def: 'fire',
       choices: [['fire', 'Fire'], ['ice', 'Ice'], ['mono', 'Grey']] }] },
   { id: 'events', group: 'Calendar & news', name: 'Economic calendar', desc: 'Calendar events as flags on the chart; pick red, orange or yellow folders', params: [
     { key: 'high', label: 'Red folder (high impact)', type: 'bool', def: true },

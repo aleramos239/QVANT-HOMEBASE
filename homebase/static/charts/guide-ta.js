@@ -9,7 +9,7 @@ G.add({
     see: [
       'Bars along the bottom of the price pane, one under each candle.',
       'Green bar: buyers were the more aggressive side in that candle. Red bar: sellers were.',
-      'The colour follows who pushed harder, not whether the candle closed up or down.',
+      'The color follows who pushed harder, not whether the candle closed up or down.',
     ],
     read: [
       'A tall bar means many contracts changed hands. More traders cared.',
@@ -27,10 +27,10 @@ G.add({
   vwap: {
     what: 'Volume-weighted average price: the average price paid since a start time, busy bars counting more.',
     see: [
-      'One line on the price pane, 2 pixels thick, purple at first. Pick its colour in Settings.',
-      'More lines: "+ Add line" in Settings. Each line has its own anchor (say 6 pm or 9:30 am) and colour.',
+      'One line on the price pane, 2 pixels thick, purple at first. Pick its color in Settings.',
+      'More lines: "+ Add line" in Settings. Each line has its own anchor (say 6 pm or 9:30 am) and color.',
       'It restarts at its anchor. The default anchor, Session, is the 18:00 New York open.',
-      'Optional bands, off by default: dashed lines above and below. Every line gets them, in its own colour.',
+      'Optional bands, off by default: dashed lines above and below. Every line gets them, in its own color.',
       'Band 1, 2 and 3 sit 1, 2 and 3 standard deviations away (the usual spread of price around the line).',
     ],
     read: [
@@ -51,7 +51,7 @@ G.add({
     see: [
       'One line on the price pane. A new one is blue and 1 pixel thick; length 20 by default.',
       'Length is how many bars it looks back. Source is the price it uses; close is the price at the end of a bar.',
-      'Add several with different lengths. Each new copy takes another colour.',
+      'Add several with different lengths. Each new copy takes another color.',
       'The Timeframe box lets it follow longer bars, such as 1h, while you watch a 1m chart.',
     ],
     read: [
@@ -246,7 +246,7 @@ G.add({
     see: [
       'Its own pane under the chart: one red line, length 14 by default.',
       'The value is in price points, not dollars.',
-      'The red colour does not mean down. ATR has no direction.',
+      'The red color does not mean down. ATR has no direction.',
     ],
     read: [
       'True range of a bar is its high minus low, or more if price gapped from the last close.',

@@ -10,6 +10,7 @@
 const root = document.getElementById('lab');
 if (!root || !window.HBTester || !window.HBLabCode) return;
 const X = window.HBTester, C = window.HBLabCode, RL = window.HBReal;      // RL: the six real-or-luck lines (reallines.js)
+const IC = window.HBIcons, SP = window.HBSpring;      // the shared icon set (charts/icons.js) and enter/exit motion (spring.js)
 const $ = (s, el = root) => el.querySelector(s);
 const esc = (t) => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const MINUS = '−';
@@ -42,18 +43,22 @@ const send = (method, path, body) => call(path, { method, body: body === undefin
 /* ---- the log line under the editor ---- */
 function log(html, tone = '') { S.log.push({ html, tone }); S.log = S.log.slice(-5); paintLog(); if (/class="err"/.test(html)) toast(html); }
 /* An error, shown on screen for a few seconds: the log line under the editor is hidden when the code panel is (owner 2026-10-24). */
-let toastT = 0;
+let toastT = 0, toastEl = null;
 function toast(html) {
-  let el = document.getElementById('labToast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'labToast'; el.setAttribute('role', 'alert');
-    el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;max-width:min(560px,90vw);padding:10px 14px;border-radius:10px;background:#1d1d1f;color:#fff;font:13px/1.4 -apple-system,system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.25);cursor:pointer';
-    el.addEventListener('click', () => { el.hidden = true; });
-    document.body.appendChild(el);
-  }
-  el.innerHTML = html; el.hidden = false;
-  clearTimeout(toastT); toastT = setTimeout(() => { el.hidden = true; }, 7000);
+  const root = document.getElementById('toastRoot');
+  if (!root) return;
+  if (toastEl) toastEl.remove();                    // one at a time: the latest error replaces the last
+  const el = toastEl = document.createElement('div');
+  el.className = 'toast err'; el.setAttribute('role', 'alert');
+  const msg = document.createElement('span'), x = document.createElement('button');
+  msg.innerHTML = html;                              // the callers' lines are escaped already (log)
+  x.type = 'button'; x.className = 'toast-x'; x.setAttribute('aria-label', 'Dismiss'); x.innerHTML = IC.x;
+  const dismiss = () => { clearTimeout(toastT); if (toastEl === el) toastEl = null; leave(el); };
+  x.addEventListener('click', dismiss);
+  el.appendChild(msg); el.appendChild(x);
+  root.appendChild(el);
+  enter(el, 'right top');
+  clearTimeout(toastT); toastT = setTimeout(dismiss, 7000);
 }
 function paintLog() {
   const el = $('#edLog');
@@ -641,12 +646,17 @@ function syncChart() { if (P.chart && S.run && S.run.bundle && shownRid !== S.ru
 })();
 
 /* ---- dialogs and menus ---- */
-let overlay = null, menuEl = null, dlgFrom = null;
+let overlay = null, menuEl = null, menuFrom = null, dlgFrom = null;
 const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 /* Closing a sheet gives the keyboard back to what opened it (or, when the list was painted again meanwhile, to the same row of it). */
-function closeDialog(back = true) {
+/* a menu or sheet leaves the way the Charts ones do (spring.js [data-motion]); `instant` is a swap, nothing to animate */
+function leave(el, instant) { if (instant || !SP) el.remove(); else SP.dematerialize(el, () => el.remove()); }
+function enter(el, origin) { if (SP) SP.materialize(el, origin); }
+/* a menu or sheet still fading out is dropped when the next one opens, or two scrims / two menus overlap for 120 ms */
+function dropLeaving() { for (const e of document.querySelectorAll('.lab-ov[data-motion="leave"], .lab-menu[data-motion="leave"]')) e.remove(); }
+function closeDialog(back = true, instant = false) {
   if (!overlay) return;
-  overlay.remove(); overlay = null;
+  leave(overlay, instant); overlay = null;
   const from = dlgFrom; dlgFrom = null;
   if (!back || !from) return;
   const el = from.el.isConnected ? from.el : from.fk ? [...root.querySelectorAll('[data-fk]')].find((x) => x.dataset.fk === from.fk) : null;
@@ -654,7 +664,7 @@ function closeDialog(back = true) {
 }
 function dialog(html) {
   const a = document.activeElement, from = overlay ? dlgFrom : a && a !== document.body ? { el: a, fk: (a.dataset && a.dataset.fk) || '' } : null;
-  closeDialog(false);       // a sheet that opens from a sheet remembers what opened the first one
+  closeDialog(false, true); dropLeaving(); // a sheet that opens from a sheet remembers what opened the first one
   dlgFrom = from;
   overlay = document.createElement('div');
   overlay.className = 'lab-ov';
@@ -670,16 +680,22 @@ function dialog(html) {
   });
   document.body.appendChild(overlay);
   const d = overlay.firstElementChild, h = d.querySelector('h2');
+  enter(overlay); enter(d);
   if (h) { h.id = h.id || 'labDlgTitle'; d.setAttribute('aria-labelledby', h.id); }
   d.focus({ preventScroll: true });      // the sheet has the keyboard from the start; a sheet then moves it to its first field
   return d;
 }
-function closeMenu() {
-  if (menuEl) { menuEl.remove(); menuEl = null; }
+function closeMenu(instant = false) {
+  if (menuEl) {
+    const had = menuEl.contains(document.activeElement), from = menuFrom;
+    leave(menuEl, instant); menuEl = null; menuFrom = null;
+    if (had && from && from.isConnected) from.focus({ preventScroll: true });          // the keyboard goes back to the button that opened it
+  }
   for (const t of document.querySelectorAll('[data-act="viewmenu"][aria-expanded="true"]')) t.setAttribute('aria-expanded', 'false');
 }
 function menu(anchor, html, onPick) {
-  closeMenu();
+  closeMenu(true); dropLeaving();
+  menuFrom = anchor;
   menuEl = document.createElement('div');
   menuEl.className = 'lab-menu';
   menuEl.innerHTML = html;
@@ -689,10 +705,18 @@ function menu(anchor, html, onPick) {
   menuEl.style.left = `${Math.max(8, right ? a.right - m.width : a.left)}px`;
   menuEl.style.top = `${Math.max(8, Math.min(a.bottom + 8, innerHeight - m.height - 8))}px`;
   menuEl.style.setProperty('--o', right ? 'top right' : 'top left');
+  enter(menuEl, right ? 'top right' : 'top left');
   menuEl.addEventListener('click', (e) => { const t = e.target.closest('[data-pick]'); if (t) { closeMenu(); onPick(t.dataset.pick); } });
 }
 document.addEventListener('pointerdown', (e) => { if (menuEl && !menuEl.contains(e.target) && !e.target.closest('[data-act="new"], [data-act="more"], [data-act="viewmenu"]')) closeMenu(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenu(); closeDialog(); } });
+/* Escape closes the menu on top; only with no menu open does it close the sheet. Arrows, Home and End walk the menu's items. */
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { if (menuEl) closeMenu(); else closeDialog(); return; }
+  if (!menuEl || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key) || (e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]'))) return;
+  const items = [...menuEl.querySelectorAll('button')].filter((b) => !b.disabled);
+  const k = window.HBChartMenu.step(items.indexOf(document.activeElement), items.length, e.key);
+  if (k >= 0) { e.preventDefault(); items[k].focus(); }
+});
 
 async function newMenu(anchor) {
   const r = await send('GET', '/api/tester/drafts/templates');
@@ -1005,7 +1029,7 @@ function reviewDialog() {
     if (!r.ok) { closeDialog(); log(`<span class="err">Review not requested: ${esc(r.error)}</span>`); return; }
     const ck = r.json.checks || [];
     d.innerHTML = `<h2>Review requested</h2><p>Saved as a file. When you want it looked at, tell Claude: <code>review ${esc(r.json.id)}</code></p>
-      <ul>${ck.map((c) => `<li class="${c.ok ? '' : 'no'}"><i>${c.ok ? '✓' : '○'}</i>${esc(c.label)}</li>`).join('')}</ul>
+      <ul>${ck.map((c) => `<li class="${c.ok ? '' : 'no'}"><i>${c.ok ? IC.check : '○'}</i>${esc(c.label)}</li>`).join('')}</ul>
       <p style="margin:0"><code>${esc(r.json.md)}</code></p>
       <div class="acts"><button class="btn btn-default" data-x="cancel">Done</button></div>`;
     log(`Review requested · <b>${esc(r.json.id)}</b>`);
@@ -1039,7 +1063,7 @@ function allMetricsDialog() {
     const none = (k, i) => k === 'unseen' && !sets[i].trades;
     let body = '';
     if (st.view === 'year') {
-      const rows = AM.yearly(trades.filter((t) => !st.side || t.side === st.side), cap), keys = [['trades', 'int'], ['net', 'usd'], ['win_rate', 'pct'], ['profit_factor', 'num'], ['expectancy', 'usd'], ['max_dd', 'usd'], ['sharpe', 'num'], ['month_wr', 'pct']];
+      const rows = AM.yearly(trades.filter((t) => !st.side || t.side === st.side), cap), keys = [['trades', 'int'], ['net', 'usd'], ['win_rate', 'wr'], ['profit_factor', 'num'], ['expectancy', 'usd'], ['max_dd', 'usd'], ['sharpe', 'num'], ['month_wr', 'pct']];
       const lab = { trades: 'Trades', net: 'Net', win_rate: 'Win rate', profit_factor: 'Profit factor', expectancy: 'Avg trade', max_dd: 'Max drawdown', sharpe: 'Sharpe', month_wr: 'Good months' };
       body = `<table class="am-t am-y"><thead><tr><th>Year</th>${keys.map(([k]) => `<th>${lab[k]}</th>`).join('')}</tr></thead><tbody>${rows.map((y) =>
         `<tr><th>${esc(y.year)}${y.unseen && !wf ? '*' : ''}</th>${keys.map(([k, u]) => cell(u, y[k], toneOf(u, y[k]))).join('')}</tr>`).join('')}</tbody></table>
@@ -1188,8 +1212,8 @@ function fileMenu(el) {
   const { id, name, row } = el.dataset, to = [...S.groups.groups, ''], cur = S.groups.members[id] || '';
   const mark = (S.groups.status || {})[id] || '', marks = [...Object.entries(C.MARKS), ['', 'No status']];
   const targets = row ? C.deleteTargets(S.picks, row) : [];       // a saved strategy's row also deletes: itself, or every picked one when it is picked
-  menu(el, `<h6>Status</h6>${marks.map(([m, t]) => `<button class="row" data-pick="st:${m}"><span>${t}</span>${m === mark ? '<small>✓</small>' : ''}</button>`).join('')}<hr>
-    ${to.length > 1 ? `<h6>Move to</h6>${to.map((g, i) => `<button class="row" data-pick="${i}"><span>${esc(g || 'Ungrouped')}</span>${g === cur ? '<small>✓</small>' : ''}</button>`).join('')}<hr>` : ''}
+  menu(el, `<h6>Status</h6>${marks.map(([m, t]) => `<button class="row" data-pick="st:${m}"><span>${t}</span>${m === mark ? `<small>${IC.check}</small>` : ''}</button>`).join('')}<hr>
+    ${to.length > 1 ? `<h6>Move to</h6>${to.map((g, i) => `<button class="row" data-pick="${i}"><span>${esc(g || 'Ungrouped')}</span>${g === cur ? `<small>${IC.check}</small>` : ''}</button>`).join('')}<hr>` : ''}
     <button class="row" data-pick="new"><span>New group…</span></button>${row ? `<hr><button class="row" data-pick="delete"><span>${esc(C.deleteItem(S.picks, row))}</span></button>` : ''}`,
   async (pick) => {
     if (pick === 'delete') return deleteStrategies(targets);
@@ -1274,7 +1298,7 @@ function viewSwitch() {
 }
 function viewMenu(anchor) {
   const html = VIEW_GROUPS.map(([group, views, why]) => `<h6>${group}</h6>${views.map(([v, t]) =>
-    `<button class="row" role="menuitemradio" aria-checked="${S.view === v}" data-pick="${v}" title="${esc(why[v] || '')}"><span>${t}</span>${S.view === v ? '<small>✓</small>' : ''}</button>`).join('')}`).join('<hr>');
+    `<button class="row" role="menuitemradio" aria-checked="${S.view === v}" data-pick="${v}" title="${esc(why[v] || '')}"><span>${t}</span>${S.view === v ? `<small>${IC.check}</small>` : ''}</button>`).join('')}`).join('<hr>');
   menu(anchor, html, (v) => { setView(v); const t = root.querySelector('[data-fk="viewmenu"]'); if (t) t.focus({ preventScroll: true }); });
   menuEl.dataset.for = 'view';
   menuEl.setAttribute('role', 'menu');
@@ -1418,7 +1442,7 @@ function codeSheet(id) {
   d.classList.add('wide', 'tk-dlg');
   d.addEventListener('click', (e) => {
     const j = e.target.closest('[data-jump]');
-    if (j) { const t = d.querySelector(`#tkp${j.dataset.jump}`); if (t) t.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+    if (j) { const t = d.querySelector(`#tkp${j.dataset.jump}`); if (t) t.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); return; }
     if (e.target.closest('[data-x]')) closeDialog();
   });
 }
@@ -2512,7 +2536,7 @@ function oosHtml(T) {
     return `${head}${perYearHtml(cell ? [cell] : [], 'in-sample, as set')}<div class="rs-hero"><div class="rs-net"><i>${net > 0 ? '+' : net < 0 ? MINUS : ''}$</i>${esc(Math.abs(Math.round(net)).toLocaleString('en-US'))}</div></div>
       <div class="rs-take">${esc(`${(oo.months || []).length} test months · ${rec.trades ?? 0} trades · after fees.`)}</div>
       ${WFEQ ? EQ_BOX : ''}
-      <div class="rs-trio"><div><b>${esc(X.num(rec.pf, 2, true))}</b><span>Profit factor</span></div><div><b>${esc(X.rate(rec.win_rate))}</b><span>Win rate</span></div><div><b>${esc(X.num(rec.sharpe))}</b><span>Sharpe</span></div></div>
+      <div class="rs-trio"><div><b>${esc(X.num(rec.pf, 2, true))}</b><span>Profit factor</span></div><div><b>${esc(X.wrate(rec.win_rate))}</b><span>Win rate</span></div><div><b>${esc(X.num(rec.sharpe))}</b><span>Sharpe</span></div></div>
       ${row ? `<div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr>${X.WF_FIXED_COLS.map((c) => `<th>${esc(c[1])}</th>`).join('')}</tr></thead><tbody><tr>${row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr></tbody></table></div>` : ''}
       ${realHtml(realRead(res, sid), sid)}
       ${bt ? `<div class="rs-gh">Block by block</div><div class="wf-scroll"><table class="heat-tbl wf-steps"><thead><tr>${bt.head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${bt.rows.map((x) => `<tr>${x.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : ''}`;
@@ -2537,7 +2561,7 @@ function propHtml(r) {
     const h = p.headline || {}, pc = (v) => (v == null ? '—' : `${Math.round(v * 100)}%`);
     return `<div class="rs-gh">More numbers · Prop sim${p.rules && p.rules.label ? ` · ${esc(p.rules.label)}` : ''} · not one of the six lines</div><div class="rs-group">${wfKv('Passes the eval', pc(h.eval_pass_p))}${wfKv('Busts the eval', pc(h.bust_p))}
       ${wfKv('Days to pass', h.median_days_to_pass == null ? '—' : String(Math.round(h.median_days_to_pass)))}${wfKv('Gets a payout', pc(h.funded_payout_p))}
-      ${wfKv('Expected cheque', h.funded_expected_cheque == null ? '—' : money0(h.funded_expected_cheque))}</div>`;
+      ${wfKv('Expected payout', h.funded_expected_cheque == null ? '—' : money0(h.funded_expected_cheque))}</div>`;
   }
   return `<div class="rs-gh">More numbers · Prop sim · not one of the six lines</div><div class="rs-group"><button class="rs-row" data-act="propsim"${r.propBusy ? ' disabled' : ''}><span>${r.propBusy ? 'Running the prop sim…' : 'Run the prop sim'}</span><span>›</span></button>
     ${r.propErr ? `<div class="heat-err">${esc(r.propErr)}</div>` : ''}</div>`;
@@ -2581,7 +2605,7 @@ function wfSplitHtml(r) {
     ${row('Net / month', (s) => (pm(s) == null ? '—' : money0(pm(s))), pm)}
     ${row('Total net', (s) => money0(s.stats.net_profit || 0), (s) => s.stats.net_profit)}
     ${row('Profit factor', (s) => X.num(s.stats.profit_factor, 2, true))}
-    ${row('Win rate', (s) => X.rate(s.stats.win_rate))}
+    ${row('Win rate', (s) => X.wrate(s.stats.win_rate))}
     ${row('Max drawdown', (s) => (s.stats.max_drawdown == null ? '—' : money0(s.stats.max_drawdown)))}</div>`;
 }
 /* What to trade now: the best of the searched settings on the last 3 whole months -- the setting the Desk would tell the owner
@@ -2633,7 +2657,7 @@ function stepsHtml(b, f) {
   return `<div class="lab-steps"><ol>${st.map((x, i) => {
     const not = x.ok && x.word && x.word !== 'REAL';          // a verdict read, but not REAL: no tick
     const k = not ? 'ok word' : x.ok ? 'ok' : x.lock ? 'lock' : i === next ? 'next' : '';
-    return `<li class="${k}" title="${esc(x.ok ? `${x.name}: done` : `${x.name}: ${x.why}`)}"><i aria-hidden="true">${not ? '·' : x.ok ? '✓' : x.lock ? ICON_LOCK : i === next ? '●' : '○'}</i>${esc(x.name)}<span class="vh">${x.ok ? ', done' : x.lock ? ', locked' : ''}</span></li>`;
+    return `<li class="${k}" title="${esc(x.ok ? `${x.name}: done` : `${x.name}: ${x.why}`)}"><i aria-hidden="true">${not ? '·' : x.ok ? IC.check : x.lock ? ICON_LOCK : i === next ? '●' : '○'}</i>${esc(x.name)}<span class="vh">${x.ok ? ', done' : x.lock ? ', locked' : ''}</span></li>`;
   }).join('')}</ol>${said.length ? `<p>${esc(said.join(' · '))}</p>` : ''}</div>`;
 }
 function perYearHtml(cells, what) {
@@ -2652,10 +2676,10 @@ function wfFixedHtml(w, job) {
   const locked = t.picked != null, pickRow = t.rows.find((x) => x.i === t.picked);
   const mb = buf(), own = mb ? X.ownStopNote(metaOf(mb), job.axes, t.rows.length) : '', sid = (job && job.strategy) || curSid(), rd = realRead(r, sid);
   const th = t.head.map((h) => (h.key === 'box' ? `<th>${esc(h.label)}</th>`
-    : `<th><button class="wf-sort${sk === h.key ? ' on' : ''}" data-act="wfsort" data-k="${esc(h.key)}" title="Sort by ${esc(h.label)}">${esc(h.label)}${sk === h.key ? (w.sort.dir < 0 ? ' ↓' : ' ↑') : ''}</button></th>`)).join('');
+    : `<th><button class="wf-sort${sk === h.key ? ' on' : ''}" data-act="wfsort" data-k="${esc(h.key)}" title="Sort by ${esc(h.label)}">${esc(h.label)}<span class="wf-arrow">${sk === h.key ? (w.sort.dir < 0 ? IC.chevron : IC.chevronUp) : ''}</span></button></th>`)).join('');
   const tr = t.rows.map((row) => `<tr${row.i === t.picked ? ' class="sel"' : ''}><td>${locked ? (row.i === t.picked ? '<b>Picked</b>' : '')
     : `<button class="btn btn-sm btn-outline" data-act="wfpick" data-i="${row.i}"${w.busy ? ' disabled' : ''}>Pick</button>`}</td>
-    <th><button class="wf-sort" data-act="wfblk" data-i="${row.i}" title="Show it block by block">${row.box} ${esc(row.label)}</button></th>${row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr>`).join('');
+    <th><button class="wf-sort" data-act="wfblk" data-i="${row.i}" title="${esc(`${row.box} ${row.label}`)} · show it block by block">${row.box} ${esc(row.label)}</button></th>${row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr>`).join('');
   const win = r.window || {}, bi = w.blk != null ? w.blk : t.picked, bc = (r.cells || []).find((c) => c.i === bi);
   const bt = bc && X.wfFixedBlocks(bc, r.oos), bRow = bc && t.rows.find((x) => x.i === bi);
   const blocks = !bt ? '<div class="heat-note">Click a box to see it block by block.</div>'
@@ -2669,11 +2693,11 @@ function wfFixedHtml(w, job) {
         <tbody><tr>${o.row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr></tbody></table></div>` : ''}`;
   const yc = bc ? [bc] : r.cells || [];
   return `${perYearHtml(yc, bc ? `${X.boxNo(bi)} ${bRow ? bRow.label : ''}`.trim() : 'the average box')}
-    <div class="rs-gh">In-sample table · ${t.rows.length} box${t.rows.length === 1 ? '' : 'es'}${win.start ? ` · ${esc(wfMon(win.start))} – ${esc(wfMon(win.end))}` : ''}</div>
     ${rd ? `<div class="rl-count">${esc(`${rd.up} of ${rd.n} boxes made money${rd.n ? ` (${Math.round(rd.up / rd.n * 100)}%)` : ''}`)}</div>` : ''}
-    ${own ? `<div class="heat-note">${esc(own)}</div>` : ''}
-    <div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr><th></th>${th}</tr></thead><tbody>${tr}</tbody></table></div>
     ${realHtml(rd, sid)}
+    <div class="rs-gh">In-sample table · ${t.rows.length} box${t.rows.length === 1 ? '' : 'es'}${win.start ? ` · ${esc(wfMon(win.start))} – ${esc(wfMon(win.end))}` : ''}</div>
+    ${own ? `<div class="heat-note">${esc(own)}</div>` : ''}
+    <div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed wf-is"><thead><tr><th></th>${th}</tr></thead><tbody>${tr}</tbody></table></div>
     <div class="rs-gh">Test months</div><div class="rs-group wf-oos">${test}
       ${w.say ? `<div class="heat-err">${esc(w.say)}</div>` : ''}</div>
     <div class="rs-gh">Block by block${bc ? ` · ${esc(X.boxNo(bi))} ${esc(bRow ? bRow.label : '')}` : ''}</div>${blocks}
@@ -2720,14 +2744,14 @@ function wfResHtml(f) {
       <div class="rs-kv wf-kv2 wf-kvh"><span></span><span>In</span><span>Out</span></div>
       ${row('Months', (x) => (ov(x) ? '—' : String(x.n_months || 0)))}${row('Net / month', (x) => money0(pmn(x) || 0), pmn)}${row('Total net', (x) => (ov(x) ? '—' : money0(net(x) || 0)), (x) => (ov(x) ? null : net(x)))}
       ${row('Trades', (x) => (ov(x) ? '—' : String(x.stats.trades ?? '—')))}${row('Profit factor', (x) => X.num(x.stats.profit_factor, 2, true))}
-      ${row('Win rate', (x) => X.rate(x.stats.win_rate))}${row('Realized RR', (x) => rr(x.stats))}
+      ${row('Win rate', (x) => X.wrate(x.stats.win_rate))}${row('Realized RR', (x) => rr(x.stats))}
       ${row('Max drawdown', (x) => (x.stats.max_drawdown == null ? '—' : money0(x.stats.max_drawdown)), (x) => x.stats.max_drawdown)}
       ${row('Sharpe', (x) => X.num(x.stats.sharpe))}</div>
       ${wfSplitHtml(r)}${wfPickRows(r, axes)}${wfStepsHtml(r, axes)}
       <div class="heat-foot">${esc(r.n_cells > 1 ? `${r.n_cells} settings searched · ${r.looks} looks counted` : 'The strategy as set: nothing searched')}</div>`;
   }
   return `${head}
-    <div class="rs-trio"><div><b>${esc(X.num(s.profit_factor, 2, true))}</b><span>Profit factor</span></div><div><b>${esc(X.rate(s.win_rate))}</b><span>Win rate</span></div><div><b>${esc(rr(s))}</b><span>Realized RR</span></div><div><b>${esc(X.num(s.sharpe))}</b><span>Sharpe</span></div></div>
+    <div class="rs-trio"><div><b>${esc(X.num(s.profit_factor, 2, true))}</b><span>Profit factor</span></div><div><b>${esc(X.wrate(s.win_rate))}</b><span>Win rate</span></div><div><b>${esc(rr(s))}</b><span>Realized RR</span></div><div><b>${esc(X.num(s.sharpe))}</b><span>Sharpe</span></div></div>
     ${side === 'is' ? '' : wfSplitHtml(r)}
     <div class="rs-gh">Per month</div><div class="rs-group">
       ${wfKv('Net / month', money0(pm.net_profit || 0), wfTone(pm.net_profit))}${wfKv('Trades / month', X.num(pm.trades, 1))}
@@ -2915,8 +2939,8 @@ function rulesHtml(f, meta) {
     <div class="grid">
       ${sizes.length ? sel('bar_minutes', 'Signal bar', [[0, `Strategy's own${own}`], ...sizes.map((m) => [m, `${m} minute${m === 1 ? '' : 's'}`])], 'The candle size the strategy reads its signals on') : ''}
       ${time('entry_from', 'Trade from (NY)', 'No entry before this time')}
-      ${time('entry_to', 'Trade until (NY)', 'No new entry from this time; an order still waiting is cancelled, an open trade is left alone')}
-      ${time('flat_at', 'Flat at (NY)', 'Cancels everything and closes what is open at this time; no entry after it')}
+      ${time('entry_to', 'Last entry (NY)', 'No new entry from this time; an order still waiting is cancelled, an open trade is left alone')}
+      ${time('flat_at', 'Flat by (NY)', 'Cancels everything and closes what is open at this time; no entry after it')}
       ${sel('direction', 'Direction', [['both', 'Both'], ['long', 'Long only'], ['short', 'Short only']])}
       ${num('max_trades', 'Trades a day', 'The most entries in a day')}
       ${num('stop_wins', 'Stop after wins', 'No new entry once the day has this many winning trades')}
@@ -3136,7 +3160,7 @@ function paintRes() {
     const split = (v) => { const m = /^([+−-]?)\$?(.*?)(%?)$/.exec(String(v)); return m ? `${m[1] === '+' ? '' : esc(m[1])}${esc(m[2])}${m[3] ? '<small>%</small>' : ''}` : esc(v); };   // a minus stays: a losing Sharpe reads −
     main = `<div class="rs-h"><b>Backtest</b><span>${esc(r.cellLabel ? r.cellLabel : rangeText(run.range))}</span></div>
       <div class="rs-hero"><div class="rs-net"><i>${netv > 0 ? '+' : netv < 0 ? MINUS : ''}$</i>${esc(Math.abs(Math.round(netv)).toLocaleString('en-US'))}</div>
-        ${pctv == null ? '' : `<span class="rs-delta${pos ? '' : ' neg'}" title="Of the $${esc(Math.round(cap).toLocaleString('en-US'))} starting balance">${pos ? '▲' : netv < 0 ? '▼' : ''} ${Math.abs(pctv).toFixed(1)}%</span>`}</div>
+        ${pctv == null ? '' : `<span class="rs-delta${pos ? '' : ' neg'}" title="Of the $${esc(Math.round(cap).toLocaleString('en-US'))} starting balance">${pctv > 0 ? '+' : pctv < 0 ? MINUS : ''}${Math.abs(pctv).toFixed(1)}%</span>`}</div>
       <div class="rs-take">${n === 0 ? 'It took no trades in this range. Check the session window and the entry rules, then run it again.' : takeaway(eqPoints(r.bundle.equity || {}), netv, n)}<span>${esc(used)}</span></div>
       <div class="eqw" id="eqw"><svg preserveAspectRatio="none" role="img" aria-label="Equity curve, after fees"></svg><div class="eq-rule" id="eqRule"></div><span class="eq-dot" id="eqDot"></span>
         <span class="eq-tag" id="eqHi"></span><span class="eq-tag" id="eqLo"></span><div class="eq-tip" id="eqTip"></div><div class="eq-ax" id="eqAx"></div></div>

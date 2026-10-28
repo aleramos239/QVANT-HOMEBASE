@@ -184,7 +184,7 @@ const CTL_AXIS = 'ctl.';
 const CTL_IMPLIES = { stop_own_mult: ['stop_mode', 'own'], stop_pts: ['stop_mode', 'fixed'], stop_atr: ['stop_mode', 'atr'], target_pts: ['target_mode', 'fixed'],
   target_atr: ['target_mode', 'atr'], target_rr: ['target_mode', 'rr'], stop_candle_ticks: ['stop_mode', 'candle'] };
 const CTL_LABELS = {
-  entry_from: 'Trade from (NY)', entry_to: 'Trade until (NY)', flat_at: 'Flat at (NY)', direction: 'Direction',
+  entry_from: 'Trade from (NY)', entry_to: 'Last entry (NY)', flat_at: 'Flat by (NY)', direction: 'Direction',
   max_trades: 'Trades a day', stop_wins: 'Stop after wins', stop_losses: 'Stop after losses', max_consec_losses: 'Losses in a row',
   day_loss: 'Daily loss ($)', day_profit: 'Daily profit ($)', cooldown_min: 'Cool off after a loss (min)', max_hold_min: 'Close after (min held)',
   stop: 'Stop', stop_own_mult: 'Own stop (x)', own_floor: 'Own stop floor (0.25 x ATR)', stop_mode: 'Stop type', stop_pts: 'Stop (points)', stop_atr: 'Stop (x ATR)', target_mode: 'Target type', target_pts: 'Target (points)',
@@ -248,11 +248,12 @@ const neg = (s, v) => (v < 0 ? MINUS + s : s);
 function num(v, d = 2, inf = false) { return v == null || !Number.isFinite(v) ? '—' : (inf && v >= 999) ? '∞' : neg(Math.abs(v).toFixed(d), v); }
 function pct(v) { return v == null || !Number.isFinite(v) ? '—' : (v > 0 ? '+' : v < 0 ? MINUS : '') + Math.abs(v).toFixed(2) + '%'; }
 function rate(v) { return v == null || !Number.isFinite(v) ? '—' : v.toFixed(1) + '%'; }
+function wrate(v) { return v == null || !Number.isFinite(v) ? '—' : Math.round(v) + '%'; }   // a win rate: whole percent
 function dur(s) {
   if (s == null || !Number.isFinite(s)) return '—';
   s = Math.round(s);
   if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`;
   return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
 }
@@ -367,7 +368,7 @@ function tiles(run) {
   return [
     { label: 'Net P&L', value: signed(a.net_profit), sub: pct(a.net_profit_pct), tone: toneOf(a.net_profit) },
     { label: 'Max drawdown', value: Tr.money(a.max_drawdown), sub: pct(a.max_drawdown_pct), tone: toneOf(a.max_drawdown) },
-    { label: 'Win rate', value: rate(a.win_rate), sub: `${a.wins ?? 0}/${a.trades ?? 0}`, tone: '' },
+    { label: 'Win rate', value: wrate(a.win_rate), sub: `${a.wins ?? 0}/${a.trades ?? 0}`, tone: '' },
     { label: 'Profit factor', value: num(a.profit_factor, 2, true), sub: '', tone: '' },
     { label: 'Sharpe', value: num(a.sharpe), sub: 'traded days', tone: '', title: run.report.sharpe_basis },
     { label: 'Avg trade', value: signed(a.avg_trade), sub: '', tone: toneOf(a.avg_trade) },
@@ -396,7 +397,7 @@ function propView(p) {
     { label: 'Eval pass', value: rate(h.eval_pass_p * 100), sub: ci ? `95% CI ${(ci[0] * 100).toFixed(1)}–${(ci[1] * 100).toFixed(1)}%` : '' },
     { label: 'Bust', value: rate(h.bust_p * 100), sub: '' },
     { label: 'Median days to pass', value: h.median_days_to_pass == null ? '—' : String(Math.round(h.median_days_to_pass)), sub: '' },
-    { label: 'Funded: expected cheque', value: Tr.money(h.funded_expected_cheque), sub: '' }] };
+    { label: 'Funded: expected payout', value: Tr.money(h.funded_expected_cheque), sub: '' }] };
 }
 
 /* The Eval picker's options: one per ruleset the server offers, `selected` marking the one in
@@ -465,7 +466,7 @@ function intDelta(v) { return v == null || !Number.isFinite(v) ? '—' : SIGNCH(
 const CMP_ROWS = [
   ['net', 'Net profit', (c) => c.net_profit, signed, (v) => signed(v), true],
   ['pf', 'Profit factor', (c) => c.profit_factor, (v) => num(v, 2, true), (v) => numDelta(v, 2), true],
-  ['wr', 'Win rate', (c) => c.win_rate, rate, rateDelta, true],
+  ['wr', 'Win rate', (c) => c.win_rate == null ? null : Math.round(c.win_rate), wrate, (v) => numDelta(v, 0) + '%', true],   // whole percent, so the delta adds up
   ['sharpe', 'Sharpe', (c) => c.sharpe, (v) => num(v), (v) => numDelta(v), true],
   ['maxdd', 'Max drawdown', (c) => c.max_drawdown, (v) => Tr.money(v), (v) => signed(v), true],
   ['avg', 'Avg trade', (c) => c.avg_trade, signed, (v) => signed(v), true],
@@ -523,7 +524,7 @@ const SUMMARY = [
   ['Commission paid', (c) => Tr.money(c.commission_paid)],
   ['Max drawdown', (c) => `${Tr.money(c.max_drawdown)} (${pct(c.max_drawdown_pct)})`], ['Max run-up', (c) => Tr.money(c.max_runup)],
   ['Profit factor', (c) => num(c.profit_factor, 2, true)], ['Total trades', (c) => int(c.trades)], ['Winning trades', (c) => int(c.wins)],
-  ['Losing trades', (c) => int(c.losses)], ['Percent profitable', (c) => rate(c.win_rate)], ['Avg trade', (c) => signed(c.avg_trade)],
+  ['Losing trades', (c) => int(c.losses)], ['Percent profitable', (c) => wrate(c.win_rate)], ['Avg trade', (c) => signed(c.avg_trade)],
   ['Avg winning trade', (c) => signed(c.avg_win)], ['Avg losing trade', (c) => signed(c.avg_loss)],
   ['Risk : reward (average win / average loss)', (c) => (c.rr_label && c.rr_label !== '—' ? `RR ${c.rr_label}` : '—')],
   ['Largest winning trade', (c) => signed(c.largest_win)], ['Largest losing trade', (c) => signed(c.largest_loss)],
@@ -533,7 +534,7 @@ const SUMMARY = [
   ['Trading days', (c) => int(c.days)]];
 function summaryRows(s) { return SUMMARY.map(([label, f]) => ({ label, all: f(s.all), long: f(s.long), short: f(s.short) })); }
 function periodRows(list) {
-  return (list || []).map((p) => ({ period: p.period, trades: int(p.trades), net: signed(p.net), tone: toneOf(p.net), win: rate(p.win_rate),
+  return (list || []).map((p) => ({ period: p.period, trades: int(p.trades), net: signed(p.net), tone: toneOf(p.net), win: wrate(p.win_rate),
     pf: num(p.profit_factor), dd: Tr.money(p.max_drawdown), sharpe: num(p.sharpe), avg: signed(p.avg_trade) }));
 }
 
@@ -760,7 +761,7 @@ function cellView(c) {
   const s = c.summary, errs = s.skipped_by_error || 0;
   return { state: 'done', net: signed(s.net_profit), sharpe: `Sharpe ${num(s.sharpe)}`, tone: toneOf(s.net_profit),
     warn: errs ? `${errs} strategy error${errs === 1 ? '' : 's'}` : '',
-    title: `${int(s.trades)} trades · WR ${rate(s.win_rate)} · PF ${num(s.profit_factor, 2, true)} · t ${num(s.t_stat)} · max DD ${Tr.money(s.max_drawdown)}` };
+    title: `${int(s.trades)} trades · WR ${wrate(s.win_rate)} · PF ${num(s.profit_factor, 2, true)} · t ${num(s.t_stat)} · max DD ${Tr.money(s.max_drawdown)}` };
 }
 function gridProgress(st) {
   const s = st && st.status, n = `${int(st && st.done)} / ${int(st && st.total)} cells`;
@@ -800,11 +801,11 @@ function wfFixedBody(f, axes) {
 }
 const pts1 = (v) => (v == null || !Number.isFinite(v) ? '—' : (v > 0 ? '+' : v < 0 ? MINUS : '') + Math.abs(v).toFixed(1));
 /* the in-sample table's columns (walkforward.is_numbers, spec 4.3), win rate first: [key, label, format, toned] */
-const WF_FIXED_COLS = [['win_rate', 'Win rate', rate], ['breakeven', 'Break-even win rate', rate], ['wr_minus_be', 'Win rate − break-even', pts1],
+const WF_FIXED_COLS = [['win_rate', 'Win rate', wrate], ['breakeven', 'Break-even win rate', wrate], ['wr_minus_be', 'Win rate − break-even', pts1],
   ['trades', 'Trades', int], ['per_week', 'A week', (v) => num(v, 1)], ['avg_trade', 'Avg trade', signed, true], ['avg_r', 'Avg R', (v) => num(v, 2)],
   ['net', 'Net', signed, true], ['pf', 'Profit factor', (v) => num(v, 2, true)], ['sharpe', 'Sharpe', (v) => num(v)],
   ['max_dd', 'Max drawdown', (v) => Tr.money(v)], ['months_pos', 'Months up', rate], ['months_wr60', 'Months 60%+ win', rate],
-  ['worst_month_wr', 'Worst month win', rate], ['long_net', 'Long net', signed, true], ['short_net', 'Short net', signed, true]];
+  ['worst_month_wr', 'Worst month win', wrate], ['long_net', 'Long net', signed, true], ['short_net', 'Short net', signed, true]];
 const fixedCells = (rec) => WF_FIXED_COLS.map(([k, , fmt, toned]) => ({ text: fmt(rec ? rec[k] : null), tone: toned && rec ? toneOf(rec[k]) : '' }));
 function boxLabel(axes, params) {
   if (!axes || !axes.length) return 'As set';
@@ -829,7 +830,7 @@ function wfFixedTable(res, axes, sort) {
    once THIS box's read is done (oos.blocks) -- before that no test-month column exists. */
 function wfFixedBlocks(cell, oos) {
   const read = oos && oos.state === 'done' && oos.cell === (cell && cell.i) ? new Map((oos.blocks || []).map((b) => [b.i, b])) : null;
-  const part = (b) => [{ text: int(b ? b.trades : null), tone: '' }, { text: rate(b ? b.win_rate : null), tone: '' },
+  const part = (b) => [{ text: int(b ? b.trades : null), tone: '' }, { text: wrate(b ? b.win_rate : null), tone: '' },
     { text: b ? signed(b.net) : '—', tone: b ? toneOf(b.net) : '' }];
   return { head: ['Block', 'In-sample months', 'Trades', 'Win rate', 'Net', ...(read ? ['Test month', 'Trades', 'Win rate', 'Net'] : [])],
     rows: ((cell && cell.blocks) || []).map((b) => {
@@ -883,11 +884,11 @@ function wfLooksText(cells, nSteps, penalty = 1) {
 }
 function etaText(s) {
   if (s == null || !Number.isFinite(s)) return '';
-  if (s < 60) return '<1 min left';
+  if (s < 60) return '<1m left';
   const m = Math.round(s / 60);
-  if (m < 60) return `~${m} min left`;
+  if (m < 60) return `~${m}m left`;
   const h = Math.floor(m / 60), r = m % 60;
-  return r ? `~${h} h ${r} min left` : `~${h} h left`;
+  return r ? `~${h}h ${String(r).padStart(2, '0')}m left` : `~${h}h left`;
 }
 function wfProgress(st) {
   const s = st && st.status, n = `${int(st && st.done)} / ${int(st && st.total)} cells`, pause = st && st.paused ? ` · ${st.paused}` : '';
@@ -918,7 +919,7 @@ function wfTiles(r, which = 'oos') {
     { label: 'Trades / month', value: num(pm.trades, 1), sub: '', tone: '' },
     { label: 'Total net', value: signed(s.net_profit), sub: `over ${months_(n)}`, tone: toneOf(s.net_profit) },
     { label: 'Max drawdown', value: Tr.money(s.max_drawdown), sub: '', tone: toneOf(s.max_drawdown) },
-    { label: 'Win rate', value: rate(s.win_rate), sub: '', tone: '' },
+    { label: 'Win rate', value: wrate(s.win_rate), sub: '', tone: '' },
     { label: 'Profit factor', value: num(s.profit_factor, 2, true), sub: '', tone: '' },
     { label: 'Sharpe', value: num(s.sharpe), sub: 'traded days', tone: '' }];
 }
@@ -951,7 +952,7 @@ function wfStepRows(r, axes) {
     }
     const i = s.is, o = s.oos;
     return { cells: [...head, paramsLabel(axes, s.params), signed(i.net_profit), int(i.trades), num(i.sharpe),
-      signed(o.net_profit), int(o.trades), rate(o.win_rate), num(o.profit_factor, 2, true), num(o.sharpe), Tr.money(o.max_drawdown)],
+      signed(o.net_profit), int(o.trades), wrate(o.win_rate), num(o.profit_factor, 2, true), num(o.sharpe), Tr.money(o.max_drawdown)],
     stitched: !!s.stitched, changed: s.changed, isTone: toneOf(i.net_profit), oosTone: toneOf(o.net_profit) };
   });
 }
@@ -1000,7 +1001,7 @@ function wfCompareCell(key, c) {
     case 'net': return { text: signed(s.net_profit), tone: toneOf(s.net_profit) };
     case 'net_month': return { text: signed(pm.net_profit), tone: toneOf(pm.net_profit) };
     case 'trades': return { text: int(s.trades), tone: '' };
-    case 'win_rate': return { text: rate(s.win_rate), tone: '' };
+    case 'win_rate': return { text: wrate(s.win_rate), tone: '' };
     case 'pf': return { text: num(s.profit_factor, 2, true), tone: '' };
     case 'avg_trade': return { text: signed(s.avg_trade), tone: toneOf(s.avg_trade) };
     case 'max_dd': return { text: Tr.money(s.max_drawdown), tone: toneOf(s.max_drawdown) };
@@ -1078,7 +1079,7 @@ const api = { strategyLabel, DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, ma
   today, rangeSpec, rangeDates, rangeBody, parseDate, dateError, prettyDate, pillLabel, monthGrid, shiftMonth,
   problems, inputError, body, CONTROLS, controlsClean, controlsFields, controlsError, setControl,
   CTL_AXIS, CTL_LABELS, CTL_IMPLIES, ctlAxisInputs, axisInput, axisHint, axisLabels,
-  key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, evalOptions, propShown, mcHeadline, mcTiles, mcHistogram, compareRows, paramsDiff,
+  key, runLabel, progress, pct, rate, wrate, num, dur, fmtEt, tiles, badges, propView, evalOptions, propShown, mcHeadline, mcTiles, mcHistogram, compareRows, paramsDiff,
   summaryRows, periodRows, sortTrades, tradeCells, equitySeries, reachSpec, toneOf };
 if (typeof window !== 'undefined') window.HBTester = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

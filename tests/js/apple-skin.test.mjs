@@ -316,13 +316,10 @@ test('desk skin: the toolbar fits at every window width from 980 px, either pane
       // the page switch: three tabs (the Mac's Desk; the server app hides it)
       const [tl, tr] = pad(/\.hb-seg > a$/, w, on), tabMin = px(g(/\.hb-seg > a$/, 'min-width'));
       const seg = pad(/\.hb-seg$/, w, on).reduce((a, b) => a + b) + 2 * px(g(/\.hb-seg$/, 'gap')) + ['Desk', 'Charts', 'Lab'].reduce((a, t) => a + Math.max(tabMin, TXT[t] + tl + tr), 0);
-      const centred = g(/\.hb-tb-c$/, 'position') === 'absolute';
       // the right-hand group: the readiness column and the armed state, then Arm, then Kill
       const rd = px(g(/\.hb-rd-col$/, 'width')), stc = px(g(/\.hb-st-col$/, 'width'));
       const rgap = px(g(/\.hb-tb-r$/, 'gap')), right = rd + px(g(/\.hb-(?:desk-)?status$/, 'gap')) + stc + rgap + px(g(/#armBtn$/, 'width')) + rgap + px(g(/#killBtn$/, 'width'));
       const [ml, mr] = pad(/\.hb-tb-main$/, w, on), mgap = px(g(/\.hb-tb-main$/, 'gap'));
-      const inFlow = (g(/\.hb-tb-l$/, 'display') === 'none' ? 0 : 1) + (centred ? 0 : 1) + 1;
-      const need = ml + mr + (inFlow - 1) * mgap + (centred ? 0 : seg) + right;
       // the gear corner's own items: the machine chip (long or short words), the gear, the inspector button
       const short = g(/\.hb-m-long$/, 'display') === 'none';
       assert.notEqual(short, g(/\.hb-m-short$/, 'display') === 'none', `${w} px: exactly one of the machine chip's words shows`);
@@ -333,6 +330,14 @@ test('desk skin: the toolbar fits at every window width from 980 px, either pane
       const items = il + ir + chipW + igap + px(g(/#settingsBtn$/, 'width')) + igap + (ICON + pad(/\.hb-tbtn$/, w, on).reduce((a, b) => a + b));
       const zone = inspOff ? items : px(g(/\.hb-tb-insp$/, 'width'));
       const lead = px(g(/\.hb-tb-lead$/, 'width'));
+      // the page switcher: shell.js fit() centres it unless it would reach the right-hand group (12 px clear, 8 px of bar padding)
+      assert.ok(mgap <= 12, 'fit() keeps 12 px clear, the bar\'s widest gap');
+      assert.equal(mr, 8, 'fit() counts the bar\'s right padding');
+      const tight = w / 2 + seg / 2 + 12 > w - zone - 8 - right;
+      const centred = get(/\.hb-tb-c$/, w, new Set([...on, ...(tight ? ['hb-c-tight'] : [])]), 'position') === 'absolute';
+      assert.equal(centred, !tight, `${w} px, ${state}: the CSS follows what fit() decides`);
+      const inFlow = (g(/\.hb-tb-l$/, 'display') === 'none' ? 0 : 1) + (centred ? 0 : 1) + 1;
+      const need = ml + mr + (inFlow - 1) * mgap + (centred ? 0 : seg) + right;
       assert.ok(items <= zone, `${w} px, ${state}: the gear corner holds its own items`);
       // the room left between Kill and the gear corner's first item (the bar's own padding on both sides counts): 8 px at least
       const clear = w - lead - (need - mr) - (items - il);
