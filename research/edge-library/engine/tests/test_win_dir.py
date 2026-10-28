@@ -33,6 +33,13 @@ def test_a_flat_window_is_no_trade():
     assert sides({"src": "ret", "off_min": 30}, day(flat(60))) == []
 
 
+def test_retgap_follows_the_candle_and_a_doji_reads_the_gap():
+    p = {"src": "retgap", "a_start": "09:30", "a_end": "09:45", "off_min": 15}
+    assert sides(p, day(ramp(15, 1.0))) == ["long"] and sides(p, day(ramp(15, -1.0))) == ["short"]
+    # a doji: the prior daily close is 15050 (test_noise.rows), the tape opens at 15000 -> gap down -> short; `ret` alone trades nothing
+    assert sides(p, day(flat(30))) == ["short"] and sides({**p, "src": "ret"}, day(flat(30))) == []
+
+
 def test_dir_keeps_one_side_only():
     up, dn = day(ramp(30, 1.0)), day(ramp(30, -1.0))
     p = {"src": "ret", "off_min": 30, "dir": "long"}
@@ -127,3 +134,32 @@ def test_the_evening_instance_reads_the_prior_session_for_pret(monkeypatch):
     tape.date = D
     t = S.run_session(st, tape, daily=DAILY, on_error="raise", window=st.eve_window, segment="eve").trades
     assert [x["side"] for x in t] == ["short"] and calls[-1] == DAILY[-1]["date"]
+
+
+def test_win_dir_own_stops_at_the_window_extreme_and_win_dir_stays_without_structure():
+    assert B.has_structure("win_dir_own") is True and B.has_structure("win_dir") is False
+    st = B.WRAPPED["win_dir_own"]({**BASE, "stop_mode": "own", "stop_val": 1.0, "src": "retgap", "a_end": "09:45", "off_min": 15})
+    st.ROLLS = frozenset()
+    t = S.run_session(st, tape_of(day(ramp(15, 1.0) + flat(15, 15015.0))), daily=DAILY, on_error="raise").trades
+    assert [x["side"] for x in t] == ["long"]
+    assert abs((t[0]["entry_price"] - t[0]["sl"]) - 15.0) < 2             # the window's low sits 15 points under the 09:45 entry
+
+
+def test_win_dir_retr_waits_for_the_pullback_and_the_stop_is_the_candle_extreme():
+    P = {**BASE, "stop_mode": "own", "stop_val": 1.0, "src": "retgap", "a_end": "09:45", "off_min": 15, "retr": 0.5}
+    run = lambda bars: S.run_session((lambda st: (setattr(st, "ROLLS", frozenset()), st)[1])(B.WRAPPED["win_dir_retr"](P)), tape_of(bars),
+                                    daily=DAILY, on_error="raise").trades
+    assert B.has_structure("win_dir_retr") is True
+    up = ramp(15, 1.0)                                                       # the candle runs 15000 -> 15015: its middle is 15007.5
+    assert run(day(up + flat(30, 15015.0))) == []                             # never pulls back: no trade
+    t = run(day(up + flat(5, 15015.0) + ramp(10, -1.0, 15015.0) + flat(15, 15005.0)))
+    assert [x["side"] for x in t] == ["long"] and abs(t[0]["entry_price"] - 15007.5) < 1.0
+    assert abs((t[0]["entry_price"] - t[0]["sl"]) - 7.5) < 1.0               # the stop = the candle's low
+
+
+def test_win_dir_runs_on_a_3_minute_bar():
+    # the 09:30 candle is three 1-minute bars (3 points up); the trade is at 09:33, the stop is the candle's low
+    st = B.WRAPPED["win_dir_own"]({**BASE, "tf": "3", "stop_mode": "own", "stop_val": 1.0, "src": "retgap", "a_end": "09:33", "off_min": 3})
+    st.ROLLS = frozenset()
+    t = S.run_session(st, tape_of(day(ramp(3, 1.0) + flat(30, 15003.0))), daily=DAILY, on_error="raise").trades
+    assert [x["side"] for x in t] == ["long"] and abs((t[0]["entry_price"] - t[0]["sl"]) - 3.0) < 2

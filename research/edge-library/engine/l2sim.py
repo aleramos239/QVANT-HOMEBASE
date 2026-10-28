@@ -1811,7 +1811,7 @@ class Template(Strategy):
     DEFAULTS = {"tf": "5", "sess": "all", "dir": "both", "stop_mode": "atr", "stop_val": 1.5, "tgt_r": 2.0,
                 "trail_atr": 0.0, "exit_bars": 0, "max_tr": 3, "f_trend": "off", "f_vwap": "off", "f_depth": "off",
                 "f_book": "off", "x_book": "off", "f_thin": "off", "hold_to": "session"}
-    SCHEMA = {"tf": ("choice", ("1", "5", "15", "30")),                    # the tester drafts' inputs (R/gen_drafts COMMON)
+    SCHEMA = {"tf": ("choice", ("1", "3", "5", "15", "30")),                    # the tester drafts' inputs (R/gen_drafts COMMON)
               "sess": ("choice", ("all", "asia", "london", "nyam", "mid", "pm", "eve", "pre", "globex")),
               "dir": ("choice", ("both", "long", "short")), "stop_mode": ("choice", ("atr", "pts", "struct", "pct", "own")),
               "stop_val": ("float", 0.1, 1000), "tgt_r": ("float", 0, 20), "trail_atr": ("float", 0, 10),

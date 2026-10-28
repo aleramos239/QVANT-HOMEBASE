@@ -7,6 +7,7 @@ written BEFORE any result. d = the number the rule reads; d > 0 -> long, d < 0 -
   vwap   d = last price - the VWAP anchored at 00:00 / 03:00 / 09:30 (the session's own cash anchor, `vwr`)
   gap    d = last price - the prior daily close
   loc    d = the prior daily close - the middle of its range
+  retgap d = ret; a flat window (a doji) reads the open of a_start vs the prior daily close instead (owner, 2026-10-27: first-candle follow)
   retd   d = the prior daily close - the daily close n_d days before it
   smad   d = the prior daily close - the mean of the last n_d daily closes
 Every window rule needs a_end at or before the entry (else no trade).
@@ -26,8 +27,8 @@ from l2sim import SESS, Template, _hms
 from .orb_dir_rv import ref_mean
 from .port2 import TodDrift
 
-SRCS = ("ret", "open", "vwap", "gap", "loc", "retd", "smad", "pret", "rexp", "gapagree", "vol5", "delta", "vslope")
-WINDOWED = ("ret", "gapagree", "vol5", "delta", "vslope")          # same-day windows (pret reads the prior day: its a_end is that day's)
+SRCS = ("ret", "retgap", "open", "vwap", "gap", "loc", "retd", "smad", "pret", "rexp", "gapagree", "vol5", "delta", "vslope")
+WINDOWED = ("ret", "retgap", "gapagree", "vol5", "delta", "vslope")          # same-day windows (pret reads the prior day: its a_end is that day's)
 _BS: dict = {}
 
 
@@ -53,6 +54,7 @@ def window_ret(root: str, iso: str, day: dt.date, a: str, b: str):
 
 
 class WinDir(TodDrift):
+    SCREEN_TFS = ("1", "3", "5", "15", "30")          # 3 added 2026-10-28 (owner: first-candle follow on a 3-minute candle)
     DEFAULTS = {**TodDrift.DEFAULTS, "dir": "both", "exit_bars": 400, "mode": "follow", "src": "ret", "a_start": "09:30",
                 "a_end": "10:00", "n_d": 5}
     SCHEMA = {**TodDrift.SCHEMA, "dir": ("choice", ("both", "long", "short")), "exit_bars": ("int", 1, 1000),
@@ -79,6 +81,9 @@ class WinDir(TodDrift):
             if p["a_start"] >= "18:00":                                    # the evening before the trade date
                 return window_ret(root, self.day, dt.date.fromisoformat(self.day) - dt.timedelta(days=1), p["a_start"], p["a_end"])
             return self._wm()
+        if src == "retgap":
+            w, o = self._wm(), self.mo(_sec(p["a_start"]))
+            return w if w or w is None or o is None or not dl else o - dl[-1]["c"]
         if src == "open":
             o = self.mo(_sec(p["a_start"]))
             return None if o is None else lp - o
@@ -140,6 +145,34 @@ class WinDir(TodDrift):
         return None if s is None else SESS[s][0] + int(self.p["off_min"]) * 60
 
 
+class WinDirOwn(WinDir):
+    """win_dir whose own stop is the a_start-a_end window's other extreme (a long: its low, a short: its high): the hm40 table gains the
+    own-stop cells. A subclass, so the win_dir cards keep their exit table (blocks.has_structure reads each class apart)."""
+
+    def _mkt(self, ctx, side, *a, **kw):
+        r = self.rng(S._sec(self.p["a_start"]), S._sec(self.p["a_end"]))
+        return super()._mkt(ctx, side, *a, struct=None if r is None else (r[1] if side == "long" else r[0]), **kw)
+
+
+class WinDirRetr(WinDirOwn):
+    """win_dir_own that waits for a retracement: instead of the market order at the window's close, a LIMIT `retr` of the window's range back
+    from its far end (a long: high - retr x range, a short: low + retr x range; 0.5 = the middle), the stop = the window's other extreme, alive
+    `wait_min` minutes. A price already past the level, or no fill in time = no trade. retr 0 = win_dir_own's market order."""
+    DEFAULTS = {**WinDirOwn.DEFAULTS, "retr": 0.5, "wait_min": 60}
+    SCHEMA = {**WinDirOwn.SCHEMA, "retr": ("float", 0.0, 1.0), "wait_min": ("int", 5, 240)}
+
+    def _mkt(self, ctx, side, *a, **kw):
+        if not float(self.p["retr"]):
+            return super()._mkt(ctx, side, *a, **kw)
+        r = self.rng(S._sec(self.p["a_start"]), S._sec(self.p["a_end"]))
+        if r is None:
+            return None
+        hi, lo = r
+        px = hi - float(self.p["retr"]) * (hi - lo) if side == "long" else lo + float(self.p["retr"]) * (hi - lo)
+        px = round(px / ctx.tick) * ctx.tick
+        return self._lim(ctx, side, px, struct=lo if side == "long" else hi, ttl=-(-int(self.p["wait_min"]) // self.tf))
+
+
 class PdBracket(Template):
     """pd_bracket: at session start + off_min, OCO stop entries one tick beyond the prior day's high and low (the daily bar's: evening to 17:00);
     the stop = the other level; a side whose level price has already passed is not armed; one trade a session; the exit cell's stop and target."""
@@ -172,6 +205,20 @@ FAMILIES = {
                  "complexity": 3,
                  "variants": [{"off_min": 0}, {"off_min": 15}, {"off_min": 30}],
                  "roots": ("NQ",)}),
+    "win_dir_own": (WinDirOwn, {}, False,
+                    "win_dir_own: win_dir with the window's other extreme as the structure (own stop = its distance x 0.5 / 1 / 1.5 / 2)",
+                    {"rationale": "As win_dir; the stop sits where the window's move is proven wrong (past the other end of the first candle).",
+                     "complexity": 3,
+                     "variants": [{"off_min": 0}, {"off_min": 15}, {"off_min": 30}],
+                     "roots": ("NQ",)}),
+    "win_dir_retr": (WinDirRetr, {}, False,
+                     "win_dir_retr: win_dir_own that enters on a retracement: a limit `retr` of the window's range back from its far end, the stop "
+                     "the window's other extreme (own stop = its distance x 0.5 / 1 / 1.5 / 2), alive wait_min minutes; 1 per session",
+                     {"rationale": "The first candle's direction is the day's lean; a pullback into the candle buys it cheaper and puts the stop "
+                                   "closer to where the read is proven wrong. Who loses: sellers into the opening drop and chasers who missed the dip.",
+                      "complexity": 3,
+                      "variants": [{"retr": 0.382}, {"retr": 0.5}, {"retr": 0.618}],
+                      "roots": ("NQ",)}),
     "pd_bracket": (PdBracket, {}, True,
                    "pd_bracket: at session start + off_min, stop entries one tick beyond the prior day's high and low (OCO), the stop the other "
                    "level, a level price has already passed is not armed; 1 per session",
