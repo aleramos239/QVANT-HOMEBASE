@@ -160,6 +160,11 @@ const TABS = [
       { label: 'Stop for this symbol', pref: { key: 'defStop', kind: 'perRoot', min: 0, max: 10000, note: 'ticks (0 = no stop)' } },
       { caption: 'Every chart on this symbol. 0 keeps orders as they are: no stop unless you add one, and the Buy / Sell block says NAKED.' },
     ]],
+    // owner D6 (2026-10-28): off by default; the Buy / Sell, the confirm and LIVE's arm are the same whether it is on or off
+    ['QUICK SETUP', [
+      { label: 'Size per symbol, order templates, account chips', pref: { key: 'on', kind: 'switch', quick: true } },
+      { caption: 'Every chart, this browser. On: each symbol keeps its own size, the order panel saves up to five templates (they only fill the form), and a chart\'s account chips tick and untick accounts. Off: one size for every symbol, and a chip opens this tab.' },
+    ]],
     // 5.7 (2026-10-27): moved here from the order panel's "Chart preview" (HBOrderPanel's look, this browser's)
     ['ORDER PREVIEW', [
       { label: 'Line', look: { key: 'style', choices: [[0, 'Solid'], [2, 'Dashed'], [1, 'Dotted']] } },
@@ -939,7 +944,7 @@ function mount(box, host) {
       ctl.append(c);
     }
     if (r.pref) {   // a viewer-wide trade preference (the one-click switches): every chart's, not this one's
-      const { key, kind, min, max, note } = r.pref, cur = host.prefs ? host.prefs() : {};
+      const { key, kind, min, max, note, quick } = r.pref, cur = host.prefs ? host.prefs() : {};
       if (kind === 'perRoot') {   // one number per symbol (this chart's): host.prefs()[key][root], 0 = off
         const root = cell.cfg.root, n = mk('input', 'set-num');
         n.type = 'number'; n.min = String(min); n.max = String(max); n.step = '1';
@@ -952,13 +957,15 @@ function mount(box, host) {
         };
         ctl.append(n, mk('span', 'set-unit', note));
       } else if (kind === 'switch') {
-        const sw = button('switch' + (cur[key] ? ' on' : ''));
+        // `quick`: the quick-setup store (host.quick / host.setQuick), not the trade prefs
+        const get = () => ((quick ? host.quick : host.prefs) || (() => ({})))() || {}, put = quick ? host.setQuick : host.setPrefs;
+        const sw = button('switch' + (get()[key] ? ' on' : ''));
         sw.setAttribute('role', 'switch');
-        sw.setAttribute('aria-checked', String(!!cur[key]));
+        sw.setAttribute('aria-checked', String(!!get()[key]));
         sw.setAttribute('aria-label', r.label);
         sw.onclick = () => {
-          if (host.setPrefs) host.setPrefs({ [key]: !(host.prefs() || {})[key] });
-          const on = !!(host.prefs ? host.prefs() : {})[key];
+          if (put) put({ [key]: !get()[key] });
+          const on = !!get()[key];
           sw.classList.toggle('on', on);
           sw.setAttribute('aria-checked', String(on));
         };

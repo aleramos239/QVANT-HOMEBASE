@@ -335,7 +335,7 @@ function build() {
   ahead.append(mk('span', 'op-lab', 'Accounts'), ui.change);
   ui.chips = mk('div', 'op-chips');
   ui.why = mk('div', 'op-why');
-  accts.append(ahead, ui.chips, ui.why);
+  accts.append(ahead, ui.chips, ui.why, buildTemplates());
 
   const foot = mk('div', 'op-foot');
   // S1: the wrapper carries the LIVE ring (outside the button, so a disabled Send never dims it); the button its LIVE
@@ -356,6 +356,62 @@ function build() {
   ui.order.append(ui.form, accts, foot);
 
   el.replaceChildren(head, ui.order);
+}
+
+/* ---- saved order templates (owner D6, 2026-10-28): FORM-FILL ONLY. A pick fills the quantity, the stop and target
+   (ticks) and this chart's accounts; it never sends: Buy / Sell, the confirm and LIVE's arm are untouched. Up to five,
+   this browser's, and only while Settings > Trading's quick setup is on (hidden otherwise). ---- */
+function buildTemplates() {
+  const box = mk('div', 'op-tpl'), head = mk('div', 'op-ahead');
+  ui.tpl = { box, sel: mk('select', 'op-sel'), save: mk('button', 'op-link', 'Save this order'), del: mk('button', 'op-link', 'Delete'), key: null };
+  for (const b of [ui.tpl.save, ui.tpl.del]) b.type = 'button';
+  ui.tpl.sel.setAttribute('aria-label', 'Saved order templates');
+  ui.tpl.sel.onchange = () => applyTemplate(ui.tpl.sel.value);
+  ui.tpl.save.title = 'Saves the quantity, stop, target and this chart\'s accounts (not LIVE ones) as a template';
+  ui.tpl.save.onclick = saveTemplate;
+  ui.tpl.del.onclick = () => { if (ui.tpl.sel.value) D().setQuick(T.removeTemplate(D().quick, ui.tpl.sel.value)); };
+  head.append(mk('span', 'op-lab', 'Templates'), ui.tpl.save);
+  box.append(head, ui.tpl.sel, ui.tpl.del);
+  box.hidden = true;
+  return box;
+}
+function paintTemplates() {
+  const q = D().quick || { on: false, templates: [] }, t = ui.tpl;
+  t.box.hidden = !q.on;
+  const key = JSON.stringify(q.templates);
+  if (key === t.key) { t.del.hidden = !t.sel.value; return; }
+  t.key = key;
+  const was = t.sel.value, o0 = mk('option', '', q.templates.length ? 'Pick a template…' : 'None saved yet');
+  o0.value = '';
+  t.sel.replaceChildren(o0, ...q.templates.map((x) => { const o = mk('option', '', x.name); o.value = x.name; return o; }));
+  t.sel.value = q.templates.some((x) => x.name === was) ? was : '';
+  t.del.hidden = !t.sel.value;
+}
+function saveTemplate() {
+  const cell = selectedCell(), Dk = D();
+  if (!cell || !cell.shown) return;
+  const c = compute(cell), qty = st.riskOn ? NaN : T.parseQty(st.qty);
+  if (!(qty >= 1)) { Dk.toast('err', 'Enter the quantity first: a template saves whole contracts'); return; }
+  const listed = (Dk.state && Dk.state.accounts) || [];
+  const accounts = UI().tradeOf(cell).accounts.filter((id) => listed.some((a) => a.id === id && a.env !== 'live'));   // never LIVE
+  const t = { root: c.root, qty, sl: st.sl.on && c.sl ? c.sl.ticks : 0, tp: st.tp.on && c.tp ? c.tp.ticks : 0, accounts };
+  const r = T.saveTemplate(Dk.quick, { ...t, name: T.templateName(t) });
+  if (r.error) { Dk.toast('err', r.error); return; }
+  Dk.setQuick(r.quick);
+  ui.tpl.sel.value = T.templateName(t);
+  Dk.toast('ok', `Template saved: ${T.templateName(t)}`);
+}
+function applyTemplate(name) {
+  const Dk = D(), tpl = Dk.quick.templates.find((x) => x.name === name), cell = selectedCell();
+  if (!tpl || !cell || !cell.shown) return;
+  Dk.setQty(cell.shown.root, tpl.qty);   // the chart's own size box follows
+  st.qty = ui.qty.value = String(tpl.qty);
+  st.riskOn = false;
+  for (const [k, n] of [['sl', tpl.sl], ['tp', tpl.tp]]) { st[k] = { on: n > 0, unit: 'ticks', value: n > 0 ? String(n) : '' }; ui.ex[k].inp.value = st[k].value; }
+  const plan = T.templatePlan(tpl, UI().tradeOf(cell).accounts, Dk.state);
+  for (const id of [...plan.remove, ...plan.add]) UI().toggleAccount(cell, id, { quiet: false });   // the same guarded tick as Settings > Trading, saved with the layout
+  if (plan.live.length) Dk.toast('err', `Not ticked: ${plan.live.join(', ')} is LIVE. Tick it yourself in Settings > Trading`);
+  paint();
 }
 
 /* A collapsible section (TradingView's "Exits", "Extra settings"): its header toggles st[key]. */
@@ -471,12 +527,12 @@ function symbolChanged() {
 /* ---- paint: texts, classes and disabled states in place ---- */
 function paint() {
   if (!ui) return;
-  const pq = D().prefs.qty;
-  if (pq !== prefQty) {   // the chart's Buy/Sell box changed the size: the form follows (never while typing in it)
-    prefQty = pq;
+  const cell = selectedCell(), root = cell && cell.shown ? cell.shown.root : null;
+  const pq = T.qtyFor(D().prefs, D().quick, root), qk = D().quick && D().quick.on ? `${root}|${pq}` : pq;   // per symbol: a new symbol re-reads its own
+  if (qk !== prefQty) {   // the chart's Buy/Sell box changed the size: the form follows (never while typing in it)
+    prefQty = qk;
     if (!focused(ui.qty) && T.parseQty(st.qty) !== pq) st.qty = ui.qty.value = String(pq);
   }
-  const cell = selectedCell(), root = cell && cell.shown ? cell.shown.root : null;
   if (cell !== seen.cell || root !== seen.root) {
     if (seen.cell && cell !== seen.cell) flashPending = true;   // shown once this chart's accounts paint (it may still be loading)
     seen = { cell, root };
@@ -494,6 +550,7 @@ function paint() {
     return;
   }
 
+  paintTemplates();
   // header: the badge (rebuilt only on a symbol change), the root and its name
   if (root !== logoRoot) { logoRoot = root; ui.logo.replaceChildren(...(root ? [window.HBCell.badgeEl(root, 20)] : [])); }
   if (!cell || !root) {
@@ -956,7 +1013,7 @@ function mount(pg, container) {
   el = container;
   if (!el) return;
   el.classList.add('opanel');
-  st.qty = String(Math.min(T.PANEL_QTY_MAX, Math.max(1, D().prefs.qty)));
+  st.qty = String(Math.min(T.PANEL_QTY_MAX, Math.max(1, T.qtyFor(D().prefs, D().quick, null))));
   build();
   ui.qty.value = st.qty;
   resetExits();
