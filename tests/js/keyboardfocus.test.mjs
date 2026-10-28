@@ -314,7 +314,7 @@ test('reduced motion: the Charts and Lab switches, the run-settings chevron, the
 
 test('the pins follow: every edited script and skin file has its new version', () => {
   const man = JSON.parse(rd('apple/manifest.json'));
-  assert.equal(man.version, 53);
+  assert.equal(man.version, 54);
   assert.match(rd('backtest.html'), /charts\/lab\.js\?v=138"/);
   assert.match(rd('backtest.html'), /charts\/lab\.css\?v=89"/);
   assert.match(rd('backtest.html'), /charts\/charts\.css\?v=58"/);

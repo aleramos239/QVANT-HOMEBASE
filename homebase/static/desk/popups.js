@@ -273,7 +273,7 @@ function dayState(a) {
 function dayTakeBox(id, a) {
   const d = (a && a.day) || {}, v = Number(d.day_lock) || 0, state = `<span data-ro="day">${dayState(a)}</span>`;
   return `<span class="mcap" title="Closed profit that ends the day for this account: no new entry after it, for any strategy. 0 = off">Day take $</span>
-    <input type="number" min="0" max="100000" step="50" value="${v || ""}" placeholder="OFF" style="width:72px" aria-label="Day take, dollars (0 = OFF)"
+    <input class="hb-field" type="number" min="0" max="100000" step="50" value="${v || ""}" placeholder="OFF" style="width:72px" aria-label="Day take, dollars (0 = OFF)"
       onkeydown="if(event.key==='Enter')setDayTake(${jsArg(id)}, this.value)"><button class="btn btn-outline btn-sm"
       onclick="setDayTake(${jsArg(id)}, this.previousElementSibling.value)">Set</button>${state}`;
 }
@@ -426,7 +426,7 @@ function renderGroupMgr(force) {
   const have = new Set(known.map(k => k[0]));
   for (const g of groups) for (const id of g.members) if (!have.has(id)) { have.add(id); known.push([id, id + " (not on the Desk any more)"]); }
   const glist = groups.map(g => `<div class="acct" style="padding:8px 0;gap:8px;align-items:center">
-      <input class="grp-sel" value="${esc(g.name)}" maxlength="40" spellcheck="false" aria-label="Name of ${esc(g.name)}" style="flex:1;min-width:0;max-width:none"
+      <input class="hb-field grp-sel" value="${esc(g.name)}" maxlength="40" spellcheck="false" aria-label="Name of ${esc(g.name)}" style="flex:1;min-width:0;max-width:none"
         onchange="renameGroup(${jsArg(g.id)}, this.value)">
       <span class="hint" style="font-size:11.5px;white-space:nowrap">${g.members.length} in it</span>
       <button class="btn btn-outline btn-sm" onclick="deleteGroup(${jsArg(g.id)})">Delete</button></div>`).join("");
@@ -434,7 +434,7 @@ function renderGroupMgr(force) {
     const cur = groups.find(g => g.members.includes(id));
     return `<div class="acct" style="padding:7px 0;gap:8px;align-items:center">
       <span class="nm" style="font-size:13px;flex:1;min-width:0">${esc(label)}</span>
-      <select class="grp-sel" aria-label="Group of ${esc(label)}" onchange="moveToGroup(${jsArg(id)}, this.value)">
+      <select class="hb-field grp-sel" aria-label="Group of ${esc(label)}" onchange="moveToGroup(${jsArg(id)}, this.value)">
         <option value="">${esc(DeskLab.NO_GROUP)}</option>${groups.map(g => `<option value="${esc(g.id)}"${cur && cur.id === g.id ? " selected" : ""}>${esc(g.name)}</option>`).join("")}
       </select></div>`;
   }).join("");

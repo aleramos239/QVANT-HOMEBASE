@@ -413,7 +413,19 @@ html.hb-apple .field input, html.hb-apple .modal input[type="text"], html.hb-app
   height: 24px; padding: 0 7px; border: 0; border-radius: var(--hb-r-ctl); background: var(--a-field); box-shadow: var(--a-field-shadow-strong); color: var(--a-label);
   font-family: var(--a-font); font-size: 13px; line-height: 16px; }
 html.hb-apple .field input { width: 100%; }
-html.hb-apple .field input:focus, html.hb-apple .modal input:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
+/* a text field or tick box no rule above names still gets the house look (zero specificity: every named rule wins) */
+:where(html.hb-apple) :where(input[type="text"]),
+:where(html.hb-apple) :where(input[type="number"]),
+:where(html.hb-apple) :where(input[type="search"]),
+:where(html.hb-apple) :where(input:not([type])) {
+  height: 24px; padding: 0 7px; box-sizing: border-box; border: 0; border-radius: var(--hb-r-ctl); background: var(--a-field); box-shadow: var(--a-field-shadow);
+  color: var(--a-label); font-family: var(--a-font); font-size: 13px; line-height: 16px; }
+:where(html.hb-apple) :where(input[type="text"]):focus-visible,
+:where(html.hb-apple) :where(input[type="number"]):focus-visible,
+:where(html.hb-apple) :where(input[type="search"]):focus-visible,
+:where(html.hb-apple) :where(input:not([type])):focus-visible {
+  outline: 3.5px solid var(--a-focus); outline-offset: 0; }
+:where(html.hb-apple) :where(input[type="checkbox"]) { width: 14px; height: 14px; margin: 0 4px 0 0; vertical-align: -2px; accent-color: var(--a-accent); }
 html.hb-apple .wnote { margin: 8px 0 0; font-size: 11px; line-height: 14px; color: var(--a-label-2); }
 html.hb-apple .slabel, html.hb-apple .slabel2 { margin: 14px 0 6px; font-size: 11px; line-height: 14px; font-weight: 700; letter-spacing: normal; text-transform: none; color: var(--a-label-2); }
 /* the connect wizard */
