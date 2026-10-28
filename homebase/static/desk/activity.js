@@ -288,6 +288,8 @@ const FEED_OPEN = new Set();   // rows opened to their raw line, by ts|et|event|
 function renderActivity(journal) {
   FEED_ROWS = (Array.isArray(journal) ? journal : []).filter(r => r && typeof r === "object" &&
     !(typeof r.event === "string" && r.event.indexOf("lab_") === 0 && typeof DeskLab !== "undefined" && DeskLab.hiddenEvent(r.event)));      // the Lab's named bookkeeping (DeskLab.HIDDEN_EVENTS) shows nothing; every other Lab event shows
+  for (const r of FEED_ROWS) { if (r.event) ACT_SEEN.events.add(r.event); if (r.account) ACT_SEEN.accts.add(r.account); }
+  fillActFilters();
   const sig = JSON.stringify([FEED_ROWS, FEED_RAW, [...FEED_OPEN], ACT_WHO, ACT_DAYS, ACT_ROWS === null]);
   if (sig === FEED_SIG) return;           // nothing changed: leave the rows (and a hovered tooltip) alone
   FEED_SIG = sig;
@@ -308,8 +310,9 @@ const actDay = (d) => { try { return new Date(d + "T12:00:00Z").toLocaleDateStri
 /* Activity for one strategy or one group, or for more than today (owner 2026-10-26: "see which strategy copied on which account
    and when"): the Desk's journal for those days (GET /api/journal, strategy/group/days), read again every 15 s while the page is
    open. Everything, today, stays the status poll's own tail. A group shows its strategies' lines and its account cycle's. */
-let ACT_WHO = "", ACT_DAYS = 1, ACT_ROWS = null, ACT_BUSY = false, ACT_AT = 0;
-const actFiltered = () => ACT_WHO !== "" || ACT_DAYS > 1;
+let ACT_WHO = "", ACT_DAYS = 1, ACT_EVENT = "", ACT_ACCT = "", ACT_DATE = "", ACT_ROWS = null, ACT_BUSY = false, ACT_AT = 0;
+const ACT_SEEN = {events: new Set(), accts: new Set()};      // the event types and accounts any rows shown carried: the choices of the two menus
+const actFiltered = () => ACT_WHO !== "" || ACT_DAYS > 1 || ACT_EVENT !== "" || ACT_ACCT !== "" || ACT_DATE !== "";
 const actRows = (tail) => actFiltered() ? (ACT_ROWS || []) : tail;
 function actQuery() {
   const p = new URLSearchParams({days: String(ACT_DAYS), limit: "2000"});
@@ -318,7 +321,16 @@ function actQuery() {
     p.set("group", id);
     p.set("strategy", (g ? g.members : []).join(","));
   } else if (ACT_WHO.startsWith("s:")) p.set("strategy", ACT_WHO.slice(2));
+  if (ACT_EVENT) p.set("event", ACT_EVENT);
+  if (ACT_ACCT) p.set("account", ACT_ACCT);
+  if (ACT_DATE) p.set("date", ACT_DATE);          // the last day of the period (the route reads `days` back from it)
   return "/api/journal?" + p;
+}
+/* A filter menu's choices: its first ("All ..."), then what was seen, sorted by name; a pick no row carries now stays on it. */
+function actOpts(first, seen, cur, label) {
+  const keys = [...new Set(seen)].sort();
+  if (cur && !keys.includes(cur)) keys.push(cur);
+  return [["", first]].concat(keys.map(k => [k, label(k)]));
 }
 async function loadActivity(force) {
   if (!actFiltered() || DEMO || ACT_BUSY || (!force && Date.now() - ACT_AT < 15000)) return;
@@ -350,21 +362,41 @@ function fillActWho() {
   }
   sel.value = ACT_WHO;
 }
+function fillActFilters() {
+  fillActPick($("#actEvent"), actOpts("All events", [...ACT_SEEN.events], ACT_EVENT, e => e.replace(/_/g, " ")), ACT_EVENT);
+  fillActPick($("#actAcct"), actOpts("All accounts", [...ACT_SEEN.accts, ...Object.keys((ST && ST.accounts) || {})], ACT_ACCT,
+    k => (ST && ST.accounts && ST.accounts[k] && ST.accounts[k].label) || k), ACT_ACCT);
+}
+function fillActPick(sel, opts, cur) {
+  if (!sel || document.activeElement === sel) return;
+  const sig = JSON.stringify(opts);
+  if (sel._sig !== sig) {
+    sel._sig = sig;
+    sel.innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join("");
+  }
+  sel.value = cur;
+}
 function setActivity(who, days) {
   ACT_WHO = who; ACT_DAYS = days; ACT_ROWS = null; ACT_AT = 0;
   fillActWho();
   const d = $("#actDays");
   if (d) d.value = String(days);
+  const dt = $("#actDate");
+  if (dt) dt.value = ACT_DATE;
   renderActivity(actRows([]));
   if (actFiltered()) loadActivity(true); else if (ST) render();
 }
 /* "Activity ›" on a strategy's or a group's page: its lines of the last 7 days. */
 function openActivity(who) {
+  ACT_EVENT = ACT_ACCT = ACT_DATE = "";          // a strategy's or a group's page opens its own lines, not the last filters
   setActivity(who, 7);
   setView("activity");
 }
 $("#actWho")?.addEventListener("change", (e) => setActivity(e.target.value, ACT_DAYS));
 $("#actDays")?.addEventListener("change", (e) => setActivity(ACT_WHO, Math.max(1, parseInt(e.target.value, 10) || 1)));
+$("#actEvent")?.addEventListener("change", (e) => { ACT_EVENT = e.target.value; setActivity(ACT_WHO, ACT_DAYS); });
+$("#actAcct")?.addEventListener("change", (e) => { ACT_ACCT = e.target.value; setActivity(ACT_WHO, ACT_DAYS); });
+$("#actDate")?.addEventListener("change", (e) => { ACT_DATE = e.target.value; setActivity(ACT_WHO, ACT_DAYS); });
 $("#feed").addEventListener("click", (e) => {
   const row = e.target && e.target.closest && e.target.closest(".feed-row");
   if (!row || FEED_RAW) return;
