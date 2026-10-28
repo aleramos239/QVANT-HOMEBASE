@@ -23,6 +23,13 @@
 
 html.hb-apple {
   --hb-bubble-r: 8px;                      /* one corner for every bubble: buttons, pills, segments, platters, chips, tags (change here, nowhere else) */
+  /* the spacing steps (px) a rule may name instead of a bare number; the radii and field shadows the sheets already repeat */
+  --sp-2: 2px; --sp-4: 4px; --sp-6: 6px; --sp-8: 8px; --sp-10: 10px; --sp-12: 12px; --sp-14: 14px; --sp-16: 16px; --sp-20: 20px; --sp-24: 24px;
+  --hb-r-ctl: 6px;                         /* a 24 px control: field, small button, tab, swatch */
+  --hb-r-mini: 5px;                        /* the 22 px quantity field */
+  --hb-menu-r: 13px;                       /* a menu and a popover */
+  --a-field-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08);          /* a text field's hairline (--a-field-edge follows light, dark and more contrast) */
+  --a-field-shadow-strong: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .1);
   color-scheme: light;
   --a-font: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   --a-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
@@ -264,8 +271,8 @@ html.hb-apple .hb-btn:active { background: var(--a-fill-press); transform: none;
 html.hb-apple .hb-btn[disabled], html.hb-apple .hb-btn:disabled { background: var(--a-fill-off); color: var(--a-label-3); }
 
 /* text field: 24 high, radius 6, the field colour with a hairline; search fields are capsules */
-html.hb-apple .hb-field { -webkit-appearance: none; appearance: none; height: 24px; padding: 0 7px; box-sizing: border-box; border: 0; border-radius: 6px; background: var(--a-field);
-  box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08); color: var(--a-label); font-size: 13px; line-height: 16px; }
+html.hb-apple .hb-field { -webkit-appearance: none; appearance: none; height: 24px; padding: 0 7px; box-sizing: border-box; border: 0; border-radius: var(--hb-r-ctl); background: var(--a-field);
+  box-shadow: var(--a-field-shadow); color: var(--a-label); font-size: 13px; line-height: 16px; }
 html.hb-apple .hb-field::placeholder { color: var(--a-label-2); }
 html.hb-apple .hb-field:focus, html.hb-apple .hb-field:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
 
@@ -318,3 +325,9 @@ html.hb-apple #tbFavs .tb-btn.active, html.hb-apple .tab-btn.active, html.hb-app
 html.hb-apple #statusPill.pill.armed, html.hb-apple .tag, html.hb-apple .tag-live, html.hb-apple .tag-paper, html.hb-apple .hb-badge,
 html.hb-apple .legend .badge, html.hb-apple .hb-news-chip, html.hb-apple .hb-news-src, html.hb-apple .hb-news-tag, html.hb-apple .rs-chip,
 html.hb-apple .tst-badge, html.hb-apple .tl-now { height: 20px !important; border-radius: var(--hb-bubble-r) !important; font-size: 11px !important; line-height: 14px !important; font-weight: 590 !important; letter-spacing: normal !important; padding-inline: 8px !important; }
+
+/* ---- the page's own .btn on the system size: one copy for the Desk and Charts (the Lab scopes its own, `.lab-page .btn`, above this) ------------ */
+html.hb-apple .btn { padding: 0 14.5px; border: 0; gap: 5px; background: var(--a-fill); color: var(--a-label); box-shadow: none; transform: none; transition: background-color 100ms ease; }
+html.hb-apple .btn:hover { background: var(--a-fill); color: var(--a-label); }
+html.hb-apple .btn:active { background: var(--a-fill-press); transform: none; }
+html.hb-apple .btn:disabled { opacity: 1; background: var(--a-fill-off); color: var(--a-label-3); }

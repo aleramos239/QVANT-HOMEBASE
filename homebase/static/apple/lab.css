@@ -77,8 +77,7 @@ html.hb-apple .hb-tb .lab-run.hb-tbtn[disabled] { opacity: .45; color: var(--a-o
 html.hb-apple .hb-tb .lab-run.hb-tbtn.busy { opacity: 1; }
 html.hb-apple .hb-tb .lab-run.hb-tbtn.busy::before { width: auto; height: auto; border: 0; border-radius: var(--hb-bubble-r); animation: none; }
 html.hb-apple .hb-tb .lab-run.busy .sf { width: 12px; height: 12px; box-sizing: border-box; border: 1.5px solid currentColor; border-top-color: transparent; border-radius: 50%; background: transparent;
-  -webkit-mask: none; mask: none; animation: hb-lab-spin .8s linear infinite; }
-@keyframes hb-lab-spin { to { transform: rotate(360deg); } }
+  -webkit-mask: none; mask: none; animation: hb-spin .8s linear infinite; }
 html.hb-apple.hb-inactive .hb-tb .lab-run.hb-tbtn { background: var(--a-platter) !important; color: var(--a-label) !important; box-shadow: var(--a-platter-shadow); }
 /* small windows: with the inspector open the trailing group would reach the centred switcher, so it joins the flow */
 @media (max-width: 1300px) { html.hb-apple:not(.hb-insp-off) .hb-tb-c { position: static; transform: none; flex: none; } }
@@ -302,8 +301,8 @@ html.hb-apple #labRes .rs-set[open] > summary::after { transform: rotate(90deg);
 html.hb-apple #labRes .rs-set .grid { display: grid; grid-template-columns: minmax(0, 1fr) 104px; gap: 13px 10px; align-items: center; padding: 7px 10px 7px; border-top: 1px solid var(--a-group-sep); margin: 0; }
 html.hb-apple #labRes .rs-set label { font-size: 13px; line-height: 16px; color: var(--a-label); }
 html.hb-apple #labRes .rs-show .grid { border-top: 0; }   /* the Show picker is a card of its own, not a section under a title */
-html.hb-apple #labRes .rs-set input, html.hb-apple #labRes .rs-set select { -webkit-appearance: none; appearance: none; justify-self: end; width: 100%; height: 24px; padding: 0 7px; border: 0; border-radius: 6px; background: var(--a-field); color: var(--a-label);
-  box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08); font-family: var(--a-font); font-size: 13px; line-height: 16px; font-variant-numeric: tabular-nums; text-align: right; outline: none; }
+html.hb-apple #labRes .rs-set input, html.hb-apple #labRes .rs-set select { -webkit-appearance: none; appearance: none; justify-self: end; width: 100%; height: 24px; padding: 0 7px; border: 0; border-radius: var(--hb-r-ctl); background: var(--a-field); color: var(--a-label);
+  box-shadow: var(--a-field-shadow); font-family: var(--a-font); font-size: 13px; line-height: 16px; font-variant-numeric: tabular-nums; text-align: right; outline: none; }
 html.hb-apple #labRes .rs-set input[type="number"]::-webkit-inner-spin-button, html.hb-apple #labRes .rs-set input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 /* a pop-up button: the system's filled control with the up/down chevrons (WebKit sets a select's text by its direction, so the text stays leading) */
 html.hb-apple #labRes .rs-set select { width: max-content; max-width: 100%; text-overflow: ellipsis; padding: 0 22px 0 8px; box-shadow: none; text-align: left; color: var(--a-label);
@@ -324,21 +323,21 @@ html.hb-apple #labRes .rs-bar { height: 6px; margin: 9px 0 12px; border-radius: 
 html.hb-apple #labRes .rs-bar i { border-radius: 3px; background: var(--a-accent-on); }
 
 /* ---- buttons, the page's own classes on the system sizes ----------------------------------------------------------- */
-html.hb-apple .lab-page .btn { -webkit-appearance: none; appearance: none; display: inline-flex; align-items: center; justify-content: center; flex: none; height: 28px; padding: 0 14.5px; border: 0; border-radius: var(--hb-bubble-r); gap: 5px;
-  background: var(--a-fill); color: var(--a-label); box-shadow: none; font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; transform: none; cursor: default; transition: background-color 100ms ease; }
+html.hb-apple .lab-page .btn { -webkit-appearance: none; appearance: none; display: inline-flex; align-items: center; justify-content: center; flex: none; padding: 0 14.5px; border: 0; gap: 5px;
+  background: var(--a-fill); color: var(--a-label); box-shadow: none; transform: none; cursor: default; transition: background-color 100ms ease; }
 html.hb-apple .lab-page .btn:hover { background: var(--a-fill); color: var(--a-label); }
 html.hb-apple .lab-page .btn:active { background: var(--a-fill-press); transform: none; }
 html.hb-apple .lab-page .btn:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
 html.hb-apple .lab-page .btn:disabled { opacity: 1; background: var(--a-fill-off); color: var(--a-label-3); }
-html.hb-apple .lab-page .btn.btn-sm { height: 24px; padding: 0 12.5px; border-radius: 6px; }
-html.hb-apple .lab-page .btn.btn-lg { height: 28px; padding: 0 14.5px; border-radius: var(--hb-bubble-r); }
+html.hb-apple .lab-page .btn.btn-sm { padding: 0 12.5px; }
+html.hb-apple .lab-page .btn.btn-lg { padding: 0 14.5px; }
 html.hb-apple .lab-page .btn.btn-default, html.hb-apple .lab-page .btn.btn-primary { background: var(--a-accent); color: var(--a-on-accent); }
 html.hb-apple .lab-page .btn.btn-default:hover, html.hb-apple .lab-page .btn.btn-primary:hover { background: var(--a-accent); color: var(--a-on-accent); }
 html.hb-apple .lab-page .btn.btn-default:active, html.hb-apple .lab-page .btn.btn-primary:active { background: color-mix(in srgb, var(--a-accent) 86%, #000); }
 html.hb-apple.hb-inactive .lab-page .btn.btn-default { background: var(--a-fill); color: var(--a-label); }
 
 /* ---- menus: the system menu ------------------------------------------------------------------------------------------ */
-html.hb-apple .lab-menu { z-index: 90; min-width: 200px; max-width: 340px; padding: 5px; border: 0; border-radius: 13px; background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
+html.hb-apple .lab-menu { z-index: 90; min-width: 200px; max-width: 340px; padding: 5px; border: 0; border-radius: var(--hb-menu-r); background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
   box-shadow: var(--a-menu-shadow); animation: none; font-size: 13px; line-height: 16px; color: var(--a-label); }
 html.hb-apple .lab-menu button { -webkit-appearance: none; appearance: none; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; width: 100%; min-height: 24px; padding: 4px 9px; border: 0; border-radius: 8px;
   background: transparent; color: var(--a-label); font-size: 13px; line-height: 16px; font-weight: 400; text-align: left; cursor: default; }
@@ -362,12 +361,12 @@ html.hb-apple .lab-dlg.wide { width: min(680px, calc(100vw - 32px)); }
 html.hb-apple .lab-dlg h2 { margin: 0 0 6px; font-size: 13px; line-height: 16px; font-weight: 700; letter-spacing: normal; color: var(--a-label); }
 html.hb-apple .lab-dlg p { margin: 0 0 12px; font-size: 13px; line-height: 16px; color: var(--a-label); }
 html.hb-apple .lab-dlg p b { font-weight: 590; }
-html.hb-apple .lab-dlg textarea { display: block; width: 100%; min-height: 84px; padding: 5px 7px; border: 0; border-radius: 6px; background: var(--a-field); color: var(--a-label); box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .1);
+html.hb-apple .lab-dlg textarea { display: block; width: 100%; min-height: 84px; padding: 5px 7px; border: 0; border-radius: var(--hb-r-ctl); background: var(--a-field); color: var(--a-label); box-shadow: var(--a-field-shadow-strong);
   font-family: var(--a-font); font-size: 13px; line-height: 16px; resize: vertical; outline: none; }
 html.hb-apple .lab-dlg textarea::placeholder { color: var(--a-label-2); }
 html.hb-apple .lab-dlg textarea:focus, html.hb-apple .lab-dlg textarea:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; box-shadow: 0 0 0 1px var(--a-field-edge); }
 /* a group's name: a text field, and what is wrong with it underneath */
-html.hb-apple .lab-dlg input { display: block; width: 100%; height: 24px; padding: 0 7px; border: 0; border-radius: 6px; background: var(--a-field); color: var(--a-label); box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .1);
+html.hb-apple .lab-dlg input { display: block; width: 100%; height: 24px; padding: 0 7px; border: 0; border-radius: var(--hb-r-ctl); background: var(--a-field); color: var(--a-label); box-shadow: var(--a-field-shadow-strong);
   font-family: var(--a-font); font-size: 13px; line-height: 16px; outline: none; }
 html.hb-apple .lab-dlg h2 + input { margin-top: 10px; }
 html.hb-apple .lab-dlg input::placeholder { color: var(--a-label-2); }
@@ -426,7 +425,7 @@ html.hb-apple #lab .bp-table tfoot td { background: var(--a-group); border-top: 
 html.hb-apple #lab .bp-empty { padding: 20px; font-size: 13px; line-height: 16px; color: var(--a-label-2); }
 
 /* ---- the chart shell's own menus, dialogs and toasts ------------------------------------------------------------------------ */
-html.hb-apple .lab-page .menu { padding: 5px; border: 0; border-radius: 13px; background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-menu-shadow);
+html.hb-apple .lab-page .menu { padding: 5px; border: 0; border-radius: var(--hb-menu-r); background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-menu-shadow);
   font-size: 13px; line-height: 16px; color: var(--a-label); }
 html.hb-apple .lab-page .menu-i { height: 24px; gap: 8px; padding: 0 9px; border-radius: 8px; font-size: 13px; line-height: 16px; color: var(--a-label); }
 html.hb-apple .lab-page .menu-i:hover, html.hb-apple .lab-page .menu-i:focus-visible { background: var(--a-accent); color: var(--a-on-accent); outline: none; }

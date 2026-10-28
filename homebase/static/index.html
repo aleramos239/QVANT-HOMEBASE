@@ -11,7 +11,7 @@
     document.documentElement.setAttribute('data-theme', (_t==='light'||_t==='dark') ? _t : 'light');
   }catch(_){ document.documentElement.setAttribute('data-theme','light'); }
 </script>
-<link rel="stylesheet" href="/static/shadcn.css?v=3">
+<link rel="stylesheet" href="/static/shadcn.css?v=4">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
 <script src="/static/desklab.js?v=41"></script>
@@ -78,7 +78,7 @@
     backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
     -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
     border-top:1px solid var(--glass-edge); --muted-foreground:var(--glass-text-2); }
-  .scroll{ flex:1 0 auto; padding:22px 24px 48px; }
+  .scroll{ flex:1 0 auto; }
   /* frosted cards (strategies, accounts, the activity log) */
   .card{ background:var(--glass-bg);
     backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -87,7 +87,7 @@
   /* a card is its own stacking context now (backdrop-filter): one holding an open + Assign menu is
      lifted, or the next card would paint over the part of the menu that hangs below it */
   .card:has(.amenu:not([hidden])){ position:relative; z-index:45; }
-  .view-wrap{ max-width:980px; margin:0 auto; }
+  .view-wrap{ margin:0 auto; }
   .spacer{ flex:1; }
 
   .pill{ display:inline-flex; align-items:center; gap:4px; white-space:nowrap;
@@ -551,7 +551,7 @@
     .master{ flex-wrap:wrap; justify-content:flex-end; row-gap:8px; max-width:100%; }
   }
 </style>
-<link rel="stylesheet" href="/static/apple.css?v=12">
+<link rel="stylesheet" href="/static/apple.css?v=13">
 <link rel="stylesheet" href="/static/hb.css?v=8">
 <script src="/static/apple/web.js?v=2" data-tab="desk"></script>
 </head>
