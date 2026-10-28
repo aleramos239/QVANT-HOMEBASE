@@ -174,6 +174,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                                 compute_readiness=compute_readiness, engine=engine, feed_status=feed.status,
                                 journal_cache=journal_cache, labdesk=labdesk, level_timer=level_timer,
                                 notices=acc.notices, power_status=power_status, state_dir=lambda: state_dir(), timer=timer)
+    routes.deploy.register(app, STATIC=STATIC)
     routes.control.register(app, _kill_lock=_kill_lock, adapters=adapters, cfg=cfg, desk=desk, engine=engine)
     routes.accounts.register(app, ADD_MANY_MAX=ADD_MANY_MAX, _add_lock=acc.add_lock, _connect_account=acc.connect_account,
                                   _connect_failed=acc.connect_failed, _drop_account=acc.drop_account, _key_env=_key_env,
