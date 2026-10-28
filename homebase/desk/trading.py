@@ -615,7 +615,7 @@ class ChartDesk:
         try:
             hist = (self.engine.balance_history(aid) if self.engine.balance_history else None) or {}
             return prop_room(_prop_rules(str(prop["rules"])), float(prop["start_balance"]), hist, self.engine._today(),
-                             float(lv["balance"]), float(lv.get("realized_pnl") or 0.0))
+                             float(lv["balance"]))
         except Exception:  # noqa: BLE001
             return None
 

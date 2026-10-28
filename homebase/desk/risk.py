@@ -9,13 +9,16 @@ from .dayrules import (LOCK_LOCK, LOCK_TAKE, DayBook, DayRules, ceil_to_tick, me
                        round_trip_fee, size_for_profit, standing, take_level, take_points)
 
 
-def prop_room(rules: dict, start: float, eod: dict, today: str, balance: float, day_pnl: float) -> dict:
+def prop_room(rules: dict, start: float, eod: dict, today: str, balance: float) -> dict:
     """What a prop account may still lose (read-only; nothing here refuses an order).  `rules` is a propsim rule file,
     `eod` the desk's {date: end-of-day balance}.  The floor trails the best EOD balance by trailing_mll and locks at
     start + lock_floor (the rule files' model: an intraday trail is not modelled).  daily = the day's loss limit plus
-    today's closed P&L (None: no daily limit); drawdown = balance - floor; contracts = cap_micros / 10 minis.
+    today's P&L (None: no daily limit).  Today's P&L is balance minus the last end-of-day balance before today
+    (the start balance when there is none), NOT the adapter's realized_pnl: a paper book's is lifetime; drawdown = balance - floor; contracts = cap_micros / 10 minis.
     The balance is cash: the page takes the open loss off these two."""
     peak = max([start] + [float(v) for d, v in eod.items() if d < today])
+    prior = [float(v) for d, v in sorted(eod.items()) if d < today]
+    day_pnl = balance - (prior[-1] if prior else start)
     floor = peak - float(rules["trailing_mll"])
     if rules.get("lock_floor") is not None:
         floor = min(floor, start + float(rules["lock_floor"]))
