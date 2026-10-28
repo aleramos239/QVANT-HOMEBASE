@@ -154,6 +154,11 @@ const TABS = [
       { label: 'Lines, menu and bottom panel', pref: { key: 'oneClick', kind: 'switch' } },
       { caption: 'Every chart. Off: that surface asks to confirm first. "Don\'t ask again" in a confirm turns its switch on.' },
     ]],
+    // 2026-10-28 (owner D3): off (0) until set -- then a chart click, the menu and the order panel start with a stop this many ticks away
+    ['DEFAULT STOP', [
+      { label: 'Stop for this symbol', pref: { key: 'defStop', kind: 'perRoot', min: 0, max: 10000, note: 'ticks (0 = no stop)' } },
+      { caption: 'Every chart on this symbol. 0 keeps orders as they are: no stop unless you add one, and the Buy / Sell block says NAKED.' },
+    ]],
     // 5.7 (2026-10-27): moved here from the order panel's "Chart preview" (HBOrderPanel's look, this browser's)
     ['ORDER PREVIEW', [
       { label: 'Line', look: { key: 'style', choices: [[0, 'Solid'], [2, 'Dashed'], [1, 'Dotted']] } },
@@ -872,7 +877,18 @@ function mount(box, host) {
     }
     if (r.pref) {   // a viewer-wide trade preference (the one-click switches): every chart's, not this one's
       const { key, kind, min, max, note } = r.pref, cur = host.prefs ? host.prefs() : {};
-      if (kind === 'switch') {
+      if (kind === 'perRoot') {   // one number per symbol (this chart's): host.prefs()[key][root], 0 = off
+        const root = cell.cfg.root, n = mk('input', 'set-num');
+        n.type = 'number'; n.min = String(min); n.max = String(max); n.step = '1';
+        n.value = String((cur[key] || {})[root] || 0);
+        n.setAttribute('aria-label', r.label);
+        n.onchange = () => {
+          const v = Math.round(Number(n.value));
+          if (host.setPrefs) host.setPrefs({ [key]: { ...((host.prefs() || {})[key] || {}), [root]: Number.isFinite(v) ? v : 0 } });
+          n.value = String(((host.prefs ? host.prefs() : cur)[key] || {})[root] || 0);   // shows the clamped value
+        };
+        ctl.append(n, mk('span', 'set-unit', note));
+      } else if (kind === 'switch') {
         const sw = button('switch' + (cur[key] ? ' on' : ''));
         sw.setAttribute('role', 'switch');
         sw.setAttribute('aria-checked', String(!!cur[key]));

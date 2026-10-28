@@ -33,6 +33,7 @@ let el = null;                          // the content container HBPanelShell ha
 let ui = null;                          // element references, built once
 let visible = false;                    // HBPanelShell.setVisible: the panel is open (docked or floating)
 let seen = { cell: null, root: null };  // the chart the form was last painted for
+let defSeen = 0;                       // the default stop (ticks) the form's SL was last pre-filled from
 let formRoot = null;                    // the symbol the form's prices were typed for (reset when it changes)
 let acctKey = null, logoRoot = null;
 let prefQty = null;                     // the shared quantity (the chart's Buy/Sell box) the form last took
@@ -454,7 +455,8 @@ function resetExits() {
   st.tr = { on: false, unit: 'ticks', value: '', after: st.tr.after };
   st.p1 = { on: false, unit: 'ticks', value: '', qty: st.p1.qty };
   if (ui) for (const k of ['be', 'tr', 'p1']) { ui.ex[k].inp.value = ''; ui.ex[k].sel.value = 'ticks'; }
-  for (const [k, n] of [['tp', p.tpTicks], ['sl', p.slTicks]]) {
+  // 2026-10-28 (owner D3): the symbol's default stop (Settings > Trading) pre-fills the SL; 0 = none set, as before
+  for (const [k, n] of [['tp', p.tpTicks], ['sl', p.slTicks || T.defaultStopTicks(p, seen.root)]]) {
     st[k] = { on: n > 0, unit: 'ticks', value: n > 0 ? String(n) : '' };
     if (ui) { ui.ex[k].inp.value = st[k].value; ui.ex[k].sel.value = 'ticks'; }
   }
@@ -483,6 +485,9 @@ function paint() {
     if (formRoot !== null) symbolChanged();
     formRoot = root;
   }
+  // the default stop for this symbol was set or changed in Settings: the exits start over from it (never when it is off and stays off)
+  const defSl = root ? T.defaultStopTicks(D().prefs, root) : 0;
+  if (defSl !== defSeen) { defSeen = defSl; if (root) resetExits(); }
   if (!visible) {   // closed: the chart keeps the order's lines (they still drag, and the ENTRY tag still sends)
     flashPending = false;
     paintPreview(root ? cell : null, root ? compute(cell) : null);

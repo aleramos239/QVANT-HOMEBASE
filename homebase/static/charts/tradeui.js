@@ -326,11 +326,13 @@ function placeOrder({ cell, root, side, type, price = null, qty, exits = undefin
     // N1: a Market order that would attach a bracket (a nonzero SL/TP tick pref) needs a fresh quote to compute
     // it from -- refuse rather than send it naked, with one-click on or off. Not `guardedSend`'s buildBody: this
     // must stop the send before any confirm dialog even opens, not just before the network call.
-    if (T.needsQuoteForBracket(type, prefs.slTicks, prefs.tpTicks) && !q0) {
+    // 2026-10-28 (owner D3): the symbol's default stop from Settings > Trading, off (0) unless he set it: then `pf` IS prefs
+    const defSl = T.defaultStopTicks(prefs, root), pf = defSl > 0 ? { ...prefs, slTicks: defSl } : prefs;
+    if (T.needsQuoteForBracket(type, pf.slTicks, pf.tpTicks) && !q0) {
       D().toast('err', "No recent price — can't attach your stop/target; try again");
       return;
     }
-    ({ sl, tp } = T.bracket(side, ref, prefs, tick));
+    ({ sl, tp } = T.bracket(side, ref, pf, tick));
   }
   const build = (m) => {
     const resolved = T.resolveConfirmedAccounts(shown, m.accounts);
