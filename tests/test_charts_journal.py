@@ -90,7 +90,12 @@ def test_flip_through_zero_splits_the_crossing_fill():
 def test_a_trip_still_open_has_no_exit_or_pnl():
     trips = J.round_trips([fill(1, "Buy", 2, 100.0, ms(10)), fill(2, "Sell", 1, 101.0, ms(10, 5))])
     assert len(trips) == 1 and trips[0]["open"] and trips[0]["exit"] is None and trips[0]["pnl"] is None
-    assert trips[0]["left"] == 1
+    assert trips[0]["left"] == 1 and trips[0]["qty"] == 1                           # what is left, not what was entered
+
+
+def test_fills_of_one_millisecond_pair_in_the_order_they_arrived():
+    trips = J.round_trips([fill("9", "Buy", 1, 100.0, ms(10)), fill("10", "Sell", 1, 101.0, ms(10))])   # "10" < "9" as text
+    assert [(t["side"], t["pnl"]) for t in trips] == [("Buy", 20.0)]
 
 
 def test_accounts_and_symbols_pair_apart_and_input_order_does_not_matter():
@@ -134,6 +139,17 @@ def test_r_stays_empty_without_a_usable_stop():
         assert trips[0]["r"] is None and trips[0]["stop"] is None, recs
 
 
+def test_a_trip_entered_without_a_stop_does_not_inherit_an_earlier_trips_stop():
+    trips = J.round_trips([fill(1, "Buy", 1, 100.0, ms(10, 0, 1)), fill(2, "Sell", 1, 110.0, ms(10, 5)),
+                           fill(3, "Buy", 1, 200.0, ms(11, 0, 1)), fill(4, "Sell", 1, 210.0, ms(11, 5))])
+    J.attach_stops(trips, [order(ms(10), sl=90.0), order(ms(11), sl=None)])        # the second order had no stop
+    assert [(t["stop"], t["r"]) for t in trips] == [(90.0, 1.0), (None, None)]
+    trips = J.round_trips([fill(1, "Buy", 1, 100.0, ms(10, 0, 1)), fill(2, "Sell", 1, 110.0, ms(10, 5)),
+                           fill(3, "Buy", 1, 200.0, ms(11, 0, 1)), fill(4, "Sell", 1, 210.0, ms(11, 5))])
+    J.attach_stops(trips, [order(ms(10), sl=90.0)])                                  # no order at all for the second
+    assert [t["stop"] for t in trips] == [90.0, None]
+
+
 # ---- bot runs from the journal (days before the recorder) ---------------------------------------------------------
 def test_bot_trips_from_entry_and_exit_lines():
     recs = [{"ts": ms(9, 30, 1) / 1000, "event": "entry_fill", "strategy": "b1", "account": "a1", "side": "Buy",
@@ -167,6 +183,32 @@ def test_record_fill_writes_one_line_per_fill_and_reads_back_deduped(tmp_path):
     assert [(f["id"], f["side"], f["price"], f["account"]) for f in got] == [(1, "Buy", 100.25, "a1"), (2, "Sell", 101.0, "a1")]
     assert got[0]["ms"] == int(dt.datetime(2026, 10, 27, 14, 3, 5, 123000, dt.timezone.utc).timestamp() * 1000)
     assert J.read_fills(d, "2026-10-26") == []
+
+
+def state_msg(*pos, account="a1"):
+    return {"type": "desk", "event": "state",
+            "data": {"accounts": [{"id": account, "positions": [{"symbol": s, "root": "NQ", "net": n, "avg_price": p} for s, n, p in pos]}]}}
+
+
+def test_a_position_open_when_the_log_starts_is_carried_in_so_its_exit_closes_it(tmp_path):
+    d = tmp_path / "fills"
+    now = ms(10, 30)
+    J.record_carried(d, state_msg(("NQZ6", 2, 100.0), ("NQZ6", 0, 0)), now)
+    J.record_carried(d, state_msg(("NQZ6", 2, 100.0)), now + 60000)                 # a reconnect: already carried
+    J.record_fill(d, desk_msg(5, t="2026-10-27T14:45:00Z", side="Sell", qty=2, price=101.0))
+    trips = J.round_trips(J.read_fills(d, DAY))
+    assert [(t["side"], t["qty"], t["entry"], t["exit"], t["pnl"], t["open"]) for t in trips] == [("Buy", 2, 100.0, 101.0, 40.0, False)]
+
+
+def test_carried_in_only_when_the_log_has_nothing_for_that_contract_and_never_raises(tmp_path):
+    d = tmp_path / "fills"
+    J.record_fill(d, desk_msg(1, t="2026-10-27T14:00:00Z"))                         # the log already knows this account's long 1
+    J.record_carried(d, state_msg(("NQZ6", 1, 100.25)), ms(10, 30))
+    assert [f["id"] for f in J.read_fills(d, DAY)] == [1]
+    for msg in (desk_msg(1), {"type": "desk", "down": "x"}, "junk", None, {"event": "state", "data": {"accounts": "x"}},
+                state_msg(("NQZ6", "two", 1.0)), state_msg(("NQZ6", 1, None)), {"event": "state", "data": {"accounts": [5, {"id": 1}]}}):
+        J.record_carried(d, msg, ms(10, 30))
+    assert [f["id"] for f in J.read_fills(d, DAY)] == [1]
 
 
 def test_record_fill_ignores_everything_else_and_never_raises(tmp_path):

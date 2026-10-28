@@ -46,7 +46,7 @@ from .desk import Fanout, Quotes, register as register_desk
 from .export import export_router
 from .refresh import refresh_router
 from .history import History
-from .journal import Notes as JournalNotes, record_fill as journal_record_fill
+from .journal import Notes as JournalNotes, record_carried as journal_record_carried, record_fill as journal_record_fill
 from .hub import Hub, Stream
 from .known import Known
 from . import lagwatch
@@ -432,6 +432,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         desk_fan.publish(msg)
         if not replay:
             journal_record_fill(journal_dir / "fills", msg)       # a copy of each fill, for the Fills tab's past days
+            journal_record_carried(journal_dir / "fills", msg, int(time.time() * 1000))    # and a position open before it began
 
     def fan(msg: dict) -> None:
         for c in list(conns):

@@ -93,6 +93,30 @@ def record_fill(fills_dir: Path, msg) -> None:
         pass
 
 
+def record_carried(fills_dir: Path, msg, now_ms: int) -> None:
+    """The log starts late when the chart service restarts with a position open: its exit would then show as a trip the
+    other way. On a desk 'state' message, log a position the log has no fills for as one Buy/Sell at the account's average
+    price, so the exit closes it. Never raises."""
+    try:
+        if not isinstance(msg, dict) or msg.get("event") != "state":
+            return                                  # a state is rare (a connect or resync); a fill never reads the log here
+        accounts = msg["data"]["accounts"]
+        path = fills_dir / f"{desk_day_of_ms(now_ms)}.jsonl"
+        known = {(f.get("account"), f.get("symbol")) for f in _jsonl.read_all(path)}
+        for a in accounts if isinstance(accounts, list) else []:
+            for p in a.get("positions") or []:
+                net, price = _num(p.get("net")), _num(p.get("avg_price"))
+                if not net or price is None or not isinstance(p.get("symbol"), str) or (a.get("id"), p["symbol"]) in known:
+                    continue
+                fills_dir.mkdir(parents=True, exist_ok=True)
+                _jsonl.append(path, {"ms": now_ms, "account": a["id"], "id": f"carried-{now_ms}-{p['symbol']}", "order_id": None,
+                                     "symbol": p["symbol"], "side": "Buy" if net > 0 else "Sell", "qty": abs(net), "price": price,
+                                     "owner": None})
+                known.add((a["id"], p["symbol"]))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def read_fills(fills_dir: Path, day: str) -> list[dict]:
     """The logged fills of a Desk day, once each (the desk repeats a notice after a resync)."""
     seen, out = set(), []
@@ -109,7 +133,7 @@ def _trip(account, symbol, owner, d, entries, exits, left) -> dict:
     eq = sum(q for q, _, _ in entries)
     entry = sum(q * p for q, p, _ in entries) / eq
     t = {"id": f"{account}|{symbol}|{entries[0][2]}", "account": account, "symbol": symbol, "owner": owner,
-         "side": "Buy" if d > 0 else "Sell", "qty": eq, "entry": entry, "entry_ms": entries[0][2], "exit": None,
+         "side": "Buy" if d > 0 else "Sell", "qty": left or eq, "entry": entry, "entry_ms": entries[0][2], "exit": None,
          "exit_ms": None, "pnl": None, "stop": None, "r": None, "open": left > 0, "left": left, "source": "fills"}
     if not left:
         xq = sum(q for q, _, _ in exits)
@@ -130,11 +154,11 @@ def round_trips(fills: list) -> list[dict]:
         if not qty or qty <= 0 or price is None or ms is None or f.get("side") not in ("Buy", "Sell"):
             continue
         clean.append((int(ms), str(f.get("account")), str(f.get("symbol")), 1 if f["side"] == "Buy" else -1, qty, price,
-                      f.get("owner"), str(f.get("id"))))
-    clean.sort(key=lambda c: (c[0], c[7]))
+                      f.get("owner")))
+    clean.sort(key=lambda c: c[0])         # stable: fills of one millisecond keep the order they were logged in
     book: dict = {}            # (account, symbol) -> [dir, entries, exits, net, owner]
     out = []
-    for ms, acct, sym, sgn, qty, price, owner, _ in clean:
+    for ms, acct, sym, sgn, qty, price, owner in clean:
         while qty > 0:
             b = book.setdefault((acct, sym), [0, [], [], 0.0, owner])
             if b[3] == 0:
@@ -167,18 +191,23 @@ def _r(t: dict) -> None:
 
 def attach_stops(trips: list[dict], records: list) -> None:
     """Give each fills trip the stop of the last accepted chart order that opened it (same account, contract and side,
-    sent before its first fill), and its R. No such order: no stop, no R."""
+    sent before its first fill, one order for one trip), and its R. No such order, or one sent without a stop: no stop, no R.
+    shortcut: a scale-in order sent after the first fill is not matched to its trip, upgrade when that matters."""
     orders = [r for r in records if isinstance(r, dict) and r.get("event") == "manual_order" and r.get("ok") is True
-              and _num(r.get("sl")) is not None and _num(r.get("ts")) is not None]
+              and _num(r.get("ts")) is not None]
     orders.sort(key=lambda r: r["ts"])
+    used = set()
     for t in trips:
         if t["source"] != "fills":
             continue
-        for r in reversed(orders):
-            if (r.get("account") == t["account"] and r.get("side") == t["side"]
+        for i in range(len(orders) - 1, -1, -1):
+            r = orders[i]
+            if (i not in used and r.get("account") == t["account"] and r.get("side") == t["side"]
                     and root_of(r.get("contract") or r.get("root")) == root_of(t["symbol"])
                     and r["ts"] * 1000 <= t["entry_ms"] + STOP_SLACK_MS):
-                t["stop"] = float(r["sl"])
+                used.add(i)
+                sl = _num(r.get("sl"))              # an order without a stop still opened this trip: it must not borrow an older one
+                t["stop"] = sl
                 break
         _r(t)
 
