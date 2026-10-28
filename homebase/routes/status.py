@@ -11,7 +11,7 @@ from pathlib import Path
 
 from fastapi.responses import FileResponse
 
-from ..backtest.slots import backtests_off
+from ..backtest.slots import backtests_off, status as backtest_slots
 from ..desk import labdesk as labdesk_mod
 from ..desk.metrics import live_metrics
 
@@ -58,6 +58,7 @@ def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapter
         return {
             "armed": cfg.armed,
             "machine": "server" if backtests_off() else "mac",   # read-only: the trading server has ~/.homebase/no_backtests
+            "backtests": backtest_slots(),   # read-only: {off} on the server, else the cap, the slots held, a quiet window
             "chart_trading": asdict(cfg.chart_trading),
             "et_now": engine.now_et().isoformat(timespec="seconds"),
             "readiness": compute_readiness(engine.now_et(), cfg, engine,

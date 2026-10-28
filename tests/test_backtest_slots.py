@@ -398,3 +398,27 @@ def test_the_trading_server_starts_no_backtest_while_its_switch_file_exists(tmp_
         with pytest.raises(ValueError, match="the Chicago server is for trading only"):
             m.submit({"strategy": "anything"})
     assert not list((base / "runs").glob("*")) if (base / "runs").exists() else True
+
+
+def test_status_reads_the_cap_the_running_count_and_the_server_switch(tmp_path, monkeypatch, tester_shared):
+    """The Desk's Settings card (read-only): the cap in force, how many hold a slot, a quiet window, and the server's
+    "never backtests" answer. Reading never takes a slot."""
+    f = tmp_path / "ov.json"
+    monkeypatch.setenv("HOMEBASE_TESTER_SLOTS_FILE", str(f))
+    clock = Clock(et(MON, "12:00:00"))
+    s = slots.status(clock())
+    assert s == {"off": False, "cap": 2, "until": None, "then": None, "running": 0, "quiet": False}
+    held = Slots(tester_shared / "slots", clock=clock)
+    a, b = held.try_acquire(), held.try_acquire()
+    assert slots.status(clock())["running"] == 2
+    assert held.try_acquire() is None                      # the probe left nothing held
+    a.close()
+    assert slots.status(clock())["running"] == 1
+    b.close()
+    f.write_text('{"cap": 12, "until": "2027-01-01T00:00", "quiet": [{"from": "2026-09-28T11:00", "to": "2026-09-28T13:00"}]}')
+    s = slots.status(clock())
+    assert (s["cap"], s["until"], s["then"], s["quiet"], s["running"]) == (12, "2027-01-01T00:00:00-05:00", {"desk": 2, "other": 4}, True, 0)
+    (tmp_path / "home" / ".homebase").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    (tmp_path / "home" / ".homebase" / "no_backtests").touch()
+    assert slots.status(clock()) == {"off": True}

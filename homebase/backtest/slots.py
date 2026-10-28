@@ -130,6 +130,29 @@ def in_quiet(now: dt.datetime) -> bool:
     return quiet_end(now) is not None
 
 
+def status(now: dt.datetime | None = None) -> dict:
+    """What the Desk's Settings card shows, read-only: {"off": True} on the trading server, else the cap in force, when an
+    override cap ends (`until`) and the caps after it (`then`: desk hours / other times), how many slots are held now, and whether a quiet window holds.
+    A held slot is probed with a shared flock that is dropped at once; nothing is created or taken."""
+    if backtests_off():
+        return {"off": True}
+    now = now or et_now()
+    ov = override()
+    running = 0
+    for f in sorted((shared_dir() / "slots").glob("*.lock")):
+        try:
+            with open(f) as fh:
+                fcntl.flock(fh, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            running += 1
+        except OSError:
+            pass
+    ends = ov["until"] if "cap" in ov and now < ov["until"] else None
+    return {"off": False, "cap": cap_at(now), "until": ends and ends.isoformat(),
+            "then": ends and {"desk": CAP, "other": CAP_OFF_HOURS},
+            "running": running, "quiet": in_quiet(now)}
+
+
 _seq_lock = threading.Lock()
 _last = [0, 0]      # [ns, seq]: tickets from this process are strictly increasing
 

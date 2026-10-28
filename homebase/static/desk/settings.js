@@ -269,6 +269,7 @@ function renderSettings() {
   buildTrading();                                  // once; patched in place from then on
   renderChartTrading(ST && ST.chart_trading);      // the switch as the desk has it now
   renderMarketData();  // rebuilds only its own container, and only when its inputs changed
+  renderBacktests(ST && ST.backtests);
 }
 
 async function applyMd() {
@@ -289,6 +290,25 @@ async function applyMd() {
   if (res.ok) { MD = res.settings; MD_STAGED = MD.md; MD_ERR = ""; }
   else { MD_ERR = res.error; MD_STAGED = MD.md; }   // snap back to whichever login is ACTUALLY in use
   renderMarketData();
+}
+
+/* ---- Backtests (read-only): how many may run at once on this machine and how many run now ----
+   From /api/status `backtests` (backtest/slots.py status). The cap is set by hand in ~/.homebase/tester_slots.json; the card
+   has no field or button. The trading server says it never runs backtests (its ~/.homebase/no_backtests marker). */
+function backtestWords(b) {
+  if (b.off) return "This server never runs backtests. Run them on the Mac.";
+  return `Up to ${b.cap} at once · ${b.running ? b.running + " running now" : "none running now"}` +
+         (b.quiet ? " · paused for a quiet window" : "");
+}
+let BT_SIG = "";
+function renderBacktests(b) {
+  const root = $("#settingsBacktests");
+  const sig = JSON.stringify(b);
+  if (!root || sig === BT_SIG) return;
+  BT_SIG = sig;
+  root.innerHTML = !b ? "" : `<div class="slabel" style="margin-top:14px">BACKTESTS</div>
+    <p class="wnote" style="margin-top:4px;color:var(--foreground)">${esc(backtestWords(b))}</p>` +
+    (b.until ? `<p class="wnote">That limit is set by hand until ${esc(b.until.slice(0, 10))}; after it: ${b.then.desk} in desk hours, ${b.then.other} other times.</p>` : "");
 }
 
 /* ---- Server updates (read-only): which commit the Chicago server runs and why a ship waits ----
