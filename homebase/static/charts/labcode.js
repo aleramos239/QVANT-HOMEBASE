@@ -402,6 +402,35 @@ function plCard(F) {
   if (inds.length) card.indicators = inds;
   return card;
 }
+/* -- the idea card form (the blueprint's phase 0, by click): the values of the form -> the card tool's arguments (exits hm40, the
+   tool's default), and what is still missing. Nothing here judges the card: the card writer refuses a card that is not whole, in its words. -- */
+const BC_BARS = ['1', '5', '15', '30'];
+const BC_NAME = /^[a-z][a-z0-9_]{1,39}$/;             // an idea's name, as the toolkit takes it (2-40 characters, a letter first)
+const bcForm = () => ({ name: '', why: '', loser: '', market: '', session: '', bar: '5', family: '', main_setting: '', values: '', neighbors: '', sides: 'both', sides_why: '', loses_when: '' });
+const bcList = (v) => plT(v).split(',').map((x) => x.trim()).filter(Boolean);
+function bcNeeds(F) {
+  const n = [], v = bcList(F.values);
+  if (!plT(F.name)) n.push('a name'); else if (!BC_NAME.test(plT(F.name))) n.push('a name: small letters, numbers and _, a letter first');
+  if (!plT(F.why)) n.push('why it should make money');
+  if (!plT(F.loser)) n.push('who loses');
+  if (!plT(F.market)) n.push('a market');
+  if (!plT(F.session)) n.push('a time of day');
+  if (!plT(F.family)) n.push('an entry rule');
+  if (!plT(F.main_setting)) n.push('its main setting');
+  if (v.length < 3 || v.length > 4 || new Set(v).size !== v.length) n.push('3 or 4 values, each once');
+  if (!plT(F.sides_why)) n.push('why both sides, or one');
+  return n;
+}
+function bcBody(F) {
+  const ms = plT(F.main_setting);
+  return { name: plT(F.name), card: { why: plT(F.why), loser: plT(F.loser), home: { market: plT(F.market), session: plT(F.session), bar: plT(F.bar) },
+    neighbors: bcList(F.neighbors), main_setting: ms, sides: plT(F.sides) || 'both', sides_why: plT(F.sides_why), loses_when: plT(F.loses_when) },
+  settings: { family: plT(F.family), params: { [ms]: bcList(F.values) }, exits: 'hm40' } };
+}
+/* A tool's text without its own "Next:" line (written in the toolkit's command words). */
+const bcLines = (text) => String(text || '').split('\n').filter((l) => !l.startsWith('Next:')).join('\n').trim();
+/* The card tool's text after a save, with the one next step: said, never started. */
+const bcSaid = (text) => `${bcLines(text)}\nNext: ask for the in-sample table.`;
 /* -- the form's lists: the server's `rules` ({name, words, markets, sessions, bars, settings: [{name, kind, min, max, choices, default,
    tried}]}) and `indicators` ({block, sides: [{side, words}], markets}), read off the toolkit's own block list -- */
 const PL_BARS = ['1', '5'];                         // a card is always run on 1-minute and on 5-minute bars
@@ -914,7 +943,7 @@ const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, 
   shownRows, canPick, pickRange, prunePicks, rowClick, draftName, deleteItem, deleteTargets, deleteConfirm, deleteConfirmHtml, deleteLine, goneLine, unsavedLine, deleteKey, isTyping,
   libFilter, MARKS, LIB_SORTS, LIB_SHOWS, markOf, libShow, libSort, libMarkets, tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
   PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots,
-  plPick, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend,
+  plPick, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend, BC_BARS, bcForm, bcNeeds, bcBody, bcLines, bcSaid,
   plUsable, plRules, plMainSetting, plIndicators, plSessionsFor, plNeed, plValueError, plSettingWords, plPrefill,
   FM_LATEST, fmShown, fmKeys, fmKinds, fmSides, fmWords, fmHasValue, fmKindValue, fmFit, fmSetMarket, fmStarts, fmSize, fmSuggest, fmStart, fmSwitch, fmFill, fmNumberError, fmErrors, fmAnswers, fmFirstError, fmId, fmKeepErrors,
   plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, promoteState, deskSaid,
