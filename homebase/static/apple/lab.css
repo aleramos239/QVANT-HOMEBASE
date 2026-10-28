@@ -455,17 +455,19 @@ html.hb-apple .lab-page .toast.err { color: var(--a-red-text); }
 html.hb-apple .lab-page .toast-x { border-radius: 10px; color: var(--a-label-2); }
 
 /* ---- the 3:1 result, the per-year row, Adjust metrics and the group builder: a profit is green, a loss is ink and prints its own minus -- */
-/* (the heat-map tints, a failed real-or-luck line and .mix-err are data or real errors and keep their colours) */
+/* (the heat-map tints, a failed real-or-luck line and .mix-err are data or real errors and keep their colours; in the group builder and A/B 'dn'
+   also means worse / a drawdown, which may print a plus, so only the Net tile and the members' Net cell, which print their own minus, turn to ink) */
 html.hb-apple #labRes #wfRes .up, html.hb-apple #labRes #wfRes .rs-kv b.up, html.hb-apple .rl-years .up, html.hb-apple .am-t td.up, html.hb-apple .mix .up { color: var(--a-green); }
-html.hb-apple #labRes #wfRes .down, html.hb-apple #labRes #wfRes .rs-kv b.down, html.hb-apple .rl-years .down, html.hb-apple .am-t td.dn, html.hb-apple .mix .dn { color: var(--a-label); }
+html.hb-apple #labRes #wfRes .down, html.hb-apple #labRes #wfRes .rs-kv b.down, html.hb-apple .rl-years .down, html.hb-apple .am-t td.dn, html.hb-apple .mix-tile:first-child b.dn, html.hb-apple .mix-t td:nth-child(3).dn { color: var(--a-label); }
 
 /* ---- the group builder, A/B and Adjust metrics sheets: one 20 edge, the other Lab tables' 10 cells ---------------------------------- */
 html.hb-apple .mix { background: var(--a-scrim); }
 html.hb-apple .mix-in { background: var(--a-window); box-shadow: var(--a-sheet-shadow); -webkit-backdrop-filter: none; backdrop-filter: none; }
 html.hb-apple .mix-head { padding: 14px 20px; }
 html.hb-apple .mix-out { padding: 14px 20px 24px; }
+html.hb-apple .mix-side { padding: 12px 20px; }
 html.hb-apple .ab-picks { padding: 10px 20px; }
-html.hb-apple .am-t th, html.hb-apple .am-t td, html.hb-apple .mix-t th, html.hb-apple .mix-t td { padding: 4px 10px; }
+html.hb-apple .am-t th, html.hb-apple .am-t td, html.hb-apple .mix-t th, html.hb-apple .mix-t td { padding: 4px 10px; line-height: 16px; }
 html.hb-apple .am-t th:first-child, html.hb-apple .am-t td:first-child, html.hb-apple .mix-t th:first-child, html.hb-apple .mix-t td:first-child { padding-left: 0; }
 html.hb-apple .am-t th:last-child, html.hb-apple .am-t td:last-child, html.hb-apple .mix-t th:last-child, html.hb-apple .mix-t td:last-child { padding-right: 0; }
 

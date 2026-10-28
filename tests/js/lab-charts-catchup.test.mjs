@@ -69,7 +69,8 @@ const LOSS_GAIN = [
   ['html.hb-apple .rl-years .up', '.rl-years .up', 'gain'],
   ['html.hb-apple .am-t td.dn', '.am-t td.dn', 'loss'],
   ['html.hb-apple .am-t td.up', '.am-t td.up', 'gain'],
-  ['html.hb-apple .mix .dn', '.mix .dn', 'loss'],
+  ['html.hb-apple .mix-tile:first-child b.dn', '.mix .dn', 'loss'],
+  ['html.hb-apple .mix-t td:nth-child(3).dn', '.mix .dn', 'loss'],
   ['html.hb-apple .mix .up', '.mix .up', 'gain'],
 ];
 test('Lab tables: a loss is ink and a gain is the Mac green, over the plain red and teal', () => {
@@ -78,6 +79,15 @@ test('Lab tables: a loss is ink and a gain is the Mac green, over the plain red 
     assert.ok(has(PLAIN_LAB, plain), `${plain}: the plain rule this answers is gone, update the list`);
     assert.ok(beats(mac, plain), `${mac} must outrank ${plain}`);
   }
+});
+
+test('group builder and A/B: only the Net cells (a loss with its minus) turn to ink; "worse" and drawdown cells keep their red', () => {
+  // in A/B 'dn' means B is worse (it can print +$400 for a bigger drawdown), and the drawdown / worst day / bust tiles are always 'dn'
+  assert.ok(!has(LAB, 'html.hb-apple .mix .dn'), 'no blanket ink rule for .mix .dn');
+  // the member table's Net is column 3; the Net tile is the first tile of the first row
+  assert.match(read('charts/labmix.js'), /<th>Size<\/th><th>Net<\/th>/);
+  assert.match(read('charts/labmix.js'), /tile\('Net', money\(g\.net\), g\.net >= 0 \? 'up' : 'dn'\)/);
+  assert.match(PLAIN_LAB, /\.mix \.dn \{ color: #F23645/, 'the plain red is what the other cells keep');
 });
 
 test('Lab tables: the real errors and the heat-map tints keep their colours', () => {
@@ -114,12 +124,15 @@ test('Lab sheets (group builder, A/B, Adjust metrics): one 20 px edge and the ot
   assert.equal(decl(LAB, 'html.hb-apple .mix-head').padding, '14px 20px');
   assert.equal(decl(LAB, 'html.hb-apple .mix-out').padding, '14px 20px 24px');
   assert.equal(decl(LAB, 'html.hb-apple .ab-picks').padding, '10px 20px');
+  assert.equal(decl(LAB, 'html.hb-apple .mix-side').padding, '12px 20px', 'the pick column sits on the same 20 edge');
   // Adjust metrics already sits on 20 (head 20 20 0, body 0 20 20): the plain rules the skin must not break
   assert.match(PLAIN_LAB, /\.am-head \{[^}]*padding: 20px 20px 0/);
   assert.match(PLAIN_LAB, /\.am-body \{[^}]*padding: 0 20px 20px/);
   for (const t of ['.am-t', '.mix-t']) {
     assert.equal(decl(LAB, `html.hb-apple ${t} th`).padding, '4px 10px', `${t} header cells`);
     assert.equal(decl(LAB, `html.hb-apple ${t} td`).padding, '4px 10px', `${t} cells`);
+    assert.equal(decl(LAB, `html.hb-apple ${t} td`)['line-height'], '16px', `${t} one line is 4 + 16 + 4 = 24 like the other tables' rows`);
+    assert.equal(decl(LAB, `html.hb-apple ${t} th`)['line-height'], '16px', `${t} header cells`);
     assert.equal(decl(LAB, `html.hb-apple ${t} th:first-child`)['padding-left'], '0', `${t} first cell sits on the edge`);
     assert.equal(decl(LAB, `html.hb-apple ${t} th:last-child`)['padding-right'], '0', `${t} last cell sits on the edge`);
   }
