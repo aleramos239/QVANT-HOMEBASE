@@ -257,9 +257,9 @@ html.hb-apple .dom-vol { color: var(--a-label-2); }
 html.hb-apple .dom-idle { padding: 24px 20px; font-size: 13px; line-height: 16px; color: var(--a-label-2); }
 
 /* ---- the bottom panel: a pane with a hairline on top; text tabs, the chosen one on the grey pill ---------------------------- */
-html.hb-apple #bpanel { flex: none; height: 36px; margin: 0; border: 0; border-top: 1px solid var(--a-sep); border-radius: 0; box-shadow: none; background: var(--a-window); }
+html.hb-apple #bpanel { flex: none; height: 37px; margin: 0; border: 0; border-top: 1px solid var(--a-sep); border-radius: 0; box-shadow: none; background: var(--a-window); }
 html.hb-apple #bpanel.open { height: var(--bp-h, 260px); }
-html.hb-apple #bpanel .bp-bar { flex: none; height: 35px; padding: 0 12px 0 14px; border: 0; border-bottom: 1px solid transparent; background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+html.hb-apple #bpanel .bp-bar { flex: none; height: 36px; padding: 0 12px 0 14px; border: 0; border-bottom: 1px solid transparent; background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 html.hb-apple #bpanel.open .bp-bar { border-bottom-color: var(--a-sep); }
 html.hb-apple #bpanel .bp-tabs { height: 24px; gap: 2px; align-items: center; }
 html.hb-apple #bpanel .bp-tab { height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--a-label-2); font-size: 13px; line-height: 16px; font-weight: 400; transition: none; }
@@ -272,16 +272,19 @@ html.hb-apple #bpanel .bp-body { background: var(--a-window); }
 html.hb-apple .bp-empty { padding: 28px 20px; font-size: 13px; line-height: 16px; color: var(--a-label-2); text-align: center; }
 /* tables: 24 rows, an 11 secondary header, tabular numbers */
 html.hb-apple .bp-table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 16px; font-variant-numeric: tabular-nums; color: var(--a-label); }
-html.hb-apple .bp-table th { height: 23px; padding: 0 10px; background: var(--a-window); border-bottom: 1px solid var(--a-sep); color: var(--a-label-2); font-size: 11px; line-height: 14px; font-weight: 400; letter-spacing: normal; text-transform: none; }
+html.hb-apple .bp-table th { height: 24px; padding: 0 10px; background: var(--a-window); border-bottom: 1px solid var(--a-sep); color: var(--a-label-2); font-size: 11px; line-height: 14px; font-weight: 400; letter-spacing: normal; text-transform: none; }
 html.hb-apple .bp-table td { height: 24px; padding: 0 10px; border: 0; }
 html.hb-apple .bp-table th:first-child, html.hb-apple .bp-table td:first-child { padding-left: 20px; }
 html.hb-apple .bp-table th:last-child, html.hb-apple .bp-table td:last-child { padding-right: 20px; }
 html.hb-apple .bp-table tbody tr:nth-child(even) td { background: var(--a-group); }
 html.hb-apple .bp-table tr:hover td { background: var(--a-hover); }
 html.hb-apple .bp-table tfoot td { background: transparent; border-top: 1px solid var(--a-sep); font-weight: 590; }
-/* a profit is green; a loss is ink with its minus sign (the side and status cells keep the page's own colours) */
+/* a profit is green; a loss is ink with its minus sign. The Side cell is not a number: Long is green, Short is ink; a row's last cell
+   (the account status, "Not connected") is a real error and stays the page's red */
 html.hb-apple .bp-table td.num.up, html.hb-apple .bb-pnl.up { color: var(--a-green); }
 html.hb-apple .bp-table td.num.down, html.hb-apple .bb-pnl.down { color: var(--a-label); }
+html.hb-apple .bp-table td.up:not(.num) { color: var(--a-green); }
+html.hb-apple .bp-table td.down:not(.num):not(:last-child) { color: var(--a-label); }
 html.hb-apple .bp-table .dot { width: 7px; height: 7px; background: var(--a-label-3); }
 html.hb-apple .bp-table .dot.ok { background: var(--a-label-2); }
 html.hb-apple .bp-table .dot.warn { background: var(--a-orange); }
@@ -433,7 +436,7 @@ html.hb-apple .dlg-err { padding: 0 20px 6px; font-size: 11px; line-height: 14px
 html.hb-apple .dlg-foot, html.hb-apple .set-foot { gap: 8px; padding: 14px 20px 20px; border-top: 1px solid var(--a-sep); }
 html.hb-apple .dlg-foot { border-top: 0; padding-top: 6px; }
 /* settings panes: a form (rows 32; controls regular, 24) */
-html.hb-apple .set-pane { padding: 4px 20px 16px; }
+html.hb-apple .set-pane, html.hb-apple .dialog.drawstyle .set-pane, html.hb-apple .dialog.indicator-settings .set-pane { padding: 4px 20px 16px; }
 html.hb-apple .set-cap { margin: 14px 0 4px; font-size: 11px; line-height: 14px; font-weight: 590; letter-spacing: normal; text-transform: none; color: var(--a-label-2); }
 html.hb-apple .set-row { height: 32px; gap: 12px; font-size: 13px; line-height: 16px; }
 html.hb-apple .set-row.tall { height: auto; min-height: 32px; padding: 6px 0; }
