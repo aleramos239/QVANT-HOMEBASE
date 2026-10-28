@@ -58,6 +58,13 @@ window.HBIcons = {
   channel: svg('<path d="M3 15 17 3"/><path d="M7 21 21 9"/>'),
   note: svg('<path d="M4 4h16v12h-9l-5 4v-4H4z"/><path d="M8 9h8"/><path d="M8 12h5"/>'),
   avwap: svg('<circle cx="4.5" cy="17.5" r="1.8"/><path d="M6 16.5C9 15 10 8.5 13 8.5s4 4 8 3"/>'),
+  // 2026-10-28: a horizontal ray, a fib extension, up / down arrow stamps, a price label, a kept range
+  hray: svg('<circle cx="5" cy="12" r="2"/><path d="M7 12h14"/>'),
+  fibext: svg('<path d="M3 20 8 12l4 5 5-11"/><path d="M14 4h7"/><path d="M14 8h7"/>'),
+  arrowup: svg('<path d="M12 3 5 11h4.5v10h5V11H19z"/>'),
+  arrowdown: svg('<path d="M12 21 5 13h4.5V3h5v10H19z"/>'),
+  plabel: svg('<path d="M3 12 8 6h13v12H8z"/><path d="M12 12h5"/>'),
+  range: svg('<path d="M3 6v12"/><path d="M21 6v12"/><path d="M3 12h18"/><path d="m7 8-4 4 4 4"/><path d="m17 8 4 4-4 4"/>'),
   vline: svg('<circle cx="12" cy="12" r="3"/><line x1="12" x2="12" y1="3" y2="9"/><line x1="12" x2="12" y1="15" y2="21"/>'),
   fib: svg('<path d="M3 5h18"/><path d="M3 10h13"/><path d="M3 14.5h18"/><path d="M3 19h9"/>'),
   rect: svg('<rect width="20" height="12" x="2" y="6" rx="2"/>'),

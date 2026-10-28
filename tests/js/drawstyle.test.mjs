@@ -192,7 +192,7 @@ test('snapEndpointPrice: Shift takes the other endpoint\'s price, else the point
 
 /* ---- 2026-10-09: ray, extended line, vertical line, Fib retracement; more settings; per-interval visibility ---- */
 test('the new tools take exactly their own fields, and an old drawing keeps its look', () => {
-  assert.deepEqual(Object.keys(S.FIELDS), ['trend', 'ray', 'xline', 'hline', 'vline', 'rect', 'fib', 'arrow', 'channel', 'note', 'avwap', 'long', 'short']);
+  assert.deepEqual(Object.keys(S.FIELDS), ['trend', 'ray', 'xline', 'hline', 'vline', 'rect', 'fib', 'arrow', 'channel', 'note', 'avwap', 'long', 'short', 'hray', 'fibext', 'arrowup', 'arrowdown', 'plabel', 'range']);
   assert.ok(!S.FIELDS.ray.includes('extendLeft') && !S.FIELDS.xline.includes('extendRight'), 'a ray and an extended line extend by what they are');
   for (const t of ['trend', 'ray', 'xline']) assert.ok(S.FIELDS[t].includes('priceLabel') && S.FIELDS[t].includes('stats'), t);
   // an old trend line / rectangle saved before these settings existed: every new switch is off
@@ -297,4 +297,50 @@ test('a retracement\'s fill opacity is a whole percent 0-100, defaulting to the 
   assert.equal(S.normalize('fib', { fillOpacity: 101 }).fillOpacity, 8);
   assert.equal(S.normalize('fib', { fillOpacity: 0.3 }).fillOpacity, 8);
   assert.equal('fillOpacity' in S.normalize('rect', { fillOpacity: 30 }), false);
+});
+
+/* ---- 2026-10-28: horizontal ray, fib extension, arrow stamps, price label, range ---- */
+test('the five new tools take exactly the fields the server takes', () => {
+  assert.deepEqual([...S.FIELDS.hray].sort(), ['bold', 'fontSize', 'labelPos', 'lineStyle', 'priceLabel', 'text', 'textColor', 'width']);
+  assert.deepEqual([...S.FIELDS.fibext].sort(), ['extendLeft', 'extendRight', 'fill', 'fillOpacity', 'fontSize', 'levels', 'lineStyle', 'showLevels', 'showPrices', 'width']);
+  assert.deepEqual(S.FIELDS.arrowup, ['fontSize']);
+  assert.deepEqual(S.FIELDS.arrowdown, ['fontSize']);
+  assert.deepEqual([...S.FIELDS.plabel].sort(), ['bold', 'fillColor', 'fontSize', 'textColor']);
+  assert.deepEqual(S.FIELDS.range, ['show']);
+  assert.deepEqual(S.LABEL_POS.hray, S.LABEL_POS.trend);
+  assert.ok(!S.isLine('hray'), 'a horizontal ray has its own one-point run');
+});
+
+test('a range shows price and time unless told otherwise; only both / price / date are kept', () => {
+  assert.deepEqual(S.normalize('range', {}), { show: 'both' });
+  assert.deepEqual(S.normalize('range', { show: 'price' }), { show: 'price' });
+  assert.deepEqual(S.normalize('range', { show: 'date' }), { show: 'date' });
+  assert.deepEqual(S.normalize('range', { show: 'volume', width: 3 }), { show: 'both' });
+  assert.equal(S.isValidField('range', 'show', 1), false);
+});
+
+test('a fib extension starts with the usual targets, copies its levels and has no reverse switch', () => {
+  const d = S.normalize('fibext', {});
+  assert.deepEqual(d.levels.map((l) => l.v), [0, 0.618, 1, 1.272, 1.618, 2, 2.618]);
+  assert.ok(d.levels.every((l) => l.on));
+  assert.notEqual(d.levels, S.DEFAULTS.fibext.levels);
+  assert.equal('reverse' in d, false);
+  assert.equal(S.fibExtPrice(100, 110, 104, 1.618), 104 + 10 * 1.618, 'C plus the A-B move times the ratio');
+  assert.equal(S.fibExtPrice(110, 100, 104, 1), 94, 'a down move projects down');
+});
+
+test('a price label and the arrow stamps start small and keep a valid size only', () => {
+  assert.equal(S.normalize('arrowup', {}).fontSize, 16);
+  assert.equal(S.normalize('arrowdown', { fontSize: 99 }).fontSize, 16);
+  assert.equal(S.normalize('arrowdown', { fontSize: 24 }).fontSize, 24);
+  assert.deepEqual(Object.keys(S.normalize('plabel', {})).sort(), ['bold', 'fontSize', 'textColor']);
+  assert.equal(S.normalize('plabel', { text: 'x' }).text, undefined, 'a price label is its price: no text of its own');
+});
+
+test('a horizontal ray: its label sits above, below or on the line, from its start', () => {
+  const hs = [[100, 200]];
+  const a = S.labelAnchor('hray', hs, 'above', 400);
+  assert.deepEqual([a.x > 100, a.y < 200, a.baseline, a.align], [true, true, 'bottom', 'left']);
+  assert.equal(S.labelAnchor('hray', hs, 'below', 400).baseline, 'top');
+  assert.equal(S.labelAnchor('hray', hs, 'middle', 400).y, 200);
 });

@@ -17,7 +17,7 @@ const isLine = (t) => LINE_TYPES.includes(t);
    box (spec: "above/below/middle" for lines, "inside top/middle/bottom" for a rectangle), a
    vertical line beside it at the top / middle / bottom of the pane. */
 const LINE_POS = ['above', 'below', 'middle'], BOX_POS = ['top', 'middle', 'bottom'];
-const LABEL_POS = { trend: LINE_POS, ray: LINE_POS, xline: LINE_POS, arrow: LINE_POS, hline: LINE_POS, rect: BOX_POS, vline: BOX_POS };
+const LABEL_POS = { trend: LINE_POS, ray: LINE_POS, xline: LINE_POS, arrow: LINE_POS, hray: LINE_POS, hline: LINE_POS, rect: BOX_POS, vline: BOX_POS };
 const LABEL_ALIGN = ['left', 'center', 'right'];      // a horizontal line's label, along the line
 const MAX_TEXT = 200;
 const MAX_FIB_LEVELS = 16, FIB_MIN = -10, FIB_MAX = 10;
@@ -47,11 +47,22 @@ const FIELDS = {
   avwap: ['width', 'lineStyle'],
   // a position box: the colours of its two zones, the size of its labels and whether they show (all optional: unset = the theme's)
   long: POS, short: POS,
+  // 2026-10-28: a horizontal ray (one point, runs right), a fib extension (A, B, C), arrow stamps and a price label (one point
+  // each; the arrow's size is `fontSize`), a range (the measure, kept; `show` = price and time, price only or time only)
+  hray: ['width', 'lineStyle', ...TEXT, 'priceLabel'],
+  fibext: ['width', 'lineStyle', 'extendLeft', 'extendRight', 'levels', 'showLevels', 'showPrices', 'fill', 'fillOpacity', 'fontSize'],
+  arrowup: ['fontSize'], arrowdown: ['fontSize'],
+  plabel: ['fontSize', 'textColor', 'bold', 'fillColor'],
+  range: ['show'],
 };
+const RANGE_SHOW = ['both', 'price', 'date'];
 /* The Fibonacci levels a fresh retracement carries: {v: the ratio, on: drawn, color}. 0 sits on the
    SECOND point (where the drag ended) and 1 on the first, so the levels count the pullback. */
 const FIB_LEVELS = [[0, '#787B86'], [0.236, '#F23645'], [0.382, '#FF9800'], [0.5, '#4CAF50'], [0.618, '#089981'],
   [0.786, '#00BCD4'], [1, '#787B86'], [1.618, '#2962FF']].map(([v, color]) => ({ v, on: v !== 1.618, color }));
+/* A fib extension's levels: the next legs of the A-B move, projected from C (0 sits on C). */
+const FIBEXT_LEVELS = [[0, '#787B86'], [0.618, '#089981'], [1, '#2962FF'], [1.272, '#FF9800'], [1.618, '#F23645'], [2, '#9C27B0'],
+  [2.618, '#00BCD4']].map(([v, color]) => ({ v, on: true, color }));
 const LINE_DEF = { width: 2, lineStyle: 'solid', text: '', fontSize: 12, textColor: '#2962FF', bold: false, labelPos: 'above',
   priceLabel: false, stats: false };
 const DEFAULTS = {
@@ -77,6 +88,12 @@ const DEFAULTS = {
   note: { text: 'Note', fontSize: 12, textColor: '#2962FF', bold: false },
   avwap: { width: 2, lineStyle: 'solid' },
   long: {}, short: {},
+  hray: { width: 2, lineStyle: 'solid', text: '', fontSize: 12, textColor: '#2962FF', bold: false, labelPos: 'above', priceLabel: false },
+  fibext: { width: 1, lineStyle: 'solid', extendLeft: false, extendRight: false, levels: FIBEXT_LEVELS, showLevels: true, showPrices: true,
+    fill: true, fillOpacity: 8, fontSize: 11 },
+  arrowup: { fontSize: 16 }, arrowdown: { fontSize: 16 },
+  plabel: { fontSize: 12, textColor: '#2962FF', bold: false },
+  range: { show: 'both' },
 };
 /* Canvas dash patterns (ctx.setLineDash), keyed the same as lineStyle. */
 const DASH = { solid: [], dashed: [6, 4], dotted: [1, 3] };
@@ -116,6 +133,7 @@ function isValidField(type, key, v) {
     case 'fillOpacity': return Number.isInteger(v) && v >= 0 && v <= 100;
     case 'labelPos': return (LABEL_POS[type] || []).includes(v);
     case 'labelAlign': return LABEL_ALIGN.includes(v);
+    case 'show': return RANGE_SHOW.includes(v);
     case 'levels': return Array.isArray(v) && v.length >= 1 && v.length <= MAX_FIB_LEVELS && v.every(isValidLevel);
     default: return false;
   }
@@ -183,6 +201,8 @@ function lineEnds(type, x0, y0, x1, y1, paneW, paneH, style) {
 
 /* A retracement level's price: 0 on the second point (b), 1 on the first (a); `reverse` swaps them. */
 function fibPrice(a, b, v, reverse) { return reverse ? a + (b - a) * v : b + (a - b) * v; }
+/* A fib extension's level price: from C, the A-B move times the ratio (1 = a leg as long as A-B). */
+function fibExtPrice(a, b, c, v) { return c + (b - a) * v; }
 /* The levels that are drawn, ascending by ratio. */
 function fibLevels(style) { return ((style && style.levels) || []).filter((l) => l.on); }
 /* "0.618" / "1" / "1.618": a ratio as the chart writes it. */
@@ -228,6 +248,12 @@ function labelAnchor(type, hs, pos, paneWidth, align = 'center', paneHeight = 0)
     if (pos === 'middle') return { x, y: paneHeight / 2, baseline: 'middle', align: 'left' };
     return { x, y: GAP, baseline: 'top', align: 'left' };
   }
+  if (type === 'hray') {       // along the run, just right of its point; `align` left keeps it off the line's start
+    const y = hs[0][1], x = hs[0][0] + GAP;
+    if (pos === 'below') return { x, y: y + GAP, baseline: 'top', align: 'left' };
+    if (pos === 'middle') return { x, y, baseline: 'middle', align: 'left' };
+    return { x, y: y - GAP, baseline: 'bottom', align: 'left' };
+  }
   if (isLine(type)) {
     const [[x0, y0], [x1, y1]] = hs, mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
     if (pos === 'below') return { x: mx, y: my + GAP, baseline: 'top' };
@@ -264,7 +290,7 @@ function shouldStartRuler(tool, shiftKey) { return tool === 'cursor' && !!shiftK
 function snapEndpointPrice(otherPrice, proposedPrice, shiftHeld) { return shiftHeld ? otherPrice : proposedPrice; }
 
 const api = { LINE_STYLES, LINE_TYPES, CAPS, isLine, LABEL_POS, LABEL_ALIGN, FIELDS, DEFAULTS, FIB_LEVELS, MAX_FIB_LEVELS, MAX_TEXT, VIS_MAX_S,
-  isColor, isValidField, normalize, starting, dashFor, extendLine, lineEnds, fibPrice, fibLevels, fibText, normalizeVis, shownOn,
+  isColor, isValidField, normalize, starting, dashFor, extendLine, lineEnds, fibPrice, fibExtPrice, fibLevels, fibText, normalizeVis, shownOn,
   labelAnchor, toolbarAnchor, shouldStartRuler, snapEndpointPrice };
 if (typeof window !== 'undefined') window.HBDrawStyle = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

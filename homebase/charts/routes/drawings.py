@@ -16,6 +16,10 @@ MAX_DRAWINGS = 500            # per symbol
 # parallel), a note (one point and its text) and an anchored VWAP (one point: the bar it starts at)
 DRAWING_POINTS = {"trend": 2, "ray": 2, "xline": 2, "rect": 2, "fib": 2, "hline": 1, "vline": 1, "long": 3, "short": 3,
                   "arrow": 2, "channel": 3, "note": 1, "avwap": 1}
+# 2026-10-28: a horizontal ray (one point, runs right), a fib extension (A, B, C: levels project A->B from C), arrow stamps and a
+# price label (one point each), a range (two points: the measure, kept)
+DRAWING_POINTS.update({"hray": 1, "fibext": 3, "arrowup": 1, "arrowdown": 1, "plabel": 1, "range": 2})
+RANGE_SHOW = ("both", "price", "date")          # a range shows price and time, price only or time only
 POSITION_QTY_MAX = 10_000     # a long/short box's quantity
 MAX_TEMPLATE_BYTES = 16 * 1024   # one chart-settings template, as JSON
 MAX_TEMPLATE_NAME = 40
@@ -26,7 +30,7 @@ _RGBA_COLOR = re.compile(r"rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*
 DRAWING_LINE_STYLES = ("solid", "dashed", "dotted")
 _LINE_POS, _BOX_POS = ("above", "below", "middle"), ("top", "middle", "bottom")
 DRAWING_LABEL_POS = {"trend": _LINE_POS, "ray": _LINE_POS, "xline": _LINE_POS, "hline": _LINE_POS, "rect": _BOX_POS, "vline": _BOX_POS,
-                     "arrow": _LINE_POS}
+                     "arrow": _LINE_POS, "hray": _LINE_POS}
 DRAWING_LABEL_ALIGN = ("left", "center", "right")
 _TEXT_FIELDS = {"text", "fontSize", "textColor", "bold", "labelPos"}
 DRAWING_CAPS = ("none", "arrow", "circle")      # the mark at a line's end (2026-10-11); a field left out = none
@@ -48,6 +52,11 @@ DRAWING_STYLE_FIELDS = {
     "channel": {"width", "lineStyle", "extendLeft", "extendRight", "fillColor", "midline"},
     "note": {"text", "fontSize", "textColor", "bold", "fillColor"},
     "avwap": {"width", "lineStyle"},
+    "hray": {"width", "lineStyle", "priceLabel"} | _TEXT_FIELDS,
+    "fibext": {"width", "lineStyle", "extendLeft", "extendRight", "levels", "showLevels", "showPrices", "fill", "fillOpacity", "fontSize"},
+    "arrowup": {"fontSize"}, "arrowdown": {"fontSize"},
+    "plabel": {"fontSize", "textColor", "bold", "fillColor"},
+    "range": {"show"},
     # a position box: its zone colours, its label size, whether its labels show
     "long": _POS_FIELDS, "short": _POS_FIELDS,
 }
@@ -119,6 +128,10 @@ def check_style(kind: str, style) -> dict:
         if style["midStyle"] not in DRAWING_LINE_STYLES:
             raise ValueError("style.midStyle: solid, dashed or dotted")
         out["midStyle"] = style["midStyle"]
+    if "show" in style:
+        if style["show"] not in RANGE_SHOW:
+            raise ValueError("style.show: both, price or date")
+        out["show"] = style["show"]
     if "labelAlign" in style:
         if style["labelAlign"] not in DRAWING_LABEL_ALIGN:
             raise ValueError("style.labelAlign: left, center or right")
@@ -233,7 +246,7 @@ def check_drawings(body) -> list:
             raise ValueError("id: a string of 1-40 characters")
         n = DRAWING_POINTS.get(kind)
         if n is None:
-            raise ValueError("type: trend, ray, xline, arrow, hline, vline, rect, fib, channel, note, avwap, long or short")
+            raise ValueError("type: trend, ray, xline, arrow, hline, vline, rect, fib, channel, note, avwap, hray, fibext, arrowup, arrowdown, plabel, range, long or short")
         if not isinstance(pts, list) or len(pts) != n or not all(isinstance(p, dict) for p in pts):
             raise ValueError(f"a {kind} has exactly {n} point(s)")
         clean = []

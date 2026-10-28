@@ -1551,3 +1551,16 @@ test('status: feedSummary names the stale open markets in `stale` (cj-4: the pag
   assert.deepEqual(C.feedSummary({ ...live({ NQ: tick(2) }), error: 'md login refused' }, ...WED_10).stale, ['NQ']);
   assert.deepEqual(C.feedSummary({ ...live({ NQ: tick(2), YM: tick(400) }), recorder: { error: 'disk full' } }, ...WED_10).stale, ['YM'], 'a recorder error is not lost prices');
 });
+
+test('every tool in a rail group has a button on the Charts and Backtest pages and an icon; the new ones are in the groups they belong to', async () => {
+  const fs = await import('node:fs');
+  const rd = (f) => fs.readFileSync(new URL(`../../homebase/static/${f}`, import.meta.url), 'utf8');
+  const icons = rd('charts/icons.js'), all = C.TOOL_GROUPS.flatMap(([, tools]) => tools);
+  for (const t of all) {
+    for (const page of ['charts.html', 'backtest.html']) assert.ok(rd(page).includes(`data-tool="${t}"`), `${t} is on ${page}`);
+    assert.ok(new RegExp(`^  ${t}: svg\\(`, 'm').test(icons), `${t} has an icon`);
+  }
+  assert.equal(C.toolGroupOf('hray'), 0);
+  for (const t of ['fibext', 'range']) assert.equal(C.toolGroupOf(t), 1, t);
+  for (const t of ['plabel', 'arrowup', 'arrowdown']) assert.equal(C.toolGroupOf(t), 2, t);
+});

@@ -1436,9 +1436,9 @@ function filter(query, group = 'All', favs = []) {
    last used from it). Order = the order they were starred. */
 const FAV_GROUP = 'Favorites';
 const TOOL_GROUPS = [
-  ['Lines and shapes', ['trend', 'ray', 'xline', 'arrow', 'channel', 'hline', 'vline', 'rect']],
-  ['Fib and positions', ['fib', 'long', 'short', 'measure']],
-  ['Notes, marks and eraser', ['note', 'avwap', 'alert', 'erase']],
+  ['Lines and shapes', ['trend', 'ray', 'hray', 'xline', 'arrow', 'channel', 'hline', 'vline', 'rect']],
+  ['Fib and positions', ['fib', 'fibext', 'long', 'short', 'measure', 'range']],
+  ['Notes, marks and eraser', ['note', 'plabel', 'arrowup', 'arrowdown', 'avwap', 'alert', 'erase']],
 ];
 /* Alt + a key picks a drawing tool (event.code: the letter on macOS is a symbol under Alt). Alt+R is Reset chart view. */
 const TOOL_KEYS = { KeyT: 'trend', KeyH: 'hline', KeyV: 'vline', KeyB: 'rect', KeyF: 'fib', KeyA: 'arrow', KeyM: 'measure', KeyE: 'erase' };
