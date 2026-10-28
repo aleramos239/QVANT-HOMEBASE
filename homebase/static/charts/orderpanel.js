@@ -220,7 +220,7 @@ function build() {
   ui.qty.addEventListener('input', () => {
     st.qty = ui.qty.value;
     const n = T.parseQty(st.qty);
-    if (Number.isInteger(n) && n >= 1) D().setPrefs({ qty: n });   // the chart's Buy/Sell box shows the same size
+    if (Number.isInteger(n) && n >= 1) D().setQty(formRoot, n);   // the chart's Buy/Sell box shows the same size (this symbol's own while Quick setup is on)
     paint();
   });
   ui.risk = mk('input', 'op-in');
@@ -543,7 +543,7 @@ function paint() {
   }
   // the default stop for this symbol was set or changed in Settings: the exits start over from it (never when it is off and stays off)
   const defSl = root ? T.defaultStopTicks(D().prefs, root) : 0;
-  if (defSl !== defSeen) { defSeen = defSl; if (root) resetExits(); }
+  if (root && defSl !== defSeen) { defSeen = defSl; resetExits(); }   // a chart with no symbol in between must not wipe typed exits
   if (!visible) {   // closed: the chart keeps the order's lines (they still drag, and the ENTRY tag still sends)
     flashPending = false;
     paintPreview(root ? cell : null, root ? compute(cell) : null);
