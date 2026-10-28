@@ -2898,6 +2898,14 @@ function onKey(e) {
     if (k >= 0) { e.preventDefault(); items[k].focus(); }
     return;
   }
+  // Chart hotkeys (Settings > Keys): off and no key set by default, so this does nothing until the owner sets one. Flatten /
+  // Cancel all act on THIS chart through the FLAT button's own function; the replay keys steer a replaying chart. Never in a
+  // text box or menu (returned above / here), never a held-down repeat (HBTradePure.hotkeyAction).
+  const HK = window.HBTradePure, hk = HK && HK.hotkeyAction(e, HK.loadHotkeys());
+  if (hk && c && !menuEl && !hotkeyBox && (hk.startsWith('replay-') ? c.replay && window.HBReplayUI?.hotkey(c, hk) : window.HBTradeUI?.hotkey(c, hk))) {
+    e.preventDefault();
+    return;
+  }
   // TradingView-style bare-key hotkeys: a digit opens the timeframe box, a letter opens symbol search -- never
   // while a menu is open (menuEl; dlg already returned above) or a modifier is held (so Alt+R, Ctrl/Cmd
   // shortcuts and Bar Replay's own Space/-> stay untouched -- those aren't single digits/letters anyway).

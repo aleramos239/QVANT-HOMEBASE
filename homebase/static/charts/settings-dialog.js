@@ -38,6 +38,7 @@ const asPrecision = (v) => (v === '' ? null : Number(v));
      this browser's, changed at once -- Cancel does not undo it),
    pref?: {key, kind?: 'switch', min, max, note} (a viewer-wide trade preference: host.prefs / host.setPrefs),
    sound?: {kind: 'switch' | 'volume' | 'event', key?} (HBSounds, this browser's: on / volume / an event's sound),
+   keys?: true (the Keys tab's block: the hotkey switch and one recorded chord per action this page has, this browser's),
    caption?: text (a plain note line, no control)}. */
 const TABS = [
   { id: 'symbol', label: 'Symbol', icon: 'candles', sections: [
@@ -161,6 +162,13 @@ const TABS = [
       { label: 'Labels', look: { key: 'labels', choices: [['line', 'On the line'], ['scale', 'On the price scale']] } },
       { label: 'Shading', look: { key: 'shade', range: [0, 40, 2] } },
       { caption: "The order panel's lines on the chart. Every chart, this browser; changed at once." },
+    ]],
+  ] },
+  // chart hotkeys (the owner, 2026-10-28): off, and no key set, until he records each one; this browser's, changed at once.
+  // On both pages: Charts lists the trading keys, the Backtest tab (where Bar Replay lives) the replay keys.
+  { id: 'keys', label: 'Keys', icon: 'list', sections: [
+    ['KEYS', [
+      { keys: true },
     ]],
   ] },
   // trade sounds (the owner, 2026-10-18): this browser's, every chart, off until switched on; changed at once
@@ -798,6 +806,60 @@ function mount(box, host) {
       ctl.append(s, hear);
     }
   }
+  /* The Keys tab's block (HBTradePure hotkeys): the master switch and one recorded key per action. Off, and every key
+     empty, until the owner sets them; saved at once, this browser's (Cancel does not undo it). A key needs Ctrl, Alt or Cmd. */
+  let recStop = null;   // ends the key recording in progress, if any
+  function keysBlock() {
+    const Tr = window.HBTradePure, el = mk('div', 'set-keys');
+    if (!Tr || !Tr.HOTKEY_ACTIONS) return el;
+    const state = Tr.loadHotkeys(), shown = (c) => c.replace(/Key([A-Z])$/, '$1').replace(/Digit(\d)$/, '$1').replace('Meta', 'Cmd').split('+').join(' + ');
+    const save = () => Tr.saveHotkeys(state);
+    const line = (label) => {
+      const rowEl = mk('div', 'set-row'), name = mk('label', 'set-name'), ctl = mk('div', 'set-ctl');
+      name.append(mk('span', '', label));
+      rowEl.append(name, ctl);
+      el.append(rowEl);
+      return ctl;
+    };
+    const sw = button('switch' + (state.on ? ' on' : ''));
+    sw.setAttribute('role', 'switch');
+    sw.setAttribute('aria-checked', String(state.on));
+    sw.setAttribute('aria-label', 'Keys on');
+    sw.onclick = () => { state.on = !state.on; save(); sw.classList.toggle('on', state.on); sw.setAttribute('aria-checked', String(state.on)); };
+    line('Keys on').append(sw);
+    const err = mk('div', 'set-acct-err');
+    err.hidden = true;
+    for (const [id, label] of Tr.HOTKEY_ACTIONS.filter((a) => a[2] === (host.accountRows ? 'trade' : 'replay'))) {
+      const set = button('btn', state.map[id] ? shown(state.map[id]) : 'Not set'), clear = button('btn', 'Clear');
+      set.setAttribute('aria-label', `${label}: set the key`);
+      clear.setAttribute('aria-label', `${label}: clear the key`);
+      clear.hidden = !state.map[id];
+      const paint = () => { set.textContent = state.map[id] ? shown(state.map[id]) : 'Not set'; clear.hidden = !state.map[id]; };
+      clear.onclick = () => { delete state.map[id]; save(); err.hidden = true; paint(); };
+      set.onclick = () => {
+        if (recStop) recStop();
+        set.textContent = 'Press the key…';
+        err.hidden = true;
+        const stop = () => { document.removeEventListener('keydown', onRec, true); recStop = null; paint(); };
+        const onRec = (e) => {
+          if (!box.isConnected) { stop(); return; }
+          e.preventDefault(); e.stopPropagation();   // the pressed key is the answer, never also a chart key or the dialog's own
+          if (e.key === 'Escape') { stop(); return; }
+          if (/^(?:Control|Alt|Shift|Meta|OS)(?:Left|Right)?$/.test(e.code || '')) return;   // wait for the key itself
+          const chord = Tr.chordOf(e), bad = Tr.hotkeyAssignError(state.map, id, chord);
+          if (bad) { err.textContent = bad; err.hidden = false; return; }
+          state.map[id] = chord; save(); err.hidden = true; stop();
+        };
+        recStop = stop;
+        document.addEventListener('keydown', onRec, true);
+      };
+      line(label).append(set, clear);
+    }
+    el.append(err, mk('div', 'set-note', 'Hold Ctrl, Alt or Cmd with a key; Esc cancels. ' + (host.accountRows
+      ? 'Flatten and Cancel all ask the same confirm as the chart buttons, on the selected chart only. There is no Buy or Sell key.'
+      : 'These only steer a replay on the selected chart.')));
+    return el;
+  }
   function row(r) {
     if (r.accounts) {   // the ACCOUNTS list: a block of its own, not a label + control row
       const el = mk('div', 'set-accts');
@@ -815,6 +877,7 @@ function mount(box, host) {
       return dataMore;
     }
     if (r.refresh) return refreshRow();
+    if (r.keys) return keysBlock();
     if (r.caption) return mk('div', 'set-note', r.caption);
     const el = mk('div', 'set-row'), name = mk('label', 'set-name'), ctl = mk('div', 'set-ctl');
     if (r.check) {

@@ -20,7 +20,8 @@ const Cat = need('HBCatalog', './catalog.js');
 // (the Backtest tab) can use it without trade.js itself. Re-exported below unchanged; every
 // existing caller here keeps using the bare names exactly as before.
 const TP = need('HBTradePure', './tradepure.js');
-const { PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd, inferType, menuText, execArrow } = TP;
+const { PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd, inferType, menuText, execArrow,
+  HOTKEYS_KEY, HOTKEY_ACTIONS, chordOf, hotkeyAssignError, parseHotkeys, loadHotkeys, saveHotkeys, hotkeyAction } = TP;
 
 const BOT_NAMES = { nq930: '9:30 bot' };
 const ET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -1784,7 +1785,7 @@ function routeSend(action, body, send) {
   return Promise.all(out);
 }
 
-const api = { PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
+const api = { HOTKEYS_KEY, HOTKEY_ACTIONS, chordOf, hotkeyAssignError, parseHotkeys, loadHotkeys, saveHotkeys, hotkeyAction, PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
   lineText, lineTitle, lineColor, notWorkingKeys, lineGone, exitZones, beStop, beArmStep, trailStop, trailStep, splitOrder, splitNote, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, etDateOf, pastRunMarkers, pastRunFlags,

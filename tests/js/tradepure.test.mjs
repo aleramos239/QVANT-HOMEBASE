@@ -15,7 +15,9 @@ test('HBTradePure exposes exactly the re-exported names, nothing money/desk-shap
   // unchanged, and read directly by fillquality.js -- see tradepure.js's own docstring.
   assert.deepEqual(Object.keys(TP).sort(),
     ['PREFS_KEY', 'bracket', 'money', 'parsePrefs', 'prefsText', 'roundTick', 'usd', 'POINT_VALUE', 'pointValue',
-      'inferType', 'menuText', 'execArrow'].sort());
+      'inferType', 'menuText', 'execArrow',
+      // chart hotkeys (2026-10-28): pure key parsing + this browser's saved keys, shared with the Backtest tab's replay keys
+      'HOTKEYS_KEY', 'HOTKEY_ACTIONS', 'chordOf', 'hotkeyAssignError', 'parseHotkeys', 'loadHotkeys', 'saveHotkeys', 'hotkeyAction'].sort());
   assert.equal(TP.PREFS_KEY, 'hb_trade_prefs');
 });
 
