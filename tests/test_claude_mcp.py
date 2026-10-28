@@ -616,6 +616,7 @@ def test_walkforward_tool_default_fixed_blocks(fixed):
     assert "The backtest, heatmap and walkforward tools follow the same law" in text
     assert "heatmap and walkforward run the 3:1 block walk-forward (heatmap = its in-sample table" in text
     assert "walkforward oos (the test months) ONLY when he says so (owner_said)" in text
+    assert "At most 2 backtests" not in text and "ask the machine, not this text" in text         # the cap is the machine's file (12 now), not a number fixed here
 
 
 def test_walkforward_oos_needs_owner_said(fixed):

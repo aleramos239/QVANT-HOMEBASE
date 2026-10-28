@@ -381,3 +381,46 @@ test('the self-test line says what happened to the test order and to the account
     at('placed, but it has no order id, so it was not cancelled: it may still be on the account.' + check, 'neg'));
   assert.deepEqual(st({ placed: { ok: false, error: 'no' } }), at('refused: no', 'warn'));
 });
+
+// ---- the Activity page's own filters: strategy or group, period, and (mcp-38) one event type, one account, one day -----------
+const PICKS = between('let ACT_WHO', 'async function loadActivity');
+function loadPicks() {
+  const ctx = vm.createContext({ console, URLSearchParams, groupOf: () => null, ST: { accounts: { a1: { label: 'A one' } } } });
+  vm.runInContext(PICKS + `
+    globalThis.api = { actQuery, actFiltered, actOpts, set(k, v) { ({ ACT_WHO: () => (ACT_WHO = v), ACT_DAYS: () => (ACT_DAYS = v), ACT_EVENT: () => (ACT_EVENT = v),
+      ACT_ACCT: () => (ACT_ACCT = v), ACT_DATE: () => (ACT_DATE = v) })[k](); } };`, ctx);
+  return ctx.api;
+}
+
+test('the event, account and day picks go to the journal route as event, account and date; each alone makes the page read the route', () => {
+  const a = loadPicks();
+  assert.equal(a.actFiltered(), false);
+  assert.equal(a.actQuery(), '/api/journal?days=1&limit=2000');
+  for (const [k, v] of [['ACT_EVENT', 'order_filled'], ['ACT_ACCT', 'a1'], ['ACT_DATE', '2026-10-20']]) {
+    const b = loadPicks();
+    b.set(k, v);
+    assert.equal(b.actFiltered(), true, k);
+  }
+  a.set('ACT_EVENT', 'order_filled'); a.set('ACT_ACCT', 'a1'); a.set('ACT_DATE', '2026-10-20'); a.set('ACT_DAYS', 7); a.set('ACT_WHO', 's:nq930');
+  assert.equal(a.actQuery(), '/api/journal?days=7&limit=2000&strategy=nq930&event=order_filled&account=a1&date=2026-10-20');
+});
+
+test('actOpts: the first choice, then what was seen (sorted, named in words), and a pick that is no longer seen stays', () => {
+  const a = loadPicks();
+  const plain = (v) => JSON.parse(JSON.stringify(v));      // arrays made inside the vm are not this realm's
+  assert.deepEqual(plain(a.actOpts('All events', ['order_filled', 'alert', 'order_filled'], 'zz', (e) => e.replace(/_/g, ' '))),
+    [['', 'All events'], ['alert', 'alert'], ['order_filled', 'order filled'], ['zz', 'zz']]);
+  assert.deepEqual(plain(a.actOpts('All accounts', ['a1'], '', (k) => 'A one')), [['', 'All accounts'], ['a1', 'A one']]);
+});
+
+test('the Activity page has the menus and the day box the filters listen to', () => {
+  for (const id of ['actEvent', 'actAcct', 'actDate']) {
+    assert.match(HTML, new RegExp(`id="${id}"`), id);
+    assert.match(HTML, new RegExp(`\\$\\("#${id}"\\)\\?\\.addEventListener\\("change"`), id);
+  }
+});
+
+test('with one account picked the feed says it shows only lines that name it', () => {
+  assert.match(HTML, /acctNote = ACT_ACCT \? `<div class="feed-empty">Only lines that name this account/);
+  assert.match(HTML, /JSON\.stringify\(\[FEED_ROWS, FEED_RAW, \[\.\.\.FEED_OPEN\], ACT_WHO, ACT_DAYS, ACT_ACCT,/);
+});

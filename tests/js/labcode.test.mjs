@@ -880,3 +880,15 @@ test('triesCount: each in-sample setting, one per heat-map table, every test-mon
   assert.equal(L.triesCount([], [{ strategy: 's', scheme: 'fixed', axes: [], status: 'done' }], 's', []).tabled, false);
   assert.equal(L.triesCount([], [{ strategy: 'x', scheme: 'fixed', axes: ['a'], status: 'done' }], 's', []).tabled, false);
 });
+
+test('tradesCsv: one header, one row per trade, times as ET text, a comma or quote in a cell is quoted, a missing number is blank', () => {
+  const t = [{ date: '2024-03-05', side: 'long', qty: 2, entry_ms: Date.UTC(2024, 2, 5, 14, 35), entry_price: 18000.25, exit_ms: Date.UTC(2024, 2, 5, 15, 0), exit_price: 18010, exit_reason: 'tp',
+    sl: 17990, tp: null, gross: 400, commission: 4.4, net: 395.6, mae_usd: -20, mfe_usd: 500, seconds: 1500 },
+  { date: '2024-03-06', side: 'short', qty: 1, entry_ms: Date.UTC(2024, 2, 6, 14, 35), entry_price: 1, exit_ms: Date.UTC(2024, 2, 6, 14, 36), exit_price: 2, exit_reason: 'a,"b"', net: -5 }];
+  const lines = L.tradesCsv(t).split('\n');
+  assert.equal(lines[0], 'date,side,qty,entry_et,entry_price,exit_et,exit_price,exit_reason,sl,tp,gross,commission,net,mae_usd,mfe_usd,seconds');
+  assert.equal(lines[1], '2024-03-05,long,2,2024-03-05 09:35:00,18000.25,2024-03-05 10:00:00,18010,tp,17990,,400,4.4,395.6,-20,500,1500');
+  assert.equal(lines[2], '2024-03-06,short,1,2024-03-06 09:35:00,1,2024-03-06 09:36:00,2,"a,""b""",,,,,-5,,,');
+  assert.equal(lines.length, 3);
+  assert.equal(L.tradesCsv([]), 'date,side,qty,entry_et,entry_price,exit_et,exit_price,exit_reason,sl,tp,gross,commission,net,mae_usd,mfe_usd,seconds');
+});

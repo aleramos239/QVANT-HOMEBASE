@@ -618,6 +618,9 @@
             <select class="hb-field" id="actWho" aria-label="Show"><option value="">Everything</option></select>
             <select class="hb-field" id="actDays" aria-label="Period">
               <option value="1">Today</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select>
+            <select class="hb-field" id="actEvent" aria-label="Event type"><option value="">All events</option></select>
+            <select class="hb-field" id="actAcct" aria-label="Account"><option value="">All accounts</option></select>
+            <input class="hb-field" type="date" id="actDate" aria-label="Period ends on (empty: today)" title="The period ends on this day (empty: today)" style="width:auto">
             <button class="btn btn-outline btn-sm" type="button" id="feedRawBtn" aria-pressed="false"
               title="Show every row's raw journal line">Raw</button>
           </div>
@@ -899,7 +902,7 @@
 
 <script src="/static/desk/core.js?v=3"></script>
 <script src="/static/desk/topbar.js?v=2"></script>
-<script src="/static/desk/activity.js?v=5"></script>
+<script src="/static/desk/activity.js?v=7"></script>
 <script src="/static/desk/views.js?v=1"></script>
 <script src="/static/desk/groups.js?v=5"></script>
 <script src="/static/desk/strategy.js?v=7"></script>

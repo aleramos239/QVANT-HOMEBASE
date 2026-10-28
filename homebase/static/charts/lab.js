@@ -1140,6 +1140,16 @@ const AMK = 'hb_lab_am';
 const amDefault = () => ({ cols: ['build', 'unseen', 'all'], year: '', side: '', hideCat: [], hide: [], view: 'metrics' });
 function amLoad() { try { return { ...amDefault(), ...(JSON.parse(localStorage.getItem(AMK)) || {}) }; } catch (_) { return amDefault(); } }
 function amSave(st) { try { localStorage.setItem(AMK, JSON.stringify(st)); } catch (_) { /* private mode: not kept */ } }
+/* The open run's trades as a CSV file, built here from the bundle already on the page (nothing is asked of the server). */
+function tradesCsvDownload() {
+  const r = S.run && S.run.bundle ? S.run : null;
+  if (!r) return;
+  const st = r.bundle.run.strategy || {}, a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([C.tradesCsv(r.bundle.trades)], { type: 'text/csv' }));
+  a.download = `${String(st.name || st.id || 'run').replace(/[^\w.-]+/g, '_')}_trades.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 function allMetricsDialog() {
   const r = S.run && S.run.bundle ? S.run : null;
   if (!r || !AM) return;
@@ -3270,6 +3280,7 @@ function paintRes() {
       <div class="rs-gh">Run settings</div>${settings}
       <div class="rs-group">${P.chart ? '' : '<button class="rs-row" data-act="show"><span>Show trades on the chart</span><span>›</span></button>'}
         <button class="rs-row" data-act="allmetrics"><span>All metrics</span><span>›</span></button>
+        <button class="rs-row" data-act="tradescsv"><span>Download the trades (CSV)</span><span>›</span></button>
         <button class="rs-row" data-act="report"><span>${root.dataset.report === '1' && P.chart ? 'Hide the report' : 'Report'}</span><span>›</span></button>
         ${b.kind === 'pipe' ? '' : `<button class="rs-row" data-act="review"${b.kind === 'builtin' ? ' disabled' : ''}><span>Request a review</span><span>›</span></button>${deskRows(b)}`}</div>${b.kind === 'pipe' ? '' : deskNote(b)}`;
     main = main.replace('<div class="rs-gh">Run settings</div>', `${propHtml(r)}<div class="rs-gh">Run settings</div>`);
@@ -3318,6 +3329,7 @@ function act(name, el) {
   else if (name === 'show') showOnChart(false);
   else if (name === 'report') { if (root.dataset.report === '1' && P.chart) setReport(false); else showOnChart(true); }
   else if (name === 'allmetrics') allMetricsDialog();
+  else if (name === 'tradescsv') tradesCsvDownload();
   else if (name === 'review') reviewDialog();
   else if (name === 'deskgo') deskGo();
   else if (name === 'deskoff') deskOffDialog();

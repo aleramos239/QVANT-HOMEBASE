@@ -220,6 +220,18 @@ def test_journal_endpoint_strategy_group_and_days(client, tmp_path):
     assert get(group="g5", days=7)["count"] == 1
 
 
+def test_journal_endpoint_account_also_keeps_lines_that_name_it_only_in_touched_or_strategies(client, tmp_path):
+    rows = [
+        {"et": "2026-09-22T09:00:00", "event": "kill", "touched": {"lab_a@x1": [], "lab_b@x2": []}},
+        {"et": "2026-09-22T09:01:00", "event": "account_flatten", "strategies": ["lab_b@x2"]},
+        {"et": "2026-09-22T09:02:00", "event": "signal_refused", "strategy": "lab_a"},               # names no account at all
+        {"et": "2026-09-22T09:03:00", "event": "exit_fill", "account": "x1"},
+    ]
+    (tmp_path / "journal.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    got = client.get("/api/journal", params={"date": "2026-09-22", "account": "x1"}).json()["events"]
+    assert sorted(e["event"] for e in got) == ["exit_fill", "kill"]
+
+
 def test_journal_endpoint_reads_off_the_event_loop(client, tmp_path, monkeypatch):
     import asyncio
     calls = []
