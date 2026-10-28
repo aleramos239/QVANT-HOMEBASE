@@ -970,6 +970,18 @@ test('tool groups: every group tool is a rail tool, once, and the default favori
   assert.equal(C.toolGroupOf('cursor'), -1);
 });
 
+test('tool hotkeys: Alt + a key picks one of 8 drawing tools; Alt+R stays Reset view; no trading key', () => {
+  assert.equal(Object.keys(C.TOOL_KEYS).length, 8);
+  assert.equal(C.toolForKey('KeyT'), 'trend');
+  assert.equal(C.toolForKey('KeyH'), 'hline');
+  assert.equal(C.toolForKey('KeyR'), null, 'Alt+R is Reset chart view');
+  assert.equal(C.toolForKey('KeyZ'), null);
+  const all = C.TOOL_GROUPS.flatMap(([, tools]) => tools);
+  for (const t of Object.values(C.TOOL_KEYS)) assert.ok(all.includes(t), `${t} is a rail tool`);
+  for (const t of Object.values(C.TOOL_KEYS)) assert.ok(!['long', 'short', 'alert'].includes(t), 'positions and alerts have no hotkey');
+  assert.ok(all.includes('erase'), 'the eraser is on the rail');
+});
+
 // ---- 2026-10-11: line opacity / type / axis value, volume + delta colours, reference levels, legend option ----
 test('a line style keeps opacity, type and axis value only when they are set and valid', () => {
   const plain = C.clampStyle('ema', { main: { color: '#112233', width: 2, dash: 'solid', visible: true } });

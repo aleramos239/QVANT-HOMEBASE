@@ -250,7 +250,7 @@ test('edits reach subscribers at once and are saved once, 300 ms after the last'
   const puts = f.calls.filter((c) => c.method === 'PUT');
   assert.equal(puts.length, 1);
   assert.equal(puts[0].url, '/api/drawings/NQ');
-  assert.deepEqual(puts[0].body, [{ ...H2, points: [{ p: 3 }] }]);
+  assert.deepEqual(puts[0].body, { drawings: [{ ...H2, points: [{ p: 3 }] }], known: [] });   // known: what the page loaded (nothing)
   off();
   s.clear('NQ');
   assert.equal(seen.length, 4);
@@ -274,7 +274,7 @@ test('drawings added before the first load finishes are merged with the saved on
   assert.deepEqual(s.list('NQ').map((d) => d.id), ['h1', 'h2']);
   t.mock.timers.tick(300);
   await flush();
-  assert.deepEqual(calls.filter((c) => c.method === 'PUT').at(-1).body.map((d) => d.id), ['h1', 'h2']);
+  assert.deepEqual(calls.filter((c) => c.method === 'PUT').at(-1).body.drawings.map((d) => d.id), ['h1', 'h2']);
 });
 
 test('a failed load is reported, retried before saving, and never overwritten', async (t) => {
@@ -306,6 +306,113 @@ test('a failed save is reported and the drawings stay on screen', async (t) => {
   assert.deepEqual(errors, [['NQ', 'save failed (400): type: trend, hline or rect']]);
 });
 
+/* ---- two windows, old files, nothing lost (2026-10-27) ---- */
+test('a save carries the ids the page loaded, then the ids it last sent', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = fakeFetch((url, method) => (method === 'GET' ? { status: 200, body: [H1] } : { status: 200, body: { ok: true, count: 2 } }));
+  const s = new D.Store({ fetchFn: f });
+  await s.ensure('NQ');
+  s.add('NQ', H2);
+  t.mock.timers.tick(300);
+  await flush();
+  s.remove('NQ', 'h1');
+  t.mock.timers.tick(300);
+  await flush();
+  const puts = f.calls.filter((c) => c.method === 'PUT').map((c) => c.body);
+  assert.deepEqual(puts[0], { drawings: [H1, H2], known: ['h1'] });
+  assert.deepEqual(puts[1], { drawings: [H2], known: ['h1', 'h2'] });   // so the server can tell "removed here" from "added elsewhere"
+});
+
+test('a drawing another window added comes back with the save: shown at once, never dropped by a later save', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const H3 = { id: 'h3', type: 'hline', points: [{ p: 3 }] };
+  let first = true;
+  const f = fakeFetch((url, method) => {
+    if (method === 'GET') return { status: 200, body: [H1] };
+    const r = { status: 200, body: first ? { ok: true, count: 3, kept: [H3] } : { ok: true, count: 3 } };
+    first = false;
+    return r;
+  });
+  const s = new D.Store({ fetchFn: f });
+  let told = 0;
+  s.subscribe('NQ', () => { told += 1; });
+  await s.ensure('NQ');
+  s.add('NQ', H2);
+  t.mock.timers.tick(300);
+  await flush();
+  await flush();
+  assert.deepEqual(s.list('NQ').map((d) => d.id), ['h1', 'h2', 'h3']);
+  assert.equal(f.calls.filter((c) => c.method === 'PUT').length, 1, 'adopting it is not a save of its own');
+  assert.ok(told >= 3);
+  assert.equal(s.canUndo('NQ'), true);
+  s.undo('NQ');                                                        // the one undo step is the add, not the adopted drawing
+  assert.deepEqual(s.list('NQ').map((d) => d.id), ['h1', 'h3'].sort());
+  t.mock.timers.tick(300);
+  await flush();
+  assert.deepEqual(f.calls.filter((c) => c.method === 'PUT').at(-1).body.known, ['h1', 'h2', 'h3']);
+});
+
+test('old-format drawings load as they are and are saved back whole', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const old = [{ id: 'o1', type: 'trend', points: [{ t: 1, p: 2 }, { t: 3, p: 4 }] }, { id: 'o2', type: 'hline', color: '#F23645', points: [{ p: 5 }] }];
+  const f = fakeFetch((url, method) => (method === 'GET' ? { status: 200, body: old } : null));
+  const s = new D.Store({ fetchFn: f });
+  await s.ensure('NQ');
+  assert.deepEqual(s.list('NQ'), old);                  // no hidden / locked / style needed
+  s.add('NQ', H1);
+  t.mock.timers.tick(300);
+  await flush();
+  assert.deepEqual(f.calls.find((c) => c.method === 'PUT').body.drawings, [...old, H1]);
+});
+
+test('Bring to front / Send to back move one drawing in the list (its draw order) as one undo step', () => {
+  const st = new D.Store({ fetchFn: async () => ({ ok: true, json: async () => [] }), delay: 0 });
+  const H3 = { id: 'h3', type: 'hline', points: [{ p: 3 }] };
+  st.put('NQ', [H1, H2, H3]);
+  const ids = () => st.list('NQ').map((d) => d.id);
+  st.reorder('NQ', 'h1', 'front');
+  assert.deepEqual(ids(), ['h2', 'h3', 'h1']);
+  st.reorder('NQ', 'h3', 'back');
+  assert.deepEqual(ids(), ['h3', 'h2', 'h1']);
+  st.reorder('NQ', 'h3', 'back');                       // already there: no change, no step
+  st.reorder('NQ', 'nope', 'front');
+  assert.deepEqual(ids(), ['h3', 'h2', 'h1']);
+  st.undo('NQ');
+  assert.deepEqual(ids(), ['h2', 'h3', 'h1']);
+  st.undo('NQ');
+  assert.deepEqual(ids(), ['h1', 'h2', 'h3']);
+  assert.equal(st.canUndo('NQ'), false);
+});
+
+test('near the 500 limit the page says so while it saves', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const errors = [];
+  const f = fakeFetch(() => null);
+  const s = new D.Store({ fetchFn: f, onError: (root, msg) => errors.push(msg) });
+  await s.ensure('NQ');
+  s.put('NQ', Array.from({ length: 449 }, (_, i) => ({ ...H1, id: `x${i}` })));
+  t.mock.timers.tick(300);
+  await flush();
+  assert.deepEqual(errors, []);
+  s.add('NQ', H2);
+  t.mock.timers.tick(300);
+  await flush();
+  assert.deepEqual(errors, ['450 of 500 drawings used']);
+});
+
+test('cloned: a new id, a few bars and ticks along, unlocked, and a price alert is not cloned', () => {
+  const c = D.cloned({ ...trend, locked: true, hidden: true }, 0.25, TIME);
+  assert.notEqual(c.id, trend.id);
+  assert.equal(c.locked, undefined);
+  assert.equal(c.hidden, undefined);
+  assert.deepEqual(c.points, [{ t: bars[0].ms + 3 * MIN, p: 901 }, { t: bars[4].ms + 3 * MIN, p: 861 }]);
+  assert.equal(c.type, 'trend');
+  assert.equal(D.cloned({ ...hline, alert: { dir: 'up', fired: false } }, 0.25, TIME), null);
+  assert.deepEqual(D.cloned(hline, 0.25, TIME).points, [{ p: 876 }]);
+  const vl = { id: 'v', type: 'vline', points: [{ t: bars[1].ms }] };
+  assert.deepEqual(D.cloned(vl, 0.25, TIME).points, [{ t: bars[4].ms }]);
+});
+
 test('samePoints: two versions of a drawing on exactly the same points', () => {
   assert.equal(D.samePoints(trend, { ...trend, points: trend.points.map((q) => ({ ...q })) }), true);
   assert.equal(D.samePoints(trend, D.moveDrawing(trend, 0, 0.25, 0.25, TIME)), false);
@@ -320,7 +427,7 @@ test('samePoints: two versions of a drawing on exactly the same points', () => {
    returns to the cursor after a placement, as on the page), the magnet, and
    the chart's bars (OHLC ones for the magnet). */
 function pointerRig(saved, { tool = 'cursor', magnet = { on: false, mode: 'weak' }, rigBars = bars, onPosition = () => {},
-  styleDefault = undefined, onDrawingSettings = undefined } = {}) {
+  styleDefault = undefined, onDrawingSettings = undefined, drawingsHidden = undefined } = {}) {
   globalThis.window = { addEventListener() {}, removeEventListener() {},
     LightweightCharts: { LineStyle: { Solid: 0, Dotted: 1, Dashed: 2 } } };
   const applyCalls = [];
@@ -336,7 +443,7 @@ function pointerRig(saved, { tool = 'cursor', magnet = { on: false, mode: 'weak'
   const store = new D.Store({ fetchFn: f, delay: 0 });
   let now = tool;
   const ctl = new D.Controller(cell, { tool: () => now, toolDone() { now = 'cursor'; }, drawings: store,
-    magnet: () => magnet, onPosition, ...(styleDefault ? { styleDefault } : {}), ...(onDrawingSettings ? { onDrawingSettings } : {}) });
+    magnet: () => magnet, onPosition, ...(drawingsHidden ? { drawingsHidden } : {}), ...(styleDefault ? { styleDefault } : {}), ...(onDrawingSettings ? { onDrawingSettings } : {}) });
   const ev = (x, y, buttons = 1, metaKey = false) => ({ button: 0, buttons, ctrlKey: false, metaKey, clientX: x, clientY: y,
     preventDefault() {}, stopPropagation() {} });
   const gesture = async (path, metaKey = false) => {   // press at path[0], move through the rest, release at the last point
@@ -368,7 +475,7 @@ test('a click on a drawing selects it and never nudges it; a real drag moves it 
   await R.gesture([[120, 120], [122, 121], [130, 130]]);           // a real move: +1 bar, -10.00
   const moved = { ...trend, points: [{ t: bars[1].ms, p: 890 }, { t: bars[4].ms + MIN, p: 850 }] };
   assert.deepEqual(R.store.list('NQ'), [moved]);
-  assert.deepEqual(R.puts().map((c) => c.body), [[moved]]);
+  assert.deepEqual(R.puts().map((c) => c.body.drawings), [[moved]]);
   R.done();
 });
 
@@ -615,6 +722,64 @@ test('an unlocked drawing behaves exactly as before (no regression from the lock
   assert.equal(R.ctl.sel, 'a');
   assert.equal(R.ctl.deleteSelected(), true);
   assert.deepEqual(R.store.list('NQ'), []);
+  R.done();
+});
+
+test('a hidden drawing is not drawn, grabbed or selected; Hide all drawings hides every one', async (t) => {
+  withWindow(t);
+  const hid = { ...trend, hidden: true };
+  const R = pointerRig([hid, rect], { tool: 'cursor' });
+  await R.store.ensure('NQ');
+  assert.deepEqual(R.ctl.items().map((d) => d.id), ['b']);
+  R.ctl.onDown(evAt(104, 104));                         // squarely on the hidden trend line
+  R.ctl.onUp(evAt(104, 104, { buttons: 0 }));
+  assert.equal(R.ctl.sel, null);
+  assert.deepEqual(R.store.list('NQ').map((d) => d.id), ['a', 'b']);   // still saved
+  R.done();
+  let all = false;
+  const R2 = pointerRig([trend, rect], { tool: 'cursor', drawingsHidden: () => all });
+  await R2.store.ensure('NQ');
+  assert.equal(R2.ctl.items().length, 2);
+  all = true;
+  assert.deepEqual(R2.ctl.items(), []);
+  R2.done();
+});
+
+test('the eraser deletes the drawing under the click, skips a locked one, and stays the tool', async (t) => {
+  withWindow(t);
+  const locked = { ...rect, locked: true };
+  const R = pointerRig([trend, locked], { tool: 'erase' });
+  await R.store.ensure('NQ');
+  R.ctl.onDown(evAt(120, 135));                         // inside the locked rectangle, off the trend line
+  R.ctl.onUp(evAt(120, 135, { buttons: 0 }));
+  assert.deepEqual(R.store.list('NQ').map((d) => d.id), ['a', 'b']);
+  R.ctl.onDown(evAt(104, 104));                         // on the trend line
+  R.ctl.onUp(evAt(104, 104, { buttons: 0 }));
+  assert.deepEqual(R.store.list('NQ').map((d) => d.id), ['b']);
+  assert.equal(R.tool(), 'erase');
+  R.ctl.onDown(evAt(300, 20));                          // empty chart: nothing
+  R.ctl.onUp(evAt(300, 20, { buttons: 0 }));
+  assert.deepEqual(R.store.list('NQ').map((d) => d.id), ['b']);
+  assert.equal(R.store.canUndo('NQ'), true);
+  R.store.undo('NQ');
+  assert.deepEqual(R.store.list('NQ').map((d) => d.id), ['a', 'b']);
+  R.done();
+});
+
+test('copySelected / paste: a clone of the selected drawing, selected, one undo step', async (t) => {
+  withWindow(t);
+  const R = pointerRig([trend], { tool: 'cursor' });
+  await R.store.ensure('NQ');
+  assert.equal(R.ctl.copySelected(), null);             // nothing selected
+  R.ctl.onDown(evAt(120, 120));
+  R.ctl.onUp(evAt(120, 120, { buttons: 0 }));
+  const copy = R.ctl.copySelected();
+  assert.equal(copy.id, 'a');
+  const made = R.ctl.paste(copy);
+  assert.deepEqual(R.store.list('NQ').map((d) => d.id), ['a', made.id]);
+  assert.equal(R.ctl.sel, made.id);
+  assert.equal(R.ctl.paste(copy).id === made.id, false, 'a second paste is a second clone');
+  assert.equal(R.store.list('NQ').length, 3);
   R.done();
 });
 
