@@ -40,7 +40,7 @@ if str(L) not in sys.path:
 
 import l2sim  # noqa: E402
 
-TFS = ("1", "5", "15", "30")                       # l2sim.Template's tf choices; the SPEC's screen cadence is 1 and 5
+TFS = ("1", "3", "5", "15", "30")                  # l2sim.Template's tf choices; the SPEC's screen cadence is 1 and 5
 RUN_KEYS = ("strict_limit",)                       # the only execution option a family may pin for the screen (SPEC: B4)
 REGISTRY: dict = {}                                # name -> (StrategyClass, default_inputs, both_sides, notes)
 LIBRARY: dict = {}                                 # name -> edge-library meta (rationale, complexity, variants, roots, ...)
