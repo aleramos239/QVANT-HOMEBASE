@@ -910,7 +910,17 @@ function triesCount(runs, wfs, sid, results) {
     tabled: ws.some((w) => w.scheme === 'fixed' && (w.axes || []).length > 0 && w.status === 'done'), layout: lay };
 }
 
-const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, withDeskGroup, ON_DESK, INDENT,
+/* A run's trades as CSV text (the Lab's "Download trades"): the columns of the chart's trade list, times in New York time. */
+const CSV_COLS = ['date', 'side', 'qty', 'entry_et', 'entry_price', 'exit_et', 'exit_price', 'exit_reason', 'sl', 'tp', 'gross', 'commission', 'net', 'mae_usd', 'mfe_usd', 'seconds'];
+const ET_FMT = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+function tradesCsv(trades) {
+  const et = (ms) => (ms == null ? '' : ET_FMT.format(new Date(ms)));
+  const cell = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const rows = (trades || []).map((t) => CSV_COLS.map((k) => cell(k === 'entry_et' ? et(t.entry_ms) : k === 'exit_et' ? et(t.exit_ms) : t[k])));
+  return [CSV_COLS, ...rows].map((r) => r.join(',')).join('\n');
+}
+
+const api = { tradesCsv, highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, withDeskGroup, ON_DESK, INDENT,
   shownRows, canPick, pickRange, prunePicks, rowClick, draftName, deleteItem, deleteTargets, deleteConfirm, deleteConfirmHtml, deleteLine, goneLine, unsavedLine, deleteKey, isTyping,
   libFilter, MARKS, LIB_SORTS, LIB_SHOWS, markOf, libShow, libSort, libMarkets, tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
   PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots,
