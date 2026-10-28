@@ -684,3 +684,30 @@ test('repair pass: with chart trading OFF (after a Kill) lines and the panel sti
     desk.state = was; desk.down = '';
   }
 });
+
+/* 2026-10-27 (owner "3 yeah"): every Charts confirm names the machine it will act from, read like the Desk reads it:
+   window.HB_MACHINE (the native shell), else the desk state's machine; unknown shows nothing, never a guess. */
+function confirmLines() {
+  const body = dialogs[dialogs.length - 1].box.children.find((x) => x.className === 'cf-body');
+  return body.children.filter((x) => x.className === 'cf-note cf-machine').map((x) => x.textContent);
+}
+test('machine words: the pure mapping', () => {
+  assert.equal(T.machineWords('mac'), 'This Mac');
+  assert.equal(T.machineWords('server'), 'Server · Chicago');
+  assert.equal(T.machineWords(null), '');
+  assert.equal(T.machineWords('whatever'), '');
+});
+test('a confirm names the machine: shell value, else desk state, else nothing', async () => {
+  const c = chart(['sim041']);
+  for (const [shell, st, want] of [['mac', undefined, ['This Mac']], ['server', undefined, ['Server · Chicago']],
+    [undefined, 'server', ['Server · Chicago']], [undefined, undefined, []]]) {
+    reset();
+    global.window.HB_MACHINE = shell; STATE.machine = st;
+    desk.prefs.oneClick = false;   // so the order asks
+    UI.placeOrder({ cell: c, root: 'NQ', side: 'Buy', type: 'Market', qty: 1 });
+    await flush();
+    assert.equal(dialogs.length, 1);
+    assert.deepEqual(confirmLines(), want);
+  }
+  delete global.window.HB_MACHINE; delete STATE.machine;
+});
