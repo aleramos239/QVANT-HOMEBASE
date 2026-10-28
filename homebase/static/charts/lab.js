@@ -755,7 +755,7 @@ function cardSheet() {
   const text = (k) => `<input id="bc_${k}" data-bc="${k}" value="${esc(F[k])}" spellcheck="false" autocomplete="off">`;
   const field = (k, label, control, help = '') => `<div class="bp-f pl-f"><label for="bc_${k}">${esc(label)}</label>${control}${help ? `<small>${esc(help)}</small>` : ''}</div>`;
   const sync = () => {
-    const needs = C.bcNeeds(F), go = $('[data-x="go"]', d);
+    const needs = C.bcNeeds(F, takenNames()), go = $('[data-x="go"]', d);
     if (!go) return;
     go.disabled = busy || needs.length > 0;
     $('#bcNeed', d).textContent = needs.length ? `Still needed: ${needs.join('; ')}.` : '';
@@ -790,7 +790,7 @@ function cardSheet() {
     if (!x || busy) return;
     if (k === 'cancel') return closeDialog();
     if (k === 'open') { const name = x.dataset.name; closeDialog(); return selectDraft(name); }
-    if (k !== 'go' || C.bcNeeds(F).length) return;
+    if (k !== 'go' || C.bcNeeds(F, takenNames()).length) return;
     busy = true; x.disabled = true; x.textContent = 'Saving…'; $('#bcErr', d).hidden = true;
     const r = await bcRun('blueprint_card', C.bcBody(F));
     busy = false;
@@ -812,9 +812,9 @@ function checkSheet(b) {
   const d = dialog('<h2>Code check</h2>');
   d.classList.add('wide', 'pl-dlg');
   const paint = (res) => {
-    const done = res && res.ok && /Phase 1 is passed/.test(res.text);
+    const done = res && res.ok && C.bcPassed(res.text);
     d.innerHTML = `<h2 id="labDlgTitle">Code check · ${esc(name)}</h2>
-      <div class="pl-body" tabindex="-1"><div class="bp-form">${res ? bcPars(res.ok ? C.bcLines(res.text) : res.text)
+      <div class="pl-body" tabindex="-1"><div class="bp-form">${res ? bcPars(res.ok ? C.bcLines(res.text) : C.bcRefused(res.text))
         : '<p>Do the trades do what the card says? Six lines are read on the in-sample months, and 3 trades are named for you to look at on the chart. It runs no backtest.</p>'}</div></div>
       <div class="pl-foot">${res && res.ok && !done ? '<p class="pl-tip">Next: look at the 3 trades named above on the chart, then press "I looked at them".</p>' : ''}
         <div class="acts"><button class="btn btn-outline" data-x="cancel">Close</button>${res && res.ok && !done ? '<button class="btn btn-outline" data-x="looked">I looked at them</button>' : ''}<button class="btn btn-default" data-x="go">${res ? 'Run it again' : 'Run the code check'}</button></div></div>`;

@@ -408,9 +408,10 @@ const BC_BARS = ['1', '5', '15', '30'];
 const BC_NAME = /^[a-z][a-z0-9_]{1,39}$/;             // an idea's name, as the toolkit takes it (2-40 characters, a letter first)
 const bcForm = () => ({ name: '', why: '', loser: '', market: '', session: '', bar: '5', family: '', main_setting: '', values: '', neighbors: '', sides: 'both', sides_why: '', loses_when: '' });
 const bcList = (v) => plT(v).split(',').map((x) => x.trim()).filter(Boolean);
-function bcNeeds(F) {
+function bcNeeds(F, taken = []) {
   const n = [], v = bcList(F.values);
   if (!plT(F.name)) n.push('a name'); else if (!BC_NAME.test(plT(F.name))) n.push('a name: small letters, numbers and _, a letter first');
+  else if (taken.includes(plT(F.name))) n.push('a name that is not in the Lab yet');   // the card writer would rewrite that idea's card
   if (!plT(F.why)) n.push('why it should make money');
   if (!plT(F.loser)) n.push('who loses');
   if (!plT(F.market)) n.push('a market');
@@ -429,6 +430,10 @@ function bcBody(F) {
 }
 /* A tool's text without its own "Next:" line (written in the toolkit's command words). */
 const bcLines = (text) => String(text || '').split('\n').filter((l) => !l.startsWith('Next:')).join('\n').trim();
+/* Did the code check pass? Only its RESULT line says: the fail text also contains "Phase 1 is passed" ("... is passed only when every line is true."). */
+const bcPassed = (text) => /^RESULT:.*Phase 1 is passed\.\s*$/m.test(String(text || ''));
+/* A refusal in the toolkit's command words (no in-sample trades stored yet) said plainly; any other refusal as it is. */
+const bcRefused = (text) => /say what to check/.test(text) ? 'There are no in-sample trades to check yet. Ask for the in-sample table first, then run the code check.' : String(text || '');
 /* The card tool's text after a save, with the one next step: said, never started. */
 const bcSaid = (text) => `${bcLines(text)}\nNext: ask for the in-sample table.`;
 /* -- the form's lists: the server's `rules` ({name, words, markets, sessions, bars, settings: [{name, kind, min, max, choices, default,
@@ -943,7 +948,7 @@ const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, 
   shownRows, canPick, pickRange, prunePicks, rowClick, draftName, deleteItem, deleteTargets, deleteConfirm, deleteConfirmHtml, deleteLine, goneLine, unsavedLine, deleteKey, isTyping,
   libFilter, MARKS, LIB_SORTS, LIB_SHOWS, markOf, libShow, libSort, libMarkets, tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
   PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots,
-  plPick, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend, BC_BARS, bcForm, bcNeeds, bcBody, bcLines, bcSaid,
+  plPick, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend, BC_BARS, bcForm, bcNeeds, bcBody, bcLines, bcSaid, bcPassed, bcRefused,
   plUsable, plRules, plMainSetting, plIndicators, plSessionsFor, plNeed, plValueError, plSettingWords, plPrefill,
   FM_LATEST, fmShown, fmKeys, fmKinds, fmSides, fmWords, fmHasValue, fmKindValue, fmFit, fmSetMarket, fmStarts, fmSize, fmSuggest, fmStart, fmSwitch, fmFill, fmNumberError, fmErrors, fmAnswers, fmFirstError, fmId, fmKeepErrors,
   plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, promoteState, deskSaid,

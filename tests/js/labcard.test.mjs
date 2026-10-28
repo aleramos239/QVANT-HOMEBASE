@@ -68,3 +68,25 @@ test('the code check text drops the toolkit\'s command words', () => {
   const t = 'CODE CHECK of x\n  #3 2024-01-02 09:35 -> 09:50 ET  long\nRESULT: fails 1.5.\nNext: Look at the 3 trades on the chart, then run the code check again with --looked.';
   assert.equal(L.bcLines(t), 'CODE CHECK of x\n  #3 2024-01-02 09:35 -> 09:50 ET  long\nRESULT: fails 1.5.');
 });
+
+test('passed is read from the RESULT line: the fail text also says "Phase 1 is passed"', () => {
+  const head = 'CODE CHECK of x\n  #3 2024-01-02 09:35 -> 09:50 ET  long';
+  assert.equal(L.bcPassed(`${head}\nRESULT: every line is true. Phase 1 is passed.`), true);
+  assert.equal(L.bcPassed(`${head}\nRESULT: every line that is read is true; 1.6 waits for a change to the code. Phase 1 is passed.\nNext: x`), true);
+  assert.equal(L.bcPassed(`${head}\nRESULT: fails 1.5. Phase 1 is passed only when every line is true.\nNext: x`), false);
+  assert.equal(L.bcPassed(''), false);
+});
+
+test('a name already in the Lab is not written over by a click', () => {
+  assert.deepEqual(L.bcNeeds(FILLED(), ['nq_orb_pre']), ['a name that is not in the Lab yet']);
+  assert.deepEqual(L.bcNeeds(FILLED(), ['other']), []);
+  assert.deepEqual(L.bcNeeds(FILLED()), []);
+});
+
+test('a code check refused for want of stored trades says it in plain words', () => {
+  const raw = 'nq_orb_pre: say what to check: --store=<store key> or --trades=<trades file> (no code check of this idea is on file to read again)';
+  const said = L.bcRefused(raw);
+  assert.doesNotMatch(said, /--store|--trades/);
+  assert.match(said, /in-sample table/);
+  assert.equal(L.bcRefused('nq_x: no such idea'), 'nq_x: no such idea');
+});
