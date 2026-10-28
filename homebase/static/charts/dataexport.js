@@ -178,7 +178,7 @@ function refreshView(st) {
     let text = 'Done, charts reloaded. ' + (k.filling
       ? `${n(k.filling)} still ${k.filling === 1 ? 'has gaps' : 'have gaps'} Tradovate has: click Refresh again.`
       : 'Every gap Tradovate still has is filled.');
-    if (k.lost) text += ` ${n(k.lost)} keep${k.lost === 1 ? 's' : ''} holes Tradovate no longer has.`;
+    if (k.lost) text += ` ${n(k.lost)} keep${k.lost === 1 ? 's' : ''} holes Tradovate no longer has: Massive can fill them from a terminal (python -m homebase.ticks --fill-from-massive --holes --dry-run lists what it would take first).`;
     // Tradovate posts an hour's ticks ~45 min after it ends (tickarchive.HISTORY_COMMIT_MIN): a hole after that
     // is not "filled" yet, so say when it can be (the owner, 2026-10-19: "when i click refresh it doesnt fill the gap")
     const f = Date.parse(st.finished || '');

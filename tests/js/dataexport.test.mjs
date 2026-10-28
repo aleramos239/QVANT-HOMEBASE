@@ -177,7 +177,7 @@ test('refreshView: idle says nothing; running names the step; done reads the cov
 test('refreshView: with the report classes it says what a click can still fill, and that the charts reloaded', () => {
   const view = (classes) => DE.refreshView({ status: 'done', steps: [], coverage: { sessions: 180, classes } }).text;
   assert.equal(view({ whole: 144, filling: 0, lost: 22 }),
-    'Done, charts reloaded. Every gap Tradovate still has is filled. 22 sessions keep holes Tradovate no longer has.');
+    'Done, charts reloaded. Every gap Tradovate still has is filled. 22 sessions keep holes Tradovate no longer has: Massive can fill them from a terminal (python -m homebase.ticks --fill-from-massive --holes --dry-run lists what it would take first).');
   assert.equal(view({ whole: 170, filling: 1, lost: 0 }),
     'Done, charts reloaded. 1 session still has gaps Tradovate has: click Refresh again.');
   // a click at 08:27 ET: Tradovate has posted up to 07:00, so the 07:00 hour's gaps fill from 08:45
