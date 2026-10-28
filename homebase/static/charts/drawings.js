@@ -99,6 +99,7 @@ function distToSegment(px, py, ax, ay, bx, by) {
 const ONE_POINT = new Set(['note', 'avwap']);
 const ALERT_COLOR = '#F5A623';
 const UNDO_MAX = 50;
+const MAX_DRAWINGS = 500, NEAR_CAP = 450;   // the server refuses a symbol's 501st drawing (charts/routes/drawings.py); the page says so from 450
 
 /* An anchored VWAP's line: the volume-weighted average of (high + low + close) / 3 from the bar its point sits on to the
    last bar, [{ms, v}]. A bar with no volume adds nothing; nothing is drawn until some volume has traded. */
@@ -259,6 +260,14 @@ function moveDrawing(d, dBars, dPrice, tick, ctx) {
       : { t: shiftTime(q.t, dBars, ctx), p: roundToTick(q.p + dPrice, tick) })) };
 }
 
+/* A copy of a drawing for Clone / paste: a new id, a few bars and ticks along so it does not hide behind the original, not
+   locked or hidden. A price alert is not cloned (null): an alert is set on its own. */
+function cloned(d, tick, ctx) {
+  if (d.alert) return null;
+  const { locked, hidden, ...rest } = moveDrawing(d, 3, 4 * tick, tick, ctx);
+  return { ...rest, id: newId() };
+}
+
 /* Do two versions of a drawing sit on exactly the same points? */
 function samePoints(a, b) {
   return a.points.length === b.points.length && a.points.every((q, i) => q.t === b.points[i].t && q.p === b.points[i].p);
@@ -351,7 +360,8 @@ function snapPrice(bar, y, p, mode, yOf) {
 }
 
 /* Drawings per symbol, shared by every chart of that symbol, saved to the
-   server as the symbol's whole list, debounced. */
+   server as the symbol's whole list, debounced. A save also names the ids this page has loaded or saved ("known"): the
+   server keeps a drawing it holds that this page never knew (another window added it), and sends it back to be shown. */
 class Store {
   constructor({ fetchFn, delay = 300, onError = () => {} } = {}) {
     this.fetch = fetchFn || ((...a) => fetch(...a));
@@ -362,7 +372,7 @@ class Store {
 
   st(root) {
     let s = this.roots.get(root);
-    if (!s) { s = { list: [], loaded: false, loading: null, timer: null, subs: new Set() }; this.roots.set(root, s); }
+    if (!s) { s = { list: [], loaded: false, loading: null, timer: null, subs: new Set(), known: new Set() }; this.roots.set(root, s); }
     return s;
   }
 
@@ -390,6 +400,7 @@ class Store {
       if (!r.ok) throw new Error(`load failed (${r.status})`);
       const saved = await r.json(), mine = new Set(s.list.map((d) => d.id));
       s.list = [...(Array.isArray(saved) ? saved : []).filter((d) => d && !mine.has(d.id)), ...s.list];
+      for (const d of Array.isArray(saved) ? saved : []) if (d && d.id) s.known.add(d.id);
       s.loaded = true;
       this.emit(root);
       return true;
@@ -403,7 +414,16 @@ class Store {
   /* `quiet`: not an undo step of its own (a settings dialog's live preview, an alert marked gone off). */
   replace(root, d, quiet = false) { this.set(root, this.list(root).map((x) => (x.id === d.id ? d : x)), quiet); }
   remove(root, id) { this.set(root, this.list(root).filter((x) => x.id !== id)); }
-  clear(root) { this.set(root, []); }
+  /* Bring to front / Send to back: the list is the draw order (and the click order, last on top). */
+  reorder(root, id, where) {
+    const list = this.list(root), d = list.find((x) => x.id === id);
+    if (!d || list[where === 'front' ? list.length - 1 : 0] === d) return;
+    const rest = list.filter((x) => x !== d);
+    this.set(root, where === 'front' ? [...rest, d] : [d, ...rest]);
+  }
+  /* What Remove all may take: a locked drawing stays (as for Delete), and so does a hidden one (the user cannot see it). */
+  removable(root) { return this.list(root).filter((d) => !d.locked && !d.hidden); }
+  clear(root) { this.set(root, this.list(root).filter((d) => d.locked || d.hidden)); }
 
   /* Every change is one undo step (the list before it), up to UNDO_MAX; a new change drops the redo steps. The steps live
      as long as the page: a reload starts clean. */
@@ -450,17 +470,36 @@ class Store {
 
   async save(root) {
     if (!(await this.ensure(root))) return;   // never overwrite drawings we could not read
+    const s = this.st(root), sent = this.list(root);
+    if (sent.length >= NEAR_CAP) this.onError(root, `${sent.length} of ${MAX_DRAWINGS} drawings used`);
     try {
       const r = await this.fetch(this.url(root), { method: 'PUT', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(this.list(root)) });
+        body: JSON.stringify({ drawings: sent, known: [...s.known] }) });
       if (!r.ok) {
         let detail = '';
         try { detail = (await r.json()).detail || ''; } catch (_) { /* no JSON body */ }
         throw new Error(`save failed (${r.status})${detail ? ': ' + detail : ''}`);
       }
+      let kept = [];
+      try { kept = (await r.json()).kept || []; } catch (_) { /* nothing came back to show */ }
+      s.known = new Set(sent.map((d) => d.id));
+      this.adopt(root, kept);
     } catch (e) {
       this.onError(root, e && e.message ? e.message : String(e));
     }
+  }
+
+  /* Drawings the server kept from another window: shown, and put into the undo steps too (an undo must not take them out). */
+  adopt(root, kept) {
+    const s = this.st(root), have = new Set(s.list.map((d) => d.id));
+    const fresh = (Array.isArray(kept) ? kept : []).filter((d) => d && d.id && !have.has(d.id));
+    if (!fresh.length) return;
+    const add = (l) => [...l, ...fresh.filter((d) => !l.some((x) => x.id === d.id))];
+    s.list = add(s.list);
+    s.undo = (s.undo || []).map(add);
+    s.redo = (s.redo || []).map(add);
+    for (const d of fresh) s.known.add(d.id);
+    this.emit(root);
   }
 }
 
@@ -830,7 +869,9 @@ class Controller {
   /* The symbol's drawings, with one being dragged shown where it is now. */
   items() {
     // a drawing told to show on other intervals only (d.vis) is not on this chart at all: not drawn, not grabbed
-    const spec = this.cell.spec(), list = this.host.drawings.list(this.root).filter((d) => DS.shownOn(d.vis, spec));
+    // hidden (d.hidden, or Hide all drawings from the chart menu) is the same: still saved, not drawn, not grabbed
+    const spec = this.cell.spec(), all = this.host.drawingsHidden && this.host.drawingsHidden();
+    const list = all ? [] : this.host.drawings.list(this.root).filter((d) => !d.hidden && DS.shownOn(d.vis, spec));
     const cur = this.drag && this.drag.cur;
     return cur ? list.map((d) => (d.id === cur.id ? cur : d)) : list;
   }
@@ -947,6 +988,15 @@ class Controller {
       this.mode = 'drag';
       this.downAt = pt;
       this.prim.redraw();
+      return;
+    }
+    if (tool === 'erase') {   // the eraser: a click deletes the top drawing under it (a locked one stays), and the tool stays
+      const geo = this.geo(), all = this.items();
+      for (let i = all.length - 1; geo && i >= 0; i--) {
+        if (!hitTest(all[i], pt, geo)) continue;
+        if (!all[i].locked) { this.host.drawings.remove(this.root, all[i].id); this.setHover(null); }
+        break;
+      }
       return;
     }
     if (tool !== 'cursor') {
@@ -1192,6 +1242,16 @@ class Controller {
     return false;
   }
 
+  /* Clone / Copy-Paste: the selected drawing to copy, and a clone of a copied one pasted onto this symbol (selected; null for a price alert). */
+  copySelected() { return this.selectedDrawing(); }
+  paste(d) {
+    const c = cloned(d, this.cell.tick, this.ctx());
+    if (!c) return null;
+    this.sel = c.id;
+    this.host.drawings.add(this.root, c);   // every chart of this symbol refreshes, with the clone selected
+    return c;
+  }
+
   /* Never on a locked drawing (its toolbar's Unlock, or the settings dialog, is the way off). */
   deleteSelected() {
     if (!this.sel) return false;
@@ -1229,7 +1289,7 @@ function zoneAt(pt, w, h) {
 }
 
 const api = { zoneAt, barIndexAt, placeMarkers, logicalOf, xOfLogical, timeToX, snapTime, roundToTick, distToSegment, handlePoints, hitTest,
-  setPoint, shiftTime, moveDrawing, samePoints, fillOf, fmtDuration, measureLabel, lineStats, fibRows, withAlpha, timeTag, newId, MAGNET_PX, MAGNET_OFF, parseMagnet,
+  setPoint, shiftTime, moveDrawing, cloned, samePoints, fillOf, fmtDuration, measureLabel, lineStats, fibRows, withAlpha, timeTag, newId, MAGNET_PX, MAGNET_OFF, parseMagnet,
   magnetMode, snapPrice, toolLabelsShown, toolLabelParts, Store, Primitive, Controller, HANDLE_TOL, LINE_TOL };
 if (typeof window !== 'undefined') window.HBDrawings = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

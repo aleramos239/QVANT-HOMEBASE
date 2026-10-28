@@ -15,7 +15,7 @@
      window.HB_PAGE tells the shared app.js/panel.js which storage namespace (layouts, the bottom
      panel's default) and /ws page kind to use. -->
 <script>window.HB_PAGE = 'backtest';</script>
-<link rel="stylesheet" href="/static/charts/charts.css?v=54">
+<link rel="stylesheet" href="/static/charts/charts.css?v=55">
 <link rel="stylesheet" href="/static/charts/apple-charts.css?v=8">
 <link rel="stylesheet" href="/static/charts/guide.css?v=5">
 <link rel="stylesheet" href="/static/charts/lab.css?v=85">
@@ -73,7 +73,10 @@
 </header>
 <div class="main">
   <nav class="rail" id="rail" aria-label="Drawing tools">
-    <button class="rail-btn" type="button" data-tool="cursor" title="Cursor" aria-pressed="true"><span class="icw" data-icon="cursor"></span></button>
+    <div class="rail-split" id="railCursorBox">
+      <button class="rail-btn" type="button" data-tool="cursor" title="Cursor" aria-pressed="true"><span class="icw" data-icon="cursor"></span></button>
+      <button class="rail-corner" type="button" id="railCursorMore" title="Mouse pointer: cross, dot or arrow" aria-label="Mouse pointer" aria-haspopup="menu" aria-expanded="false"></button>
+    </div>
     <button class="rail-btn" type="button" data-tool="trend" title="Trend line" aria-pressed="false"><span class="icw" data-icon="trend"></span></button>
     <button class="rail-btn" type="button" data-tool="ray" title="Ray" aria-pressed="false"><span class="icw" data-icon="ray"></span></button>
     <button class="rail-btn" type="button" data-tool="xline" title="Extended line" aria-pressed="false"><span class="icw" data-icon="xline"></span></button>
@@ -89,11 +92,13 @@
     <button class="rail-btn" type="button" data-tool="long" title="Long position" aria-pressed="false"><span class="icw" data-icon="long"></span></button>
     <button class="rail-btn" type="button" data-tool="short" title="Short position" aria-pressed="false"><span class="icw" data-icon="short"></span></button>
     <button class="rail-btn" type="button" data-tool="measure" title="Measure" aria-pressed="false"><span class="icw" data-icon="measure"></span></button>
+    <button class="rail-btn" type="button" data-tool="erase" title="Eraser: click a drawing to delete it" aria-pressed="false"><span class="icw" data-icon="erase"></span></button>
     <span class="rail-sep"></span>
     <div class="rail-split">
       <button class="rail-btn" type="button" id="railMagnet" title="Magnet off" aria-label="Magnet off" aria-pressed="false"><span class="icw" data-icon="magnet"></span></button>
       <button class="rail-corner" type="button" id="railMagnetMore" title="Magnet mode" aria-label="Magnet mode" aria-haspopup="menu" aria-expanded="false"></button>
     </div>
+    <button class="rail-btn" type="button" id="railStay" title="Stay in drawing mode: off" aria-label="Stay in drawing mode: off" aria-pressed="false"><span class="icw" data-icon="lock"></span></button>
     <button class="rail-btn" type="button" id="railObjects" title="Objects on this symbol (undo: ⌘Z)"><span class="icw" data-icon="objects"></span></button>
     <button class="rail-btn" type="button" id="railClear" title="Remove drawings"><span class="icw" data-icon="trash"></span></button>
   </nav>
@@ -128,7 +133,7 @@
 <div class="rail-tip" id="railTip" role="status" hidden></div>
 <script src="/static/nobacknav.js?v=33"></script>
 <script src="/static/vendor/lightweight-charts-5.2.1.js?v=33"></script>
-<script src="/static/charts/icons.js?v=36"></script>
+<script src="/static/charts/icons.js?v=37"></script>
 <script src="/static/charts/spring.js?v=33"></script>
 <script src="/static/charts/flowdefs.js?v=14"></script>
 <script src="/static/charts/flowmath.js?v=12"></script>
@@ -143,7 +148,7 @@
 <script src="/static/charts/catalog.js?v=63"></script>
 <script src="/static/charts/primitives.js?v=45"></script>
 <script src="/static/charts/drawstyle.js?v=38"></script>
-<script src="/static/charts/drawings.js?v=41"></script>
+<script src="/static/charts/drawings.js?v=43"></script>
 <script src="/static/charts/position.js?v=37"></script>
 <script src="/static/hbclock.js?v=1"></script>
 <script src="/static/charts/settings.js?v=39"></script>
@@ -164,7 +169,7 @@
 <script src="/static/charts/panellayout.js?v=35"></script>
 <script src="/static/charts/layouts.js?v=33"></script>
 <script src="/static/charts/presets.js?v=33"></script>
-<script src="/static/charts/app.js?v=66"></script>
+<script src="/static/charts/app.js?v=68"></script>
 <script src="/static/charts/labcode.js?v=26"></script>
 <script src="/static/charts/allmetrics.js?v=5"></script>
 <script src="/static/charts/reallines.js?v=4"></script>

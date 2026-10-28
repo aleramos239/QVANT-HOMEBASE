@@ -1391,6 +1391,88 @@ def test_locked_refuses_non_bool(locked):
         check_drawings([{**HLINE, "locked": locked}])
 
 
+def test_hidden_roundtrips_on_any_kind():
+    assert check_drawings([{**TREND, "hidden": True}])[0]["hidden"] is True
+    assert check_drawings([{**HLINE, "hidden": False}])[0]["hidden"] is False
+    assert check_drawings([{**LONG, "hidden": True}])[0]["hidden"] is True
+    assert "hidden" not in check_drawings([TREND])[0]
+
+
+@pytest.mark.parametrize("hidden", ["yes", 1, None, "true"])
+def test_hidden_refuses_non_bool(hidden):
+    with pytest.raises(ValueError):
+        check_drawings([{**HLINE, "hidden": hidden}])
+
+
+def _ids(client):
+    return [d["id"] for d in client.get("/api/drawings/NQ").json()]
+
+
+def test_a_stale_tab_save_never_drops_a_drawing_it_never_saw(tmp_path):
+    """Two windows: window B saves a new drawing; window A (loaded before that) then saves its own list. The server
+    keeps B's drawing -- A only removes what A itself had loaded."""
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        assert client.put("/api/drawings/NQ", json=[TREND, HLINE]).status_code == 200
+        known = ["d1", "d2"]                                                    # what window A loaded
+        assert client.put("/api/drawings/NQ", json={"drawings": [TREND, HLINE, RECT], "known": known}).status_code == 200   # B adds d3
+        r = client.put("/api/drawings/NQ", json={"drawings": [TREND], "known": known})   # A deletes d2 and saves
+        assert r.status_code == 200
+        assert _ids(client) == ["d1", "d3"]                                    # d2 gone (A knew it), d3 kept (A never saw it)
+        assert r.json() == {"ok": True, "count": 2, "kept": [RECT]}            # and A is told, to show it
+
+
+def test_a_normal_save_replaces_exactly_what_the_page_knew(tmp_path):
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        assert client.put("/api/drawings/NQ", json=[TREND, HLINE]).status_code == 200
+        r = client.put("/api/drawings/NQ", json={"drawings": [RECT, TREND], "known": ["d1", "d2"]})
+        assert r.json() == {"ok": True, "count": 2}                            # nothing foreign: no "kept"
+        assert _ids(client) == ["d3", "d1"]                                    # order is the page's (z-order)
+        assert client.put("/api/drawings/NQ", json={"drawings": [], "known": ["d1", "d3"]}).status_code == 200
+        assert _ids(client) == []                                              # Remove all by the page that knew them
+
+
+def test_the_old_bare_list_put_still_replaces_the_whole_list(tmp_path):
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        client.put("/api/drawings/NQ", json=[TREND, HLINE])
+        assert client.put("/api/drawings/NQ", json=[RECT]).json() == {"ok": True, "count": 1}
+        assert _ids(client) == ["d3"]
+
+
+def test_an_old_format_drawings_file_loads_and_survives_a_merge_save(tmp_path):
+    """A file written before style / vis / locked / hidden / alert existed: it reads back unchanged, and a stale tab's save keeps
+    its drawings even though they were never validated by this version."""
+    state = tmp_path / "state"
+    state.mkdir()
+    old = [{"id": "old1", "type": "trend", "points": [{"t": 1, "p": 2.0}, {"t": 3, "p": 4.0}]},
+           {"id": "old2", "type": "hline", "color": "#F23645", "points": [{"p": 5.5}]},
+           {"id": "old3", "type": "spiral-from-a-future-version", "points": []}]     # even one this version would refuse
+    (state / "drawings.json").write_text(json.dumps({"NQ": old, "ES": [HLINE]}))
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        assert client.get("/api/drawings/NQ").json() == old
+        r = client.put("/api/drawings/NQ", json={"drawings": [TREND], "known": []})   # a page that loaded nothing
+        assert r.status_code == 200
+        assert _ids(client) == ["d1", "old1", "old2", "old3"]
+        assert json.loads((state / "drawings.json").read_text())["ES"] == [HLINE]     # another symbol untouched
+
+
+def test_a_merge_that_would_pass_the_cap_is_refused_and_saves_nothing(tmp_path):
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        full = [{**HLINE, "id": f"x{i}"} for i in range(MAX_DRAWINGS)]
+        assert client.put("/api/drawings/NQ", json=full).status_code == 200
+        r = client.put("/api/drawings/NQ", json={"drawings": [TREND], "known": []})   # 500 foreign + 1
+        assert r.status_code == 400
+        assert len(client.get("/api/drawings/NQ").json()) == MAX_DRAWINGS
+
+
+@pytest.mark.parametrize("body", [{"drawings": [TREND]}, {"drawings": [TREND], "known": "d1"}, {"drawings": [TREND], "known": [1]},
+                                  {"drawings": "no", "known": []}, {"known": []}])
+def test_a_bad_merge_body_is_a_400_and_saves_nothing(tmp_path, body):
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        client.put("/api/drawings/NQ", json=[HLINE])
+        assert client.put("/api/drawings/NQ", json=body).status_code == 400
+        assert _ids(client) == ["d2"]
+
+
 TREND_STYLE = {"width": 3, "lineStyle": "dashed", "extendLeft": True, "extendRight": False,
                "text": "Support", "fontSize": 14, "textColor": "#F23645", "bold": True, "labelPos": "below"}
 HLINE_STYLE = {"width": 2, "lineStyle": "dotted", "axisLabel": False, "labelPos": "middle"}

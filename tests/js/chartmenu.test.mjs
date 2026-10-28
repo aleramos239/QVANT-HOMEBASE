@@ -18,7 +18,7 @@ test('no drawings and no indicators: Reset, Copy price, Settings, each in its ow
 test('Remove N drawings / Remove N indicators only when N > 0, drawings first, singular for one', () => {
   const reg = fresh();
   assert.deepEqual(texts(reg.items({ ...CTX, nDrawings: 3, nIndicators: 1 })),
-    ['Reset chart view', '—', 'Copy price 30,878.00', '—', 'Remove 3 drawings', 'Remove 1 indicator',
+    ['Reset chart view', '—', 'Copy price 30,878.00', '—', 'Remove 3 drawings', 'Hide all drawings', 'Remove 1 indicator',
       'Hide all indicators', '—', 'Settings…']);
   assert.deepEqual(texts(reg.items({ ...CTX, nDrawings: 1 })).slice(4, 5), ['Remove 1 drawing']);
   assert.deepEqual(texts(reg.items({ ...CTX, nIndicators: 4 })).slice(4, 5), ['Remove 4 indicators']);
@@ -26,8 +26,8 @@ test('Remove N drawings / Remove N indicators only when N > 0, drawings first, s
 
 test('each built-in names its action; Reset shows ⌥R; Copy carries the plain price', () => {
   const list = fresh().items({ ...CTX, nDrawings: 2, nIndicators: 2 }).filter((x) => !x.sep);
-  assert.deepEqual(list.map((x) => x.act), ['reset', 'copy', 'removeDrawings', 'removeIndicators', 'toggleIndicators', 'settings']);
-  assert.deepEqual(list.map((x) => x.section), ['view', 'copy', 'remove', 'remove', 'remove', 'settings']);
+  assert.deepEqual(list.map((x) => x.act), ['reset', 'copy', 'removeDrawings', 'toggleDrawings', 'removeIndicators', 'toggleIndicators', 'settings']);
+  assert.deepEqual(list.map((x) => x.section), ['view', 'copy', 'remove', 'remove', 'remove', 'remove', 'settings']);
   assert.equal(list[0].sub, '⌥R');
   assert.equal(list[1].copy, '30878.00');
 });
@@ -53,13 +53,13 @@ test('the extension point: a trading section between Copy and Remove, dividers a
   const ctx = { ...CTX, nDrawings: 2 };
   const list = reg.items(ctx);
   assert.deepEqual(texts(list), ['Reset chart view', '—', 'Copy price 30,878.00', '—', 'Buy 1 NQ @ 30878 limit',
-    'Sell 1 NQ @ stop', '—', 'Remove 2 drawings', '—', 'Settings…']);
+    'Sell 1 NQ @ stop', '—', 'Remove 2 drawings', 'Hide all drawings', '—', 'Settings…']);
   assert.equal(seen, ctx);
   assert.equal(list[4].section, 'trading');
   assert.equal(typeof list[4].run, 'function');
   off();
   assert.deepEqual(texts(reg.items(ctx)),
-    ['Reset chart view', '—', 'Copy price 30,878.00', '—', 'Remove 2 drawings', '—', 'Settings…']);
+    ['Reset chart view', '—', 'Copy price 30,878.00', '—', 'Remove 2 drawings', 'Hide all drawings', '—', 'Settings…']);
   off();   // a second call is harmless
 });
 
@@ -69,7 +69,7 @@ test('registrations keep their order in a section; an extension comes after the 
   reg.register('trading', () => [{ text: 'B', run: noop }]);
   reg.register('remove', () => [{ text: 'Remove alerts', run: noop }]);
   assert.deepEqual(texts(reg.items({ ...CTX, nDrawings: 1 })), ['Reset chart view', '—', 'Copy price 30,878.00', '—',
-    'A', 'B', '—', 'Remove 1 drawing', 'Remove alerts', '—', 'Settings…']);
+    'A', 'B', '—', 'Remove 1 drawing', 'Hide all drawings', 'Remove alerts', '—', 'Settings…']);
 });
 
 test('unknown sections and non-functions are refused; a throwing or junk extension is skipped', () => {
@@ -113,6 +113,14 @@ test('Hide/Show all indicators: only when there are indicators, text flips with 
   assert.deepEqual(texts(reg.items({ ...CTX, nIndicators: 0, allIndicatorsHidden: true })), texts(reg.items(CTX)));
   const it = reg.items({ ...CTX, nIndicators: 1 }).find((x) => x.act === 'toggleIndicators');
   assert.equal(it.section, 'remove');
+});
+
+test('Hide/Show all drawings: with drawings, or while they are all hidden; the text flips with allDrawingsHidden', () => {
+  const reg = fresh();
+  assert.deepEqual(texts(reg.items({ ...CTX, nDrawings: 2 })).slice(4, 6), ['Remove 2 drawings', 'Hide all drawings']);
+  assert.deepEqual(texts(reg.items({ ...CTX, nDrawings: 2, allDrawingsHidden: true })).slice(4, 6), ['Remove 2 drawings', 'Show all drawings']);
+  assert.deepEqual(texts(reg.items({ ...CTX, nDrawings: 0 })), texts(reg.items(CTX)), 'no drawings, nothing hidden: no item');
+  assert.deepEqual(texts(reg.items({ ...CTX, nDrawings: 0, allDrawingsHidden: true })).slice(4, 5), ['Show all drawings'], 'the way back stays');
 });
 
 test('the legend fold map: readFolded sanitizes, toggleFolded flips one cell without touching the others', () => {

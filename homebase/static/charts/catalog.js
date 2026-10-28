@@ -1436,8 +1436,14 @@ const FAV_GROUP = 'Favorites';
 const TOOL_GROUPS = [
   ['Lines and shapes', ['trend', 'ray', 'xline', 'arrow', 'channel', 'hline', 'vline', 'rect']],
   ['Fib and positions', ['fib', 'long', 'short', 'measure']],
-  ['Notes and marks', ['note', 'avwap', 'alert']],
+  ['Notes, marks and eraser', ['note', 'avwap', 'alert', 'erase']],
 ];
+/* Alt + a key picks a drawing tool (event.code: the letter on macOS is a symbol under Alt). Alt+R is Reset chart view. */
+const TOOL_KEYS = { KeyT: 'trend', KeyH: 'hline', KeyV: 'vline', KeyB: 'rect', KeyF: 'fib', KeyA: 'arrow', KeyM: 'measure', KeyE: 'erase' };
+function toolForKey(code) { return TOOL_KEYS[code] || null; }
+/* The mouse pointer over the plot (rail, under the cursor tool; per browser): the usual cross is the default. */
+const CURSOR_STYLES = [['cross', 'Cross'], ['dot', 'Dot'], ['arrow', 'Arrow']];
+function parseCursorStyle(raw) { return raw === 'dot' || raw === 'arrow' ? raw : 'cross'; }
 /* The indicators the saved layouts actually use, most first (2026-10-22): the Favorites group before the user stars anything. */
 const IND_FAV_DEFAULT = ['vwap', 'volume', 'levels', 'footprint', 'events', 'headlines', 'bigorders', 'bigprints', 'profile', 'delta'];
 const TOOL_FAV_DEFAULT = ['trend', 'hline', 'rect', 'fib', 'long', 'short'];
@@ -1462,7 +1468,7 @@ const api = { parseFavs, sortFavs, toggleFav, CATALOG, GROUPS, ROOT_NAMES, FAVOU
   ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, statusDrops, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
   styleLineKeys, styleControls, colorDefs, isColorKey, styleColor, hasLegend, defaultStyle, clampStyle, cycleColor, sanitizePreset, normalizeHHMM,
   SHAPES, lineColor, refsOf, clampOpts, HTF_IDS, parseTf, fmtTf,
-  FAV_GROUP, TOOL_GROUPS, TOOL_FAV_DEFAULT, IND_FAV_DEFAULT, TV_SECTIONS, TV_TOPICS, parseIdList, toggleId, toolGroupOf };
+  FAV_GROUP, TOOL_GROUPS, TOOL_KEYS, toolForKey, CURSOR_STYLES, parseCursorStyle, TOOL_FAV_DEFAULT, IND_FAV_DEFAULT, TV_SECTIONS, TV_TOPICS, parseIdList, toggleId, toolGroupOf };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

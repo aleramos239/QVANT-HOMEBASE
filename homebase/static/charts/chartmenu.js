@@ -6,9 +6,9 @@
    directly.
 
    An item is {text, sub?, act, …} (a built-in: the page runs MENU_ACTS[act]) or {text, sub?, run(ctx)} (an
-   extension's: the page calls run). ctx is the page's {cell, root, price, tick, nDrawings, nIndicators}; price
+   extension's: the page calls run). ctx is the page's {cell, root, price, tick, nDrawings, nIndicators, allDrawingsHidden}; price
    is tick-rounded, or null when the pointer is off the price scale. This file reads only price, tick, nDrawings
-   and nIndicators.
+   nIndicators, allIndicatorsHidden and allDrawingsHidden.
 
    The chart-trading build adds its Buy/Sell items without editing this file:
      HBChartMenu.register('trading', (ctx) => [{ text: 'Buy 1 NQ @ 30,878.00 limit', run(ctx) { … } }]);
@@ -71,6 +71,7 @@ function builtins(reg) {
     : [{ act: 'copy', text: copyLabel(ctx.price, ctx.tick), copy: copyText(ctx.price, ctx.tick) }]));
   reg.register('remove', (ctx) => [
     ...(ctx.nDrawings > 0 ? [{ act: 'removeDrawings', text: `Remove ${count(ctx.nDrawings, 'drawing')}` }] : []),
+    ...(ctx.nDrawings > 0 || ctx.allDrawingsHidden ? [{ act: 'toggleDrawings', text: ctx.allDrawingsHidden ? 'Show all drawings' : 'Hide all drawings' }] : []),
     ...(ctx.nIndicators > 0 ? [{ act: 'removeIndicators', text: `Remove ${count(ctx.nIndicators, 'indicator')}` }] : []),
     ...(ctx.nIndicators > 0 ? [{ act: 'toggleIndicators', text: ctx.allIndicatorsHidden ? 'Show all indicators' : 'Hide all indicators' }] : [])]);
   reg.register('settings', () => [{ act: 'settings', text: 'Settings…' }]);

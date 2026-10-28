@@ -40,6 +40,11 @@ let menuNeedsMaterialize = false;   // true right after openMenu(), consumed by 
 let customWait = null;   // {cell, spec, err}: a custom interval sent from the open interval menu, awaiting the server
 let dlg = null;   // the open dialog: {back, box, focus}
 let tool = 'cursor';
+const STAY_KEY = 'hb_stay_draw', CURSOR_KEY = 'hb_cursor_style';
+let stayDrawing = (() => { try { return localStorage.getItem(STAY_KEY) === 'on'; } catch (_) { return false; } })();   // Stay in drawing mode: off unless switched on
+let cursorStyle = (() => { try { return C.parseCursorStyle(localStorage.getItem(CURSOR_KEY)); } catch (_) { return 'cross'; } })();   // cross, dot or arrow
+let drawingsHidden = false;   // Hide all drawings: this page only, never saved (a reload shows them again)
+let copiedDrawing = null;     // {root, d}: the drawing ⌘C took
 let noteTimer = 0, armTimer = 0, armRoot = null;   // armRoot: the symbol the armed remove-all names
 const drawings = new window.HBDrawings.Store({ onError: (root, msg) => sbNote(`${root} drawings: ${msg}`) });
 let magnet = loadMagnet();   // the rail's magnet {on, mode}, per viewer (localStorage hb_charts_magnet)
@@ -257,7 +262,8 @@ function hostFor(id) {
     },
     changed() { saveLast(); renderToolbar(); },
     tool: () => tool,
-    toolDone() { setTool('cursor'); },
+    toolDone,
+    drawingsHidden: () => drawingsHidden,
     drawings,
     magnet: () => magnet,
     events: () => calendar,
@@ -1719,7 +1725,14 @@ function drawToolbarButtons(cell, root, d) {
   const del = btn('trash', 'Delete');
   del.classList.add('danger');
   del.onclick = () => { if (cell.dc) cell.dc.deleteSelected(); };
-  wrap.append(mk('span', 'dtb-sep'), lock, del);
+  const clone = btn('copy', 'Clone (⌘C, ⌘V)');
+  clone.onclick = () => { if (cell.dc && cell.dc.paste(drawings.list(root).find((x) => x.id === d.id) || d)) markDirty(); else sbNote('A price alert is not cloned: set a new one'); };
+  const hide = btn('eyeOff', 'Hide (show it again in the Objects list)');
+  hide.onclick = () => { patchDrawing(root, d.id, { hidden: true }); sbNote('Hidden: the Objects list shows it again'); };
+  const front = btn('chevronUp', 'Bring to front'), back = btn('chevron', 'Send to back');
+  front.onclick = () => { drawings.reorder(root, d.id, 'front'); markDirty(); };
+  back.onclick = () => { drawings.reorder(root, d.id, 'back'); markDirty(); };
+  wrap.append(mk('span', 'dtb-sep'), clone, hide, front, back, mk('span', 'dtb-sep'), lock, del);
   return { el: wrap, focused: () => wrap.contains(document.activeElement) };
 }
 
@@ -2117,6 +2130,7 @@ const MENU_ACTS = {
     try { navigator.clipboard.writeText(it.copy).catch(() => {}); } catch (_) { /* no clipboard */ }
   },
   removeDrawings: (ctx) => drawings.clear(ctx.root),
+  toggleDrawings: toggleDrawingsHidden,
   removeIndicators: (ctx) => { ctx.cell.update({ indicators: [] }); markDirty(); },
   toggleIndicators: (ctx) => {
     const show = ctx.allIndicatorsHidden;   // all hidden already: this shows them again, else it hides them
@@ -2136,8 +2150,8 @@ function chartMenu(cell, at) {
   if (i < 0) return;
   select(i);
   const root = cell.shown ? cell.shown.root : cell.cfg.root;
-  const ctx = { cell, root, price: at.price, tick: cell.tick, nDrawings: drawings.list(root).length,
-    nIndicators: cell.cfg.indicators.length,
+  const ctx = { cell, root, price: at.price, tick: cell.tick, nDrawings: drawings.removable(root).length,
+    nIndicators: cell.cfg.indicators.length, allDrawingsHidden: drawingsHidden,
     allIndicatorsHidden: cell.cfg.indicators.length > 0 && cell.cfg.indicators.every((x) => x.visible === false) };
   const m = openMenu(null, 'menu-chart', { at });
   let armed = 0;
@@ -2293,6 +2307,68 @@ function setTool(t) {
   syncCrosshair();
 }
 
+/* A placement is done: back to the cursor, unless Stay in drawing mode is on (the rail's lock). */
+function toolDone() { if (!stayDrawing) setTool('cursor'); }
+function setStayDrawing(on) {
+  stayDrawing = on;
+  try { localStorage.setItem(STAY_KEY, on ? 'on' : 'off'); } catch (_) { /* storage off */ }
+  const b = $('#railStay'), tip = `Stay in drawing mode: ${on ? 'on' : 'off'}`;
+  b.setAttribute('aria-pressed', String(on));
+  b.title = tip;
+  b.setAttribute('aria-label', tip);
+}
+/* The mouse pointer over the plot (Cross is the TradingView default), set by the cursor button's corner. */
+function setCursorStyle(v) {
+  cursorStyle = C.parseCursorStyle(v);
+  try { localStorage.setItem(CURSOR_KEY, cursorStyle); } catch (_) { /* storage off */ }
+  document.body.dataset.cursorStyle = cursorStyle;
+}
+function cursorMenu() {
+  const m = openMenu($('#railCursorMore'), 'menu-magnet', { right: true });
+  for (const [id, text] of C.CURSOR_STYLES) {
+    const b = menuItem(text, '', () => { closeMenu(); setCursorStyle(id); }, false), ck = icon('check');
+    ck.classList.add('menu-ck');
+    if (cursorStyle !== id) ck.style.visibility = 'hidden';
+    b.setAttribute('role', 'menuitemradio');
+    b.setAttribute('aria-checked', String(cursorStyle === id));
+    b.prepend(ck);
+    m.appendChild(b);
+  }
+}
+/* ⌥ + a letter picks a drawing tool (catalog TOOL_KEYS); ⌥R stays Reset chart view. These keys only choose a drawing tool. */
+function toolHotkey(e) {
+  if (!e.altKey || e.metaKey || e.ctrlKey || e.shiftKey || e.repeat || menuEl || hotkeyBox) return false;
+  const t = C.toolForKey(e.code);
+  if (!t) return false;
+  e.preventDefault();
+  pickTool(t);
+  return true;
+}
+/* ⌘C / ⌘V (Ctrl on Windows): copy the selected drawing, paste a clone of it on the same symbol. Otherwise the keys are left alone. */
+function drawingClipboard(e, c) {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || !c || !c.dc || (e.code !== 'KeyC' && e.code !== 'KeyV')) return false;
+  const root = c.dc.root;
+  if (e.code === 'KeyC') {
+    if (String(window.getSelection() || '')) return false;   // text selected on the page: that copy is the browser's
+    const d = c.dc.copySelected();
+    if (!d) return false;
+    e.preventDefault();
+    if (d.alert) { sbNote('A price alert is not copied: set a new one'); return true; }
+    copiedDrawing = { root, d };
+    sbNote('Copied: ⌘V pastes it');
+    return true;
+  }
+  if (!copiedDrawing) return false;
+  e.preventDefault();
+  if (copiedDrawing.root !== root) sbNote(`That drawing is on ${copiedDrawing.root}: paste it on a ${copiedDrawing.root} chart`);
+  else if (c.dc.paste(copiedDrawing.d)) { markDirty(); sbNote('Pasted'); }
+  return true;
+}
+function toggleDrawingsHidden() {
+  drawingsHidden = !drawingsHidden;
+  for (const c of cells) if (c.dc) c.dc.refresh();
+}
+
 /* ---- starred tools and tool groups on the rail (2026-10-11) ----
    The rail's tool buttons stay in the page (setTool and the keys act on them); starring one moves it into the favorites
    row under the cursor, and the rest wait out of sight in a pool. A group button is the tool last used from that group;
@@ -2370,7 +2446,7 @@ function initRail() {
   const rail = $('#rail');
   for (const b of rail.querySelectorAll('[data-tool]')) if (b.dataset.tool !== 'cursor') railTools.set(b.dataset.tool, b);
   loadToolPrefs();
-  const favs = mk('div', 'rail-favs'), pool = mk('div', 'rail-pool'), groups = mk('div', 'rail-groups'), cursor = rail.querySelector('[data-tool="cursor"]');
+  const favs = mk('div', 'rail-favs'), pool = mk('div', 'rail-pool'), groups = mk('div', 'rail-groups'), cursor = $('#railCursorBox');
   favs.id = 'railFavs';
   pool.id = 'railPool';
   pool.hidden = true;
@@ -2421,7 +2497,7 @@ function disarm() {
 function clearDrawings() {
   const c = cur(), btn = $('#railClear');
   if (!c) return;
-  const root = c.shown ? c.shown.root : c.cfg.root, n = drawings.list(root).length;
+  const root = c.shown ? c.shown.root : c.cfg.root, n = drawings.removable(root).length;
   if (btn.classList.contains('arm') && root === armRoot) { disarm(); drawings.clear(root); return; }
   disarm();
   if (!n) { showTip(btn, `No drawings on ${root}`); armTimer = setTimeout(disarm, 1500); return; }
@@ -2439,7 +2515,7 @@ function undoDrawings(c, again) {
   else sbNote(again ? 'Nothing to redo' : 'Nothing to undo');
 }
 
-/* The objects list: every drawing on the selected chart's symbol, newest first; a row selects it, with its own lock and delete. */
+/* The objects list: every drawing on the selected chart's symbol, newest first; a row selects it, with its own lock, hide and delete. */
 function objectsDialog() {
   const c = cur();
   if (!c) return;
@@ -2455,15 +2531,19 @@ function objectsDialog() {
     const all = drawings.list(root);
     if (!all.length) { list.replaceChildren(mk('div', 'dlg-msg', 'No drawings on this symbol yet.')); return; }
     list.replaceChildren(...[...all].reverse().map((d) => {
-      const row = mk('div', 'obj-row'), name = mk('button', 'obj-name');
+      const row = mk('div', d.hidden ? 'obj-row off' : 'obj-row'), name = mk('button', 'obj-name');
       name.type = 'button';
       name.append(mk('span', 'obj-type', (d.type === 'hline' && d.alert ? 'Price alert' : DRAW_NAMES[d.type]) || d.type), mk('span', 'obj-sub', detail(d)));
       name.onclick = () => { closeDialog(); if (c.dc) { c.dc.sel = d.id; c.dc.refresh(); } };
       const lock = button('btn btn-ghost obj-btn', d.locked ? 'Unlock' : 'Lock');
       lock.onclick = () => { patchDrawing(root, d.id, { locked: !d.locked }); render(); };
+      const eye = button('btn btn-ghost obj-btn', d.hidden ? 'Show' : 'Hide');
+      eye.onclick = () => { patchDrawing(root, d.id, { hidden: !d.hidden }); render(); };
       const del = button('btn btn-ghost obj-btn', 'Delete');
-      del.onclick = () => { drawings.remove(root, d.id); markDirty(); render(); };
-      row.append(name, lock, del);
+      del.disabled = !!d.locked;   // the same rule as the Delete key: unlock it first
+      del.title = d.locked ? 'Locked: unlock it first' : '';
+      del.onclick = () => { if (d.locked) return; drawings.remove(root, d.id); markDirty(); render(); };
+      row.append(name, lock, eye, del);
       return row;
     }));
   }
@@ -2792,6 +2872,7 @@ function onKey(e) {
     if (c) c.resetView();
     return;
   }
+  if (toolHotkey(e) || drawingClipboard(e, c)) return;
   // Space plays/pauses, → steps -- only the selected cell while it replays, no input focused (returned above), no
   // menu / hotkey box open, and never a key aimed at the order panel (its send button owns Space itself).
   // ArrowRight already covers Shift+→ (e.key is the same either way -- TradingView's own replay hotkey);
@@ -2861,6 +2942,10 @@ async function init() {
   $('#railClear').onclick = clearDrawings;
   const objects = $('#railObjects');
   if (objects) objects.onclick = objectsDialog;
+  $('#railStay').onclick = () => setStayDrawing(!stayDrawing);
+  setStayDrawing(stayDrawing);
+  $('#railCursorMore').onclick = () => toggleMenu($('#railCursorMore'), cursorMenu);
+  setCursorStyle(cursorStyle);
   $('#railMagnet').onclick = () => setMagnet({ ...magnet, on: !magnet.on });
   $('#railMagnetMore').onclick = () => toggleMenu($('#railMagnetMore'), magnetMenu);
   renderMagnet();
