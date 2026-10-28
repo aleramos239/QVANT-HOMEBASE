@@ -50,7 +50,8 @@ function parsePrefs(text) {
   const ticked = idList(o.ticked);
   const sw = (v) => (typeof v === 'boolean' ? v : true);
   return { ticked, oneClick: o.oneClick === true, oneClickChart: sw(o.oneClickChart), oneClickPanel: sw(o.oneClickPanel),
-    qty: int(o.qty, 1, QTY_MAX, 1), slTicks: 0, tpTicks: 0 };
+    qty: int(o.qty, 1, QTY_MAX, 1), slTicks: 0, tpTicks: 0,
+    accountActions: o.accountActions === true };   // package 9: the panel's FLATTEN ACCOUNT / CANCEL ALL, off until switched on
 }
 const prefsText = (p) => JSON.stringify(parsePrefs(JSON.stringify(p)));
 

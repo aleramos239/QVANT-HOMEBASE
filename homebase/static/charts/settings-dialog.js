@@ -154,6 +154,11 @@ const TABS = [
       { label: 'Lines, menu and bottom panel', pref: { key: 'oneClick', kind: 'switch' } },
       { caption: 'Every chart. Off: that surface asks to confirm first. "Don\'t ask again" in a confirm turns its switch on.' },
     ]],
+    // package 9: whole-account actions in the bottom panel's Accounts tab; always one confirm each, LIVE needs the arm
+    ['ACCOUNT BUTTONS', [
+      { label: 'Flatten account / Cancel all', pref: { key: 'accountActions', kind: 'switch' } },
+      { caption: 'Adds two buttons to each row of the Accounts tab. Each asks to confirm first, every time. Cancel all also cancels stops and targets.' },
+    ]],
     // 5.7 (2026-10-27): moved here from the order panel's "Chart preview" (HBOrderPanel's look, this browser's)
     ['ORDER PREVIEW', [
       { label: 'Line', look: { key: 'style', choices: [[0, 'Solid'], [2, 'Dashed'], [1, 'Dotted']] } },

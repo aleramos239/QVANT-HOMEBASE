@@ -20,7 +20,7 @@ from homebase.desk.desk_api import ensure_key, event_stream, host_is_local, trad
 from homebase.server import create_app
 from tests.trading_util import NQC, TradeAdapter, journal, mkdesk, run
 
-ACTIONS = ("order", "modify", "cancel", "exits", "cancel-symbol", "flatten", "reverse")
+ACTIONS = ("order", "modify", "cancel", "exits", "cancel-symbol", "cancel-all", "flatten", "reverse")
 DESK = "http://127.0.0.1:8850"
 
 

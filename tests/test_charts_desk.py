@@ -366,7 +366,7 @@ def test_proxy_forwards_json_with_the_key_and_our_quotes(tmp_path):
     assert (path, key) == ("/api/trade/order", KEY)
     assert body == {"client_id": "c",                                  # the page's quotes replaced
                     "quotes": {"NQ": {"bid": 100.0, "ask": 100.25, "last": 100.25, "ts_ms": 5}}}
-    for action in ("modify", "cancel", "cancel-symbol", "flatten", "reverse"):
+    for action in ("modify", "cancel", "cancel-symbol", "cancel-all", "flatten", "reverse"):
         assert c.post(f"/api/desk/{action}", json={}).status_code == 200
         assert posted[-1][0] == f"/api/trade/{action}"
 

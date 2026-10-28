@@ -927,10 +927,12 @@ function confirmOrder(b, state, quote, pv, tick) {
     bracket: bits.join(' · '), each: accts.length > 1 ? `each of ${accts.length} accounts` : '', live: accts.some((a) => a.env === 'live'),
     warn: b.tif === 'GTC' ? GTC_WARN : '' };
 }
-function actionTitle(kind, { root, line, from, to }, tick) {
+function actionTitle(kind, { root, line, from, to, who, roots }, tick) {
   switch (kind) {
     case 'flatten': return line ? `Flatten ${root} · ${whoText(line)}` : `Flatten ${root}`;
     case 'cancel-symbol': return `Cancel all ${root} orders`;
+    case 'cancel-all': return `Cancel all orders · ${who}`;
+    case 'flatten-account': return `Flatten ${who} · ${roots.join(', ')}`;
     case 'reverse': return `Reverse ${root}`;
     case 'cancel': return `Cancel ${lineLabel(line)} @ ${Cat.fmtPrice(line.price, tick)} · ${whoText(line)}`;
     case 'modify': return `Move ${lineLabel(line)} ${Cat.fmtPrice(from, tick)} → ${Cat.fmtPrice(to, tick)}`;
@@ -939,18 +941,57 @@ function actionTitle(kind, { root, line, from, to }, tick) {
 }
 
 /* ---- toasts (ruling S3) ---- */
-const VERB = { order: 'order accepted', modify: 'order moved', cancel: 'order cancelled', exits: 'exit placed', 'cancel-symbol': 'orders cancelled',
+const VERB = { order: 'order accepted', modify: 'order moved', cancel: 'order cancelled', exits: 'exit placed', 'cancel-symbol': 'orders cancelled', 'cancel-all': 'orders cancelled',
   flatten: 'flattened', reverse: 'reversed' };
 function resultToasts(action, status, data, state) {
   if (action === 'bot-kill') return killToasts(status, data, state);
   const label = (id) => { const a = accountsOf(state).find((x) => x.id === id); return a ? short(a) : id; };
   if (!data || typeof data !== 'object' || !data.results) {
     const d = data && (data.detail ?? data.error);
-    return [{ tone: 'err', text: typeof d === 'string' && d ? d : `desk error (HTTP ${status})` }];
+    const out = [{ tone: 'err', text: typeof d === 'string' && d ? d : `desk error (HTTP ${status})` }];
+    // c-43: no answer at all (0), or the relay gave up (502/504): the order may or may not be in
+    if (status === 0 || status === 502 || status === 504) out.push({ tone: 'warn', text: 'Result unknown, check positions before sending again' });
+    return out;
   }
   return Object.entries(data.results).map(([id, r]) => (r && r.ok
     ? { tone: 'ok', text: `${label(id)} · ${VERB[action] || 'done'}` }
     : { tone: 'err', text: `${label(id)} · ${(r && r.error) || 'refused'}` }));
+}
+/* ---- package 9: exit safety ---- */
+/* c-20: adding the missing half of an exit cancels the old exit first, then places the pair -- a moment with no
+   exit on the desk. The old exit's name ('stop' | 'target') when the position's accounts already hold one on `root`
+   (the exit side is opposite the position's `side`), else null: a bare position has no gap. */
+function exitReplacing(state, ids, root, side) {
+  const want = side === 'Buy' ? 'Sell' : 'Buy';
+  for (const a of accountsOf(state)) {
+    if (!ids.includes(a.id)) continue;
+    for (const o of a.orders || []) {
+      if (rootOf(o.symbol) !== root || o.side !== want || o.owner) continue;
+      if (/stop/i.test(o.type)) return 'stop';
+      if (/limit/i.test(o.type)) return 'target';
+    }
+  }
+  return null;
+}
+/* answers: one array per body sent, one answer per place it went (routeSend). True only when every answer names
+   its accounts and every account says ok -- an answer we cannot read is not ok. */
+function answersOk(answers) {
+  return Array.isArray(answers) && answers.every((parts) => Array.isArray(parts) && parts.every((d) => {
+    const r = d && d.results && typeof d.results === 'object' ? Object.values(d.results) : [];
+    return r.length > 0 && r.every((x) => x && x.ok);
+  }));
+}
+/* c-28: a split order is two sends. The accounts whose first leg went in and whose second did not. */
+function splitStranded(answers) {
+  if (!Array.isArray(answers) || answers.length < 2) return [];
+  const okIds = (parts) => new Set((parts || []).flatMap((d) => Object.entries((d && d.results) || {}).filter(([, r]) => r && r.ok).map(([id]) => id)));
+  const one = okIds(answers[0]), two = okIds(answers[1]);
+  return [...one].filter((id) => !two.has(id));
+}
+/* The roots an account holds a position in ('positions') or has working orders on ('orders'). */
+function accountRoots(acct, what) {
+  const list = what === 'orders' ? (acct && acct.orders) || [] : ((acct && acct.positions) || []).filter((p) => p.net);
+  return [...new Set(list.map((x) => rootOf(x.symbol)))];
 }
 function fillText(ev, state, tick) {
   const f = ev.fill, a = accountsOf(state).find((x) => x.id === ev.account);
@@ -1739,7 +1780,7 @@ function routeSend(action, body, send) {
 
 const api = { PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
-  lineText, lineTitle, lineColor, notWorkingKeys, lineGone, exitZones, beStop, beArmStep, trailStop, trailStep, splitOrder, splitNote, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
+  lineText, lineTitle, lineColor, notWorkingKeys, lineGone, exitZones, beStop, beArmStep, trailStop, trailStep, splitOrder, splitNote, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, exitReplacing, answersOk, splitStranded, accountRoots, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, etDateOf, pastRunMarkers, pastRunFlags,
   algoFillMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
