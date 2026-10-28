@@ -171,12 +171,54 @@ function buildFillRow(tr, r) {
   td(tr, r.price, 'num');
   td(tr, r.owner);
 }
-function renderFills(target) {
+function renderLiveFills(target) {
   const d = D();
   if (!d.state) { target.replaceChildren(downDiv(d.down)); return; }
   const rows = T.fillRows(d.state);
   if (!rows.length) { target.replaceChildren(emptyDiv('No fills today')); return; }
   syncTable(target, FILL_HEAD, rows, (r) => r.key, buildFillRow, buildFillRow);   // a fill never changes once it exists
+}
+/* The day picker above the Fills tab (journal.js): empty = today's live fills above; a day = its round trips from the
+   chart service's journal route, with a note and tags on each. A picked day is drawn again only by its own handlers,
+   never by a desk event, so a note being typed keeps its focus. */
+const J = window.HBJournal;
+const jv = { date: '', trips: null, tag: '', error: '' };
+let jseq = 0;
+function jLabel(id) {
+  const d = D(), a = ((d && d.state && d.state.accounts) || []).find((x) => x.id === id);
+  return a && a.label ? a.label : id;
+}
+function jRepaint() { if (isShowing('fills')) renderActive(); }
+function jPick(date) {
+  Object.assign(jv, { date, trips: null, tag: '', error: '' });
+  const my = ++jseq;
+  jRepaint();
+  if (!date) return;
+  J.load(date).then((trips) => { if (my === jseq) { jv.trips = trips; jRepaint(); } },
+    (e) => { if (my === jseq) { jv.error = `Could not read the journal — ${e.message}`; jRepaint(); } });
+}
+function jSave(trip, note, tags) {
+  J.saveNote(trip.id, note, tags).then(() => { trip.note = note; trip.tags = tags; },
+    (e) => { jv.error = e.message; jRepaint(); });
+}
+function jCsv() {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([J.csv(jv.date, J.withTag(jv.trips || [], jv.tag), jLabel)], { type: 'text/csv' }));
+  a.download = `journal-${jv.date}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const jHandlers = { labelOf: jLabel, today: '', onDate: jPick, onTag: (tag) => { jv.tag = tag; jRepaint(); }, onCsv: jCsv, onSave: jSave };
+function renderFills(target) {
+  if (!J) { renderLiveFills(target); return; }
+  let body = target.querySelector('.bp-jbody');
+  if (!body) {
+    jHandlers.today = J.deskDay(Date.now());
+    body = el('div', 'bp-jbody');
+    target.replaceChildren(J.bar(document, jv, jHandlers), body);
+  }
+  if (!jv.date) renderLiveFills(body);
+  else if (!body.dataset.day) J.day(document, body, jv, jHandlers);   // a fresh body: a picked day is painted once
 }
 
 /* ---- "Fill quality" tab (Task 3, page half; the desk half is homebase/bothistory.py) ---- */
