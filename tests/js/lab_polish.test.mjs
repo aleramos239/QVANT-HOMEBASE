@@ -61,17 +61,56 @@ test('in-sample table: the order in the source is per year, count, six lines, th
   assert.ok(at('wf-steps wf-fixed wf-is') < at('<div class="rs-gh">Test months</div>'));
 });
 
-test('in-sample table: numbers right-aligned, the Pick and Box columns sticky, opaque so nothing shows through', () => {
-  for (const [css, name] of [[LABCSS, 'lab.css']]) {
-    const all = css.slice(css.indexOf('.wf-is'));
-    assert.match(all, /\.wf-is td:nth-child\(n\+3\)[^{]*\{[^}]*text-align: right/, `${name}: numeric cells right`);
-    assert.match(all, /\.wf-is th:nth-child\(n\+3\)[^{]*\{[^}]*text-align: right/, `${name}: numeric heads right`);
-    assert.match(all, /\.wf-is[^{]*:nth-child\(1\)[^{]*\{[^}]*position: sticky;[^}]*left: 0/, `${name}: Pick sticks at the left edge`);
-    assert.match(all, /\.wf-is[^{]*:nth-child\(2\)[^{]*\{[^}]*position: sticky;[^}]*left: \d+px/, `${name}: Box sticks beside it`);
-    assert.match(all, /\.wf-is[^{]*:nth-child\(-n\+2\)[^{]*\{[^}]*background: var\(--/, `${name}: sticky cells are opaque`);
-  }
-  assert.match(MAC, /\.wf-is[^{]*:nth-child\(-n\+2\)[^{]*\{[^}]*background: var\(--a-/, 'the glass inspector gets an opaque Mac colour');
+test('in-sample table: numbers right-aligned, only the capped Box column sticky, opaque in the pane colour', () => {
+  const all = LABCSS.slice(LABCSS.indexOf('.wf-is'));
+  assert.match(all, /\.wf-is td:nth-child\(n\+3\)[^{]*\{[^}]*text-align: right/, 'numeric cells right');
+  assert.match(all, /\.wf-is th:nth-child\(n\+3\)[^{]*\{[^}]*text-align: right/, 'numeric heads right');
+  assert.ok(!/\.wf-is[^{]*:nth-child\(1\)[^{]*\{[^}]*position: sticky/.test(all), 'Pick scrolls away, it does not eat the narrow pane');
+  const box = rule(all, '.wf-is td:nth-child(2)');
+  assert.match(box, /position: sticky;[^}]*left: 0/, 'Box sticks at the left edge');
+  assert.match(box, /max-width: 120px/, 'and is capped, so the numbers keep room in a 304 px pane');
+  assert.match(box, /width: 120px/, 'table-layout fixed reads the width from the head cell');
+  assert.match(box, /overflow: hidden/);
+  assert.match(box, /text-overflow: ellipsis/);
+  assert.match(box, /background: var\(--lab-sheet\)/, 'the pane colour (#labRes is --lab-sheet), not the page colour');
+  assert.ok(!/\.wf-is[^{]*\{[^}]*var\(--lab-win\)/.test(all), 'no page-coloured band in the plain skin');
+  assert.match(all, /\.wf-is \{[^}]*border-spacing: 0 3px/, 'no side gaps for scrolled cells to show through');
+  assert.match(MAC, /\.wf-is td:nth-child\(2\)[^{]*\{[^}]*background: var\(--a-/, 'the glass inspector gets an opaque Mac colour');
+  assert.ok(!/nth-child\(-n\+2\)/.test(MAC.slice(MAC.indexOf('.wf-is'), MAC.indexOf('.wf-is') + 400)), 'Mac: only Box is sticky');
   assert.ok(!/wf-is/.test(rule(LABCSS, '.wf-fixed {')), 'the one-row test-months table is not sticky');
+  const c = ctx();
+  const h = c.wfFixedHtml({ result: RES, sort: null }, { axes: AXES, strategy: 'draft_x' });
+  assert.match(h, /title="[^"]*Stop ATR x0\.5[^"]*"/, 'the full label sits in the Box title, the cell shows the cut');
+});
+
+test('Mac skin: the review checklist tick is drawn once (mask on <i>, the inner svg hidden)', () => {
+  assert.match(MAC, /html\.hb-apple \.lab-dlg li i svg \{ display: none/);
+});
+
+test('a swap does not overlap: a menu or sheet still leaving is dropped when the next one opens', () => {
+  const a = LAB.indexOf('function dropLeaving'), f = LAB.slice(a, LAB.indexOf('\n}\n', a) + 3);
+  const gone = [];
+  const mk = (n) => ({ remove: () => gone.push(n) });
+  const c = vm.createContext({ document: { querySelectorAll: (q) => { assert.match(q, /lab-ov\[data-motion="leave"\]/); assert.match(q, /lab-menu\[data-motion="leave"\]/); return [mk('ov'), mk('menu')]; } } });
+  vm.runInContext(f + '\ndropLeaving();', c);
+  assert.deepEqual(gone, ['ov', 'menu']);
+  const d = LAB.slice(LAB.indexOf('function dialog('), LAB.indexOf('function closeMenu'));
+  assert.match(d, /dropLeaving\(\)/, 'dialog() clears leftovers');
+  assert.match(LAB.slice(LAB.indexOf('function menu('), LAB.indexOf('function menu(') + 400), /dropLeaving\(\)/, 'menu() clears leftovers');
+});
+
+test('shell fit(): tight when the switcher centred on the window would cross the trailing group', () => {
+  const SH = rd('static/apple/shell.js'), a = SH.indexOf('function fit('), f = SH.slice(a, SH.indexOf('\n  }\n', a) + 4);
+  const run = (W, sw, right, insp, zone) => {
+    const cls = new Set(); const H = { classList: { contains: (k) => cls.has(k), toggle: (k, on) => (on ? cls.add(k) : cls.delete(k)) } };
+    const c = vm.createContext({ window: { innerWidth: W }, H, TB: { center: { firstElementChild: sw == null ? null : { offsetWidth: sw } }, right: { offsetWidth: right }, insp: { offsetWidth: insp } } });
+    vm.runInContext(f + '\nfit(' + (zone == null ? '' : zone) + ');', c);
+    return cls.has('hb-c-tight');
+  };
+  assert.equal(run(1400, 300, 200, 0), false, 'room: centred');
+  assert.equal(run(980, 300, 400, 0), true, 'a wide trailing group on a narrow window: flows');
+  assert.equal(run(1400, 300, 200, 0, 900), true, 'the inspector zone counts as taken room');
+  assert.equal(run(1000, null, 200, 0), false, 'no switcher yet: nothing to move');
 });
 
 test('sort arrows and check marks in the Lab are SVG icons, not text glyphs', () => {

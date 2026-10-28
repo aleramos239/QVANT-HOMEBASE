@@ -65,9 +65,9 @@ html.hb-apple .hb-tb .hb-ib.hb-tbtn { display: inline-flex; width: auto; min-wid
   transform: none; transition: none; cursor: default; z-index: auto; }
 html.hb-apple .hb-tb .hb-ib.hb-tbtn:hover, html.hb-apple .hb-tb .hb-ib.hb-tbtn[aria-pressed="true"] { color: var(--a-label); }
 html.hb-apple .hb-tb .hb-ib.hb-tbtn.hb-solo { background: var(--a-platter) !important; box-shadow: var(--a-platter-shadow) !important; -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); }
-/* the in-sample table's sticky Pick and Box columns: the inspector is glass, so they carry the window colour or the numbers would show through */
-html.hb-apple .wf-is td:nth-child(-n+2), html.hb-apple .wf-is th:nth-child(-n+2) { background: var(--a-window); }
-html.hb-apple .wf-is tr.sel td:nth-child(-n+2), html.hb-apple .wf-is tr.sel th:nth-child(-n+2) { background: linear-gradient(var(--a-fill), var(--a-fill)) var(--a-window); }
+/* the in-sample table's sticky Box column: the inspector is glass, so they carry the window colour or the numbers would show through */
+html.hb-apple .wf-is td:nth-child(2), html.hb-apple .wf-is th:nth-child(2) { background: var(--a-window); }
+html.hb-apple .wf-is tr.sel td:nth-child(2), html.hb-apple .wf-is tr.sel th:nth-child(2) { background: linear-gradient(var(--a-fill), var(--a-fill)) var(--a-window); }
 /* Code and Chart: the symbol alone in a narrow window, the word from 1280 px (shell.js fit() moves the page switcher if the group grows) */
 html.hb-apple #labPanels .hb-tb-word { display: none; }
 @media (min-width: 1280px) {
@@ -388,6 +388,7 @@ html.hb-apple .lab-dlg li { display: flex; align-items: center; gap: 8px; min-he
 html.hb-apple .lab-dlg li + li::before { content: ""; position: absolute; left: 10px; right: 10px; top: 0; height: 1px; background: var(--a-group-sep); }
 html.hb-apple .lab-dlg li.no { color: var(--a-label-2); }
 html.hb-apple .lab-dlg li i { flex: none; width: 13px; height: 12px; font-size: 0; background: var(--a-label-2); -webkit-mask: var(--sf-check) center / var(--sf-check-w) var(--sf-check-h) no-repeat; mask: var(--sf-check) center / var(--sf-check-w) var(--sf-check-h) no-repeat; }
+html.hb-apple .lab-dlg li i svg { display: none; }
 html.hb-apple .lab-dlg li.no i { background: var(--a-label-3); -webkit-mask: var(--sf-minus) center / 9px 3px no-repeat; mask: var(--sf-minus) center / 9px 3px no-repeat; }
 html.hb-apple .lab-dlg code { font-family: var(--a-mono); font-size: 11px; line-height: 14px; padding: 1px 5px; border-radius: 4px; background: var(--a-fill); word-break: break-all; -webkit-user-select: text; user-select: text; }
 html.hb-apple .lab-dlg pre { margin: 0 0 4px; padding: 10px 12px; border-radius: 10px; background: var(--a-group); color: var(--a-label); font-family: var(--a-mono); font-size: 11px; line-height: 15px; white-space: pre-wrap; }

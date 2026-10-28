@@ -652,6 +652,8 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabi
 /* a menu or sheet leaves the way the Charts ones do (spring.js [data-motion]); `instant` is a swap, nothing to animate */
 function leave(el, instant) { if (instant || !SP) el.remove(); else SP.dematerialize(el, () => el.remove()); }
 function enter(el, origin) { if (SP) SP.materialize(el, origin); }
+/* a menu or sheet still fading out is dropped when the next one opens, or two scrims / two menus overlap for 120 ms */
+function dropLeaving() { for (const e of document.querySelectorAll('.lab-ov[data-motion="leave"], .lab-menu[data-motion="leave"]')) e.remove(); }
 function closeDialog(back = true, instant = false) {
   if (!overlay) return;
   leave(overlay, instant); overlay = null;
@@ -662,7 +664,7 @@ function closeDialog(back = true, instant = false) {
 }
 function dialog(html) {
   const a = document.activeElement, from = overlay ? dlgFrom : a && a !== document.body ? { el: a, fk: (a.dataset && a.dataset.fk) || '' } : null;
-  closeDialog(false, true); // a sheet that opens from a sheet remembers what opened the first one
+  closeDialog(false, true); dropLeaving(); // a sheet that opens from a sheet remembers what opened the first one
   dlgFrom = from;
   overlay = document.createElement('div');
   overlay.className = 'lab-ov';
@@ -688,7 +690,7 @@ function closeMenu(instant = false) {
   for (const t of document.querySelectorAll('[data-act="viewmenu"][aria-expanded="true"]')) t.setAttribute('aria-expanded', 'false');
 }
 function menu(anchor, html, onPick) {
-  closeMenu(true);
+  closeMenu(true); dropLeaving();
   menuEl = document.createElement('div');
   menuEl.className = 'lab-menu';
   menuEl.innerHTML = html;
@@ -2665,7 +2667,7 @@ function wfFixedHtml(w, job) {
     : `<th><button class="wf-sort${sk === h.key ? ' on' : ''}" data-act="wfsort" data-k="${esc(h.key)}" title="Sort by ${esc(h.label)}">${esc(h.label)}<span class="wf-arrow">${sk === h.key ? (w.sort.dir < 0 ? IC.chevron : IC.chevronUp) : ''}</span></button></th>`)).join('');
   const tr = t.rows.map((row) => `<tr${row.i === t.picked ? ' class="sel"' : ''}><td>${locked ? (row.i === t.picked ? '<b>Picked</b>' : '')
     : `<button class="btn btn-sm btn-outline" data-act="wfpick" data-i="${row.i}"${w.busy ? ' disabled' : ''}>Pick</button>`}</td>
-    <th><button class="wf-sort" data-act="wfblk" data-i="${row.i}" title="Show it block by block">${row.box} ${esc(row.label)}</button></th>${row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr>`).join('');
+    <th><button class="wf-sort" data-act="wfblk" data-i="${row.i}" title="${esc(`${row.box} ${row.label}`)} · show it block by block">${row.box} ${esc(row.label)}</button></th>${row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr>`).join('');
   const win = r.window || {}, bi = w.blk != null ? w.blk : t.picked, bc = (r.cells || []).find((c) => c.i === bi);
   const bt = bc && X.wfFixedBlocks(bc, r.oos), bRow = bc && t.rows.find((x) => x.i === bi);
   const blocks = !bt ? '<div class="heat-note">Click a box to see it block by block.</div>'

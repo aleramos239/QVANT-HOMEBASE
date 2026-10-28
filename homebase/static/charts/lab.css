@@ -655,12 +655,13 @@ html.hb-apple #lab #labSplit:hover::after, html.hb-apple #lab #labSplit.drag::af
 .wf-sort.on { color: var(--hb-fg); font-weight: 600; }
 .sort-th .ic { width: 10px; height: 10px; }
 .wf-arrow { display: inline-block; width: 10px; margin-left: 2px; vertical-align: -1px; } .wf-arrow svg { width: 10px; height: 10px; }
-/* the in-sample table (not the one-row test-months table): numbers right, Pick and Box stay put when it scrolls sideways */
+/* the in-sample table (not the one-row test-months table): numbers right, the Box column stays put (capped, the full label is its title) when it scrolls sideways */
+.wf-is { border-spacing: 0 3px; }
 .wf-is td:nth-child(n+3), .wf-is th:nth-child(n+3) { text-align: right; }
-.wf-is td:nth-child(1), .wf-is th:nth-child(1) { position: sticky; left: 0; z-index: 1; width: 56px; min-width: 56px; max-width: 56px; box-sizing: border-box; }
-.wf-is td:nth-child(2), .wf-is th:nth-child(2) { position: sticky; left: 59px; z-index: 1; }
-.wf-is td:nth-child(-n+2), .wf-is th:nth-child(-n+2) { background: var(--lab-win); }
-.wf-is tr.sel td:nth-child(-n+2), .wf-is tr.sel th:nth-child(-n+2) { background: linear-gradient(var(--hb-fill), var(--hb-fill)) var(--lab-win); }
+.wf-is td:nth-child(1), .wf-is th:nth-child(1) { width: 56px; min-width: 56px; max-width: 56px; box-sizing: border-box; }
+.wf-is td:nth-child(2), .wf-is th:nth-child(2) { position: sticky; left: 0; z-index: 1; width: 120px; min-width: 120px; max-width: 120px; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; background: var(--lab-sheet); }
+.wf-is th:nth-child(2) .wf-sort { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.wf-is tr.sel td:nth-child(2), .wf-is tr.sel th:nth-child(2) { background: linear-gradient(var(--hb-fill), var(--hb-fill)) var(--lab-sheet); }
 .wf-oos .heat-vals { width: 100%; margin: 6px 0; }
 
 /* Pipeline picker, Passed filter, WR settings */
