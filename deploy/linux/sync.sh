@@ -18,6 +18,12 @@
 # Either way the server keeps its own logins and keys.
 # shortcut: a file deleted on the Mac outside desklab/strategies/ideas stays on the server; mirror.sh clears that.
 set -euo pipefail
+# GUARD (the owner, 2026-10-28: "impossible to mess up"): the server is the live Desk. This script overwrites its records,
+# books and config (and deletes records only the server has), so it does nothing unless the override is typed by hand.
+# To send a strategy to the server use: deploy/linux/send_strategy.py NAME [--go]
+[ "${HOMEBASE_OVERWRITE_SERVER:-}" = "yes-overwrite-the-server" ] || {
+  echo "$(basename "$0"): refused. The server is the live Desk and this would overwrite it. To send a strategy: deploy/linux/send_strategy.py NAME --go" >&2
+  exit 1; }
 HOST="${1:-${HOMEBASE_SERVER:?give root@host or set HOMEBASE_SERVER}}"
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 H=/home/homebase
