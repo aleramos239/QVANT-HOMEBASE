@@ -2634,6 +2634,8 @@ function showStatus(s) {
   recEl.title = lim.recTitle;
   recEl.classList.toggle('warn', !!(rec && rec.buffered >= C.REC_BUSY));
   statusLine = feed.textContent;
+  // cj-4: the markets on these charts that are open and silent too long (the amber text above), for the optional alarm
+  if (s.mode === 'live') window.HBLinkWatch?.feed?.((f.stale || []).filter((r) => cells.some((c) => c.cfg && c.cfg.root === r)));
   for (const c of cells) c.setToday(s.data && s.data.today);   // today's hours still short of their ticks: a light band
 }
 
@@ -2711,6 +2713,7 @@ function connect() {
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws${wsPage}`);
   ws.onopen = () => {
     statusAt = Date.now();
+    window.HBDeskClient?.socket(true); window.HBLinkWatch?.service?.(true);   // c-30 / cj-2: the lines are live again
     if (wsOpenedOnce) setTimeout(() => window.dispatchEvent(new Event('hb:chart-reconnect')), 0);   // pages that put results on the chart put them back
     wsOpenedOnce = true;
     window.HBReplayUI?.onReconnect(cells);   // a fresh connection carries no replay sessions from the old one
@@ -2741,6 +2744,7 @@ function connect() {
     else if (m.type === 'replay_error') window.HBReplayUI?.onError(c, m);
   };
   ws.onclose = () => {
+    window.HBDeskClient?.socket(false); window.HBLinkWatch?.service?.(false);   // c-30 / cj-2: the lines are not live; toast + optional alarm
     showStatus({ connected: false, error: 'chart service unreachable — retrying' });
     // the books went with the socket: the ladder says "Book stale", the lines go, the heatmap leaves a gap
     window.HBDomUI?.onDisconnect(); window.HBL2Layer?.onDisconnect(); window.HBLiquidity?.onDisconnect(); window.HBTapeUI?.onDisconnect();

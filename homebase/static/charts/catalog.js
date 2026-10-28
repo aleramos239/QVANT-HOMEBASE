@@ -1372,7 +1372,7 @@ function feedSummary(s, weekday, minutes) {
     ...late, ...(thin ? ['thin feed'] : []),
     ...silent.slice(0, 2).map(([r]) => `${r} no ticks yet`)].join(' · ') || (roots.length ? 'feeds ok' : '');
   const dot = warn || (rec && rec.buffered >= REC_BUSY) ? 'warn' : silent.length ? '' : 'ok';
-  return { dot, text, textClass: warn ? 'warn' : '', title };
+  return { dot, text, textClass: warn ? 'warn' : '', title, stale: stale.map(([r]) => r) };   // `stale`: the page's feed alarm
 }
 
 /* W1 (2026-09-28): which status-bar segments step out so the rest fits `avail` px. `items`, in bar order:

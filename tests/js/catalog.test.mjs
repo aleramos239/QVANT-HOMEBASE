@@ -468,7 +468,7 @@ const tick = (age) => ({ contract: 'X', last_tick_age_s: age, error: null });
 
 test('status: a weekend with Bitcoin fresh and the Globex futures closed is fine', () => {
   const f = C.feedSummary(live({ BTC: tick(2), NQ: tick(180000) }), ...SAT_NOON);
-  assert.deepEqual(f, { dot: 'ok', text: 'feeds ok', textClass: '', title: 'BTC 2.0s  ·  NQ closed' });
+  assert.deepEqual(f, { dot: 'ok', text: 'feeds ok', textClass: '', title: 'BTC 2.0s  ·  NQ closed', stale: [] });
 });
 
 test('status: a stale open market is amber, the stalest first, two at most', () => {
@@ -492,7 +492,7 @@ test('status: a refused symbol reads "unavailable" in amber, whatever the market
 
 test('status: an open market that has not ticked yet is not "feeds ok" — neutral text, grey dot', () => {
   const sat = C.feedSummary(live({ BTC: tick(null), NQ: tick(null) }), ...SAT_NOON);
-  assert.deepEqual(sat, { dot: '', text: 'BTC no ticks yet', textClass: '', title: 'BTC no ticks yet  ·  NQ closed' });
+  assert.deepEqual(sat, { dot: '', text: 'BTC no ticks yet', textClass: '', title: 'BTC no ticks yet  ·  NQ closed', stale: [] });
   const wed = C.feedSummary(live({ NQ: tick(null), ES: tick(null), YM: tick(null), BTC: tick(1) }), ...WED_10);
   assert.equal(wed.text, 'NQ no ticks yet · ES no ticks yet');
   assert.equal(wed.dot, '');
@@ -514,7 +514,7 @@ test('status: a feed ten minutes late says so in amber -- ticks flowing is not "
   assert.equal(f.title, 'NQ 1.0s, 10m late  ·  ES 2.0s, 10m late  ·  YM 1.0s, 10m late');
   // on time (a fraction of a second behind): as it always read
   assert.deepEqual(C.feedSummary(live({ NQ: late(1, 0.3), ES: late(2, 0) }), ...WED_10),
-    { dot: 'ok', text: 'feeds ok', textClass: '', title: 'NQ 1.0s  ·  ES 2.0s' });
+    { dot: 'ok', text: 'feeds ok', textClass: '', title: 'NQ 1.0s  ·  ES 2.0s', stale: [] });
 });
 
 test('status: lateness is the feed\'s -- the median of the open markets, a closed one\'s old print says nothing', () => {
@@ -1502,4 +1502,11 @@ test('adx legend values follow the colours the user gave the lines', () => {
   const bar = { sv: { 'adx:14': { adx: 25, pdi: 30, mdi: 10 } } };
   const inst = { ...C.instance('adx'), style: { adx: { color: '#111111' }, pdi: { color: '#222222' } } };
   assert.deepEqual(C.legendValues(inst, bar, colors, 0.25).map((x) => x.color), ['#111111', '#222222', '#F23645']);
+});
+
+test('status: feedSummary names the stale open markets in `stale` (cj-4: the page\'s feed alarm reads it); none when fresh, closed or not connected', () => {
+  assert.deepEqual(C.feedSummary(live({ NQ: tick(180), ES: tick(2), YM: tick(360) }), ...WED_10).stale, ['YM', 'NQ'], 'stalest first, as the text');
+  assert.deepEqual(C.feedSummary(live({ NQ: tick(2) }), ...WED_10).stale, []);
+  assert.deepEqual(C.feedSummary(live({ NQ: tick(180000) }), ...SAT_NOON).stale, [], 'a closed market is never stale');
+  assert.equal(C.feedSummary({ ...live({ NQ: tick(500) }), connected: false }, ...WED_10).stale, undefined);
 });

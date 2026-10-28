@@ -24,6 +24,12 @@ const NOTES = {
   alert: [[740, 0, 0.11, 'triangle'], [740, 0.16, 0.11, 'triangle'], [554, 0.32, 0.2, 'triangle']],
 };
 
+/* The connection alarms (D11, 2026-10-27) and a refused order: Off until a sound is picked, so sounds already on stay as they were. */
+NOTES.siren = [[880, 0, 0.18, 'square'], [660, 0.2, 0.18, 'square'], [880, 0.4, 0.18, 'square'], [660, 0.6, 0.18, 'square']];
+SOUNDS.push(['siren', 'Siren']);
+EVENTS.push(['link', 'Connection lost (service, Desk or prices)'], ['linkpos', 'Connection lost, position open'], ['problem', 'Order refused / desk problem']);
+Object.assign(DEFAULTS.events, { link: 'off', linkpos: 'off', problem: 'off' });
+
 let cfg = load();
 function load() {
   try {
@@ -50,6 +56,9 @@ function audio() {
 }
 // a browser only lets a page make sound after the viewer has pressed something on it
 document.addEventListener('pointerdown', () => audio(), { once: true, capture: true });
+
+/* cj-6: sounds are on but the page has not been pressed yet, so the browser still keeps them silent. */
+function locked() { return cfg.on && (!ctx || ctx.state !== 'running'); }
 
 /* One sound, now, at `volume` (0..1). */
 function play(name, volume = cfg.volume) {
@@ -108,5 +117,5 @@ function mount() {
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 
-window.HBSounds = { SOUNDS, EVENTS, get, set, play, event };
+window.HBSounds = { SOUNDS, EVENTS, get, set, play, event, locked };
 })();

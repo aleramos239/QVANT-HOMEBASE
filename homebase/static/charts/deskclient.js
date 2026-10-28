@@ -13,6 +13,10 @@ const M = window.HBSpring;   // the feel pass (2026-09-28): toast()'s own materi
 const TOAST_MS = { ok: 5000, err: 10000, warn: 0 }, TOAST_MAX = 5;   // 0: a warning ("check it") stays until dismissed
 const HISTORY_TTL = 60000, HISTORY_RETRY = { 503: 30000, other: 60000 };
 const desk = { state: null, down: 'connecting to the desk', quotes: {}, prefs: loadPrefs() };
+/* c-30 (2026-10-27): DISPLAY ONLY. `held` is the last desk state before a "down" word, and `sock` whether the chart
+   service socket is open: the lines stay drawn, marked "not live" (HBDeskClient.stale). Nothing that sends reads
+   them -- `state` and the gate go null exactly as before. */
+desk.held = null; desk.sock = true;
 const subs = new Set();
 const ours = new Set();   // order ids this page placed: their fills get a toast (ruling S3)
 // fast-paper: a market order can fill before its POST's answer names it -- a fill of an order not (yet) ours waits
@@ -53,9 +57,9 @@ function onMessage(m) {
     emit('quote');
     return;
   }
-  if (m.down !== undefined) { desk.state = null; desk.down = m.down; gone.clear(); emit('state'); return; }
+  if (m.down !== undefined) { desk.held = desk.state || desk.held; desk.state = null; desk.down = m.down; gone.clear(); emit('state'); return; }
   const d = m.data;
-  if (m.event === 'state') { desk.state = d; desk.down = null; gone.clear(); }
+  if (m.event === 'state') { desk.state = d; desk.down = null; desk.held = null; gone.clear(); }
   else if (!desk.state) return;
   else if (m.event === 'account') {
     const list = desk.state.accounts || (desk.state.accounts = []), i = list.findIndex((a) => a.id === d.id);
@@ -71,6 +75,8 @@ function onMessage(m) {
   } else return;   // result: this page's own answers come back on its POST (ruling S3)
   emit(m.event);
 }
+/* The chart service socket opened or closed (app.js): the lines it still holds are then not live. */
+function socket(up) { if (desk.sock === up) return; desk.sock = up; emit('link'); }
 function fillToast(d) { toast('ok', T.fillText(d, desk.state, tickFor(T.rootOf(d.fill.symbol)))); }
 /* An order this page placed: its fills get a toast from now on -- and at once any that landed before its answer. */
 function claim(id) {
@@ -98,7 +104,10 @@ async function send(action, body) {
     if (!r || !r.ok || !r.order_id) continue;
     if (CLAIMS.includes(action)) claim(String(r.order_id)); else ours.add(String(r.order_id));
   }
-  for (const t of T.resultToasts(action, status, data, desk.state)) toast(t.tone, t.text);
+  for (const t of T.resultToasts(action, status, data, desk.state)) {
+    toast(t.tone, t.text);
+    if (t.tone === 'err' && window.HBSounds) window.HBSounds.event('problem');   // cj-5: a refusal can be heard (Settings > Sounds, off)
+  }
   const nw = T.notWorkingKeys(action, body, data);   // 5.12: the refused order's line greys -- nothing else changes
   for (const k of nw.ok) gone.delete(k);
   for (const k of nw.gone) gone.add(k);
@@ -183,6 +192,7 @@ function toast(tone, text) {
   }
   const ms = TOAST_MS[tone] ?? 6000;
   if (ms > 0) setTimeout(() => evict(el), ms);
+  return el;
 }
 
 /* The desk's state as the page sees it: the paper accounts (the chart service's own paper books, HBPaperClient)
@@ -192,7 +202,11 @@ function merged() { return T.withPaper(desk.state, window.HBPaperClient ? window
 
 window.HBDeskClient = {
   get state() { return merged(); }, get down() { return desk.down; }, quotes: desk.quotes,
-  get prefs() { return desk.prefs; }, setPrefs, on, onAnyFill, onMessage, send, toast, botHistory, notWorking,
+  /* c-30: 'desk' (the link is down, the last state held), 'service' (the socket is down) or null; heldState: that
+     last state, the paper books as they are now, or null. Display only. */
+  get stale() { return desk.state ? (desk.sock ? null : 'service') : desk.held ? 'desk' : null; },
+  get heldState() { return desk.held ? T.withPaper(desk.held, window.HBPaperClient ? window.HBPaperClient.accounts() : []) : null; },
+  get prefs() { return desk.prefs; }, setPrefs, on, onAnyFill, onMessage, send, toast, dismiss: evict, socket, botHistory, notWorking,
   mode: (cellTrade) => T.tradeMode({ state: merged(), down: desk.down }, cellTrade),   // ONE chart's mode, from its own {accounts}
   gate: () => T.deskGate(desk),                        // the desk-level half alone (null: up and on)
   bookChanged: () => emit('account'),                  // the PAPER account changed (app.js, on a /ws paperbook push)

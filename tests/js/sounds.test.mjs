@@ -44,3 +44,23 @@ test('sounds: off by default, then each fill by what its order was', () => {
   S.event('moved');
   assert.equal(played.at(-1), 'click');
 });
+
+test('sounds: the connection alarms and "problem" are Off until a sound is picked, even with sounds on (D11, cj-2/3/5)', () => {
+  const { S, played } = load();
+  const keys = S.EVENTS.map((e) => e[0]);
+  for (const k of ['link', 'linkpos', 'problem']) assert.ok(keys.includes(k), k);
+  S.set({ on: true });
+  for (const k of ['link', 'linkpos', 'problem']) { assert.equal(S.get().events[k], 'off', k); S.event(k); }
+  assert.deepEqual(played, [], 'a user who already switched sounds on hears nothing new');
+  S.set({ events: { linkpos: 'siren' } });
+  S.event('linkpos');
+  assert.deepEqual(played, ['siren']);
+  assert.ok(S.SOUNDS.some((s) => s[0] === 'siren'), 'the stronger tone is in the list');
+});
+
+test('sounds: locked() is true only when sounds are on and the page has not been pressed yet (cj-6)', () => {
+  const { S } = load();
+  assert.equal(S.locked(), false, 'off: nothing to unlock');
+  S.set({ on: true });
+  assert.equal(S.locked(), true);
+});
