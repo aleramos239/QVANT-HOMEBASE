@@ -687,6 +687,22 @@ def _wf_step(name: str, d, root) -> str:
             f"The test months of box {box} are on file: the prop simulator is next (bp.py sim {name} --account=ID --attempts=N --fee-budget=USD; blueprint_sim)")
 
 
+def _wf_stage(name: str, i: dict, root) -> dict:
+    """WHERE A 3:1 IDEA STANDS, for the Lab's board and its buttons: {stage, box} -- card (no card yet) | table (the in-sample table is next)
+    | pick | test (box picked, test months not read) | done | used (the read stopped) | error. {} for an idea off the 3:1 route (the same
+    test as _step's: still an idea, no build round, and hmwf.route)."""
+    from . import hmwf as H
+    if i["status"] != "idea" or _last(name, root) is not None or not H.route(name, root):
+        return {}
+    if not api.wf_on_file(name):
+        return {"stage": "table" if (api.ideastore().idea_dir(name, root) / "spec.json").is_file() else "card"}
+    w = _wf(name, root)
+    if w is None or w.get("error"):
+        return {"stage": "error"}
+    box, oos = (w["lock"] or {}).get("box"), w["oos"]
+    return {"stage": "pick" if box is None else "test" if oos is None else "used" if oos.get("state") else "done", "box": box}
+
+
 def _step(name: str, status: str, last, root, checked=None) -> str:
     """THE NEXT STEP of an idea, in one sentence, from what is on file."""
     most, d = R.need("2.9"), api.ideastore().idea_dir(name, root)
@@ -869,7 +885,7 @@ def status(name=None, root=None) -> dict:
         for i in IS.list_ideas(root):
             i = IS.refresh(i["name"], root)
             ideas.append({**{k: i[k] for k in ("name", "status", "phase", "round", "group", "runs")}, "next": _step(i["name"], i["status"], _last(i["name"], root), root),
-                          "job": JOBS.running(i["name"], root)})
+                          "job": JOBS.running(i["name"], root), "wf": _wf_stage(i["name"], i, root)})
         said = [f"{i['name']}: {head(i)} · next: {i['next']}" + (f" · job {i['job']} is running" if i["job"] else "") for i in ideas]
         return api.result("status", None, ideas=ideas, text="\n".join([f"{len(ideas)} idea{'s' * (len(ideas) != 1)} in {IS.ideas_root(root)}", *said]) if ideas else
                           f"No idea on file in {IS.ideas_root(root)}: bp.py card <name> --spec=FILE writes the first one.")

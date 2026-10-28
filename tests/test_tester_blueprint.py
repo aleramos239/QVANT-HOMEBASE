@@ -31,6 +31,12 @@ if argv[:1] == ["blockcode"]:
                       "error": None, "counts": {"filters": len(log.read_text())}, "sources": {"x.py:1-2": {"file": "x.py", "start": 1, "end": 2, "code": "a\nb"}},
                       "groups": [{"id": "filters", "title": "Filters", "words": "", "items": [{"id": "filter:f", "name": "f", "parts": [{"label": "L", "src": "x.py:1-2"}]}]}]}))
     sys.exit(0)
+if argv[:1] == ["status"] and not [a for a in argv[1:] if not a.startswith("--")]:      # every idea on file (the board)
+    print(json.dumps({"ok": True, "command": "status", "name": None, "status": None, "phase": None, "round": None, "lines": [], "text": "2 ideas", "next": "",
+                      "job": None, "saved": [], "error": None, "ideas": [
+                          {"name": "nq_a", "status": "idea", "phase": 0, "round": None, "group": "Ideas", "runs": [], "job": None, "wf": {"stage": "table"}, "next": "table is next"},
+                          {"name": "nq_b", "status": "idea", "phase": 0, "round": None, "group": "Ideas", "runs": [], "job": None, "wf": {"stage": "test", "box": "k1_own1-r1"}, "next": "test months next"}]}))
+    sys.exit(0)
 print(json.dumps({"ok": True, "command": argv[0], "name": None, "status": None, "phase": None, "round": None, "lines": [],
                   "text": "RAN " + " ".join(argv), "next": "", "job": None, "saved": [], "error": None}))
 '''
@@ -173,3 +179,75 @@ def test_the_arsenal_is_saved_in_the_app_and_a_missing_toolkit_leaves_the_other_
     assert r.status_code == 200 and any("not installed" in n for n in r.json()["notes"])
     assert {g["id"] for g in r.json()["groups"]} >= {"tester", "blueprint", "desk"}
     assert c.get("/api/tester/arsenal", headers={"host": "evil.example"}).status_code == 403
+
+
+# ---- the idea board and the three steps of a saved idea (WP5) ---------------------------------------------------------------
+
+def step(c, **body):
+    return c.post("/api/tester/blueprint/step", json=body)
+
+
+@pytest.fixture
+def steps_on(monkeypatch):
+    monkeypatch.setattr(tester_api.slots, "backtests_off", lambda: False)      # a Mac: not the trading server's marker
+
+
+def test_the_board_lists_every_idea_with_its_stage_and_says_whether_this_machine_runs(c, steps_on, monkeypatch):
+    r = c.get("/api/tester/blueprint/board")
+    assert r.status_code == 200 and [(i["name"], i["wf"]["stage"]) for i in r.json()["ideas"]] == [("nq_a", "table"), ("nq_b", "test")]
+    assert r.json()["machine_runs"] is True and c.get("/api/tester/blueprint/board", headers={"host": "evil.example"}).status_code == 403
+    monkeypatch.setattr(tester_api.slots, "backtests_off", lambda: True)
+    assert c.get("/api/tester/blueprint/board").json()["machine_runs"] is False           # the server only shows
+
+
+def test_the_board_says_why_when_the_toolkit_is_missing(c, monkeypatch, tmp_path):
+    monkeypatch.setenv("HOMEBASE_BP", str(tmp_path / "nowhere" / "bp.py"))
+    r = c.get("/api/tester/blueprint/board")
+    assert r.status_code == 503 and "not installed" in r.json()["detail"]
+
+
+def test_a_step_starts_nothing_without_the_owners_own_words(c, steps_on, tmp_path):
+    for body in ({"step": "table", "name": "nq_a"}, {"step": "table", "name": "nq_a", "owner_said": "   "},
+                 {"step": "pick", "name": "nq_a", "box": 3}, {"step": "oos", "name": "nq_b", "box": "k1_own1-r1", "reads_test_months_once": True},
+                 {"step": "table", "name": "nq_a", "owner_said": "x" * 401}):
+        r = step(c, **body)
+        assert r.status_code == 400 and "Nothing was started" in r.json()["detail"], body
+    assert not (tmp_path / "hits.log").exists()
+
+
+def test_the_test_months_need_the_extra_confirm_and_a_box(c, steps_on):
+    r = step(c, step="oos", name="nq_b", box="k1_own1-r1", owner_said="run the test months of nq_b")
+    assert r.status_code == 400 and "test months once" in r.json()["detail"]
+    r = step(c, step="oos", name="nq_b", owner_said="run it", reads_test_months_once=True)
+    assert r.status_code == 200 and r.json()["ok"] is False and "box" in r.json()["text"]       # the tool's own refusal
+
+
+def test_each_step_runs_the_tool_a_chat_runs_with_the_words_as_typed(c, steps_on, ideas_root):
+    said = "  run the table of nq_a, yes "
+    r = step(c, step="table", name="nq_a", owner_said=said)
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert f"RAN wf run nq_a --owner-said={said} --wait=45" in r.json()["text"]       # verbatim: not trimmed
+    ideastore.create("nq_b")
+    r = step(c, step="pick", name="nq_b", box=7, owner_said="box 7")
+    assert r.json()["ok"] is True and f"RAN wf pick nq_b 7 --root={ideas_root}" in r.json()["text"]
+    log = [json.loads(x) for x in (ideastore.idea_dir("nq_b") / "log.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert any(x["event"] == "pick_said" and x["said"] == "box 7" and x["box"] == 7 for x in log)      # his words stay with the pick
+    r = step(c, step="oos", name="nq_b", box="k1_own1-r1", owner_said="read the test months", reads_test_months_once=True)
+    assert r.json()["ok"] is True and "RAN wf oos nq_b k1_own1-r1 --owner-said=read the test months --wait=45" in r.json()["text"]
+
+
+def test_a_step_is_refused_on_the_server_in_a_quiet_window_and_for_bad_input(c, steps_on, monkeypatch):
+    ok = dict(step="table", name="nq_a", owner_said="go")
+    assert step(c, **{**ok, "step": "heatmap"}).status_code == 400 and step(c, **{**ok, "more": 1}).status_code == 400
+    assert c.post("/api/tester/blueprint/step", json=ok, headers=EVIL).status_code == 403
+    assert step(c, **{**ok, "name": "Not A Name"}).json()["ok"] is False
+    monkeypatch.setattr(tester_api.Slots, "quiet", lambda self: True)
+    assert step(c, **ok).status_code == 409 and "quiet window" in step(c, **ok).json()["detail"]
+    monkeypatch.setattr(tester_api.Slots, "quiet", lambda self: False)
+    monkeypatch.setattr(tester_api.slots, "backtests_off", lambda: True)
+    r = step(c, **ok)
+    assert r.status_code == 409 and "does not run backtests" in r.json()["detail"]
+
+
+def test_the_page_route_still_only_looks(c):
+    assert set(tester_api.BP_PAGE_TOOLS) == {"blueprint_blocks", "blueprint_status", "blueprint_heatmap", "blueprint_mc"}
