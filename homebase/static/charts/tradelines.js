@@ -176,7 +176,10 @@ class Overlay {
     // its orders cancelled -- the right-click menu's Flatten, one click away; its own lock, so a slow order never blocks it
     this.flatBtn = document.createElement('button');
     this.flatBtn.type = 'button'; this.flatBtn.className = 'tr-flat'; this.flatBtn.textContent = 'FLAT';
-    this.block.append(this.sellBtn, this.mid, this.buyBtn, this.flatBtn);
+    // 2026-10-28 (owner D3): NAKED while the click would send no stop -- display only, never blocks (paintBlock)
+    this.naked = mk('span', 'tr-naked', 'NAKED');
+    this.naked.title = 'No stop goes with a click here. Set a default stop in Settings > Trading.';
+    this.block.append(this.sellBtn, this.mid, this.buyBtn, this.flatBtn, this.naked);
     // I1 (final review): a real pointer click, or Enter / Space with no auto-repeat -- never the click a held key
     // (or a menu handing focus back to a focused BUY) makes; a pointer click drops focus (HBTrade.wireSend)
     T.wireSend(this.sellBtn, () => this.trade('Sell'), { blur: true });
@@ -293,6 +296,7 @@ class Overlay {
       if (sub.textContent !== t.sub) sub.textContent = t.sub;
       btn.title = `${t.full} · at market`;
     }
+    this.naked.hidden = T.defaultStopTicks(Dc.prefs, this.root) > 0;
     const busy = window.HBTradeUI.busy();
     this.buyBtn.disabled = this.sellBtn.disabled = busy;
     this.flatBtn.disabled = window.HBTradeUI.flatBusy();

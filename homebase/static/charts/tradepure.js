@@ -49,7 +49,11 @@ function parsePrefs(text) {
   if (!isObj(o)) o = {};
   const ticked = idList(o.ticked);
   const sw = (v) => (typeof v === 'boolean' ? v : true);
-  return { ticked, oneClick: o.oneClick === true, oneClickChart: sw(o.oneClickChart), oneClickPanel: sw(o.oneClickPanel),
+  // 2026-10-28 (owner D3): an optional default stop in ticks per symbol. Absent until one is set, so with it off the
+  // prefs are exactly what they always were; a 0 or a bad value drops the symbol.
+  const ds = {};
+  if (isObj(o.defStop)) for (const [k, v] of Object.entries(o.defStop)) { const n = Math.round(Number(v)); if (k.length >= 1 && k.length <= 16 && n >= 1) ds[k] = Math.min(10000, n); }
+  return { ...(Object.keys(ds).length ? { defStop: ds } : {}), ticked, oneClick: o.oneClick === true, oneClickChart: sw(o.oneClickChart), oneClickPanel: sw(o.oneClickPanel),
     qty: int(o.qty, 1, QTY_MAX, 1), slTicks: 0, tpTicks: 0 };
 }
 const prefsText = (p) => JSON.stringify(parsePrefs(JSON.stringify(p)));

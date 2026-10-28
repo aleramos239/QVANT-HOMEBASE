@@ -320,6 +320,12 @@ function needsQuoteForBracket(type, slTicks, tpTicks) {
   return type === 'Market' && (slTicks > 0 || tpTicks > 0);
 }
 
+/* 2026-10-28 (owner D3): the default stop, in ticks, for `root` from Settings > Trading; 0 = none set (today's behavior). */
+function defaultStopTicks(prefs, root) {
+  const n = prefs && prefs.defStop && root != null ? prefs.defStop[root] : 0;
+  return n > 0 ? n : 0;
+}
+
 /* N2/I1: whether a re-priced or new Limit/Stop order should be refused for having drifted (or landed) on the
    wrong side of the market, using the LAST KNOWN quote at any age -- freshness only gates display and menu
    items (see freshQuote), never this check. No quote at all is refused outright, since "no quote" means "can't
@@ -1792,7 +1798,7 @@ const api = { HOTKEYS_KEY, HOTKEY_ACTIONS, chordOf, hotkeyAssignError, parseHotk
   algoFillMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
   enterConfirms, wireSend, sendingSide, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
-  needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
+  needsQuoteForBracket, defaultStopTicks, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
   migrateTicked, deskGate, armedMode, liveSendIds, liveCueTitle, replayGuard, legsWithin, lineAccounts, accountChips, tradeSpot, acctTick, hiddenCellsLoaded,
   NO_ACCOUNTS, SYMBOL_CHANGE_ACCOUNTS_CLEARED, liveIds, liveDroppedMessage, envChip, machineWords, algoBookings, algoForAccount,
   accountsForAlgo, algoTickAccounts, accountPickRows, deskStatusText, deskStatusParts,

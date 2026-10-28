@@ -863,3 +863,18 @@ test('Keys tab: off and empty at first; the switch and a recorded key save at on
     delete global.window.HBTradePure; delete global.document.addEventListener; delete global.document.removeEventListener; delete global.localStorage;
   }
 });
+
+test('Trading tab: DEFAULT STOP is one number for THIS chart\'s symbol, 0 until set, and writes only that symbol', () => {
+  const cell = makeCell('time:60');
+  cell.cfg.root = 'NQ';
+  cell.cfg.trade = { accounts: [] };
+  cell.cfg.algo = null;
+  const prefs = { oneClick: false, oneClickChart: true, oneClickPanel: true, qty: 1, slTicks: 0, tpTicks: 0, defStop: { ES: 8 } };
+  const { box } = openTrading(cell, { prefs: () => prefs, setPrefs: (p) => Object.assign(prefs, p) });
+  const num = descend({ children: [box] }, (c) => c.getAttribute && c.getAttribute('aria-label') === 'Stop for this symbol');
+  assert.equal(num.value, '0', 'NQ has none: off');
+  num.value = '20';
+  num.onchange();
+  assert.deepEqual(prefs.defStop, { ES: 8, NQ: 20 }, 'ES is untouched');
+  assert.equal(num.value, '20');
+});
