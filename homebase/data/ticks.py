@@ -87,7 +87,9 @@ HISTORY_UTC_DAYS = 2        # the feed serves ticks from 00:00 UTC of the previo
 # live, a weekday is ~550 pages (NQ ~150, ES ~310, RTY ~37, GC ~36, YM ~18, SI 13):
 # ~5.5 h at PAGE_INTERVAL_S of the 14.7 h between 17:20 and 08:00, the first
 # hours first. What a night leaves, the next runs take.
-ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI")
+# 2026-10-27 (owner): YM, RTY and SI stopped -- unused, and each cost live-feed budget and tick-job pages. Their
+# history already on disk stays (the export still reads it); add a root back here to record it again.
+ROOTS = ("NQ", "ES", "GC")
 ARCHIVE = ticks_archive()
 PAGE = 4096                 # the feed caps a tick request at about this
 MAX_PAGES = 3000            # ~12M ticks — far above any session

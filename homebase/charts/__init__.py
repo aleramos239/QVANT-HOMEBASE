@@ -12,11 +12,11 @@ import os
 
 PORT = 8852
 # the live recorder captures the nightly tick archive's symbols
-# (homebase.ticks.ROOTS, the archive's six roots): the nightly job
+# (homebase.ticks.ROOTS, the archive's three roots; YM / RTY / SI stopped 2026-10-27, owner): the nightly job
 # merges this recording into the archive (it holds the first hours of every
 # session, which the broker's history drops at 00:00 UTC the next day) and
 # fills the ticks this one missed from the broker's history
-DEFAULT_ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI")
+DEFAULT_ROOTS = ("NQ", "ES", "GC")
 # whose md socket feeds the charts: "demo" = the Apex eval login (default;
 # confirmed by the Task 14 spike), "live" = the live account's login
 # ("LIVE" or " live" means live; anything unrecognised is "demo", which is what

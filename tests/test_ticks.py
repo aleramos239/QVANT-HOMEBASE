@@ -647,8 +647,9 @@ def test_fetch_page_on_a_shared_socket_keeps_only_its_own_chart():
 ALL_ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG", "6E", "6J", "6B", "BTC", "MBT")
 
 
-def test_the_archive_records_the_six_roots_in_priority_order():
-    assert T.ROOTS == ("NQ", "ES", "YM", "RTY", "GC", "SI")
+def test_the_archive_records_three_roots_in_priority_order():
+    # 2026-10-27 (owner): YM, RTY and SI stopped -- their history stays on disk, untouched
+    assert T.ROOTS == ("NQ", "ES", "GC")
 
 
 def test_fx_is_quarterly_and_crypto_monthly():
@@ -690,10 +691,10 @@ def test_a_weekday_evening_fetches_every_roots_first_hours_first(tmp_path):
     now = dt.datetime(2026, 9, 29, 17, 20, tzinfo=ET)
     _, jobs = T.plan(ALL_ROOTS, [dt.date(2026, 9, 29)], tmp_path, now)
     heads = [key[0] for *_, key, s, e, r in jobs[:15]]
-    assert heads == list(ALL_ROOTS)                                     # every root's 18:00-20:00 ET first
+    assert heads == [*T.ROOTS, *(r for r in ALL_ROOTS if r not in T.ROOTS)]   # every root's 18:00-20:00 ET first
     assert all(s == T.session_bounds(dt.date(2026, 9, 29), key[0])[0] for *_, key, s, e, r in jobs[:15])
     tails = [key[0] for *_, key, s, e, r in jobs[15:]]
-    assert tails == list(ALL_ROOTS)          # then the rest, every root's up to the last hour the broker has published
+    assert tails == [*T.ROOTS, *(r for r in ALL_ROOTS if r not in T.ROOTS)]   # then the rest, every root's up to the last hour the broker has published
     assert {e.astimezone(ET).strftime("%H:%M") for *_, key, s, e, r in jobs[15:]} == {"16:00"}
     now = dt.datetime(2026, 9, 29, 17, 50, tzinfo=ET)                 # 17:00 is published: the classic roots' close;
     _, jobs = T.plan(ALL_ROOTS, [dt.date(2026, 9, 29)], tmp_path, now)  # BTC/MBT's session runs on to 18:00

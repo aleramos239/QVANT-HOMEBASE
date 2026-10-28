@@ -18,7 +18,7 @@ const info = (text) => ({ text, tone: 'info' });
 // the indicators that draw only their first instance on a chart (flowlayer.js inst(), catalog eventsView / newsMode)
 const FIRST_ONLY = { fvg: 'gap', smt: 'SMT', events: 'calendar', headlines: 'news' };
 // the burst detector's markets (bursts.py DEFAULT_ROOTS: the server's HOMEBASE_BURST_ROOTS can change it)
-const BOLT_ROOTS = ['NQ', 'ES', 'YM', 'RTY', 'GC'];
+const BOLT_ROOTS = ['NQ', 'ES', 'GC'];
 const FIVE_MIN = 5 * 60000;
 const warn = (text, act) => (act ? { text, tone: 'warn', act } : { text, tone: 'warn' });
 

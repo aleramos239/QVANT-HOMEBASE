@@ -459,9 +459,9 @@ def _warm_one(args) -> str:
 
 
 WARM_FROM = dt.date(2021, 9, 22)      # the build days' first session: nothing older is ever asked for
-# The app's six markets (2026-10-07). Any other root in the archive is left alone: a run on one still
-# builds its own days on first use.
-WARM = ("NQ", "ES", "YM", "RTY", "GC", "SI")
+# The app's markets (six on 2026-10-07; NQ, ES, GC since 2026-10-27). Any other root in the archive is left alone: a run
+# on one still builds its own days on first use.
+WARM = ("NQ", "ES", "GC")
 
 
 def warm_all(jobs: int = 2) -> None:
