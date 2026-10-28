@@ -468,7 +468,7 @@ const tick = (age) => ({ contract: 'X', last_tick_age_s: age, error: null });
 
 test('status: a weekend with Bitcoin fresh and the Globex futures closed is fine', () => {
   const f = C.feedSummary(live({ BTC: tick(2), NQ: tick(180000) }), ...SAT_NOON);
-  assert.deepEqual(f, { dot: 'ok', text: 'feeds ok', textClass: '', title: 'BTC 2.0s  ·  NQ closed' });
+  assert.deepEqual(f, { dot: 'ok', text: 'feeds ok', textClass: '', title: 'BTC 2.0s  ·  NQ closed', stale: [] });
 });
 
 test('status: a stale open market is amber, the stalest first, two at most', () => {
@@ -492,7 +492,7 @@ test('status: a refused symbol reads "unavailable" in amber, whatever the market
 
 test('status: an open market that has not ticked yet is not "feeds ok" — neutral text, grey dot', () => {
   const sat = C.feedSummary(live({ BTC: tick(null), NQ: tick(null) }), ...SAT_NOON);
-  assert.deepEqual(sat, { dot: '', text: 'BTC no ticks yet', textClass: '', title: 'BTC no ticks yet  ·  NQ closed' });
+  assert.deepEqual(sat, { dot: '', text: 'BTC no ticks yet', textClass: '', title: 'BTC no ticks yet  ·  NQ closed', stale: [] });
   const wed = C.feedSummary(live({ NQ: tick(null), ES: tick(null), YM: tick(null), BTC: tick(1) }), ...WED_10);
   assert.equal(wed.text, 'NQ no ticks yet · ES no ticks yet');
   assert.equal(wed.dot, '');
@@ -514,7 +514,7 @@ test('status: a feed ten minutes late says so in amber -- ticks flowing is not "
   assert.equal(f.title, 'NQ 1.0s, 10m late  ·  ES 2.0s, 10m late  ·  YM 1.0s, 10m late');
   // on time (a fraction of a second behind): as it always read
   assert.deepEqual(C.feedSummary(live({ NQ: late(1, 0.3), ES: late(2, 0) }), ...WED_10),
-    { dot: 'ok', text: 'feeds ok', textClass: '', title: 'NQ 1.0s  ·  ES 2.0s' });
+    { dot: 'ok', text: 'feeds ok', textClass: '', title: 'NQ 1.0s  ·  ES 2.0s', stale: [] });
 });
 
 test('status: lateness is the feed\'s -- the median of the open markets, a closed one\'s old print says nothing', () => {
@@ -551,7 +551,7 @@ test('status: not connected reads "connecting…", never "feeds ok"', () => {
 
 test('status: an error is red and says what failed', () => {
   const f = C.feedSummary({ connected: false, error: 'chart service unreachable — retrying' }, ...WED_10);
-  assert.deepEqual(f, { dot: 'bad', text: 'chart service unreachable — retrying', textClass: 'bad', title: '' });
+  assert.deepEqual(f, { dot: 'bad', text: 'chart service unreachable — retrying', textClass: 'bad', title: '', stale: [] });
   const feed = C.feedSummary(live({ NQ: tick(1) }, { error: 'Refused: every symbol refused' }), ...WED_10);
   assert.deepEqual([feed.dot, feed.text, feed.textClass], ['bad', 'Refused: every symbol refused', 'bad']);
   const rec = C.feedSummary(live({ NQ: tick(1) }, { recorder: { written: 0, buffered: 0, error: 'disk full' } }), ...WED_10);
@@ -1539,4 +1539,15 @@ test('2026-10-27 wording: names told apart, ids and saved layouts untouched', ()
   assert.equal(m.indicators[0].params.levels, '5');
   assert.equal(m.indicators[2].params.length, 20);
   assert.equal(C.label(m.indicators[0]), 'Book imbalance (live gauge)');
+});
+
+test('status: feedSummary names the stale open markets in `stale` (cj-4: the page\'s feed alarm reads it); none when fresh, closed or not connected', () => {
+  assert.deepEqual(C.feedSummary(live({ NQ: tick(180), ES: tick(2), YM: tick(360) }), ...WED_10).stale, ['YM', 'NQ'], 'stalest first, as the text');
+  assert.deepEqual(C.feedSummary(live({ NQ: tick(2) }), ...WED_10).stale, []);
+  assert.deepEqual(C.feedSummary(live({ NQ: tick(180000) }), ...SAT_NOON).stale, [], 'a closed market is never stale');
+  // the feed itself gone is the worst stale: every open market is named (cj-4, review round 2) -- the alarm must not read it as "fresh"
+  assert.deepEqual(C.feedSummary({ ...live({ NQ: tick(500), ES: tick(2), BTC: tick(1) }), connected: false }, ...WED_10).stale, ['NQ', 'ES', 'BTC']);
+  assert.deepEqual(C.feedSummary({ ...live({ NQ: tick(2) }), connected: false }, ...SAT_NOON).stale, [], 'closed markets are not named');
+  assert.deepEqual(C.feedSummary({ ...live({ NQ: tick(2) }), error: 'md login refused' }, ...WED_10).stale, ['NQ']);
+  assert.deepEqual(C.feedSummary({ ...live({ NQ: tick(2), YM: tick(400) }), recorder: { error: 'disk full' } }, ...WED_10).stale, ['YM'], 'a recorder error is not lost prices');
 });

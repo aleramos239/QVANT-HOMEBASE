@@ -15,7 +15,7 @@ const src = (f) => readFileSync(new URL(`../../homebase/static/charts/${f}`, imp
 
 const BANNED_MODULES = ['deskclient.js', 'paperclient.js', 'tradeui.js', 'tradelines.js', 'orderpanel.js',
   'dom.js', 'domui.js', 'panelshell.js', 'fillquality.js', 'newsui.js', 'news.js', 'l2layer.js', 'liquidity.js',
-  'trade.js'];   // trade.js itself -- tradepure.js (its pure half) is fine and IS loaded
+  'linkwatch.js', 'trade.js'];   // trade.js itself -- tradepure.js (its pure half) is fine and IS loaded
 
 test('backtest.html loads none of the trading/desk modules', () => {
   for (const f of BANNED_MODULES) {

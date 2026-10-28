@@ -44,7 +44,7 @@ function load() {
   // newest first, as the page shows them
   const toasts = () => root.children.map((el) => el.children[0].textContent);
   D.onMessage({ type: 'desk', event: 'state', data: { enabled: true, bot: {}, accounts: [{ id: 'sim041', label: 'SIM0000041', env: 'demo' }] } });
-  return { D, reply, toasts, window, root };
+  return { D, reply, toasts, window, root, answers };
 }
 const fill = (id, orderId, price = 30000.25) => ({ type: 'desk', event: 'fill',
   data: { account: 'sim041', fill: { id, order_id: orderId, symbol: 'NQZ6', side: 'Buy', qty: 1, price } } });
@@ -189,4 +189,56 @@ test('5.12 a "not working" refusal marks the order; the request is unchanged; th
   await refuse();
   D.onMessage({ down: 'chart service unreachable' });
   assert.deepEqual([...D.notWorking()], [], 'the desk down: no lines, no marks');
+});
+
+/* c-30: a dropped link keeps the last desk state for DISPLAY (heldState / stale); the gate and state stay null, so
+   nothing that sends reads it. A new full state clears it. */
+const posState = { enabled: true, bot: {}, accounts: [{ id: 'sim041', label: 'SIM0000041', env: 'demo', positions: [{ symbol: 'NQZ6', root: 'NQ', net: 1, avg_price: 30000 }], orders: [] }] };
+
+test('c-30: the desk link drops -- state and gate say down, the last state is held for display, a new state clears it', () => {
+  const { D } = load();
+  D.onMessage({ type: 'desk', event: 'state', data: posState });
+  assert.equal(D.stale, null);
+  D.onMessage({ type: 'desk', down: 'no link to the desk' });
+  assert.equal(D.state, null, 'the sending side sees nothing');
+  assert.equal(D.gate().mode, 'down');
+  assert.equal(D.stale, 'desk');
+  assert.equal(D.heldState.accounts[0].positions[0].net, 1);
+  D.onMessage({ type: 'desk', down: 'no link to the desk' });   // a second word of "down" keeps what was held
+  assert.equal(D.heldState.accounts[0].id, 'sim041');
+  D.onMessage({ type: 'desk', event: 'state', data: { ...posState, accounts: [] } });
+  assert.equal(D.stale, null);
+  assert.equal(D.heldState, null);
+  assert.equal(D.state.accounts.length, 0);
+});
+
+test('c-30: the chart service socket drops -- the lines are marked stale, back when the socket is', () => {
+  const { D } = load();
+  D.onMessage({ type: 'desk', event: 'state', data: posState });
+  D.socket(false);
+  assert.equal(D.stale, 'service');
+  assert.equal(D.state.accounts.length, 1, 'state untouched: only the mark is new');
+  D.socket(true);
+  assert.equal(D.stale, null);
+  D.socket(false);
+  D.onMessage({ type: 'desk', down: 'no link to the desk' });
+  assert.equal(D.stale, 'desk', 'the desk word wins');
+});
+
+test('cj-5: a refused answer sounds "problem", an accepted one does not; a toast returns its element and can be dismissed', async () => {
+  const { D, window, reply, answers } = load();
+  const heard = [];
+  window.HBSounds = { event: (k) => heard.push(k) };
+  const ok = D.send('order', { client_id: 'c1', accounts: ['sim041'] });
+  reply(1);
+  await ok;
+  assert.deepEqual(heard, [], 'an accepted order is silent');
+  const bad = D.send('order', { client_id: 'c2', accounts: ['sim041'] });
+  answers.shift()({ status: 400, json: async () => ({ detail: 'refused' }) });
+  await bad;
+  assert.deepEqual(heard, ['problem']);
+  const el = D.toast('warn', 'x');
+  assert.equal(el.children[0].textContent, 'x');
+  D.dismiss(el);
+  D.dismiss(el);   // twice is harmless (evict is the one path)
 });

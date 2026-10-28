@@ -776,7 +776,7 @@ function exitZones(groups, P) {
 function lineTitle(g) { return [...new Set(((g && g.legs) || []).map((l) => l.who))].join(', '); }
 const PAPER_COLOR = '#7E57C2';   // charts.css --paper (light); cell.js's palette carries the theme's own as P.paper
 function lineColor(g, P) {
-  if (g.gone) return P.text2 || '#787B86';   // 5.12: the desk said its order is not working -- grey (lineGone)
+  if (g.gone || g.stale) return P.text2 || '#787B86';   // 5.12: the desk said its order is not working -- grey (lineGone); c-30: held while the link is down
   if (g.paper) return P.paper || PAPER_COLOR;   // a PAPER line: the paper colour whatever its kind (its text says which)
   if (g.kind === 'position') return g.side === 'Buy' ? P.up : P.down;
   if (g.kind === 'sl') return P.down;

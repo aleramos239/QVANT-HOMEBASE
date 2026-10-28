@@ -341,7 +341,9 @@ class Overlay {
   paintLines(mode) {
     const Dc = window.HBDeskClient, root = this.root;
     // every account's lines; any tradable desk account's are editable (HBTradeUI.lineMode), not only this chart's
-    const groups = T.linesFor(Dc.state, root, window.HBTradeUI.editableIds(this.cell));
+    // c-30: with the Desk link down the last lines stay, read-only and marked "not live" (display only: the gate is still down)
+    const stale = Dc.stale, held = stale === 'desk' ? Dc.heldState : null;
+    const groups = T.linesFor(held || Dc.state, root, held ? [] : window.HBTradeUI.editableIds(this.cell));
     // 2+ accounts on this chart (ticked, or with lines here): every chip names its account (HBTrade.lineText `named`)
     this.named = window.HBTradeUI.tradeOf(this.cell).accounts.length > 1 || new Set(groups.flatMap((g) => g.legs.map((l) => l.account))).size > 1;
     const busy = window.HBTradeUI.busy();
@@ -350,6 +352,7 @@ class Overlay {
     for (const g of groups) {
       seen.add(g.key);
       g.gone = T.lineGone(g, gone);   // 5.12: the desk said its order is not working: grey, and the chip says so
+      g.stale = !!stale && !(stale === 'desk' && g.paper);   // c-30: the PAPER book lives in the chart service, up while only the Desk is down
       if (this.dragging === g.key) continue;   // the key being dragged is skipped
       let it = this.items.get(g.key);
       if (!it) {
@@ -372,7 +375,7 @@ class Overlay {
       it.chip.remove();
       this.items.delete(key);
     }
-    this.zones.set(T.exitZones(groups, this.cell.P), [], L.shade / 100);
+    this.zones.set(stale ? [] : T.exitZones(groups, this.cell.P), [], L.shade / 100);
     this.sync();
   }
 
@@ -428,10 +431,11 @@ class Overlay {
 
   paint(it) {
     const Dc = window.HBDeskClient, q = Dc.quotes[this.root];
-    it.chip.text.textContent = T.lineText(it.g, q ? q.last : null, this.cell.tick, !!this.named) + (it.g.gone ? ' · not working' : '');
+    it.chip.text.textContent = T.lineText(it.g, q ? q.last : null, this.cell.tick, !!this.named) + (it.g.gone ? ' · not working' : '') + (it.g.stale ? ' · not live' : '');
     it.chip.style.setProperty('--c', T.lineColor(it.g, this.cell.P));
-    it.chip.classList.toggle('gone', !!it.g.gone);
+    it.chip.classList.toggle('gone', !!it.g.gone || !!it.g.stale);
     if (it.g.gone) it.chip.title = 'The desk said this order is not working any more; the line goes when its list catches up';
+    else if (it.g.stale) it.chip.title = 'Not live: the last state before the link dropped. It comes back live with the link';
     it.chip.classList.toggle('paper', !!it.g.paper);   // a PAPER account's line (Task 2): its colour comes via --c
   }
 
@@ -504,8 +508,9 @@ class Overlay {
 
   /* read-only: no drag, no × -- the bot owns them (the desk also refuses a change to a bot's order) */
   paintBotLines(lines) {
-    const seen = new Set();
-    for (const g of lines) {
+    const seen = new Set(), dead = !!window.HBDeskClient.stale;   // c-30: the chart service socket is down: the last lines, marked
+    for (const raw of lines) {
+      const g = dead ? { ...raw, color: this.cell.P.text2 || '#787B86', text: `${raw.text} · not live` } : raw;
       seen.add(g.key);
       let it = this.botItems.get(g.key);
       if (!it) {
