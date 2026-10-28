@@ -49,7 +49,10 @@ function of(inst, f) {
     return f.spacing > 0 && f.spacing < min ? warn('Zoom in to see the stats') : null;
   }
   // a bar counts when it STARTS inside the window (studies_ta.py), so a longer bar draws its whole range
-  if (id === 'orb' && f.barMs > (p.minutes || 15) * 60000) return warn(`Bars are longer than the ${p.minutes || 15} minutes: it draws the range of the whole first bar`);
+  if (id === 'orb' && f.barMs > 0 && ((p.minutes || 15) * 60000) % f.barMs) {
+    const mins = p.minutes || 15;
+    return warn(`${mins} minutes is not a whole number of ${f.barMs / 60000}-minute bars: it draws the range of ${Math.ceil(mins * 60000 / f.barMs) * f.barMs / 60000} minutes`);
+  }
   if (['orb', 'noise', 'topen'].includes(id) && f.barMs > FIVE_MIN) {
     const key = need('HBCatalog', './catalog.js').serverKey(inst);
     if (!visible(f).some((b) => b.sv && b.sv[key] != null)) return warn('Needs bars of 5 minutes or less (a bar must start within 5 minutes of the time)');

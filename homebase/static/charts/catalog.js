@@ -212,7 +212,7 @@ const TV_DEFS = [
     [TV_LEN(21)], TV_ONE('DPO'), { pane: 'own', refs: [0] }),
   tvDef('massindex', 'Mass Index', 'Sums how wide the bar range is versus its own average, to spot a reversal bulge',
     [TV_LEN(10)], TV_ONE('Mass Index'), { pane: 'own', refs: [27, 26.5], short: 'Mass Index' }),
-  tvDef('corr', 'Trend Strength Index', 'How straight price runs with time over N bars: 1 up, -1 down, 0 none',
+  tvDef('corr', 'Trend Strength Index', 'Correlation of price with time over N bars (how straight it runs): 1 up, -1 down',
     [TV_LEN(14, 2)], TV_ONE('Trend strength', TA_BLUE), { pane: 'own', refs: [0], short: 'Trend Strength' }),
   // ---- momentum ----
   tvDef('rsi', 'RSI', 'Relative strength: how strongly the last N values moved up versus down, 0 to 100',

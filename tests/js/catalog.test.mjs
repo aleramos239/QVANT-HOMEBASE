@@ -1486,6 +1486,7 @@ test('picker catalog fixes: server clamps, labels, descriptions', () => {
   assert.equal(C.def('mwabs').name, 'Absorption (tape)');
   assert.equal(C.def('tv_corr').name, 'Trend Strength Index (TV)');   // the guide's name; the line is no longer called TSI, the name of another study
   assert.equal(C.def('tv_corr').lines[0].label, 'Trend strength');
+  assert.match(C.def('tv_corr').desc, /correlation/i, 'the picker search still finds it by the old word');
   assert.match(C.def('tv_vdelta').desc, /candle colour/);
   assert.match(C.def('tv_cvd').desc, /candle colour/);
   assert.match(C.def('tv_updown').desc, /candle direction/);
