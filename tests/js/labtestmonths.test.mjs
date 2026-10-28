@@ -217,7 +217,7 @@ test('the test months of the strategy as set: the same ask, which says it locks 
   assert.match(LAB, /Run the test months \(the owner clicked it in the Lab\)/);     // OOS_SAID stays
 });
 
-test('Put it on the Desk: the confirm shows the verdict and the six lines of the run\'s own settings, lands OFF and no Trade rules; Not yet or no words sends nothing; the owner\'s words go as owner_said (plan 4.7, S4)', async () => {
+test('Put it on the Desk: the confirm shows the verdict and the six lines of the run\'s own settings, lands OFF and no Trade rules; Not yet sends nothing; no words are asked for', async () => {
   const RL = require('../../homebase/static/charts/reallines.js');
   const a = LAB.indexOf('function canon'), code = LAB.slice(LAB.indexOf('const curSid'), LAB.indexOf('function wfFixedHtml'))
     + LAB.slice(a, LAB.indexOf('function deskOffDialog', a));
@@ -235,16 +235,12 @@ test('Put it on the Desk: the confirm shows the verdict and the six lines of the
   vm.runInContext(`${code}\nObject.assign(globalThis, { promoteToDesk, setKey });`, c);
   c.S.three.draft_x.oos.set = c.setKey(f);                 // the one-box record was opened for these settings
   const press = (x) => dialogs.at(-1).on({ target: { closest: () => ({ dataset: { x } }) } });
-  const POST = [['POST', '/api/tester/desklab/promote', { name: 'x', run_id: 'r1', owner_said: 'put x on the desk', to: 'mac' }]];   // whatever the dialog says
+  const POST = [['POST', '/api/tester/desklab/promote', { name: 'x', run_id: 'r1', to: 'mac' }]];   // whatever the dialog says
   c.promoteToDesk({ key: 'd:x', name: 'x' });
   const h = dialogs[0].html;
-  assert.match(h, /<label for="pdSaid">Your words, that it goes on the Desk<\/label><textarea id="pdSaid" maxlength="400"><\/textarea>/);
-  assert.match(h, /data-x="go" disabled>Put it on the Desk</);         // grey until there are words
-  for (const [v, off] of [['  ', true], ['put x on the desk', false], ['', true]]) { said.value = v; said.input(); assert.equal(go.disabled, off, v); }
-  press('go');                                                          // no words: nothing is sent
-  await new Promise((r) => setImmediate(r));
-  assert.deepEqual(sent, []);
-  said.value = '  put x on the desk \n';
+  assert.doesNotMatch(h, /pdSaid|textarea/);                              // no words box (the owner, 2026-10-28)
+  assert.match(h, /data-x="go">Put it on the Desk</);                    // and the button is on
+  assert.match(h, /<select id="pdTo">/);
   assert.match(h, /Put x on the Desk\?/);
   assert.match(h, /The six lines of this run's own settings \(its in-sample months and test months, as set\):/);
   assert.match(h, /<b>LUCK<\/b>: 1 of 2 boxes made money in-sample/);

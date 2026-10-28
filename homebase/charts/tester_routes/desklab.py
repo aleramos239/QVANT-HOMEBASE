@@ -529,7 +529,7 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
 
     @r.post("/desklab/{what}")
     async def desklab_write(what: str, request: Request):
-        """promote {name, run_id, owner_said, to?}: a draft that was backtested goes on the Desk, frozen. remove {name}: its record goes
+        """promote {name, run_id, to?}: a draft that was backtested goes on the Desk, frozen. remove {name}: its record goes
         (the history stays). onoff {name, on}: the runner hosts it or leaves it be. A refusal the page may read is answered
         with its own words ({ok: false, detail})."""
         watch_guard(request)
@@ -542,7 +542,7 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
                 body = await request.json()
             except ValueError:
                 raise HTTPException(400, "the body is JSON") from None
-            keys = {"promote": {"name", "run_id", "owner_said"}, "remove": {"name"}, "delete": {"name"}, "onoff": {"name", "on"},
+            keys = {"promote": {"name", "run_id"}, "remove": {"name"}, "delete": {"name"}, "onoff": {"name", "on"},
                     "open": {"name"},
                     "archive": {"name"}, "filed": {"name"}, "restore": {"name"},
                     "archive_builtin": {"name"}, "restore_builtin": {"name"}}[what]
@@ -561,6 +561,8 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
                 keys = keys | {"builtin"}
             if what == "open" and wf is not None:
                 keys = keys | {"wf"}
+            if what == "promote" and isinstance(body, dict) and "owner_said" in body:
+                keys = keys | {"owner_said"}      # an older page still sends its words: no longer asked for, ignored (the owner, 2026-10-28)
             to = body.get("to") if what == "promote" and isinstance(body, dict) else None
             if to is not None and to not in DESKLAB_TO:
                 raise HTTPException(400, "to: mac, vps or both")
@@ -574,12 +576,10 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
             if not isinstance(body, dict) or set(body) != keys or not isinstance(body["name"], str) \
                     or not draftstore.NAME_RE.fullmatch(body["name"]):
                 raise HTTPException(400, "{" + ", ".join(sorted(keys)) + "}: a Lab strategy's name" + (
-                    ", the backtest's run id, your own words" if what == "promote" else ", on: true or false" if what == "onoff" else ""))
+                    ", the backtest's run id" if what == "promote" else ", on: true or false" if what == "onoff" else ""))
             name = body["name"]
             if what == "promote" and not isinstance(body["run_id"], str):
                 raise HTTPException(400, "run_id: the backtest's run id")
-            if what == "promote" and (not isinstance(body["owner_said"], str) or not body["owner_said"].strip()):
-                raise HTTPException(400, "owner_said: your own words that it goes on the Desk. Nothing was sent to the Desk.")
             if what == "onoff" and not isinstance(body["on"], bool):
                 raise HTTPException(400, "on: true or false")
             try:

@@ -242,8 +242,6 @@ def test_delete_takes_the_history_too_but_only_once_it_is_off_the_desk_and_let_g
     ("promote", {"name": "nq_bars"}), ("promote", {"name": "nq_bars", "run_id": "x", "owner_said": SAID, "z": 1}),
     ("promote", {"name": "Bad Name", "run_id": "x", "owner_said": SAID}), ("promote", {"name": "nq_bars", "run_id": 5, "owner_said": SAID}),
     ("promote", {"name": 5, "run_id": "x", "owner_said": SAID}), ("promote", []), ("promote", "nq_bars"),
-    ("promote", {"name": "nq_bars", "run_id": "x"}), ("promote", {"name": "nq_bars", "run_id": "x", "owner_said": ""}),
-    ("promote", {"name": "nq_bars", "run_id": "x", "owner_said": "  \n "}), ("promote", {"name": "nq_bars", "run_id": "x", "owner_said": 5}),
     ("remove", {}), ("remove", {"name": "nq_bars", "on": True}), ("remove", {"name": "../x"}), ("remove", {"name": 5}),
     ("onoff", {"name": "nq_bars"}), ("onoff", {"name": "nq_bars", "on": "yes"}), ("onoff", {"name": "nq_bars", "on": 1}),
     ("onoff", {"name": "nq_bars", "on": None}), ("onoff", {"on": True}), ("onoff", {"name": "nq_bars", "on": True, "z": 1})])
@@ -985,13 +983,19 @@ def test_the_shadow_calendar_shows_a_booked_days_shadow_copy_never_its_real_trad
     assert [(d["date"], d["trades"], d["net"]) for d in days] == [("2026-09-28", [paper], -12.0)]
 
 
+def test_a_promote_needs_no_words(c, drafts_dir, make_run):
+    draft(drafts_dir)
+    r = c.post("/api/tester/desklab/promote", json={"name": "nq_bars", "run_id": make_run()})      # the owner, 2026-10-28
+    assert r.status_code == 200 and r.json()["ok"] is True
+
+
 def test_promote_can_also_send_to_the_vps_only_when_asked(c, drafts_dir, make_run, monkeypatch):
     from homebase.charts.tester_routes import desklab
     sent = []
     monkeypatch.setattr(desklab, "send_to_vps", lambda name: sent.append(name) or ["SENT"])
     draft(drafts_dir)
     rid = make_run()
-    body = {"name": "nq_bars", "run_id": rid, "owner_said": SAID}
+    body = {"name": "nq_bars", "run_id": rid}
     url = "/api/tester/desklab/promote"
     assert c.post(url, json={**body, "to": "nowhere"}).status_code == 400 and not sent        # nothing written, nothing sent
     assert "vps" not in c.post(url, json=body).json() and not sent                              # default: this Mac only
