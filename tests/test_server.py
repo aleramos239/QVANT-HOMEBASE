@@ -91,6 +91,15 @@ def test_status_names_the_machine_from_the_no_backtests_switch(client, tmp_path,
     assert client.get("/api/status").json()["machine"] == "server"
 
 
+def test_status_carries_the_backtest_slots_read_only(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    b = client.get("/api/status").json()["backtests"]
+    assert b["off"] is False and b["running"] == 0 and b["cap"] >= 1
+    (tmp_path / ".homebase").mkdir()
+    (tmp_path / ".homebase" / "no_backtests").write_text("")
+    assert client.get("/api/status").json()["backtests"] == {"off": True}
+
+
 def test_arm_toggle_persists(client):
     r = client.post("/api/arm", json={"armed": True}).json()
     assert r["armed"] is True
