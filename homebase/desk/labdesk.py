@@ -1777,7 +1777,7 @@ class LabDesk:
                 r = json.loads(line)
             except ValueError:
                 continue
-            if not isinstance(r, dict) or not str(r.get("et", "")).startswith(today):
+            if not isinstance(r, dict) or self.engine._day_of_et(r.get("et")) != today:
                 continue
             ev, name, seq = r.get("event"), r.get("strategy"), r.get("seq")
             if not isinstance(name, str) or labcfg.store_name(name) is None:

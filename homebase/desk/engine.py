@@ -129,8 +129,18 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
     def now_et(self) -> dt.datetime:
         return self._now().astimezone(ET)
 
+    @staticmethod
+    def _day_of_et(et) -> str:
+        """The Desk day of an ET wall time (a datetime or a journal `et` string): the trading day starts at 18:00 ET,
+        like the market session and the Lab runner's day (owner, 2026-10-27). "" when it cannot be read."""
+        try:
+            t = et if isinstance(et, dt.datetime) else dt.datetime.fromisoformat(str(et))
+        except ValueError:
+            return ""
+        return (t.date() + dt.timedelta(days=t.hour >= 18)).isoformat()
+
     def _today(self) -> str:
-        return self.now_et().date().isoformat()
+        return self._day_of_et(self.now_et())
 
     def _day_path(self, date: str):
         return self._root / f"day-{date}.json"
@@ -202,20 +212,20 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
                 if not isinstance(rec, dict):
                     continue
                 if rec.get("event") in ("strategy_killed", "strategy_kill_requested") \
-                        and str(rec.get("et", "")).startswith(today) and rec.get("strategy"):
+                        and self._day_of_et(rec.get("et")) == today and rec.get("strategy"):
                     self._killed.setdefault(today, set()).add(str(rec["strategy"]))
                     continue
-                if rec.get("event") == "day_state_unreadable" and str(rec.get("et", "")).startswith(today):
+                if rec.get("event") == "day_state_unreadable" and self._day_of_et(rec.get("et")) == today:
                     self._day_unreadable = today
                     continue
-                if rec.get("event") == "inactive_today" and str(rec.get("et", "")).startswith(today) \
+                if rec.get("event") == "inactive_today" and self._day_of_et(rec.get("et")) == today \
                         and rec.get("strategy") and rec.get("code"):
                     self._inactive.setdefault(str(rec["strategy"]), {})[str(rec["code"])] = str(rec.get("reason", ""))
                     self._inactive_date = today
                     continue
                 if rec.get("event") != "timer_skipped":
                     continue
-                if not str(rec.get("et", "")).startswith(today):
+                if self._day_of_et(rec.get("et")) != today:
                     continue
                 strategy, account = rec.get("strategy"), rec.get("account")
                 if strategy and account:        # gate_chop skips carry no account

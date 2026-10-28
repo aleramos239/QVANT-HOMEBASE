@@ -48,6 +48,20 @@ def test_runner_restart_blocks_on_a_booked_strategy_at_night_but_not_on_the_week
     assert v({"a": FLAT}, night, False, book) == "ok"
 
 
+def test_the_owners_force_file_skips_only_the_booked_rule_and_expires(tmp_path, monkeypatch):
+    book, night = {"lab_x": ["acct"]}, datetime(2026, 10, 27, 21, 0, tzinfo=ET)
+    assert g.verdict({"accounts": {"a": FLAT}, "book": book}, night, True, True) == "ok"
+    assert g.verdict({"accounts": {"a": {**FLAT, "open_position_count": 1}}, "book": book}, night, True, True).startswith("no:")
+    f = tmp_path / "force_runner"
+    monkeypatch.setattr(g, "FORCE_RUNNER", str(f))
+    assert g.forced() is False
+    f.write_text("")
+    assert g.forced() is True
+    old = f.stat().st_mtime - 3600
+    os.utime(f, (old, old))
+    assert g.forced() is False
+
+
 def test_the_gate_script_exits_closed_when_the_desk_is_down(monkeypatch):
     def boom(*a, **k):
         raise OSError("refused")

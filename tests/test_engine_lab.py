@@ -1766,6 +1766,20 @@ def test_a_round_caught_placing_by_a_restart_is_never_clean(tmp_path):
     assert (chk["account"], chk["round"], chk["reason"]) == ("a1", 1, PLACING_UNKNOWN)
 
 
+def test_the_desk_day_starts_at_18_et_and_reads_journal_lines_by_that_day(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    clock.set_et(17, 59)
+    assert eng._today() == "2026-09-14"
+    clock.set_et(18, 0)
+    assert eng._today() == "2026-09-15"
+    import datetime as dt
+    clock.dt = dt.datetime(2026, 9, 15, 3, 59, tzinfo=dt.timezone.utc)       # 23:59 ET
+    assert eng._today() == "2026-09-15"
+    clock.dt = dt.datetime(2026, 9, 15, 4, 5, tzinfo=dt.timezone.utc)        # 00:05 ET: past midnight, the same day
+    assert eng._today() == "2026-09-15"
+    assert eng._day_of_et("2026-09-14T19:30:00-04:00") == "2026-09-15" and eng._day_of_et("junk") == ""
+
+
 def test_a_check_block_of_today_is_cleared_by_hand_on_a_flat_account(tmp_path):
     """The owner can clear today's "check it" round at once, not only after the midnight roll."""
     eng, ads, _ = mk(tmp_path)

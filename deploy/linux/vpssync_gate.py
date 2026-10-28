@@ -5,7 +5,9 @@ position count cannot be trusted) all wait. A disconnected account only waits wh
 today: a parked, expired or removed account that nothing uses can never hold a position the Desk could lose. The runner's booked-strategy check holds whenever the market is open
 (a desk day can run 18:00-04:00 too), not only weekdays 08:00-16:15."""
 import json
+import os
 import sys
+import time
 import urllib.request
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -18,7 +20,17 @@ def market_closed(now) -> bool:
             or 17 * 60 <= m < 18 * 60)              # Fri 17:00 -> Sun 18:00 and the daily 17:00-18:00 break
 
 
-def verdict(d, now, needs_runner: bool) -> str:
+FORCE_RUNNER = "/home/homebase/.homebase-sync/force_runner"       # the owner's word: restart the runner now (valid 30 min)
+
+
+def forced() -> bool:
+    try:
+        return time.time() - os.path.getmtime(FORCE_RUNNER) < 1800
+    except OSError:
+        return False
+
+
+def verdict(d, now, needs_runner: bool, force_runner: bool = False) -> str:
     m = now.hour * 60 + now.minute
     if 9 * 60 + 10 <= m <= 9 * 60 + 35:
         return "no: 09:10-09:35 ET"
@@ -38,7 +50,7 @@ def verdict(d, now, needs_runner: bool) -> str:
             return "no: %s is not seeded yet (its position is unknown)" % name
         if a.get("open_position_count") or a.get("working_orders"):
             return "no: %s has a position or working orders" % name
-    if needs_runner and not market_closed(now):
+    if needs_runner and not force_runner and not market_closed(now):
         booked = [k for k, v in (d.get("book") or {}).items() if k.startswith("lab_") and v]
         if booked:
             return "no: %s is booked on an account (a runner restart would end its day)" % booked[0]
@@ -51,7 +63,7 @@ def main(argv) -> str:
         d = json.load(urllib.request.urlopen("http://127.0.0.1:8850/api/status", timeout=8))
     except Exception as e:  # noqa: BLE001
         return "no: the desk is not answering (%s)" % type(e).__name__
-    return verdict(d, now, argv[1:2] == ["1"])
+    return verdict(d, now, argv[1:2] == ["1"], forced())
 
 
 if __name__ == "__main__":
