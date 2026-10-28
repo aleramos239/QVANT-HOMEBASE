@@ -90,6 +90,7 @@ import contextlib
 import contextvars
 import copy
 import datetime as dt
+import functools
 import re
 import sys
 import time
@@ -105,6 +106,14 @@ from ..config import (HARD_MAX_ORDER_QTY, HARD_MAX_POSITION_QTY, AppCfg,
                      ChartTradingCfg, assignments)
 from ..contracts import point_value, root_of, round_to_tick, spec_for, tick_size
 from ..core.num import finite as _finite
+from .risk import prop_room
+
+
+@functools.lru_cache(maxsize=16)
+def _prop_rules(rule_id: str) -> dict:
+    from ..backtest.propsim import load_rules      # late: the tester's package is not needed to place an order
+    return load_rules(rule_id)
+
 
 BOT_BUSY = ("placing", "placed", "live")
 RATE_N, RATE_WINDOW_S = 5, 1.0
@@ -587,6 +596,7 @@ class ChartDesk:
             "tradable": (connected and bool(a.account_name) and not self._pinned_twice(aid)
                          and bool(getattr(ad, "pinned_ok", False)) and bool(lv.get("seeded"))),
             "balance": lv.get("balance"), "realized_pnl": lv.get("realized_pnl"),
+            "room": self._room(aid, a, lv),
             "positions": [{**p, "root": root_of(p["symbol"]) if p.get("symbol") else None,
                            "point_value": point_value(p["symbol"]) if p.get("symbol") else None}
                           for p in lv.get("positions", [])],
@@ -595,6 +605,19 @@ class ChartDesk:
             "fills": list(self._fills.get(aid, ())),
             "strategies": self._booked(aid),
         }
+
+    def _room(self, aid: str, a, lv: dict) -> Optional[dict]:
+        """The prop room of an account that has a rule file in its `prop` config (read-only, for the chart's line and
+        warning); None without one, or when anything it needs is missing -- the view never fails for it."""
+        prop = a.prop or {}
+        if not prop.get("rules") or prop.get("start_balance") is None or lv.get("balance") is None:
+            return None
+        try:
+            hist = (self.engine.balance_history(aid) if self.engine.balance_history else None) or {}
+            return prop_room(_prop_rules(str(prop["rules"])), float(prop["start_balance"]), hist, self.engine._today(),
+                             float(lv["balance"]))
+        except Exception:  # noqa: BLE001
+            return None
 
     def bot_view(self) -> dict:
         ts = self.timer_status() or {}
