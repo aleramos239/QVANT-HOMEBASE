@@ -215,7 +215,7 @@ def check_vis(vis) -> dict | None:
 def check_drawings(body) -> list:
     """The page's drawings for one symbol, validated and stripped to what
     the page draws: [{id, type, points: [{t?, p?}], color?, qty?, locked?,
-    style?, vis?}] (a horizontal line's point is a price, a vertical line's a
+    hidden?, style?, vis?}] (a horizontal line's point is a price, a vertical line's a
     time; `vis` = the intervals it shows on, check_vis). A long / short position is [entry, target, stop] with target
     and stop on the box's right edge (same t), stop < entry < target (long)
     or target < entry < stop (short), and an optional qty 1-10000 (kept for
@@ -268,6 +268,10 @@ def check_drawings(body) -> list:
             if not isinstance(d["locked"], bool):
                 raise ValueError("locked: true or false")
             item["locked"] = d["locked"]
+        if "hidden" in d:
+            if not isinstance(d["hidden"], bool):
+                raise ValueError("hidden: true or false")
+            item["hidden"] = d["hidden"]
         if "style" in d:
             style = check_style(kind, d["style"])
             if style:
@@ -314,14 +318,28 @@ def register(app, *, drawings_path, templates_path, presets_store, known_root) -
             body = await request.json()
         except ValueError:
             raise HTTPException(400, "the body is not JSON") from None
+        # a bare list replaces the whole list (the old page); {drawings, known} is the page's list and the ids it had loaded
+        # or saved: a saved drawing the page never knew (another window added it) is kept, not wiped (2026-10-27)
+        known = None
+        if isinstance(body, dict):
+            known = body.get("known")
+            if not isinstance(known, list) or not all(isinstance(k, str) for k in known):
+                raise HTTPException(400, "known: a list of drawing ids")
+            body = body.get("drawings")
         try:
             clean = check_drawings(body)
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
         all_ = read_json(drawings_path)
-        all_[r] = clean
+        kept = []
+        if known is not None:
+            mine = {d["id"] for d in clean} | set(known)
+            kept = [d for d in all_.get(r, []) if isinstance(d, dict) and d.get("id") not in mine]
+            if len(clean) + len(kept) > MAX_DRAWINGS:
+                raise HTTPException(400, f"drawings are a list of at most {MAX_DRAWINGS} (another window added {len(kept)})")
+        all_[r] = [*clean, *kept]
         write_json(drawings_path, all_)
-        return {"ok": True, "count": len(clean)}
+        return {"ok": True, "count": len(all_[r]), **({"kept": kept} if kept else {})}
 
     @app.get("/api/templates")
     async def get_templates():
