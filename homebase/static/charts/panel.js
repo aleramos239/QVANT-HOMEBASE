@@ -307,7 +307,7 @@ function renderFillQuality(target) {
 }
 
 const ACCOUNT_HEAD = [{ text: 'Account' }, { text: 'Env' }, { text: 'Connected' }, { text: 'Broker account' }, { text: 'Balance', cls: 'num' },
-  { text: 'Realized P&L', cls: 'num' }, { text: 'Open P&L', cls: 'num' }, { text: 'Strategies' }, { text: 'Status' }];
+  { text: 'Realized P&L', cls: 'num' }, { text: 'Open P&L', cls: 'num' }, { text: 'Strategies' }, { text: 'Status' }, { text: 'Room' }];
 function buildAccountRow(tr, r) {
   td(tr, r.who);
   const c = el('td');
@@ -320,6 +320,7 @@ function buildAccountRow(tr, r) {
   td(tr, r.open, 'num ' + (r.openTone || ''));
   td(tr, r.strategies);
   td(tr, r.status, r.status === 'Ready' ? '' : 'down');
+  td(tr, r.room);
 }
 function updateAccountRow(tr, r) {
   const c = tr.children;
@@ -330,6 +331,7 @@ function updateAccountRow(tr, r) {
   c[6].textContent = r.open; c[6].className = 'num ' + (r.openTone || '');
   c[7].textContent = r.strategies;
   c[8].textContent = r.status; c[8].className = r.status === 'Ready' ? '' : 'down';
+  c[9].textContent = r.room;
 }
 function renderAccounts(target) {
   const d = D();

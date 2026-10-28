@@ -923,9 +923,37 @@ function confirmOrder(b, state, quote, pv, tick) {
   if (b.tp_price != null) bits.push(`TP ${Cat.fmtPrice(b.tp_price, tick)}${reward != null ? ` ${usd(reward)}` : ''}`);
   const rr = ref != null && b.sl_price != null && b.tp_price != null ? rrText(Math.abs(ref - b.sl_price), Math.abs(b.tp_price - ref)) : null;
   if (rr) bits.push(`RR ${rr}`);
+  const room = roomNotes(accts, b, risk, quote, s);
   return { title: orderTitle(b, tick), accounts: accts.map((a) => ({ id: a.id, label: a.label, env: a.env })),
-    bracket: bits.join(' · '), each: accts.length > 1 ? `each of ${accts.length} accounts` : '', live: accts.some((a) => a.env === 'live'),
-    warn: b.tif === 'GTC' ? GTC_WARN : '' };
+    bracket: [...bits, ...room.bits].join(' · '), each: accts.length > 1 ? `each of ${accts.length} accounts` : '', live: accts.some((a) => a.env === 'live'),
+    warn: [b.tif === 'GTC' ? GTC_WARN : '', ...room.warns].filter(Boolean).join(' · ') };
+}
+/* Prop room (the owner, 2026-10-28, "show, then warn"): the desk's `room` per account -- daily loss, trailing drawdown,
+   contracts -- shown in the confirm and the Accounts tab, and a WARNING when the order's stop-out loss is more than what is
+   left. Read-only: it never blocks an order. The open loss (on the chart's own prices) comes off the first two. */
+function roomLeft(a, quotes) {
+  const r = a && a.room;
+  if (!r) return null;
+  const l = (a.positions || []).filter((p) => p.net).reduce((x, p) => { const v = openPnl(p, quotes); return v != null && v < 0 ? x - v : x; }, 0);
+  return { daily: r.daily == null ? null : r.daily - l, drawdown: r.drawdown == null ? null : r.drawdown - l, contracts: r.contracts ?? null };
+}
+function roomText(left) {
+  return [left.daily != null && `daily ${money(left.daily)}`, left.drawdown != null && `drawdown ${money(left.drawdown)}`,
+    left.contracts != null && `max ${left.contracts} contracts`].filter(Boolean).join(' · ');
+}
+function roomNotes(accts, b, risk, quote, s) {
+  const bits = [], warns = [], loss = risk != null && risk < 0 ? -risk : null;
+  for (const a of accts) {
+    const left = roomLeft(a, quote ? { [b.root]: quote } : {});
+    if (!left) continue;
+    const who = accts.length > 1 ? `${short(a)} ` : '';
+    bits.push(`${who}room: ${roomText(left)}`);
+    if ((a.positions || []).some((p) => p.root === b.root && p.net && (p.net > 0) !== (s > 0))) continue;   // it closes size: no new risk
+    const over = [['daily loss', left.daily], ['drawdown', left.drawdown]]
+      .filter(([, v]) => v != null && (loss != null ? loss > v : v <= 0)).map(([k, v]) => `${k} ${money(v)}`);
+    if (over.length) warns.push(`${who}${loss != null ? `stop-out loses ${money(loss)}: more than the room left (${over.join(', ')})` : `no room left (${over.join(', ')})`}`);
+  }
+  return { bits, warns };
 }
 function actionTitle(kind, { root, line, from, to }, tick) {
   switch (kind) {
@@ -1688,9 +1716,10 @@ function accountRows(state, quotes) {
   return accountsOf(state).map((a) => {
     const opens = (a.positions || []).filter((p) => p.net).map((p) => openPnl(p, quotes));
     const open = opens.some((v) => v == null) ? null : opens.reduce((x, v) => x + v, 0);
+    const left = roomLeft(a, quotes);
     return { id: a.id, who: a.label, env: a.env, connected: !!a.connected, broker: a.broker_account || '—',
       balance: money(a.balance), realized: money(a.realized_pnl), open: opens.length ? (usd(open) ?? '—') : '$0',
-      openTone: tone(open), strategies: [...new Set((a.strategies || []).map(botName))].join(', '),
+      openTone: tone(open), strategies: [...new Set((a.strategies || []).map(botName))].join(', '), room: left ? roomText(left) : '',
       status: a.tradable ? 'Ready' : (a.error || (a.connected ? 'Not tradable' : 'Disconnected')) };
   });
 }
