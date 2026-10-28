@@ -1581,11 +1581,12 @@ function positionDialog(cell, d) {
 }
 
 /* ---- 2026-09-27 draw-tools plan: the floating per-drawing toolbar + its settings dialog ---- */
-const DRAW_TYPES = ['trend', 'ray', 'xline', 'arrow', 'channel', 'note', 'avwap', 'hline', 'vline', 'rect', 'fib'];          // the types that take a style object at all
+const DRAW_TYPES = ['trend', 'ray', 'xline', 'arrow', 'channel', 'note', 'avwap', 'hline', 'vline', 'rect', 'fib', 'hray', 'fibext', 'arrowup', 'arrowdown', 'plabel', 'range'];          // the types that take a style object at all
 const isPosDrawing = (d) => d.type === 'long' || d.type === 'short';
 const DRAW_NAMES = { trend: 'Trend line', ray: 'Ray', xline: 'Extended line', arrow: 'Arrow', channel: 'Parallel channel', note: 'Note',
   avwap: 'Anchored VWAP', rect: 'Rectangle', hline: 'Horizontal line', vline: 'Vertical line', fib: 'Fib retracement',
-  long: 'Long position', short: 'Short position' };
+  long: 'Long position', short: 'Short position', hray: 'Horizontal ray', fibext: 'Fib extension', arrowup: 'Arrow mark up',
+  arrowdown: 'Arrow mark down', plabel: 'Price label', range: 'Range' };
 const drawStyleDefaults = new Map();                    // type -> that tool's saved "__default__" preset payload
 async function loadDrawStyleDefaults() {
   for (const type of DRAW_TYPES) {
@@ -1709,7 +1710,7 @@ function drawToolbarButtons(cell, root, d) {
     ls.onchange = () => patchDrawing(root, d.id, { style: { lineStyle: ls.value } });
     const gear = btn('gear', 'Settings');
     gear.onclick = () => drawingSettingsDialog(cell, d);
-    wrap.append(w, ls, gear);
+    wrap.append(...(DS.FIELDS[d.type].includes('width') ? [w, ls] : []), gear);      // a stamp, a label and a range have no line to size
   } else {
     const gear = btn('gear', 'Settings');
     gear.onclick = () => positionDialog(cell, drawings.list(root).find((x) => x.id === d.id) || d);
@@ -1899,6 +1900,7 @@ function drawingSettingsDialog(cell, d0) {
   /* The prices of the drawing's points, typed (rounded to the tick): its Coordinates tab. A vertical line and an anchored
      VWAP sit on a bar, not a price, so they have none. */
   const hasPrices = type !== 'vline' && type !== 'avwap';
+  const isFib = type === 'fib' || type === 'fibext';
   function coordRows() {
     const tick = cell.tick || 0.01, D = window.HBDrawings, names = type === 'hline' ? ['Price'] : orig.points.map((_, i) => `Point ${i + 1} price`);
     const rows = [mk('div', 'set-cap', 'PRICES')];
@@ -1923,7 +1925,7 @@ function drawingSettingsDialog(cell, d0) {
     return rows;
   }
 
-  const TABS = [['style', 'Style'], ...(has('text') && type !== 'note' ? [['text', 'Text']] : []), ...(type === 'fib' ? [['levels', 'Levels']] : []),
+  const TABS = [['style', 'Style'], ...(has('text') && type !== 'note' ? [['text', 'Text']] : []), ...(isFib ? [['levels', 'Levels']] : []),
     ...(hasPrices ? [['coords', 'Coordinates']] : []), ['vis', 'Visibility']];
   function renderTabs() {
     tabs.replaceChildren(...TABS.map(([id, label]) => {
@@ -1935,9 +1937,16 @@ function drawingSettingsDialog(cell, d0) {
   }
   function renderPane() {
     const rows = [];
-    if (tab === 'style' && type === 'note') {      // a note is its text: the words, their look, the box
-      rows.push(mk('div', 'set-cap', 'NOTE'));
-      rows.push(row('Text', textCtl(work.style.text, (v) => setStyle({ text: v }, false))));
+    if (tab === 'style' && type === 'range') {      // a kept measure: what it shows (its look is the measure's own)
+      rows.push(mk('div', 'set-cap', 'RANGE'));
+      rows.push(row('Show', selectCtl(work.style.show, [['both', 'Price and time'], ['price', 'Price only'], ['date', 'Time only']], (v) => setStyle({ show: v }))));
+    } else if (tab === 'style' && (type === 'arrowup' || type === 'arrowdown')) {      // a stamp: its colour and its size
+      rows.push(mk('div', 'set-cap', 'ARROW'));
+      rows.push(row('Color', colorCtl(() => work.color, (c) => set({ color: c }))));
+      rows.push(row('Size', numberCtl(work.style.fontSize, 10, 28, (v) => setStyle({ fontSize: v }))));
+    } else if (tab === 'style' && (type === 'note' || type === 'plabel')) {      // a note is its text: the words, their look, the box; a price label is its price
+      rows.push(mk('div', 'set-cap', type === 'note' ? 'NOTE' : 'PRICE LABEL'));
+      if (type === 'note') rows.push(row('Text', textCtl(work.style.text, (v) => setStyle({ text: v }, false))));
       rows.push(row('Font size', numberCtl(work.style.fontSize, 10, 28, (v) => setStyle({ fontSize: v }))));
       rows.push(row('Text color', colorCtl(() => work.style.textColor, (c) => setStyle({ textColor: c }))));
       rows.push(row('Bold', sw('bold')));
@@ -1945,7 +1954,7 @@ function drawingSettingsDialog(cell, d0) {
       rows.push(row('Fill', colorCtl(() => window.HBDrawings.fillOf(work.style, work.color, cell.P), (c) => setStyle({ fillColor: c }))));
     } else if (tab === 'style') {
       rows.push(mk('div', 'set-cap', 'LINE'));
-      rows.push(row(type === 'fib' ? 'Trend color' : 'Color', colorCtl(() => work.color, (c) => set({ color: c }))));
+      rows.push(row(isFib ? 'Trend color' : 'Color', colorCtl(() => work.color, (c) => set({ color: c }))));
       rows.push(row('Width', numberCtl(work.style.width, 1, 8, (v) => setStyle({ width: v }))));
       rows.push(row('Style', selectCtl(work.style.lineStyle, LINE_CHOICES, (v) => setStyle({ lineStyle: v }))));
       if (type === 'channel') {
@@ -1999,13 +2008,13 @@ function drawingSettingsDialog(cell, d0) {
           [['', 'Follow Settings'], ['hover', 'On hover or when selected'], ['always', 'Always']],
           (v) => setStyle({ hoverLabels: v === '' ? undefined : v === 'hover' }))));
       }
-      if (type === 'fib') {
+      if (isFib) {
         rows.push(mk('div', 'set-cap', 'LEVELS'));
         rows.push(row('Show the ratio', sw('showLevels')));
         rows.push(row('Show the price', sw('showPrices')));
         rows.push(row('Fill between levels', sw('fill')));
         rows.push(row('Fill opacity', opacityCtl(work.style.fillOpacity, work.style.fill, (v) => setStyle({ fillOpacity: v }))));
-        rows.push(row('Reverse (0 at the start)', sw('reverse')));
+        if (type === 'fib') rows.push(row('Reverse (0 at the start)', sw('reverse')));
         rows.push(row('Text size', numberCtl(work.style.fontSize, 10, 28, (v) => setStyle({ fontSize: v }))));
       }
     } else if (tab === 'levels') {

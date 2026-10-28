@@ -96,7 +96,9 @@ function distToSegment(px, py, ax, ay, bx, by) {
   return Math.hypot(px - (ax + u * dx), py - (ay + u * dy));
 }
 
-const ONE_POINT = new Set(['note', 'avwap']);
+const ONE_POINT = new Set(['note', 'avwap', 'hray', 'arrowup', 'arrowdown', 'plabel']);
+const THREE_POINT = new Set(['channel', 'fibext']);      // placed as a drag (two points); the third starts at a default and is dragged
+const STAMP_PX = 2;                                      // an arrow stamp is fontSize x this tall
 const ALERT_COLOR = '#F5A623';
 const UNDO_MAX = 50;
 const MAX_DRAWINGS = 500, NEAR_CAP = 450;   // the server refuses a symbol's 501st drawing (charts/routes/drawings.py); the page says so from 450
@@ -146,13 +148,13 @@ function handlePoints(d, geo) {
     const x = geo.x(P[0].t);
     return x == null ? null : [[x, (geo.h || 0) / 2]];
   }
-  if (ONE_POINT.has(d.type)) {     // a note and an anchored VWAP: one handle, at the point
+  if (ONE_POINT.has(d.type)) {     // a note, an anchored VWAP, a horizontal ray, a stamp, a price label: one handle, at the point
     const x = geo.x(P[0].t), y = geo.y(P[0].p);
     return x == null || y == null ? null : [[x, y]];
   }
   const x0 = geo.x(P[0].t), x1 = geo.x(P[1].t), y0 = geo.y(P[0].p), y1 = geo.y(P[1].p);
   if (x0 == null || x1 == null || y0 == null || y1 == null) return null;
-  if (d.type === 'channel' && P[2]) {     // the third handle is the point the parallel line runs through
+  if (THREE_POINT.has(d.type) && P[2]) {     // the third handle: the point the channel's parallel runs through; a fib extension's C
     const x2 = geo.x(P[2].t), y2 = geo.y(P[2].p);
     return x2 == null || y2 == null ? null : [[x0, y0], [x1, y1], [x2, y2]];
   }
@@ -173,8 +175,16 @@ function hitTest(d, pt, geo) {
   if (d.type === 'hline') return Math.abs(pt.y - hs[0][1]) <= LINE_TOL ? { part: 'body' } : null;
   if (d.type === 'vline') return Math.abs(pt.x - hs[0][0]) <= LINE_TOL ? { part: 'body' } : null;
   const style = DS.normalize(d.type, d.style);
-  if (d.type === 'note') {         // its text box, as wide as the text is about (the canvas measures it exactly when it draws)
-    const w = String(style.text || ' ').length * style.fontSize * 0.6 + 12, h = style.fontSize + 10;
+  if (d.type === 'hray') {         // along its run, from its point to the pane's right edge
+    return pt.x >= hs[0][0] - LINE_TOL && Math.abs(pt.y - hs[0][1]) <= LINE_TOL ? { part: 'body' } : null;
+  }
+  if (d.type === 'arrowup' || d.type === 'arrowdown') {      // the stamp's box: its tip at the point, its body below (up) or above (down)
+    const h = style.fontSize * STAMP_PX, w = h * 0.7, up = d.type === 'arrowup', [[x, y]] = hs;
+    const inside = Math.abs(pt.x - x) <= w / 2 + LINE_TOL && (up ? pt.y >= y - LINE_TOL && pt.y <= y + h + LINE_TOL : pt.y <= y + LINE_TOL && pt.y >= y - h - LINE_TOL);
+    return inside ? { part: 'body' } : null;
+  }
+  if (d.type === 'note' || d.type === 'plabel') {         // its text box, as wide as the text is about (the canvas measures it exactly when it draws)
+    const w = String(d.type === 'note' ? style.text || ' ' : d.points[0].p).length * style.fontSize * 0.6 + 12, h = style.fontSize + 10;
     const inside = pt.x >= hs[0][0] - LINE_TOL && pt.x <= hs[0][0] + w + LINE_TOL && Math.abs(pt.y - hs[0][1]) <= h / 2 + LINE_TOL;
     return inside ? { part: 'body' } : null;
   }
@@ -197,10 +207,11 @@ function hitTest(d, pt, geo) {
     return distToSegment(pt.x, pt.y, ax, ay, bx, by) <= LINE_TOL ? { part: 'body' } : null;
   }
   let left = Math.min(x0, x1), right = Math.max(x0, x1), top = Math.min(y0, y1), bot = Math.max(y0, y1);
-  if (d.type === 'fib') {          // the block its levels cover
+  if (d.type === 'fib' || d.type === 'fibext') {          // the block its levels cover
     const ys = fibRows(d, geo, style).map((r) => r.y);
     if (!ys.length) return null;
     top = Math.min(...ys); bot = Math.max(...ys);
+    if (d.type === 'fibext') { left = Math.min(...hs.map((h) => h[0])); right = Math.max(...hs.map((h) => h[0])); }
     if (style.extendLeft) left = 0;
     if (style.extendRight) right = geo.w;
   } else if (style.extendRight) right = geo.w;
@@ -210,9 +221,9 @@ function hitTest(d, pt, geo) {
 
 /* A Fib retracement's drawn levels, top of the list first by ratio: [{v, price, y, color}] (a level off the price scale is left out). */
 function fibRows(d, geo, style) {
-  const [a, b] = d.points, out = [];
+  const [a, b, c] = d.points, out = [];
   for (const l of DS.fibLevels(style)) {
-    const price = DS.fibPrice(a.p, b.p, l.v, style.reverse), y = geo.y(price);
+    const price = d.type === 'fibext' ? DS.fibExtPrice(a.p, b.p, c.p, l.v) : DS.fibPrice(a.p, b.p, l.v, style.reverse), y = geo.y(price);
     if (y != null) out.push({ v: l.v, price, y, color: l.color });
   }
   return out;
@@ -230,7 +241,7 @@ function setPoint(d, k, t, p, ctx) {
   if (d.type === 'hline') return { ...d, points: [{ p }] };
   if (d.type === 'vline') return { ...d, points: [{ t }] };
   if (ONE_POINT.has(d.type)) return { ...d, points: [{ t, p }] };
-  if (d.type === 'channel') return { ...d, points: d.points.map((q, i) => (i === k ? { t, p } : q)) };
+  if (THREE_POINT.has(d.type)) return { ...d, points: d.points.map((q, i) => (i === k ? { t, p } : q)) };
   const [a, b] = d.points;
   let points;
   if (d.type === 'rect' && k >= 4) {
@@ -292,6 +303,12 @@ function measureLabel(a, b, ctx) {
   const n = La == null || Lb == null ? 0 : Math.abs(Math.round(Lb) - Math.round(La));
   return [`${sign}${Cat.fmtPrice(Math.abs(diff), ctx.tick)} (${sign}${Math.abs(pct).toFixed(2)}%) · ${ticks} tick${ticks === 1 ? '' : 's'}`,
     `${n} bar${n === 1 ? '' : 's'} · ${fmtDuration(b.t - a.t)}`];
+}
+
+/* A kept range's label lines: the measure's two (price move / bars and time), or one of them (style.show: price, date). */
+function rangeLines(a, b, ctx, show) {
+  const l = measureLabel(a, b, ctx);
+  return show === 'price' ? [l[0]] : show === 'date' ? [l[1]] : l;
 }
 
 /* A line's own numbers, on one row: the move in price, percent and ticks, then bars and time (the measure tool's words). */
@@ -613,6 +630,10 @@ function drawShape(ctx, d, geo, P, paneW, mctx = null, nums = true) {
     return;
   }
   if (d.type === 'note') { drawNote(ctx, hs, style, color, P); return; }
+  if (d.type === 'plabel') { drawNote(ctx, hs, style, color, P, Cat.fmtPrice(d.points[0].p, tick || 0.01)); return; }
+  if (d.type === 'arrowup' || d.type === 'arrowdown') { drawStamp(ctx, hs, style, color, d.type === 'arrowup'); return; }
+  if (d.type === 'hray') { drawHray(ctx, hs, style, color, P, paneW, nums && style.priceLabel ? Cat.fmtPrice(d.points[0].p, tick || 0.01) : '', font); return; }
+  if (d.type === 'range') { if (mctx) drawMeasure(ctx, { a: d.points[0], b: d.points[1] }, geo, P, mctx, { width: paneW, height: paneH }, style.show); return; }
   if (d.type === 'avwap') { drawAvwap(ctx, d, geo, P, paneW, style, color, tick, font); return; }
   if (d.type === 'channel') { drawChannel(ctx, hs, geo, P, style, color); return; }
   const [[x0, y0], [x1, y1]] = hs;
@@ -654,7 +675,7 @@ function drawShape(ctx, d, geo, P, paneW, mctx = null, nums = true) {
     if (nums && style.priceLabel) drawTag(ctx, Cat.fmtPrice(b.p, tick), x1 + 8, y1, color, P.onAccent, paneW, font);
     return;
   }
-  if (d.type === 'fib') { drawFib(ctx, d, geo, P, paneW, style, color, tick); return; }
+  if (d.type === 'fib' || d.type === 'fibext') { drawFib(ctx, d, geo, P, paneW, style, color, tick); return; }
   const x = Math.min(x0, x1), y = Math.min(y0, y1), h = Math.abs(y1 - y0);
   const w = style.extendRight ? Math.max(0, paneW - x) : Math.abs(x1 - x0);     // to the pane's right edge, as far as the chart goes
   // style.fillColor is unset ("follow the theme") on an old rect and on a fresh one with no
@@ -690,8 +711,8 @@ function drawShape(ctx, d, geo, P, paneW, mctx = null, nums = true) {
 }
 
 /* A note: its text in a small box, the point at the box's left edge. */
-function drawNote(ctx, hs, style, color, P) {
-  const [[x, y]] = hs, text = style.text || ' ';
+function drawNote(ctx, hs, style, color, P, text = style.text || ' ') {
+  const [[x, y]] = hs;
   ctx.font = `${style.bold ? 'bold ' : ''}${style.fontSize}px ${window.HBCell.FONT}`;
   const w = ctx.measureText(text).width + 12, h = style.fontSize + 10;
   ctx.fillStyle = fillOf(style, color, P);
@@ -704,6 +725,29 @@ function drawNote(ctx, hs, style, color, P) {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, x + 6, y);
+}
+
+/* An arrow stamp: a filled arrow, its tip at the point, pointing up (body below the point) or down (body above it); fontSize x 2 tall. */
+function drawStamp(ctx, hs, style, color, up) {
+  const [[x, y]] = hs, h = style.fontSize * STAMP_PX, w = h * 0.7, dir = up ? 1 : -1, neck = y + dir * h * 0.45;
+  ctx.fillStyle = color;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + w / 2, neck); ctx.lineTo(x + w * 0.15, neck); ctx.lineTo(x + w * 0.15, y + dir * h);
+  ctx.lineTo(x - w * 0.15, y + dir * h); ctx.lineTo(x - w * 0.15, neck); ctx.lineTo(x - w / 2, neck);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/* A horizontal ray: from its point to the pane's right edge, with its text and (optionally) its price tagged at the edge. */
+function drawHray(ctx, hs, style, color, P, paneW, tag, font) {
+  const [[x, y]] = hs;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(paneW, y); ctx.stroke();
+  ctx.setLineDash([]);
+  drawLabel(ctx, 'hray', hs, style, paneW);
+  if (tag) drawTag(ctx, tag, paneW, y, color, P.onAccent, paneW, font);
 }
 
 /* An anchored VWAP: the line from its bar to the last one, with its latest value tagged at the end. */
@@ -745,15 +789,16 @@ function drawChannel(ctx, hs, geo, P, style, color) {
 /* A Fib retracement: a faint line between its two points, then each level across the span of the two (to the pane's
    edges when it extends), in the level's own colour, with a soft fill up to the next level and its ratio and price. */
 function drawFib(ctx, d, geo, P, paneW, style, color, tick) {
-  const x0 = geo.x(d.points[0].t), x1 = geo.x(d.points[1].t), y0 = geo.y(d.points[0].p), y1 = geo.y(d.points[1].p);
-  const left = style.extendLeft ? 0 : Math.min(x0, x1), right = style.extendRight ? paneW : Math.max(x0, x1);
-  const rows = fibRows(d, geo, style);
+  const xy = d.points.map((q) => [geo.x(q.t), geo.y(q.p)]), xs = xy.map((q) => q[0]);      // 2 points; an extension's A, B, C
+  const left = style.extendLeft ? 0 : Math.min(...xs), right = style.extendRight ? paneW : Math.max(...xs);
   ctx.save();
   ctx.setLineDash([4, 4]);
   ctx.globalAlpha = 0.5;
   ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  ctx.beginPath(); xy.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
   ctx.restore();
+  if (d.type === 'fibext' && xy.length < 3) return;      // being placed: A and B only, C comes with the drop
+  const rows = fibRows(d, geo, style);
   const fillAlpha = (Number.isInteger(style.fillOpacity) ? style.fillOpacity : 8) / 100;      // 8 = the look before it was adjustable
   if (style.fill && fillAlpha > 0) {
     for (let i = 0; i + 1 < rows.length; i++) {
@@ -782,7 +827,7 @@ function drawFib(ctx, d, geo, P, paneW, style, color, tick) {
   }
 }
 
-function drawMeasure(ctx, m, geo, P, mctx, size) {
+function drawMeasure(ctx, m, geo, P, mctx, size, show = 'both') {
   const x0 = geo.x(m.a.t), x1 = geo.x(m.b.t), y0 = geo.y(m.a.p), y1 = geo.y(m.b.p);
   if (x0 == null || x1 == null || y0 == null || y1 == null) return;
   const up = m.b.p >= m.a.p, col = up ? P.accent : P.down;
@@ -793,9 +838,9 @@ function drawMeasure(ctx, m, geo, P, mctx, size) {
   ctx.lineWidth = 1;
   const mx = Math.round(left + w / 2) + 0.5, my = Math.round(top + h / 2) + 0.5;
   ctx.beginPath(); ctx.moveTo(mx, y0); ctx.lineTo(mx, y1); ctx.moveTo(x0, my); ctx.lineTo(x1, my); ctx.stroke();
-  const lines = measureLabel(m.a, m.b, mctx);
+  const lines = rangeLines(m.a, m.b, mctx, show);
   ctx.font = `12px ${window.HBCell.FONT}`;
-  const bw = Math.max(...lines.map((t) => ctx.measureText(t).width)) + 16, bh = 38;
+  const bw = Math.max(...lines.map((t) => ctx.measureText(t).width)) + 16, bh = 6 + 16 * lines.length;
   const bx = Math.max(2, Math.min(left + w / 2 - bw / 2, size.width - bw - 2));
   const by = Math.max(2, Math.min(up ? top - bh - 6 : top + h + 6, size.height - bh - 2));
   ctx.fillStyle = col;
@@ -803,8 +848,7 @@ function drawMeasure(ctx, m, geo, P, mctx, size) {
   ctx.fillStyle = P.onAccent;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(lines[0], bx + bw / 2, by + 11);
-  ctx.fillText(lines[1], bx + bw / 2, by + 27);
+  lines.forEach((t, i) => ctx.fillText(t, bx + bw / 2, by + 11 + 16 * i));
 }
 
 /* One chart's drawing interaction. The tool comes from the page's rail
@@ -1007,7 +1051,7 @@ class Controller {
       if (tool === 'hline') { this.commit({ type: 'hline', points: [{ p: at.p }] }); return; }
       if (tool === 'alert') { this.addAlert(at.p); return; }   // a price alert: a horizontal line that goes off when the price crosses it
       if (tool === 'vline') { this.commit({ type: 'vline', points: [{ t: at.t }] }); return; }
-      if (tool === 'note' || tool === 'avwap') { this.commit({ type: tool, points: [{ t: at.t, p: at.p }] }); return; }
+      if (ONE_POINT.has(tool)) { this.commit({ type: tool, points: [{ t: at.t, p: at.p }] }); return; }
       if (tool === 'long' || tool === 'short') { this.commit(this.newPosition(tool, at)); return; }
       const start = { t: at.t, p: at.p };
       if (tool === 'measure') this.measure = { a: start, b: start, done: false };
@@ -1106,6 +1150,7 @@ class Controller {
     const [a, b] = d.points;
     if (a.t === b.t && a.p === b.p) { this.prim.redraw(); this.host.toolDone(); return; }   // nothing to draw
     if (d.type === 'channel') d.points = [a, b, this.channelThird(a, b)];
+    else if (d.type === 'fibext') d.points = [a, b, this.fibextThird(a, b)];
     this.commit(d);
   }
 
@@ -1172,6 +1217,12 @@ class Controller {
   channelThird(a, b) {
     const tick = this.cell.tick || 0.25, gap = Math.max(Math.abs(b.p - a.p) * 0.5, tick * 20);
     return { t: a.t, p: roundToTick(a.p - gap, tick) };
+  }
+
+  /* A new fib extension's C: a 38.2 % pullback from B against the A-B move (at least 20 ticks), at B's time; it is dragged from its handle. */
+  fibextThird(a, b) {
+    const tick = this.cell.tick || 0.25, gap = Math.max(Math.abs(b.p - a.p) * 0.382, tick * 20);
+    return { t: b.t, p: roundToTick(b.p - (b.p >= a.p ? gap : -gap), tick) };
   }
 
   /* A new long/short box at the pointer: risk = the price distance of 8% of the price pane's height (on the
@@ -1302,7 +1353,7 @@ function zoneAt(pt, w, h) {
 }
 
 const api = { zoneAt, barIndexAt, placeMarkers, logicalOf, xOfLogical, timeToX, snapTime, roundToTick, distToSegment, handlePoints, hitTest,
-  setPoint, shiftTime, moveDrawing, cloned, samePoints, fillOf, fmtDuration, measureLabel, lineStats, fibRows, withAlpha, timeTag, newId, MAGNET_PX, MAGNET_OFF, parseMagnet,
+  setPoint, shiftTime, moveDrawing, cloned, samePoints, fillOf, fmtDuration, measureLabel, lineStats, fibRows, rangeLines, withAlpha, timeTag, newId, MAGNET_PX, MAGNET_OFF, parseMagnet,
   magnetMode, snapPrice, toolLabelsShown, toolLabelParts, Store, Primitive, Controller, HANDLE_TOL, LINE_TOL };
 if (typeof window !== 'undefined') window.HBDrawings = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

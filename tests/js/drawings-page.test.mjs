@@ -123,3 +123,14 @@ test('Remove all counts and clears only the drawings that can go (not locked, no
   assert.match(SRC, /nDrawings: drawings\.removable\(root\)\.length/);
   assert.doesNotMatch(SRC, /\bn = drawings\.list\(root\)\.length/);
 });
+
+test('every drawing type the style table knows has a name on the page and (but for the boxes) a settings dialog', () => {
+  const DS = require('../../homebase/static/charts/drawstyle.js');
+  const types = JSON.parse(/const DRAW_TYPES = (\[[^\]]*\])/.exec(SRC.replace(/'/g, '"'))[1]);
+  const names = /const DRAW_NAMES = \{([^}]*)\}/.exec(SRC)[1];
+  for (const t of Object.keys(DS.FIELDS)) {
+    assert.ok(new RegExp(`\\b${t}: '`).test(names), `${t} has a name`);
+    if (t !== 'long' && t !== 'short') assert.ok(types.includes(t), `${t} takes a style object`);
+  }
+  assert.match(SRC, /type === 'range'/, 'the range has its own Show choice');
+});

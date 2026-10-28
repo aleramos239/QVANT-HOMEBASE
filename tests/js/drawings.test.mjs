@@ -1084,3 +1084,122 @@ test('alerts: dragging an alert while the chart replays puts it back, unsaved', 
   assert.equal(R.store.list('NQ')[0].points[0].p, 900, 'live: it moves');
   R.done();
 });
+
+/* ---- 2026-10-28: horizontal ray, fib extension, arrow stamps, price label, range ---- */
+const hray = { id: 'h', type: 'hray', points: [{ t: bars[1].ms, p: 880 }] };                                  // from (110,120), on to the right edge (x 400)
+const stampUp = { id: 'su', type: 'arrowup', points: [{ t: bars[2].ms, p: 850 }], style: { fontSize: 16 } };   // tip at (120,150), body below
+const stampDown = { id: 'sd', type: 'arrowdown', points: [{ t: bars[2].ms, p: 850 }], style: { fontSize: 16 } };
+const plabel = { id: 'pl', type: 'plabel', points: [{ t: bars[1].ms, p: 880 }], style: { fontSize: 12 } };
+const range = { id: 'rg', type: 'range', points: [{ t: bars[1].ms, p: 880 }, { t: bars[3].ms, p: 850 }] };     // x 110-130, y 120-150
+const fibext = { id: 'fe', type: 'fibext', points: [{ t: bars[0].ms, p: 800 }, { t: bars[4].ms, p: 900 }, { t: bars[2].ms, p: 860 }] };   // A (100,200) B (140,100) C (120,140)
+
+test('a horizontal ray is one point; it runs right to the pane edge and not back', () => {
+  assert.deepEqual(D.handlePoints(hray, G), [[110, 120]]);
+  assert.deepEqual(D.hitTest(hray, { x: 111, y: 121 }, G), { part: 'handle', index: 0 });
+  assert.deepEqual(D.hitTest(hray, { x: 300, y: 122 }, G), { part: 'body' }, 'far along its run');
+  assert.equal(D.hitTest(hray, { x: 90, y: 120 }, G), null, 'behind its start');
+  assert.equal(D.hitTest(hray, { x: 300, y: 140 }, G), null, 'off the line');
+  assert.deepEqual(D.setPoint(hray, 0, bars[3].ms, 870, TIME).points, [{ t: bars[3].ms, p: 870 }]);
+  assert.deepEqual(D.moveDrawing(hray, 1, 10, 0.25, TIME).points, [{ t: bars[2].ms, p: 890 }]);
+});
+
+test('arrow stamps and a price label are one point; the stamp is grabbed on its body, the label on its box', () => {
+  assert.deepEqual(D.handlePoints(stampUp, G), [[120, 150]]);
+  assert.deepEqual(D.hitTest(stampUp, { x: 120, y: 150 }, G), { part: 'handle', index: 0 });
+  assert.deepEqual(D.hitTest(stampUp, { x: 120, y: 170 }, G), { part: 'body' }, 'an up arrow has its tip at the point and its body below');
+  assert.equal(D.hitTest(stampUp, { x: 120, y: 130 }, G), null);
+  assert.deepEqual(D.hitTest(stampDown, { x: 120, y: 130 }, G), { part: 'body' }, 'a down arrow has its body above');
+  assert.equal(D.hitTest(stampDown, { x: 120, y: 170 }, G), null);
+  assert.deepEqual(D.hitTest(plabel, { x: 125, y: 121 }, G), { part: 'body' });
+  assert.equal(D.hitTest(plabel, { x: 125, y: 160 }, G), null);
+  assert.deepEqual(D.setPoint(stampUp, 0, bars[0].ms, 840, TIME).points, [{ t: bars[0].ms, p: 840 }]);
+});
+
+test('a range is a box between its two points: corners are handles, the inside is the body; it keeps its show choice', () => {
+  assert.deepEqual(D.handlePoints(range, G), [[110, 120], [130, 150]]);
+  assert.deepEqual(D.hitTest(range, { x: 120, y: 135 }, G), { part: 'body' });
+  assert.equal(D.hitTest(range, { x: 200, y: 135 }, G), null);
+  assert.deepEqual(D.hitTest(range, { x: 110, y: 120 }, G), { part: 'handle', index: 0 });
+  const mctx = { ...TIME, tick: 0.25 };
+  const both = D.rangeLines(range.points[0], range.points[1], mctx, 'both');
+  assert.equal(both.length, 2);
+  assert.deepEqual(D.rangeLines(range.points[0], range.points[1], mctx, 'price'), [both[0]]);
+  assert.deepEqual(D.rangeLines(range.points[0], range.points[1], mctx, 'date'), [both[1]]);
+  assert.match(both[0], /-30\.00 \(-3\.41%\) · 120 ticks/);
+  assert.match(both[1], /2 bars · 2m/);
+});
+
+test('a fib extension: three handles, levels projected from C by the A-B move, its block is grabbed', () => {
+  assert.deepEqual(D.handlePoints(fibext, G), [[100, 200], [140, 100], [120, 140]]);
+  const rows = D.fibRows(fibext, G, DS.normalize('fibext', {}));
+  assert.deepEqual(rows.map((r) => r.v), [0, 0.618, 1, 1.272, 1.618, 2, 2.618]);
+  assert.deepEqual(rows[0].price, 860, '0 on C');
+  assert.deepEqual(rows[2].price, 960, '1: C plus the whole A-B move (100)');
+  assert.ok(Math.abs(rows[4].price - 1021.8) < 1e-9);
+  assert.deepEqual([rows[0].y, rows[2].y], [140, 40]);
+  assert.deepEqual(D.hitTest(fibext, { x: 100, y: 200 }, G), { part: 'handle', index: 0 });
+  assert.deepEqual(D.hitTest(fibext, { x: 120, y: 140 }, G), { part: 'handle', index: 2 });
+  assert.deepEqual(D.hitTest(fibext, { x: 110, y: 60 }, G), { part: 'body' }, 'inside the block the levels cover');
+  assert.equal(D.hitTest(fibext, { x: 250, y: 60 }, G), null);
+  assert.deepEqual(D.hitTest({ ...fibext, style: { extendRight: true } }, { x: 250, y: 60 }, G), { part: 'body' });
+  assert.deepEqual(D.setPoint(fibext, 2, bars[3].ms, 870, TIME).points, [fibext.points[0], fibext.points[1], { t: bars[3].ms, p: 870 }], 'a handle moves only its own point');
+  assert.deepEqual(D.moveDrawing(fibext, 1, 10, 0.25, TIME).points.map((q) => q.p), [810, 910, 870]);
+});
+
+test('the new tools place from the rail: one click for a ray, stamp or label, a drag for a range, a drag plus a third point for an extension', async (t) => {
+  withWindow(t);
+  for (const [tool, want] of [['hray', [{ t: bars[2].ms, p: 880 }]], ['arrowup', [{ t: bars[2].ms, p: 880 }]], ['arrowdown', [{ t: bars[2].ms, p: 880 }]],
+    ['plabel', [{ t: bars[2].ms, p: 880 }]]]) {
+    const R = pointerRig([], { tool });
+    await R.store.ensure('NQ');
+    await R.gesture([[120, 120]]);
+    const [d] = R.store.list('NQ');
+    assert.equal(d.type, tool);
+    assert.deepEqual(d.points, want, tool);
+    assert.deepEqual(d.style, DS.DEFAULTS[tool], `${tool} gets its built-in look`);
+    assert.equal(R.tool(), 'cursor');
+    assert.equal(R.puts().length, 1);
+    R.done();
+  }
+  const rg = pointerRig([], { tool: 'range' });
+  await rg.store.ensure('NQ');
+  await rg.gesture([[110, 120], [130, 150]]);
+  const [r] = rg.store.list('NQ');
+  assert.deepEqual([r.type, r.points, r.style], ['range', [{ t: bars[1].ms, p: 880 }, { t: bars[3].ms, p: 850 }], { show: 'both' }]);
+  rg.done();
+  const fe = pointerRig([], { tool: 'fibext' });
+  await fe.store.ensure('NQ');
+  await fe.gesture([[100, 200], [140, 100]]);        // A low, B high: a 100-point up move
+  const [f] = fe.store.list('NQ');
+  assert.equal(f.type, 'fibext');
+  assert.deepEqual(f.points.slice(0, 2), [{ t: bars[0].ms, p: 800 }, { t: bars[4].ms, p: 900 }]);
+  assert.deepEqual(f.points[2], { t: bars[4].ms, p: 861.75 }, 'C starts a 38.2 % pullback from B, to be dragged');
+  fe.done();
+});
+
+test('a click with no drag places nothing for a range (no size)', async (t) => {
+  withWindow(t);
+  const R = pointerRig([], { tool: 'range' });
+  await R.store.ensure('NQ');
+  await R.gesture([[110, 120]]);        // press and release in one spot: waits for a second click
+  assert.deepEqual(R.store.list('NQ'), []);
+  R.done();
+});
+
+test('the new tools paint without error and a stamp, ray and label put ink on the canvas', async (t) => {
+  withWindow(t);
+  const R = pointerRig([hray, stampUp, stampDown, plabel, range, fibext, { ...fibext, id: 'fe2', style: { extendRight: true, extendLeft: true } }]);
+  globalThis.window.HBCell = { FONT: 'sans-serif' };
+  await R.store.ensure('NQ');
+  const calls = [];
+  const ctx = new Proxy({}, { get: (_, k) => (k === 'measureText' ? () => ({ width: 40 }) : (...a) => calls.push([k, ...a])), set: () => true });
+  const P = { accent: '#2962FF', accentSoft: 'rgba(41,98,255,0.1)', down: '#F23645', downSoft: 'rgba(242,54,69,0.1)', onAccent: '#fff', handleFill: '#fff' };
+  R.ctl.cell.P = P;
+  R.ctl.cell.R = {};
+  R.ctl.prim.draw({ useMediaCoordinateSpace: (fn) => fn({ context: ctx, mediaSize: { width: 400, height: 1000 } }) });
+  assert.equal(calls.filter(([k]) => k === 'fill').length, 3, 'the two stamps and the range tag are filled');
+  assert.ok(calls.filter(([k]) => k === 'fillRect').length >= 2, 'the label and the range box are filled');
+  assert.ok(calls.some(([k, x, y]) => k === 'lineTo' && x === 400 && y === 120), 'the ray runs to the right edge at its price');
+  assert.ok(calls.some(([k, text]) => k === 'fillText' && text === '880.00'), 'the price label says its price');
+  R.done();
+});
