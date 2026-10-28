@@ -84,6 +84,7 @@ def _remote(tmp_path, gate_cmd):
     env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "VPSSYNC_DEST": str(dest), "VPSSYNC_SYNC": str(tmp_path / "sync"),
            "VPSSYNC_USER": os.environ.get("USER", "root")}
     (tmp_path / "gate.sh").write_text("#!/bin/sh\n" + gate_cmd + "\n")
+    env["VPSSYNC_SETTLE"] = "1"
     env["VPSSYNC_GATE"] = f"sh {tmp_path / 'gate.sh'} --"
     r = subprocess.run(["bash", str(L / "vpssync_remote.sh"), "rev1", str(tar), str(dele), "", "homebase"],
                        env=env, capture_output=True, text=True)

@@ -18,12 +18,16 @@ SYNC="${VPSSYNC_SYNC:-/home/homebase/.homebase-sync}"
 mkdir -p "$SYNC"
 
 GATE="${VPSSYNC_GATE:-python3}"                         # (the override is for its test only)
-gate_ok() {                                            # exit 3 unless the desk is flat and answering
-  local g="" v needs=0
+gate_ok() {                                            # [tries]: exit 3 unless the desk is flat and answering (asked every 2 s)
+  local g="" v needs=0 t
   for g in "$STAGE/deploy/linux/vpssync_gate.py" "$DEST/deploy/linux/vpssync_gate.py"; do [ -f "$g" ] && break; g=""; done
   case " $SERVICES " in *" homebase-labrun "*) needs=1 ;; esac
-  [ -n "$g" ] && v=$($GATE "$g" "$needs" 2>&1) || v="no: no gate script"
-  [ "${v%%:*}" = ok ] || { find "$STAGE" -delete 2>/dev/null || true; echo "waits: $v"; exit 3; }
+  for t in $(seq 1 "${1:-1}"); do
+    [ -n "$g" ] && v=$($GATE "$g" "$needs" 2>&1) || v="no: no gate script"
+    [ "${v%%:*}" = ok ] && return 0
+    [ "$t" -lt "${1:-1}" ] && sleep 2
+  done
+  find "$STAGE" -delete 2>/dev/null || true; echo "waits: $v"; exit 3
 }
 
 fail() { echo "$REV" > "$SYNC/failed"; echo "FAILED: $*"; exit 1; }
@@ -53,7 +57,7 @@ up() {                                                 # <what> <seconds> <comma
 }
 for s in homebase-charts homebase homebase-labrun; do
   case " $SERVICES " in *" $s "*) ;; *) continue ;; esac
-  case "$s" in homebase|homebase-labrun) gate_ok ;; esac
+  case "$s" in homebase|homebase-labrun) gate_ok "${VPSSYNC_SETTLE:-45}" ;; esac     # 90 s: the desk just restarted reconnects its accounts first
   before=$(stat -c %Y /home/homebase/.homebase/desklab/runner.json 2>/dev/null || echo 0)
   systemctl restart "$s"
   case "$s" in
