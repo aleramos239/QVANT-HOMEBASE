@@ -1005,11 +1005,7 @@ class Controller {
       this.own(e);
       if (this.mode === 'click') { this.finish(this.place ? this.placedEnd(at, e.shiftKey) : at); return; }
       if (tool === 'hline') { this.commit({ type: 'hline', points: [{ p: at.p }] }); return; }
-      if (tool === 'alert') {         // a price alert: a horizontal line that goes off when the price crosses it
-        const last = this.cell.bars.length ? this.cell.bars[this.cell.bars.length - 1].c : at.p;
-        this.commit({ type: 'hline', points: [{ p: at.p }], color: ALERT_COLOR, alert: { dir: at.p >= last ? 'up' : 'down', fired: false } });
-        return;
-      }
+      if (tool === 'alert') { this.addAlert(at.p); return; }   // a price alert: a horizontal line that goes off when the price crosses it
       if (tool === 'vline') { this.commit({ type: 'vline', points: [{ t: at.t }] }); return; }
       if (tool === 'note' || tool === 'avwap') { this.commit({ type: tool, points: [{ t: at.t, p: at.p }] }); return; }
       if (tool === 'long' || tool === 'short') { this.commit(this.newPosition(tool, at)); return; }
@@ -1090,7 +1086,7 @@ class Controller {
     this.release();
     this.setCursor(null);
     // saved only when a point really moved: a drag that ends where it started PUTs nothing
-    if (cur && !samePoints(orig, cur)) this.host.drawings.replace(this.root, this.rearmed(cur)); else this.refresh();
+    if (cur && !samePoints(orig, cur) && !(cur.alert && this.alertBlocked())) this.host.drawings.replace(this.root, this.rearmed(cur)); else this.refresh();
   }
 
   finish(at) {
@@ -1132,6 +1128,23 @@ class Controller {
     this.host.toolDone();
     // a note is its text: its settings open at once so it can be written (the drawing is in the store by then)
     if (full.type === 'note' && this.host.onDrawingSettings) setTimeout(() => this.host.onDrawingSettings(this.cell, full), 0);
+  }
+
+  /* A price alert at p, from the tool or the right-click menu. */
+  addAlert(p) {
+    if (this.alertBlocked()) return;
+    const last = this.cell.bars.length ? this.cell.bars[this.cell.bars.length - 1].c : p;
+    this.commit({ type: 'hline', points: [{ p }], color: ALERT_COLOR, alert: { dir: p >= last ? 'up' : 'down', fired: false } });
+  }
+
+  /* A replaying chart shows old prices, but a drawing is saved for the live symbol: an alert set or moved there would
+     point the wrong way on the live chart. So none is, and the page says why. */
+  alertBlocked() {
+    if (!this.cell.replay) return false;
+    this.release();
+    this.host.toolDone();
+    if (this.host.notice) this.host.notice('Alerts cannot be set or moved while the chart replays. Leave the replay first.');
+    return true;
   }
 
   /* A moved alert is armed again from where the price is now: it goes off when the price crosses its NEW level. */

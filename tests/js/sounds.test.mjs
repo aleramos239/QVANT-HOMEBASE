@@ -68,3 +68,29 @@ test('sounds: locked() is true only when sounds are on, a connection alarm is pi
   S.set({ events: { link: 'off', linkpos: 'siren' } });
   assert.equal(S.locked(), true, 'either alarm counts');
 });
+
+test('sounds: the price alert, the bot fill, a headline, a burst and the red-folder warning are events; all but the alert are Off until chosen', () => {
+  const { S, played, desk } = load();
+  S.event('priceAlert');
+  assert.deepEqual(played, [], 'sounds Off: the alert is silent too');
+  S.set({ on: true });
+  S.event('priceAlert');
+  assert.deepEqual(played, ['bell']);
+  for (const k of ['headline', 'burst', 'redFolder']) S.event(k);
+  desk({ order_id: 's', owner: 'nq930' });
+  assert.deepEqual(played, ['bell'], 'new events have no sound until the owner picks one');
+  S.set({ events: { bot: 'ding', burst: 'pop' } });
+  desk({ order_id: 's', owner: 'nq930' });
+  S.event('burst');
+  assert.deepEqual(played, ['bell', 'ding', 'pop']);
+  assert.deepEqual([...S.EVENTS.map((e) => e[0]).slice(-8, -3)], ['priceAlert', 'bot', 'headline', 'burst', 'redFolder']);
+});
+
+test('sounds: onChange tells the mute button when the switch moves, from anywhere', () => {
+  const { S } = load();
+  const seen = [];
+  S.onChange((c) => seen.push(c.on));
+  S.set({ on: true });
+  S.set({ volume: 0.3 });
+  assert.deepEqual(seen, [true, true]);
+});

@@ -107,7 +107,21 @@ function nextText(events, nowMs, colors = COLORS) {
     color: colors[next.impact] || colors.Holiday };
 }
 
-const api = { COLORS, FLAG, look, shown, layout, visibleSlice, flagAt, tipLine, tipLines, fmtIn, nextText };
+/* The red-folder warning (2026-10-27): the US High events that are 5 minutes away, then 1 minute away, each said once.
+   `said` is the caller's Set; one that is already inside the last minute is warned once, at its true minutes. */
+function soon(events, nowMs, said) {
+  const out = [];
+  for (const e of events || []) {
+    const left = e.t_ms - nowMs, stage = left > 60000 ? 5 : 1;
+    if (e.impact !== 'High' || e.country !== 'USD' || left <= 0 || left > 300000 || said.has(`${e.t_ms}:${e.title}:${stage}`)) continue;
+    said.add(`${e.t_ms}:${e.title}:${stage}`);
+    if (stage === 1) said.add(`${e.t_ms}:${e.title}:5`);   // the 5 minute warning is behind us too
+    out.push({ text: `Red folder in ${Math.max(1, Math.round(left / 60000))} min: ${e.title}` });
+  }
+  return out;
+}
+
+const api = { COLORS, FLAG, look, shown, layout, visibleSlice, flagAt, tipLine, tipLines, fmtIn, nextText, soon };
 if (typeof window !== 'undefined') window.HBEvents = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

@@ -52,12 +52,15 @@ function onMessage(m) {
     store.items = N.mergeItems(store.items, [item]);
     scheduleUnflash(item);
     emit();
+    if (N.isBreaking(item, Date.now()) && N.matchesFilter(item, store.filter)) window.HBSounds?.event('headline');   // Off until a sound is chosen
     return;
   }
   if (m.type === 'burst' || m.type === 'burst_update') {
     const { type, ...burst } = m;
     store.bursts = N.mergeBursts(store.bursts, [burst]);
     emit();
+    const c = PAGE && PAGE.cur();
+    if (type === 'burst' && c && (c.shown || c.cfg).root === burst.root) window.HBSounds?.event('burst');   // the chart you are on
   }
 }
 
@@ -299,5 +302,5 @@ function mount(page) {
   window.HBPanel.addTab({ id: 'news', label: 'News', render, onShow, onHide });
 }
 
-window.HBNewsUI = { mount, onMessage, overlay: (cell) => new Overlay(cell), refresh: emit };   // refresh: the calendar was (re)loaded
+window.HBNewsUI = { mount, onMessage, toggleFilter, overlay: (cell) => new Overlay(cell), refresh: emit };   // refresh: the calendar was (re)loaded
 })();

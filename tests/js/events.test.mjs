@@ -81,3 +81,16 @@ test('the status bar: the next event shown, "(in 2h 14m)", coloured by impact; n
   assert.deepEqual([20000, 59 * 60000, 3600000, 134 * 60000, 27 * 3600000, 48 * 3600000].map(E.fmtIn),
     ['1m', '59m', '1h', '2h 14m', '1d 3h', '2d']);
 });
+
+test('soon: a USD red-folder event is warned at 5 minutes and again at 1, each once, never other folders or past ones', () => {
+  const T = 1_800_000_000_000, red = { t_ms: T, title: 'CPI m/m', country: 'USD', impact: 'High' };
+  const cal = [red, { t_ms: T, title: 'Oil', country: 'USD', impact: 'Medium' }, { t_ms: T, title: 'ifo', country: 'EUR', impact: 'High' }];
+  const said = new Set();
+  assert.deepEqual(E.soon(cal, T - 6 * 60000, said), [], 'six minutes out: too early');
+  assert.deepEqual(E.soon(cal, T - 4.5 * 60000, said).map((w) => w.text), ['Red folder in 5 min: CPI m/m']);
+  assert.deepEqual(E.soon(cal, T - 3 * 60000, said), [], 'said already');
+  assert.deepEqual(E.soon(cal, T - 50000, said).map((w) => w.text), ['Red folder in 1 min: CPI m/m']);
+  assert.deepEqual(E.soon(cal, T - 40000, said), []);
+  assert.deepEqual(E.soon(cal, T + 1000, new Set()), [], 'already out');
+  assert.deepEqual(E.soon(cal, T - 3 * 60000, new Set()).map((w) => w.text), ['Red folder in 3 min: CPI m/m'], 'opened late: one warning, true minutes');
+});
