@@ -651,7 +651,8 @@ body[data-cursor-style="dot"] .panel[data-cursor="crosshair"] .chart * {
 .toast.err { border-left-color: var(--down); }
 .toast.warn { border-left-color: var(--warn); background: var(--warn-soft); font-weight: 600; }   /* a kill's "check it": stays until dismissed */
 .toast span { flex: 1; overflow-wrap: anywhere; }
-.toast-x { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 4px; color: var(--text-2); }
+.toast-x { position: relative; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 4px; color: var(--text-2); }
+.toast-x::after { content: ""; position: absolute; inset: -4px; }   /* the click area reaches 28 px; nothing shows */
 .toast-x:hover { background: var(--hover); }
 
 /* ---- chart trading on the chart ---- */
@@ -1209,7 +1210,7 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .btn-ghost { box-shadow: inset 0 0 0 1px var(--ctl-border); }
 .btn-ghost:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--ctl-border-hover); }
 .btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--down) 88%, #000); }
-@media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:active:not(:disabled) { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:active:not(:disabled) { transform: none; } .switch::after, .hb-news-row.breaking { transition: none; } }
 
 /* ---- instant press feedback (2026-09-28 feel pass) ----
    Every OTHER pressable surface in the app gets the same on-pointerdown response `.btn` already had above:

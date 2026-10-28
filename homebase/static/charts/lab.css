@@ -42,10 +42,13 @@ body.lab-page { background: var(--panel) !important; }
 .lab-side > .in { height: 100%; overflow-y: auto; overscroll-behavior: contain; }
 .lab-lib > .in { width: 256px; padding: 10px 8px 14px; }
 #labRes > .in { width: 348px; padding: 18px 16px 18px; }
-.lab[data-lib="0"] .lab-lib { width: 0; margin-left: 0; margin-right: 0; opacity: 0; transform: translateX(-16px); pointer-events: none; }
-.lab[data-res="0"] #labRes { width: 0; margin-left: 0; margin-right: 0; opacity: 0; transform: translateX(16px); pointer-events: none; }
+/* hidden only AFTER the slide (visibility waits 320 ms): the slide plays, and a closed pane is out of the Tab order */
+.lab[data-lib="0"] .lab-lib { width: 0; margin-left: 0; margin-right: 0; opacity: 0; transform: translateX(-16px); pointer-events: none; visibility: hidden;
+  transition: width 320ms var(--hb-spring), margin 320ms var(--hb-spring), opacity 180ms ease, transform 320ms var(--hb-spring), visibility 0s linear 320ms; }
+.lab[data-res="0"] #labRes { width: 0; margin-left: 0; margin-right: 0; opacity: 0; transform: translateX(16px); pointer-events: none; visibility: hidden;
+  transition: width 320ms var(--hb-spring), margin 320ms var(--hb-spring), opacity 180ms ease, transform 320ms var(--hb-spring), visibility 0s linear 320ms; }
 @media (max-width: 1180px) { .lab-lib, .lab-lib > .in { width: 224px; } #labRes, #labRes > .in { width: 304px; } .lab[data-lib="0"] .lab-lib, .lab[data-res="0"] #labRes { width: 0; } }
-@media (prefers-reduced-motion: reduce) { .lab-side { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .lab-side, .lab[data-lib="0"] .lab-lib, .lab[data-res="0"] #labRes { transition: none; } }
 
 /* ---- content: code | chart ---- */
 #labEd { flex: var(--lab-code, 45) 1 0; min-width: 260px; min-height: 0; display: flex; flex-direction: column; }
@@ -184,7 +187,7 @@ body.lab-page { background: var(--panel) !important; }
 .rs-bar i { display: block; height: 100%; background: var(--hb-accent); border-radius: 2px; transition: width 300ms var(--hb-spring); }
 .rs-bar.ind i { width: 38% !important; animation: rs-slide 1.2s ease-in-out infinite alternate; }
 @keyframes rs-slide { from { transform: translateX(-30%); } to { transform: translateX(170%); } }
-@media (prefers-reduced-motion: reduce) { .rs-bar.ind i { animation: none; width: 100% !important; opacity: .4; } .lab-run.busy::before { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .rs-bar i { transition: none; } .rs-bar.ind i { animation: none; width: 100% !important; opacity: .4; } .lab-run.busy::before { animation: none; } }
 
 .rs-set > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding: 0 14px; cursor: pointer; font-size: var(--hb-fs-body); }
 .rs-set > summary::-webkit-details-marker { display: none; }

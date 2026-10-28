@@ -205,7 +205,7 @@ function marketDataSection() {
   const rows = MD_CHOICES.map((c) => {
     const acct = MD.accounts && MD.accounts[c.value];
     return `<button type="button" class="${MD_STAGED === c.value ? "sel" : ""}" data-md="${c.value}"
-      ${MD_BUSY ? "disabled" : ""}>${esc(c.label)}${acct ? ` (${esc(acct)})` : ""}</button>`;
+      aria-pressed="${MD_STAGED === c.value}" ${MD_BUSY ? "disabled" : ""}>${esc(c.label)}${acct ? ` (${esc(acct)})` : ""}</button>`;
   }).join("");
   const notes = [];
   if (MD_FEED && MD_FEED.md_mismatch) notes.push(esc(MD_FEED.md_mismatch));
@@ -240,7 +240,10 @@ function renderMarketData() {
   mdSig = sig;
   root.innerHTML = marketDataSection();
   for (const b of root.querySelectorAll("button[data-md]")) {
-    b.addEventListener("click", () => { MD_STAGED = b.dataset.md; MD_ERR = ""; renderMarketData(); });
+    b.addEventListener("click", () => {
+      const v = b.dataset.md; MD_STAGED = v; MD_ERR = ""; renderMarketData();
+      root.querySelector(`button[data-md="${v}"]`)?.focus({ preventScroll: true });   // the re-render replaced the button: keep the keyboard on it
+    });
   }
   const apply = $("#mdApply");
   if (apply) apply.onclick = applyMd;
@@ -251,10 +254,12 @@ function renderClock() {
   const root = $("#settingsClock");
   if (!root || typeof HBClock === "undefined" || root.dataset.f === HBClock.format) return;
   const f = root.dataset.f = HBClock.format;
+  const had = root.contains(document.activeElement) && document.activeElement.dataset.clock;   // the rebuild replaces the focused button
   root.innerHTML = `<div class="slabel">CLOCK</div>
     <div class="seg">${[["12h", "12-hour · 3:55 PM"], ["24h", "24-hour · 15:55"]].map(([v, t]) =>
       `<button type="button" class="${v === f ? "sel" : ""}" data-clock="${v}" aria-pressed="${v === f}">${t}</button>`).join("")}</div>
     <p class="wnote">One clock for the Desk, the Charts and the Lab.</p>`;
+  if (had) root.querySelector(`button[data-clock="${had}"]`)?.focus({ preventScroll: true });
   for (const b of root.querySelectorAll("button[data-clock]")) b.onclick = async () => {
     if (!await HBClock.set(b.dataset.clock)) toast("Changed on this page. The Charts and the Lab follow once the chart service answers.");
   };

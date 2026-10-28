@@ -73,6 +73,7 @@ function load({ armed = false, confirm = true, demo = false, fetchAnswers = {}, 
       }
       return out;
     },
+    querySelector() { return null; },   // the re-focus after a press: nothing to focus in this shim
     onclick: null,
     style: {},
     className: '',

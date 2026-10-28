@@ -233,6 +233,8 @@ function setEnv(env) {
   WIZ.env = env;
   $("#envDemo").classList.toggle("sel", env === "demo");
   $("#envLive").classList.toggle("sel", env === "live");
+  $("#envDemo").setAttribute("aria-pressed", String(env === "demo"));
+  $("#envLive").setAttribute("aria-pressed", String(env === "live"));
   const n = $("#envNote");
   n.textContent = env === "live"
     ? "LIVE — real money. Orders on a live account are real. It won't trade until you assign it to a strategy."

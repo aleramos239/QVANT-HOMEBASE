@@ -137,6 +137,9 @@ html.hb-apple #labLib .lb-more { display: block; top: 6.5px; right: 17.5px; widt
   -webkit-mask: var(--sf-ellipsis-circle) center / 15px 15px no-repeat; mask: var(--sf-ellipsis-circle) center / 15px 15px no-repeat; }
 html.hb-apple #labLib .lb-gh .lb-more { top: 0; right: 15.5px; }
 html.hb-apple #labLib .lb-more svg { display: none; }
+/* the click area reaches 28 px; nothing shows. A section header's sits at the row's top edge, so it grows sideways and down only */
+html.hb-apple #labLib .lb-more::after { content: ""; position: absolute; inset: -4.5px -3px; }
+html.hb-apple #labLib .lb-gh .lb-more::after { inset: 0 -3px -9px; }
 html.hb-apple #labLib .lb-more:hover { background: var(--a-label-vibrant); }
 html.hb-apple #labLib .lb-gb .lb-empty { margin: 0 10px; padding: 2px 11px 4px 39px; }
 @media (prefers-reduced-motion: reduce) { html.hb-apple #labLib button.lb-sh::after { transition: none; } }
@@ -233,9 +236,12 @@ html.hb-apple #lab .lab-chart .lg-ohlc, html.hb-apple #lab .lab-chart .lg-row, h
 /* ---- inspector: the backtest ------------------------------------------------------------------------------------ */
 html.hb-apple #labRes.hb-insp, html.hb-apple .lab[data-res="0"] #labRes.hb-insp { display: flex; flex-direction: column; width: var(--a-insp-w); margin: 0 !important; padding: calc(var(--a-toolbar) + 4px) 0 0; overflow: hidden;
   border-radius: 0; background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
-  box-shadow: -1px 0 0 var(--a-sep), inset 1px 0 0 color-mix(in srgb, #fff 70%, transparent); transition: transform 320ms var(--a-spring), opacity 200ms ease; transform: none; opacity: 1; pointer-events: auto; }
+  box-shadow: -1px 0 0 var(--a-sep), inset 1px 0 0 color-mix(in srgb, #fff 70%, transparent); transition: transform 320ms var(--a-spring), opacity 200ms ease; transform: none; opacity: 1; pointer-events: auto; visibility: visible; }
 html.hb-apple[data-theme="dark"] #labRes.hb-insp { box-shadow: -1px 0 0 rgb(0 0 0 / .35), inset 1px 0 0 rgb(255 255 255 / .10); }
-html.hb-apple.hb-insp-off #labRes.hb-insp, html.hb-apple.hb-insp-off .lab[data-res="0"] #labRes.hb-insp { transform: translateX(100%); opacity: 0; pointer-events: none; }
+html.hb-apple.hb-insp-off #labRes.hb-insp, html.hb-apple.hb-insp-off .lab[data-res="0"] #labRes.hb-insp { transform: translateX(100%); opacity: 0; pointer-events: none; visibility: hidden;
+  transition: transform 320ms var(--a-spring), opacity 200ms ease, visibility 0s linear 320ms; }
+/* the library's own transition (above) outranks the system one, so its closed state says the same */
+html.hb-apple.hb-side-off #labLib.hb-side { visibility: hidden; transition: transform 320ms var(--a-spring), opacity 200ms ease, visibility 0s linear 320ms; }
 html.hb-apple #labRes.hb-insp > .in { flex: 1 1 auto; min-height: 0; width: auto; height: auto; padding: 0 11px 20px; overflow: hidden auto; overscroll-behavior: contain; font-size: 13px; line-height: 16px; color: var(--a-label); }
 /* the script's problem, in the page's own words (lab.js copies the text of the page's state line) */
 html.hb-apple #hbLabCheck { flex: none; margin: 0 11px 11px; }
@@ -327,7 +333,6 @@ html.hb-apple .lab-page .btn { -webkit-appearance: none; appearance: none; displ
   background: var(--a-fill); color: var(--a-label); box-shadow: none; transform: none; cursor: default; transition: background-color 100ms ease; }
 html.hb-apple .lab-page .btn:hover { background: var(--a-fill); color: var(--a-label); }
 html.hb-apple .lab-page .btn:active { background: var(--a-fill-press); transform: none; }
-html.hb-apple .lab-page .btn:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
 html.hb-apple .lab-page .btn:disabled { opacity: 1; background: var(--a-fill-off); color: var(--a-label-3); }
 html.hb-apple .lab-page .btn.btn-sm { padding: 0 12.5px; }
 html.hb-apple .lab-page .btn.btn-lg { padding: 0 14.5px; }
@@ -371,6 +376,10 @@ html.hb-apple .lab-dlg input { display: block; width: 100%; height: 24px; paddin
 html.hb-apple .lab-dlg h2 + input { margin-top: 10px; }
 html.hb-apple .lab-dlg input::placeholder { color: var(--a-label-2); }
 html.hb-apple .lab-dlg input:focus, html.hb-apple .lab-dlg input:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; box-shadow: 0 0 0 1px var(--a-field-edge); }
+/* one ring: the page's own 1.5px accent shadow on these fields would be a second ring beside the skin's (a bad or empty one keeps its red edge) */
+html.hb-apple .bp-f select:focus:not(.bad):not(.none), html.hb-apple .tk-find input:focus:not(.bad):not(.none), html.hb-apple .lb-tools select:focus:not(.bad):not(.none), html.hb-apple .mix-q:focus:not(.bad):not(.none), html.hb-apple .mix-size:focus:not(.bad):not(.none), html.hb-apple .mix-rule select:focus:not(.bad):not(.none), html.hb-apple .ab-pick select:focus:not(.bad):not(.none), html.hb-apple .ab-pick .ab-q:focus:not(.bad):not(.none) { outline: 3.5px solid var(--a-focus); outline-offset: 0; box-shadow: none; }
+/* rows, chips and cells in a scrolling list: the same ring, drawn inside so the list's edge does not cut it (a picked cell keeps its own marker) */
+html.hb-apple .tk-row:focus-visible, html.hb-apple .tk-jump button:focus-visible, html.hb-apple .tk-src:focus-visible, html.hb-apple .heat-c:not(.sel):focus-visible { outline-offset: -3px; box-shadow: none; }
 html.hb-apple .lab-dlg input.bad { box-shadow: 0 0 0 1.5px var(--a-red); }
 html.hb-apple .lab-dlg p.err { margin: 6px 0 0; font-size: 11px; line-height: 14px; color: var(--a-red-text); }
 html.hb-apple .lab-dlg ul { list-style: none; margin: 0 0 12px; padding: 0; border-radius: 10px; background: var(--a-group); font-size: 13px; line-height: 16px; }
@@ -472,6 +481,8 @@ html.hb-apple .am-t th:last-child, html.hb-apple .am-t td:last-child, html.hb-ap
 
 @media (prefers-reduced-motion: reduce) {
   html.hb-apple #lab, html.hb-apple .hb-tb-scrim, html.hb-apple #labLib.hb-side, html.hb-apple #labRes.hb-insp { transition: none; }
+  html.hb-apple.hb-side-off #labLib.hb-side, html.hb-apple.hb-insp-off #labRes.hb-insp, html.hb-apple.hb-insp-off .lab[data-res="0"] #labRes.hb-insp { transition: none; }
+  html.hb-apple #labRes .rs-set > summary::after { transition: none; }
   html.hb-apple .hb-tb .lab-run.busy .sf { animation: none; }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
