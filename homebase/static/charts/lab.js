@@ -3170,8 +3170,8 @@ function promoteRecord(f, r, b) {
   const ran = setKey({ ...f, inputs: m.inputs || {}, controls: (m.controls && m.controls.rules) || {}, qty: m.qty, commission: m.commission, slippage_ticks: m.slippage_ticks });
   return ran === T.oos.set ? T.oos.result : null;
 }
-/* Put it on the Desk: first what the six lines say of it (plan 4.7, shown only: no line blocks a promote, owner 2026-10-28), then the
-   owner's own words (the server refuses a promote without them); Not yet, or no words, sends nothing. */
+/* Put it on the Desk: first what the six lines say of it (plan 4.7, shown only: no line blocks a promote, owner 2026-10-28), then which Desk
+   (this Mac, the VPS or both); no words are asked for (owner 2026-10-28). Not yet sends nothing. */
 function promoteToDesk(b) {
   const r = S.run && S.run.key === b.key ? S.run : null;
   if (!r || !r.rid || !r.bundle || r.grid) return;      // a heat-map cell has no run of its own to promote
