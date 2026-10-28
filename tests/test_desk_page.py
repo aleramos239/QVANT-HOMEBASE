@@ -199,7 +199,7 @@ def test_the_desk_serves_the_page_uncached_and_every_desk_script_it_names(tmp_pa
 DESK_PINS = {
     "desk/core.js": (3, "be75212d4e9da719"),
     "desk/topbar.js": (2, "c145e30016ed1fed"),
-    "desk/activity.js": (6, "23516ef1f81df041"),
+    "desk/activity.js": (7, "2de4f7c04a3bae71"),
     "desk/views.js": (1, "528026221c807278"),
     "desk/groups.js": (5, "14d24b88c3f7a798"),
     "desk/strategy.js": (6, "3d27af68eac262d1"),

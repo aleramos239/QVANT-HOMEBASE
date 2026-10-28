@@ -122,6 +122,12 @@ def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapter
         """A Kill / account flatten names what it touched as {"<strategy>@<account>": ...}."""
         return isinstance(touched, (dict, list)) and any(str(k).split("@", 1)[0] in names for k in touched)
 
+    def _on_account(rec, account: str) -> bool:
+        """A line is on an account when it names it, or when a Kill / flatten lists a "<strategy>@<account>" on it."""
+        return rec.get("account") == account or any(
+            isinstance(v, (dict, list)) and any(str(k).rsplit("@", 1)[-1] == account for k in v)
+            for v in (rec.get("touched"), rec.get("strategies")))
+
     @app.get("/api/journal")
     async def journal_query(date: str | None = None, event: str | None = None,
                             account: str | None = None, limit: int = 200,
@@ -146,7 +152,7 @@ def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapter
                 continue
             if event and rec.get("event") != event:
                 continue
-            if account and rec.get("account") != account:
+            if account and not _on_account(rec, account):
                 continue
             if (names or group) and not (rec.get("strategy") in names or (group and rec.get("group") == group)
                                          or _names_in(rec.get("strategies"), names)):

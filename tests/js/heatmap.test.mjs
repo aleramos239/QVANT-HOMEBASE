@@ -85,9 +85,9 @@ test('an axis in from/to/steps mode: evenly spaced, rounded to the parameter\'s 
 test('the Max cells warning only speaks above 120 (hm40 x 3), and uses a measured per-cell time when there is one', () => {
   assert.equal(X.cellsWarning(120, 12), '');
   assert.equal(X.cellsWarning(121, null),
-    '121 cells — above 120 a grid can run for hours; only 2 cells run at a time');
-  assert.equal(X.cellsWarning(240, 30), '240 cells ≈ 1h 00m at 30s a cell, 2 at a time');
-  assert.equal(X.cellsWarning(400, 0), '400 cells — above 120 a grid can run for hours; only 2 cells run at a time');
+    '121 cells — above 120 a grid can run for hours; only 4 cells run at a time');
+  assert.equal(X.cellsWarning(240, 30), '240 cells ≈ 30m 0s at 30s a cell, 4 at a time');
+  assert.equal(X.cellsWarning(400, 0), '400 cells — above 120 a grid can run for hours; only 4 cells run at a time');
 });
 
 test('gridBody: the range picker\'s window and the cell cap, varied inputs left to the axes', () => {

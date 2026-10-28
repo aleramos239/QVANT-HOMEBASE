@@ -584,7 +584,7 @@ function reachSpec(spec, ms, nowMs, cap = 200000) {
 /* ---- the parameter heat-map (over the range picker's own window) ---- */
 const DEFAULT_MAX_CELLS = 120;     // the Max cells box's default (grid.py's: hm40's 40 cells x 3 values); the viewer may raise it
 const HARD_MAX_CELLS = 400;        // ... but never past here, and the server refuses 401 too
-const GRID_WORKERS = 2;            // grid.py's pool: how many cells actually run at once
+const GRID_WORKERS = 4;            // grid.py's pool: how many cells actually run at once
 const RANGE_MSG = 'a range is start:end:step with start ≤ end and step > 0';
 function maxCellsError(n) {
   return Number.isInteger(n) && n >= 1 && n <= HARD_MAX_CELLS ? null

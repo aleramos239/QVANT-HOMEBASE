@@ -419,3 +419,8 @@ test('the Activity page has the menus and the day box the filters listen to', ()
     assert.match(HTML, new RegExp(`\\$\\("#${id}"\\)\\?\\.addEventListener\\("change"`), id);
   }
 });
+
+test('with one account picked the feed says it shows only lines that name it', () => {
+  assert.match(HTML, /acctNote = ACT_ACCT \? `<div class="feed-empty">Only lines that name this account/);
+  assert.match(HTML, /JSON\.stringify\(\[FEED_ROWS, FEED_RAW, \[\.\.\.FEED_OPEN\], ACT_WHO, ACT_DAYS, ACT_ACCT,/);
+});

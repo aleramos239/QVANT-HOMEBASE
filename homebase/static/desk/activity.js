@@ -290,11 +290,12 @@ function renderActivity(journal) {
     !(typeof r.event === "string" && r.event.indexOf("lab_") === 0 && typeof DeskLab !== "undefined" && DeskLab.hiddenEvent(r.event)));      // the Lab's named bookkeeping (DeskLab.HIDDEN_EVENTS) shows nothing; every other Lab event shows
   for (const r of FEED_ROWS) { if (r.event) ACT_SEEN.events.add(r.event); if (r.account) ACT_SEEN.accts.add(r.account); }
   fillActFilters();
-  const sig = JSON.stringify([FEED_ROWS, FEED_RAW, [...FEED_OPEN], ACT_WHO, ACT_DAYS, ACT_ROWS === null]);
+  const sig = JSON.stringify([FEED_ROWS, FEED_RAW, [...FEED_OPEN], ACT_WHO, ACT_DAYS, ACT_ACCT, ACT_ROWS === null]);
   if (sig === FEED_SIG) return;           // nothing changed: leave the rows (and a hovered tooltip) alone
   FEED_SIG = sig;
   let day = "";
-  $("#feed").innerHTML = (FEED_RAW ? FEED_ROWS : foldRoutine(FEED_ROWS)).map((r) => {
+  const acctNote = ACT_ACCT ? `<div class="feed-empty">Only lines that name this account. A refusal that names just a strategy is not shown.</div>` : "";
+  $("#feed").innerHTML = acctNote + ((FEED_RAW ? FEED_ROWS : foldRoutine(FEED_ROWS)).map((r) => {
     const prev = r.event === "chart_trading_set" ? FEED_ROWS.slice(FEED_ROWS.indexOf(r) + 1).find(o => o.event === r.event) : null;
     const {text, tone} = activityLine(r, prev);
     const raw = r.rows ? r.rows.map(o => String(o.et || "").slice(11, 19) + "  " + activityRaw(o)).join("\n") : activityRaw(r), key = `${r.ts}|${r.et}|${r.event}|${r.account || ""}`, open = FEED_RAW || FEED_OPEN.has(key);
@@ -304,7 +305,7 @@ function renderActivity(journal) {
       `<span class="t">${esc(hbClock(String(r.et || "").slice(11, 19)))}</span>` +
       `<span class="h${tone ? " " + tone : ""}">${esc(text)}</span>` +
       (open ? `<span class="raw">${esc(raw)}</span>` : "") + `</div>`;
-  }).join("") || `<div class="feed-empty">${!actFiltered() ? "Waiting for events…" : ACT_ROWS ? "Nothing in this period." : "Loading…"}</div>`;
+  }).join("") || `<div class="feed-empty">${!actFiltered() ? "Waiting for events…" : ACT_ROWS ? "Nothing in this period." : "Loading…"}</div>`);
 }
 const actDay = (d) => { try { return new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric", timeZone: "UTC"}); } catch (_) { return d; } };
 /* Activity for one strategy or one group, or for more than today (owner 2026-10-26: "see which strategy copied on which account
