@@ -225,7 +225,9 @@ html.hb-apple .hb-side { position: fixed; z-index: 30; left: 8px; top: 8px; bott
   border: 0; border-radius: calc(var(--a-win-radius) - 8px); background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
   box-shadow: var(--a-pane-shadow); padding: 44px 0 10px; overflow: hidden auto; overscroll-behavior: contain; color: var(--a-label-vibrant);
   transition: transform 320ms var(--a-spring), opacity 200ms ease; }
-html.hb-apple.hb-side-off .hb-side { transform: translateX(calc(-100% - 16px)); opacity: 0; pointer-events: none; }
+/* hidden only AFTER the slide (visibility waits 320 ms), so the slide plays and a closed pane is out of the Tab order */
+html.hb-apple.hb-side-off .hb-side { transform: translateX(calc(-100% - 16px)); opacity: 0; pointer-events: none; visibility: hidden;
+  transition: transform 320ms var(--a-spring), opacity 200ms ease, visibility 0s linear 320ms; }
 html.hb-apple.hb-side-off .hb-tb-lead { width: calc(var(--hb-native-tl, 12px) + 46px); }
 html.hb-apple.hb-fullscreen .hb-tb-lead { padding-left: 12px; }
 
@@ -236,7 +238,9 @@ html.hb-apple .hb-insp { position: fixed; z-index: 20; right: 0; top: 0; bottom:
   padding: calc(var(--a-toolbar) + 4px) 11px 20px; overflow: hidden auto; overscroll-behavior: contain;
   transition: transform 320ms var(--a-spring), opacity 200ms ease; }
 html.hb-apple[data-theme="dark"] .hb-insp { box-shadow: -1px 0 0 rgb(0 0 0 / .35), inset 1px 0 0 rgb(255 255 255 / .10); }
-html.hb-apple.hb-insp-off .hb-insp { transform: translateX(100%); opacity: 0; pointer-events: none; }
+/* (not the Charts order dock, #pdock: it is the .hb-insp there and has its own open and close) */
+html.hb-apple.hb-insp-off .hb-insp:not(#pdock) { transform: translateX(100%); opacity: 0; pointer-events: none; visibility: hidden;
+  transition: transform 320ms var(--a-spring), opacity 200ms ease, visibility 0s linear 320ms; }
 html.hb-apple.hb-insp-off .hb-tb-insp { width: auto; }
 /* an inspector section: a small header, then a card a touch darker than the pane */
 html.hb-apple .hb-isec { margin: 0 0 11px; }
@@ -269,6 +273,7 @@ html.hb-apple .hb-field:focus, html.hb-apple .hb-field:focus-visible { outline: 
 
 @media (prefers-reduced-motion: reduce) {
   html.hb-apple .hb-side, html.hb-apple .hb-insp, html.hb-apple .hb-tb-lead, html.hb-apple .hb-tb-insp, html.hb-apple .hb-switch::after { transition: none; }
+  html.hb-apple.hb-side-off .hb-side, html.hb-apple.hb-insp-off .hb-insp:not(#pdock) { transition: none; }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   html.hb-apple .hb-side, html.hb-apple .hb-insp, html.hb-apple .hb-platter, html.hb-apple .hb-seg, html.hb-apple .hb-tbtn.hb-solo, html.hb-apple .hb-menu {

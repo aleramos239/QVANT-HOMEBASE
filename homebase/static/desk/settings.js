@@ -205,7 +205,7 @@ function marketDataSection() {
   const rows = MD_CHOICES.map((c) => {
     const acct = MD.accounts && MD.accounts[c.value];
     return `<button type="button" class="${MD_STAGED === c.value ? "sel" : ""}" data-md="${c.value}"
-      ${MD_BUSY ? "disabled" : ""}>${esc(c.label)}${acct ? ` (${esc(acct)})` : ""}</button>`;
+      aria-pressed="${MD_STAGED === c.value}" ${MD_BUSY ? "disabled" : ""}>${esc(c.label)}${acct ? ` (${esc(acct)})` : ""}</button>`;
   }).join("");
   const notes = [];
   if (MD_FEED && MD_FEED.md_mismatch) notes.push(esc(MD_FEED.md_mismatch));

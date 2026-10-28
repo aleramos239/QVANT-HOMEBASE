@@ -641,7 +641,7 @@ function syncChart() { if (P.chart && S.run && S.run.bundle && shownRid !== S.ru
 })();
 
 /* ---- dialogs and menus ---- */
-let overlay = null, menuEl = null, dlgFrom = null;
+let overlay = null, menuEl = null, menuFrom = null, dlgFrom = null;
 const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 /* Closing a sheet gives the keyboard back to what opened it (or, when the list was painted again meanwhile, to the same row of it). */
 function closeDialog(back = true) {
@@ -675,11 +675,16 @@ function dialog(html) {
   return d;
 }
 function closeMenu() {
-  if (menuEl) { menuEl.remove(); menuEl = null; }
+  if (menuEl) {
+    const had = menuEl.contains(document.activeElement), from = menuFrom;
+    menuEl.remove(); menuEl = null; menuFrom = null;
+    if (had && from && from.isConnected) from.focus({ preventScroll: true });          // the keyboard goes back to the button that opened it
+  }
   for (const t of document.querySelectorAll('[data-act="viewmenu"][aria-expanded="true"]')) t.setAttribute('aria-expanded', 'false');
 }
 function menu(anchor, html, onPick) {
   closeMenu();
+  menuFrom = anchor;
   menuEl = document.createElement('div');
   menuEl.className = 'lab-menu';
   menuEl.innerHTML = html;
@@ -692,7 +697,14 @@ function menu(anchor, html, onPick) {
   menuEl.addEventListener('click', (e) => { const t = e.target.closest('[data-pick]'); if (t) { closeMenu(); onPick(t.dataset.pick); } });
 }
 document.addEventListener('pointerdown', (e) => { if (menuEl && !menuEl.contains(e.target) && !e.target.closest('[data-act="new"], [data-act="more"], [data-act="viewmenu"]')) closeMenu(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenu(); closeDialog(); } });
+/* Escape closes the menu on top; only with no menu open does it close the sheet. Arrows, Home and End walk the menu's items. */
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { if (menuEl) closeMenu(); else closeDialog(); return; }
+  if (!menuEl || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key) || (e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]'))) return;
+  const items = [...menuEl.querySelectorAll('button')].filter((b) => !b.disabled);
+  const k = window.HBChartMenu.step(items.indexOf(document.activeElement), items.length, e.key);
+  if (k >= 0) { e.preventDefault(); items[k].focus(); }
+});
 
 async function newMenu(anchor) {
   const r = await send('GET', '/api/tester/drafts/templates');
@@ -1418,7 +1430,7 @@ function codeSheet(id) {
   d.classList.add('wide', 'tk-dlg');
   d.addEventListener('click', (e) => {
     const j = e.target.closest('[data-jump]');
-    if (j) { const t = d.querySelector(`#tkp${j.dataset.jump}`); if (t) t.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+    if (j) { const t = d.querySelector(`#tkp${j.dataset.jump}`); if (t) t.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); return; }
     if (e.target.closest('[data-x]')) closeDialog();
   });
 }

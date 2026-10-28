@@ -265,7 +265,7 @@ html.hb-apple .btn { height: 28px; padding: 0 14.5px; border: 0; border-radius: 
   font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; transform: none; cursor: default; transition: background-color 100ms ease; }
 html.hb-apple .btn:hover { background: var(--a-fill); color: var(--a-label); }
 html.hb-apple .btn:active { background: var(--a-fill-press); transform: none; }
-html.hb-apple .btn:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; box-shadow: none; border-color: transparent; }
+html.hb-apple .btn:focus-visible { box-shadow: none; border-color: transparent; }
 html.hb-apple .btn:disabled { opacity: 1; background: var(--a-fill-off); color: var(--a-label-3); }
 html.hb-apple .btn-sm { height: 24px; padding: 0 12.5px; border-radius: 6px; }
 html.hb-apple .btn-default { background: var(--a-accent); color: var(--a-on-accent); }
@@ -442,8 +442,8 @@ html.hb-apple .copt:has(input:checked) { background: color-mix(in srgb, var(--a-
 html.hb-apple .copt input { width: 16px; height: 16px; accent-color: var(--a-accent); }
 html.hb-apple .copt.all { background: var(--a-fill); margin-bottom: 10px; }
 html.hb-apple .seg { display: flex; gap: 2px; margin: 12px 0 8px; padding: 4px; border: 0; border-radius: var(--hb-bubble-r); background: var(--a-platter); box-shadow: 0 0 0 .5px var(--a-sep), var(--a-platter-shadow); }
-html.hb-apple .seg button { flex: 1 0 auto; height: 28px; padding: 0 12px; border: 0; border-radius: var(--hb-bubble-r); background: transparent; color: var(--a-label); font-size: 13px; line-height: 16px; font-weight: 400; white-space: nowrap; outline: none; }
-html.hb-apple .seg button.sel { background: var(--a-track); color: var(--a-label); font-weight: 510; outline: none; box-shadow: none; }
+html.hb-apple .seg button { flex: 1 0 auto; height: 28px; padding: 0 12px; border: 0; border-radius: var(--hb-bubble-r); background: transparent; color: var(--a-label); font-size: 13px; line-height: 16px; font-weight: 400; white-space: nowrap; }
+html.hb-apple .seg button.sel { background: var(--a-track); color: var(--a-label); font-weight: 510; box-shadow: none; }
 html.hb-apple .wres li { padding: 8px 0; border-top: 1px solid var(--a-group-sep); font-size: 13px; }
 html.hb-apple .wres .why { color: var(--a-label-2); font-size: 11px; line-height: 14px; }
 html.hb-apple .wres .why.bad { color: var(--a-red-text); }
