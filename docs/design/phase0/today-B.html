@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Desk Today, direction B (airy), static mockup with fake data</title>
+<style>
+/* Direction B: airy, Apple-Stocks. One big number, roomy rows, soft surfaces.
+   Glass only on the top bar (chrome). Data sits on solid surfaces. Static mockup: fake data. */
+:root {
+  --bg: #f5f5f7; --pane: #ffffff; --ink: #1d1d1f; --ink-2: #5c5c61; --ink-3: #6e6e73;
+  --line: #e6e6ea; --line-2: #d2d2d7; --fill: #efeff2; --fill-2: #e5e5ea;
+  --accent: #48484a; --on-accent: #ffffff;
+  --red: #c4001a; --on-red: #ffffff; --red-text: #c4001a; --red-tint: #fdecee;
+  --green: #1e7a35; --orange: #a83a00; --orange-tint: #fbece2; --orange-line: #ebbfa3;
+  --glass: rgba(255,255,255,.72); --ring: #48484a;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
+  --ease: cubic-bezier(.23, 1, .32, 1);
+}
+:root[data-theme="dark"] {
+  --bg: #000000; --pane: #1c1c1e; --ink: #f5f5f7; --ink-2: #b4b4ba; --ink-3: #98989f;
+  --line: #2c2c2e; --line-2: #3a3a3c; --fill: #2c2c2e; --fill-2: #3a3a3c;
+  --accent: #d1d1d6; --on-accent: #1c1c1e;
+  --red: #d92c35; --on-red: #ffffff; --red-text: #ff6961; --red-tint: #35191c;
+  --green: #30d158; --orange: #ff9f0a; --orange-tint: #38280f; --orange-line: #7a5316;
+  --glass: rgba(28,28,30,.72); --ring: #d1d1d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000000; --pane: #1c1c1e; --ink: #f5f5f7; --ink-2: #b4b4ba; --ink-3: #98989f;
+    --line: #2c2c2e; --line-2: #3a3a3c; --fill: #2c2c2e; --fill-2: #3a3a3c;
+    --accent: #d1d1d6; --on-accent: #1c1c1e;
+    --red: #d92c35; --on-red: #ffffff; --red-text: #ff6961; --red-tint: #35191c;
+    --green: #30d158; --orange: #ff9f0a; --orange-tint: #38280f; --orange-line: #7a5316;
+    --glass: rgba(28,28,30,.72); --ring: #d1d1d6;
+  }
+}
+* { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--sans); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.pos { color: var(--green); } .neg { color: var(--red-text); } .mute { color: var(--ink-2); }
+
+.mock { display: flex; gap: 8px; align-items: center; padding: 6px 16px; font-size: 12px; color: var(--ink-2); background: var(--fill); }
+.mock b { color: var(--ink); font-weight: 600; margin-right: auto; }
+.mock button { height: 26px; padding: 0 10px; border-radius: 13px; border: 0; background: var(--pane); display: inline-flex; align-items: center; gap: 6px; }
+.mock .ic { width: 14px; height: 14px; }
+
+/* glass: top bar only. Reduced transparency falls back to solid. */
+.top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; padding: 12px 28px; background: var(--glass); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); border-bottom: 1px solid var(--line); }
+@media (prefers-reduced-transparency: reduce) { .top { background: var(--pane); backdrop-filter: none; -webkit-backdrop-filter: none; } }
+.chip { height: 34px; padding: 0 14px; border-radius: 17px; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
+.machine { background: var(--accent); color: var(--on-accent); }
+.armed { background: var(--red); color: var(--on-red); padding: 0 16px; font-size: 14px; }
+.armed i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.ct { background: var(--orange-tint); color: var(--orange); border: 1px solid var(--orange-line); font-weight: 650; }
+.ready { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); font-weight: 560; }
+.sp { flex: 1; }
+.btn { height: 38px; padding: 0 16px; border-radius: 19px; border: 0; background: var(--fill); display: inline-flex; align-items: center; gap: 8px; font-weight: 560; transition: transform 140ms var(--ease), background-color 140ms var(--ease); }
+.btn:hover { background: var(--fill-2); }
+.btn:active { transform: scale(.97); }
+.kill { height: 44px; padding: 0 22px; background: var(--red); color: var(--on-red); font-weight: 700; font-size: 14px; }
+.kill:hover { background: var(--red); filter: brightness(.94); }
+.kill small { font-weight: 500; font-size: 12px; opacity: .9; }
+
+.page { max-width: 1120px; margin: 0 auto; padding: 36px 28px 64px; }
+.eyebrow { color: var(--ink-2); font-size: 14px; font-weight: 560; display: flex; align-items: center; gap: 10px; }
+.eyebrow .btn { margin-left: auto; height: 34px; }
+.clock { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.hero { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 24px; margin: 6px 0 28px; }
+.big { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 64px; line-height: 1.05; font-weight: 600; letter-spacing: -.02em; }
+.hero .cap { color: var(--ink-2); font-size: 14px; margin-top: 4px; }
+.rooms { display: flex; gap: 32px; }
+.room { min-width: 190px; }
+.room .l { font-size: 13px; color: var(--ink-2); }
+.room .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 24px; font-weight: 600; margin: 2px 0 8px; }
+.meter { height: 6px; border-radius: 3px; background: var(--fill-2); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.meter.low i { background: var(--orange); }
+.room .s { font-size: 12px; color: var(--ink-2); margin-top: 6px; }
+
+.accts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 36px; }
+.acct { background: var(--pane); border-radius: 18px; padding: 18px 20px; min-width: 0; }
+.acct.live { box-shadow: inset 0 0 0 2px var(--red); }
+.acct .h { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.acct .h b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 28px; font-weight: 600; text-align: right; }
+.acct .r { display: flex; justify-content: space-between; color: var(--ink-2); font-size: 13px; margin-top: 8px; }
+.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 11px; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+.t-live { background: var(--red); color: var(--on-red); }
+.t-demo { background: var(--fill-2); color: var(--ink); }
+.t-paper { color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--ink-3); }
+.t-shadow { background: var(--fill); color: var(--ink-2); font-weight: 600; letter-spacing: 0; }
+
+.sec { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 10px; }
+.sec h2 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -.01em; }
+.sec .sub { color: var(--ink-2); font-size: 13px; }
+.list { background: var(--pane); border-radius: 18px; overflow: hidden; }
+.row { display: grid; grid-template-columns: 52px minmax(0,1fr) 150px 190px 90px; align-items: center; column-gap: 16px; padding: 14px 20px; border-top: 1px solid var(--line); }
+.row:first-child { border-top: 0; }
+.row .nm { min-width: 0; }
+.row .nm b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .nm > span { display: flex; gap: 8px; align-items: center; color: var(--ink-2); font-size: 13px; margin-top: 2px; white-space: nowrap; overflow: hidden; }
+.row .nm > span em { font-style: normal; overflow: hidden; text-overflow: ellipsis; }
+.state { display: inline-flex; align-items: center; gap: 8px; font-weight: 560; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line-2); flex: none; }
+.dot.on { background: var(--green); } .dot.pos-open { background: var(--accent); } .dot.warn { background: var(--orange); }
+.pos-cell { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pnl { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600; text-align: right; }
+.sw { width: 44px; height: 26px; border-radius: 13px; background: var(--line-2); position: relative; border: 0; padding: 0; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform 180ms var(--ease); }
+.sw[aria-checked="true"] { background: var(--accent); }
+.sw[aria-checked="true"]::after { transform: translateX(18px); background: var(--pane); }
+
+.changes { margin-top: 36px; display: flex; align-items: center; gap: 14px; background: var(--pane); border-radius: 18px; padding: 16px 20px; }
+.changes .t { flex: 1; min-width: 0; }
+.changes .t b { display: block; font-size: 15px; }
+.changes .t span { color: var(--ink-2); font-size: 13px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (max-width: 1100px) { .hero { grid-template-columns: 1fr; } .accts { grid-template-columns: 1fr; } .row { grid-template-columns: 52px minmax(0,1fr) 110px 90px; } .row .pos-cell { display: none; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-laptop" viewBox="0 0 24 24"><path d="M18 5a2 2 0 0 1 2 2v8.526a2 2 0 0 0 .212.897l1.068 2.127a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45l1.068-2.127A2 2 0 0 0 4 15.526V7a2 2 0 0 1 2-2z"/><path d="M20.054 15.987H3.946"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></symbol>
+  <symbol id="i-candles" viewBox="0 0 24 24"><path d="M9 5v4"/><rect width="4" height="6" x="7" y="9" rx="1"/><path d="M9 15v2"/><path d="M17 3v2"/><rect width="4" height="8" x="15" y="5" rx="1"/><path d="M17 13v3"/><path d="M3 3v16a2 2 0 0 0 2 2h16"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+</svg>
+
+<div class="mock">
+  <b>Mockup B: airy. Fake data. Not the live Desk.</b>
+  <button id="mThemeBtn" type="button" aria-label="Switch between light and dark"><svg class="ic" id="mThemeIc"><use href="#i-moon"/></svg><span id="mThemeTx">Dark</span></button>
+  <button id="mMachineBtn" type="button" aria-label="Show the other machine chip"><svg class="ic"><use href="#i-server"/></svg>Show Server chip</button>
+</div>
+
+<header class="top" role="banner">
+  <span class="chip machine" title="This Desk runs on this Mac"><svg class="ic" id="machineIc"><use href="#i-laptop"/></svg><span id="machineTx">THIS MAC</span></span>
+  <span class="chip armed" role="status"><i></i>ARMED</span>
+  <span class="chip ct" title="The chart page can place orders, even when Disarmed. Its switch is in Settings."><svg class="ic"><use href="#i-candles"/></svg>Chart trading ON · 1 live account</span>
+  <span class="ready"><svg class="ic"><use href="#i-shield"/></svg>Ready</span>
+  <span class="sp"></span>
+  <button class="btn" type="button">Disarm</button>
+  <button class="btn kill" type="button" title="Hold for 1 second"><svg class="ic"><use href="#i-power"/></svg>Kill all<small>hold 1 s</small></button>
+</header>
+
+<div class="page">
+  <div class="eyebrow">Today, Tuesday <span class="clock">09:42 ET</span><button class="btn" type="button"><svg class="ic"><use href="#i-history"/></svg>Changes (7 days) <span class="badge">3</span></button></div>
+  <section class="hero" aria-label="Day so far">
+    <div>
+      <div class="big pos">+$1,896.50</div>
+      <div class="cap">Day net, 3 accounts, closed trades. LIVE +$612.50 · Demo and paper +$1,284.00</div>
+    </div>
+    <div class="rooms">
+      <div class="room"><div class="l">Room to daily limit (LIVE)</div><div class="v">$1,387.50</div><div class="meter" role="img" aria-label="69 percent left"><i style="width:69%"></i></div><div class="s">69% of $2,000.00 left</div></div>
+      <div class="room"><div class="l">Room to drawdown (LIVE)</div><div class="v">$1,240.00</div><div class="meter low" role="img" aria-label="25 percent left"><i style="width:25%"></i></div><div class="s">25% of $5,000.00 left</div></div>
+    </div>
+  </section>
+
+  <section class="accts" aria-label="Accounts">
+    <div class="acct live"><div class="h"><span class="tag t-live">LIVE</span><b>APEX-300K-0147</b></div><div class="v pos">+$612.50</div><div class="r"><span>Balance</span><span class="num">$298,412.50</span></div><div class="r"><span>In a trade</span><span class="num">1 NQ</span></div></div>
+    <div class="acct"><div class="h"><span class="tag t-demo">DEMO</span><b>SIM0000041</b></div><div class="v pos">+$884.00</div><div class="r"><span>Balance</span><span class="num">$50,884.00</span></div><div class="r"><span>In a trade</span><span class="num">3 MNQ</span></div></div>
+    <div class="acct"><div class="h"><span class="tag t-paper">PAPER</span><b>Paper 1</b></div><div class="v pos">+$400.00</div><div class="r"><span>Balance</span><span class="num">$50,400.00</span></div><div class="r"><span>Flat</span><span class="num">1 order working</span></div></div>
+  </section>
+
+  <div class="sec"><h2>Strategies</h2><span class="sub">6 on the Desk · 2 in a position · 1 order working</span></div>
+  <section class="list" aria-label="Strategies">
+    <div class="row"><button class="sw" role="switch" aria-checked="true" aria-label="NQ 5m wick break on"></button><div class="nm" title="NQ 5m wick break 9:30-11, stop 2x candle, 1:0.75 (#28)"><b>NQ 5m wick break 9:30-11, stop 2x candle, 1:0.75 (#28)</b><span><span class="tag t-live">LIVE</span><em>Buy 09:42 · filled</em></span></div><span class="state"><span class="dot pos-open"></span>In position</span><span class="pos-cell">Long 1 NQ @ 21,063.50</span><span class="pnl pos">+$215.00</span></div>
+    <div class="row"><button class="sw" role="switch" aria-checked="true" aria-label="NQ 15-min FVG on"></button><div class="nm" title="NQ 15-min FVG, side of the 09:30 open, no limit, 1:0.75"><b>NQ 15-min FVG, side of the 09:30 open, no limit, 1:0.75</b><span><span class="tag t-demo">DEMO</span><em>Skipped 09:35 · gate closed</em></span></div><span class="state"><span class="dot on"></span>Waiting</span><span class="pos-cell mute">Flat</span><span class="pnl">$0.00</span></div>
+    <div class="row"><button class="sw" role="switch" aria-checked="true" aria-label="NQ Overnight ORB on"></button><div class="nm"><b>NQ Overnight ORB (micro)</b><span><span class="tag t-demo">DEMO</span><em>Sell 09:31 · filled</em></span></div><span class="state"><span class="dot pos-open"></span>In position</span><span class="pos-cell">Short 3 MNQ @ 21,071.25</span><span class="pnl neg">-$38.00</span></div>
+    <div class="row"><button class="sw" role="switch" aria-checked="true" aria-label="GC EMA pullback on"></button><div class="nm"><b>GC EMA pullback + VWAP</b><span><span class="tag t-paper">PAPER</span><em>Buy limit 09:40 · working</em></span></div><span class="state"><span class="dot warn"></span>Order working</span><span class="pos-cell">Buy limit 1 GC @ 2,712.4</span><span class="pnl">$0.00</span></div>
+    <div class="row"><button class="sw" role="switch" aria-checked="true" aria-label="NQ Evening Noise Band on"></button><div class="nm"><b>NQ Evening Noise Band k0.3</b><span><span class="tag t-shadow">Shadow</span><em>Sends no orders · last signal Sell 20:14 yesterday</em></span></div><span class="state"><span class="dot"></span>Waiting</span><span class="pos-cell mute">Flat</span><span class="pnl">$0.00</span></div>
+    <div class="row"><button class="sw" role="switch" aria-checked="false" aria-label="NQ 15-min FVG tap off"></button><div class="nm" title="NQ 15-min FVG tap and 1-minute displacement, 1h gap, ATR stop 1.5, target 1R, window 09:30-11:00 ET, side of the first-hour trend (Lab draft p27_46_3_stopcap_noise_v3)"><b>NQ 15-min FVG tap and 1-minute displacement, 1h gap, ATR stop 1.5, target 1R, window 09:30-11:00 ET, side of the first-hour trend (Lab draft p27_46_3_stopcap_noise_v3)</b><span><em>Off since Monday · no account</em></span></div><span class="state mute"><span class="dot"></span>Off</span><span class="pos-cell mute">Flat</span><span class="pnl">$0.00</span></div>
+  </section>
+
+  <section class="changes" aria-label="Changes">
+    <svg class="ic"><use href="#i-history"/></svg>
+    <div class="t"><b>Changes (7 days) <span class="badge" style="display:inline-flex;vertical-align:middle;margin-left:6px">3</span></b><span>NQ 5m wick break stop 2x → 1.5x · APEX-300K-0147 day take OFF → $900 · GC EMA pullback assigned to Paper 1</span></div>
+    <button class="btn" type="button">Review and put back<svg class="ic"><use href="#i-chev"/></svg></button>
+  </section>
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement, mq = window.matchMedia('(prefers-color-scheme: dark)');
+  function paint(t) {
+    root.setAttribute('data-theme', t);
+    document.getElementById('mThemeIc').firstElementChild.setAttribute('href', t === 'dark' ? '#i-sun' : '#i-moon');
+    document.getElementById('mThemeTx').textContent = t === 'dark' ? 'Light' : 'Dark';
+  }
+  paint(mq.matches ? 'dark' : 'light');
+  document.getElementById('mThemeBtn').addEventListener('click', function () { paint(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'); });
+  var srv = false;
+  document.getElementById('mMachineBtn').addEventListener('click', function () {
+    srv = !srv;
+    document.getElementById('machineTx').textContent = srv ? 'SERVER · CHICAGO' : 'THIS MAC';
+    document.getElementById('machineIc').firstElementChild.setAttribute('href', srv ? '#i-server' : '#i-laptop');
+    this.lastChild.textContent = srv ? 'Show This Mac chip' : 'Show Server chip';
+  });
+})();
+</script>
+</body>
+</html>

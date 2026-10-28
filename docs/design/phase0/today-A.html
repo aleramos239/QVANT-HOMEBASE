@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Desk Today, direction A (quiet and dense), static mockup with fake data</title>
+<style>
+/* Direction A: quiet, dense, Bloomberg-Linear. One flat plane, hairlines, no cards, no glass.
+   Static mockup: fake data, no network, no libraries. System fonts. Numbers: SF Mono, tabular, right-aligned. */
+:root {
+  --bg: #f5f5f7; --pane: #ffffff; --ink: #1c1c1e; --ink-2: #5a5a5f; --ink-3: #6e6e73;
+  --line: #e1e1e5; --line-2: #cfcfd4; --fill: #ededf0; --fill-2: #e4e4e8;
+  --accent: #48484a; --on-accent: #ffffff;
+  --red: #c8202a; --on-red: #ffffff; --red-text: #c8202a; --red-tint: #fbe9ea;
+  --green: #1e7a35; --orange: #a83a00; --orange-tint: #fbece2; --orange-line: #e8b79a;
+  --ring: #48484a;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
+  --ease: cubic-bezier(.23, 1, .32, 1);
+}
+:root[data-theme="dark"] {
+  --bg: #161618; --pane: #1c1c1e; --ink: #f2f2f4; --ink-2: #b4b4ba; --ink-3: #98989f;
+  --line: #2f2f33; --line-2: #3d3d42; --fill: #2a2a2d; --fill-2: #333337;
+  --accent: #d1d1d6; --on-accent: #1c1c1e;
+  --red: #d92c35; --on-red: #ffffff; --red-text: #ff6961; --red-tint: #3a1c1f;
+  --green: #30d158; --orange: #ff9f0a; --orange-tint: #3a2a12; --orange-line: #7a5316;
+  --ring: #d1d1d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161618; --pane: #1c1c1e; --ink: #f2f2f4; --ink-2: #b4b4ba; --ink-3: #98989f;
+    --line: #2f2f33; --line-2: #3d3d42; --fill: #2a2a2d; --fill-2: #333337;
+    --accent: #d1d1d6; --on-accent: #1c1c1e;
+    --red: #d92c35; --on-red: #ffffff; --red-text: #ff6961; --red-tint: #3a1c1f;
+    --green: #30d158; --orange: #ff9f0a; --orange-tint: #3a2a12; --orange-line: #7a5316;
+    --ring: #d1d1d6;
+  }
+}
+* { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.4 var(--sans); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.pos { color: var(--green); } .neg { color: var(--red-text); } .mute { color: var(--ink-2); }
+
+/* mockup controls, not part of the app */
+.mock { display: flex; gap: 8px; align-items: center; padding: 6px 12px; font-size: 12px; color: var(--ink-2); background: var(--fill); border-bottom: 1px solid var(--line); }
+.mock b { color: var(--ink); font-weight: 600; margin-right: auto; }
+.mock button { height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--pane); display: inline-flex; align-items: center; gap: 6px; }
+
+.app { display: grid; grid-template-columns: 216px 1fr; grid-template-rows: 52px 1fr; min-height: calc(100vh - 38px); }
+
+/* top bar: the safety row. Machine, ARMED, chart trading, Kill are the loudest things on the screen. */
+.top { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 0 14px; background: var(--pane); border-bottom: 1px solid var(--line); }
+.chip { height: 28px; padding: 0 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
+.machine { background: var(--accent); color: var(--on-accent); }
+.armed { background: var(--red); color: var(--on-red); padding: 0 12px; font-size: 13px; }
+.armed i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.ct { background: var(--orange-tint); color: var(--orange); border: 1px solid var(--orange-line); font-weight: 650; }
+.ready { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); font-weight: 560; }
+.clock { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 12px; }
+.sp { flex: 1; }
+.btn { height: 32px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--pane); display: inline-flex; align-items: center; gap: 6px; font-weight: 560; transition: transform 120ms var(--ease), background-color 120ms var(--ease); }
+.btn:hover { background: var(--fill); }
+.btn:active { transform: scale(.97); }
+.kill { height: 36px; padding: 0 16px; background: var(--red); color: var(--on-red); border-color: transparent; font-weight: 700; font-size: 13px; }
+.kill:hover { background: var(--red); filter: brightness(.94); }
+.kill small { font-weight: 500; font-size: 11px; opacity: .9; margin-left: 2px; }
+
+/* sidebar */
+.side { background: var(--pane); border-right: 1px solid var(--line); padding: 10px 8px; overflow: hidden; }
+.side h4 { margin: 14px 8px 4px; font-size: 11px; font-weight: 600; color: var(--ink-3); }
+.nav { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border-radius: 6px; color: var(--ink); min-width: 0; }
+.nav.on { background: var(--fill); font-weight: 600; }
+.nav span.t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.nav .n { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-2); flex: none; }
+.dot.on { background: var(--green); } .dot.pos-open { background: var(--accent); } .dot.warn { background: var(--orange); }
+.badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+
+/* main */
+main { padding: 14px 16px 24px; display: grid; grid-template-columns: minmax(0, 1fr) 288px; gap: 0 20px; align-content: start; }
+.col { min-width: 0; }
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--pane); border: 1px solid var(--line); border-radius: 8px; }
+.kpi { padding: 10px 14px 12px; border-left: 1px solid var(--line); min-width: 0; }
+.kpi:first-child { border-left: 0; }
+.kpi .l { font-size: 11px; color: var(--ink-2); font-weight: 560; }
+.kpi .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 24px; font-weight: 600; letter-spacing: -.01em; margin-top: 2px; }
+.kpi .s { font-size: 11px; color: var(--ink-2); margin-top: 2px; }
+.meter { height: 4px; border-radius: 2px; background: var(--fill-2); margin-top: 8px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+.meter.low i { background: var(--orange); }
+
+h3 { margin: 18px 0 6px; font-size: 12px; font-weight: 650; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+h3 .sub { font-weight: 450; color: var(--ink-2); }
+table { width: 100%; border-collapse: collapse; background: var(--pane); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; table-layout: fixed; }
+th { text-align: left; font-size: 11px; font-weight: 560; color: var(--ink-2); padding: 0 10px; height: 28px; border-bottom: 1px solid var(--line); background: var(--pane); }
+th.r { text-align: right; }
+td { padding: 0 10px; height: 36px; border-bottom: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: color-mix(in srgb, var(--fill) 60%, transparent); }
+tr.live td { background: var(--red-tint); }
+.tag { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: .04em; }
+.t-live { background: var(--red); color: var(--on-red); }
+.t-demo { background: var(--fill-2); color: var(--ink); border: 1px solid var(--line-2); }
+.t-paper { color: var(--ink-2); border: 1px dashed var(--ink-3); }
+.t-shadow { background: var(--fill); color: var(--ink-2); font-weight: 600; letter-spacing: 0; }
+.state { display: inline-flex; align-items: center; gap: 6px; font-weight: 560; }
+.sw { width: 30px; height: 18px; border-radius: 9px; background: var(--line-2); position: relative; border: 0; padding: 0; vertical-align: middle; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform 140ms var(--ease); }
+.sw[aria-checked="true"] { background: var(--accent); }
+.sw[aria-checked="true"]::after { transform: translateX(12px); background: var(--on-accent); }
+.sw[aria-checked="true"]::after { background: var(--pane); }
+.lnk { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+
+/* right rail */
+.rail h3:first-child { margin-top: 0; }
+.panel { background: var(--pane); border: 1px solid var(--line); border-radius: 8px; }
+.chg { padding: 9px 12px; border-bottom: 1px solid var(--line); }
+.chg:last-child { border-bottom: 0; }
+.chg .a { font-weight: 560; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chg .b { font-size: 12px; color: var(--ink-2); display: flex; justify-content: space-between; align-items: center; margin-top: 2px; }
+.chg .old { font-family: var(--mono); }
+.mini { height: 24px; padding: 0 8px; font-size: 12px; border-radius: 5px; }
+.sess { padding: 10px 12px; }
+.sess .bar { height: 4px; border-radius: 2px; background: var(--fill-2); margin: 8px 0 6px; position: relative; }
+.sess .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 34%; background: var(--accent); border-radius: 2px; }
+.sess .ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-2); font-family: var(--mono); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (max-width: 1180px) { main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-laptop" viewBox="0 0 24 24"><path d="M18 5a2 2 0 0 1 2 2v8.526a2 2 0 0 0 .212.897l1.068 2.127a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45l1.068-2.127A2 2 0 0 0 4 15.526V7a2 2 0 0 1 2-2z"/><path d="M20.054 15.987H3.946"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></symbol>
+  <symbol id="i-candles" viewBox="0 0 24 24"><path d="M9 5v4"/><rect width="4" height="6" x="7" y="9" rx="1"/><path d="M9 15v2"/><path d="M17 3v2"/><rect width="4" height="8" x="15" y="5" rx="1"/><path d="M17 13v3"/><path d="M3 3v16a2 2 0 0 0 2 2h16"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></symbol>
+  <symbol id="i-bank" viewBox="0 0 24 24"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+</svg>
+
+<div class="mock">
+  <b>Mockup A: quiet and dense. Fake data. Not the live Desk.</b>
+  <button id="mThemeBtn" type="button" aria-label="Switch between light and dark"><svg class="ic" id="mThemeIc"><use href="#i-moon"/></svg><span id="mThemeTx">Dark</span></button>
+  <button id="mMachineBtn" type="button" aria-label="Show the other machine chip"><svg class="ic"><use href="#i-server"/></svg>Show Server chip</button>
+</div>
+
+<div class="app">
+  <header class="top" role="banner">
+    <span class="chip machine" id="machineChip" title="This Desk runs on this Mac"><svg class="ic" id="machineIc"><use href="#i-laptop"/></svg><span id="machineTx">THIS MAC</span></span>
+    <span class="chip armed" role="status"><i></i>ARMED</span>
+    <span class="chip ct" title="The chart page can place orders, even when Disarmed. Its switch is in Settings."><svg class="ic"><use href="#i-candles"/></svg>Chart trading ON · 1 live account</span>
+    <span class="ready"><svg class="ic"><use href="#i-shield"/></svg>Ready</span>
+    <span class="clock">09:42:18 ET</span>
+    <span class="sp"></span>
+    <button class="btn" type="button">Disarm</button>
+    <button class="btn kill" type="button" title="Hold for 1 second"><svg class="ic"><use href="#i-power"/></svg>Kill all<small>hold 1 s</small></button>
+  </header>
+
+  <nav class="side" aria-label="Desk">
+    <a class="nav on"><svg class="ic"><use href="#i-cal"/></svg><span class="t">Today</span></a>
+    <h4>Strategies</h4>
+    <a class="nav"><span class="dot pos-open"></span><span class="t">NQ 5m wick break 9:30-11</span></a>
+    <a class="nav"><span class="dot on"></span><span class="t">NQ 15-min FVG, 09:30 side</span></a>
+    <a class="nav"><span class="dot pos-open"></span><span class="t">NQ Overnight ORB (micro)</span></a>
+    <a class="nav"><span class="dot warn"></span><span class="t">GC EMA pullback + VWAP</span></a>
+    <a class="nav"><span class="dot"></span><span class="t">NQ Evening Noise Band k0.3</span></a>
+    <a class="nav"><span class="dot"></span><span class="t">NQ 15-min FVG tap and 1-minute displacement, 1h gap, ATR stop 1.5 ...</span></a>
+    <h4>Accounts</h4>
+    <a class="nav"><svg class="ic"><use href="#i-bank"/></svg><span class="t">APEX-300K-0147</span><span class="tag t-live">LIVE</span></a>
+    <a class="nav"><svg class="ic"><use href="#i-bank"/></svg><span class="t">SIM0000041</span><span class="tag t-demo">DEMO</span></a>
+    <a class="nav"><svg class="ic"><use href="#i-bank"/></svg><span class="t">Paper 1</span><span class="tag t-paper">PAPER</span></a>
+    <h4>Review</h4>
+    <a class="nav"><svg class="ic"><use href="#i-activity"/></svg><span class="t">Activity</span></a>
+    <a class="nav"><svg class="ic"><use href="#i-history"/></svg><span class="t">Changes (7 days)</span><span class="badge">3</span></a>
+  </nav>
+
+  <main>
+    <div class="col">
+      <section class="kpis" aria-label="Day so far">
+        <div class="kpi"><div class="l">Live, day net</div><div class="v pos">+$612.50</div><div class="s">1 LIVE account · closed trades</div></div>
+        <div class="kpi"><div class="l">Demo + paper, day net</div><div class="v pos">+$1,284.00</div><div class="s">2 accounts · closed trades</div></div>
+        <div class="kpi"><div class="l">Room to daily limit (LIVE)</div><div class="v">$1,387.50</div><div class="s">of $2,000.00 · 69% left</div><div class="meter" role="img" aria-label="69 percent of the daily limit left"><i style="width:69%"></i></div></div>
+        <div class="kpi"><div class="l">Room to drawdown (LIVE)</div><div class="v">$1,240.00</div><div class="s">of $5,000.00 · 25% left</div><div class="meter low" role="img" aria-label="25 percent of the drawdown left"><i style="width:25%"></i></div></div>
+      </section>
+
+      <h3>Accounts <span class="sub">3 connected</span></h3>
+      <table>
+        <colgroup><col style="width:74px"><col><col style="width:110px"><col style="width:120px"><col style="width:110px"><col style="width:130px"><col style="width:130px"></colgroup>
+        <thead><tr><th>Type</th><th>Account</th><th>State</th><th class="r">Balance</th><th class="r">Day net</th><th class="r">Room, daily limit</th><th class="r">Room, drawdown</th></tr></thead>
+        <tbody>
+          <tr class="live"><td><span class="tag t-live">LIVE</span></td><td><b>APEX-300K-0147</b></td><td><span class="state"><span class="dot on"></span>In a trade</span></td><td class="num">$298,412.50</td><td class="num pos">+$612.50</td><td class="num">$1,387.50</td><td class="num neg">$1,240.00</td></tr>
+          <tr><td><span class="tag t-demo">DEMO</span></td><td>SIM0000041</td><td><span class="state"><span class="dot on"></span>In a trade</span></td><td class="num">$50,884.00</td><td class="num pos">+$884.00</td><td class="num">no limit</td><td class="num">$2,100.00</td></tr>
+          <tr><td><span class="tag t-paper">PAPER</span></td><td>Paper 1</td><td><span class="state"><span class="dot"></span>Flat</span></td><td class="num">$50,400.00</td><td class="num pos">+$400.00</td><td class="num">no limit</td><td class="num">no limit</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Strategies <span class="sub">6 on the Desk · 2 in a position · 1 order working</span></h3>
+      <table>
+        <colgroup><col style="width:44px"><col><col style="width:118px"><col style="width:176px"><col style="width:104px"><col style="width:62px"><col style="width:78px"></colgroup>
+        <thead><tr><th></th><th>Strategy</th><th>State</th><th>Position</th><th>Last signal</th><th>Account</th><th class="r">Day net</th></tr></thead>
+        <tbody>
+          <tr><td><button class="sw" role="switch" aria-checked="true" aria-label="NQ 5m wick break on"></button></td><td title="NQ 5m wick break 9:30-11, stop 2x candle, 1:0.75 (#28)"><b>NQ 5m wick break 9:30-11, stop 2x candle, 1:0.75 (#28)</b></td><td><span class="state"><span class="dot pos-open"></span>In position</span></td><td class="num" style="text-align:left;font-size:12px">Long 1 NQ 21,063.50</td><td>Buy 09:42</td><td><span class="tag t-live">LIVE</span></td><td class="num pos">+$215.00</td></tr>
+          <tr><td><button class="sw" role="switch" aria-checked="true" aria-label="NQ 15-min FVG on"></button></td><td title="NQ 15-min FVG, side of the 09:30 open, no limit, 1:0.75"><b>NQ 15-min FVG, side of the 09:30 open, no limit, 1:0.75</b></td><td><span class="state"><span class="dot on"></span>Waiting</span></td><td class="mute">Flat</td><td>Skipped 09:35</td><td><span class="tag t-demo">DEMO</span></td><td class="num">$0.00</td></tr>
+          <tr><td><button class="sw" role="switch" aria-checked="true" aria-label="NQ Overnight ORB on"></button></td><td><b>NQ Overnight ORB (micro)</b></td><td><span class="state"><span class="dot pos-open"></span>In position</span></td><td class="num" style="text-align:left;font-size:12px">Short 3 MNQ 21,071.25</td><td>Sell 09:31</td><td><span class="tag t-demo">DEMO</span></td><td class="num neg">-$38.00</td></tr>
+          <tr><td><button class="sw" role="switch" aria-checked="true" aria-label="GC EMA pullback on"></button></td><td><b>GC EMA pullback + VWAP</b></td><td><span class="state"><span class="dot warn"></span>Order working</span></td><td class="num" style="text-align:left;font-size:12px">Buy lmt 1 GC 2,712.4</td><td>Buy lmt 09:40</td><td><span class="tag t-paper">PAPER</span></td><td class="num">$0.00</td></tr>
+          <tr><td><button class="sw" role="switch" aria-checked="true" aria-label="NQ Evening Noise Band on"></button></td><td><b>NQ Evening Noise Band k0.3</b> <span class="tag t-shadow">Shadow</span></td><td><span class="state"><span class="dot"></span>Waiting</span></td><td class="mute">Sends no orders</td><td>Sell 20:14 Mon</td><td class="mute">none</td><td class="num">$0.00</td></tr>
+          <tr><td><button class="sw" role="switch" aria-checked="false" aria-label="NQ 15-min FVG tap off"></button></td><td title="NQ 15-min FVG tap and 1-minute displacement, 1h gap, ATR stop 1.5, target 1R, window 09:30-11:00 ET, side of the first-hour trend (Lab draft p27_46_3_stopcap_noise_v3)"><b>NQ 15-min FVG tap and 1-minute displacement, 1h gap, ATR stop 1.5, target 1R, window 09:30-11:00 ET, side of the first-hour trend (Lab draft p27_46_3_stopcap_noise_v3)</b></td><td><span class="state mute"><span class="dot"></span>Off</span></td><td class="mute">Flat</td><td class="mute">Off since Mon</td><td class="mute">none</td><td class="num">$0.00</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <aside class="col rail" aria-label="Session and changes">
+      <h3>Session</h3>
+      <div class="panel sess">
+        <div style="display:flex;justify-content:space-between"><b>Today, Tuesday</b><span class="mono num" style="font-family:var(--mono)">09:42 ET</span></div>
+        <div class="bar" role="img" aria-label="Session about one third done"><i></i></div>
+        <div class="ends"><span>09:30 open</span><span>15:55 flat</span></div>
+      </div>
+
+      <h3><svg class="ic"><use href="#i-history"/></svg>Changes (7 days) <span class="sub">3</span></h3>
+      <div class="panel">
+        <div class="chg"><div class="a">NQ 5m wick break: Stop</div><div class="b"><span><span class="old">2x → 1.5x</span> · Tue 08:12</span><button class="btn mini" type="button">Put back</button></div></div>
+        <div class="chg"><div class="a">APEX-300K-0147: Day take</div><div class="b"><span><span class="old">OFF → $900</span> · Mon 17:40</span><button class="btn mini" type="button">Put back</button></div></div>
+        <div class="chg"><div class="a">GC EMA pullback: Assigned to</div><div class="b"><span><span class="old">none → Paper 1</span> · Mon 17:02</span><button class="btn mini" type="button">Put back</button></div></div>
+      </div>
+      <p class="mute" style="margin:8px 2px 0;font-size:12px">Put back asks again when it would add risk on a LIVE account.</p>
+    </aside>
+  </main>
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement, mq = window.matchMedia('(prefers-color-scheme: dark)');
+  function paint(t) {
+    root.setAttribute('data-theme', t);
+    document.getElementById('mThemeIc').firstElementChild.setAttribute('href', t === 'dark' ? '#i-sun' : '#i-moon');
+    document.getElementById('mThemeTx').textContent = t === 'dark' ? 'Light' : 'Dark';
+  }
+  paint(mq.matches ? 'dark' : 'light');
+  document.getElementById('mThemeBtn').addEventListener('click', function () { paint(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'); });
+  var srv = false;
+  document.getElementById('mMachineBtn').addEventListener('click', function () {
+    srv = !srv;
+    document.getElementById('machineTx').textContent = srv ? 'SERVER · CHICAGO' : 'THIS MAC';
+    document.getElementById('machineIc').firstElementChild.setAttribute('href', srv ? '#i-server' : '#i-laptop');
+    this.lastChild.textContent = srv ? 'Show This Mac chip' : 'Show Server chip';
+  });
+})();
+</script>
+</body>
+</html>
