@@ -206,7 +206,7 @@ DESK_PINS = {
     "desk/labdesk.js": (7, "e8cdf8dd38234fbc"),
     "desk/demo.js": (2, "ced116ced23a333f"),
     "desk/book.js": (4, "e239ee0858089361"),
-    "desk/settings.js": (5, "5323412c5f594d04"),
+    "desk/settings.js": (6, "982846352f8aa1ab"),
     "desk/popups.js": (3, "d7d287520e1471a9"),
     "desk/start.js": (2, "4ba84d0381586902"),
 }

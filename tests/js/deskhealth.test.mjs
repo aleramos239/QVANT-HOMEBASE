@@ -110,6 +110,22 @@ test('the card says plainly what is not on this machine, and a stale check is no
   assert.doesNotMatch(els.settingsHealth.innerHTML, /<table|<select/);
   api.renderHealth({ ...health, watch: { ...watch, stale: true } });
   assert.match(els.settingsHealth.innerHTML, /Not checked since 17:16 ET/);
+  assert.doesNotMatch(els.settingsHealth.innerHTML, /fine|late 5 min|silent 10 min/);     // no old reading dressed as a live one
+  assert.match(els.settingsHealth.innerHTML, /1 whole · 1 filling/);                      // the tick archive column still shows
+});
+
+test('an old pre-open result says when it ran and that it is old', () => {
+  const { api, els, win } = load();
+  const hour = 3600 * 1000;
+  win.PREOPEN = { available: true, at: 'x', got: Date.now() - hour, checks: [{ level: 'ok', label: 'power', detail: 'plugged in' }] };
+  api.renderHealth(health);
+  assert.match(els.settingsHealth.innerHTML, /All clear \(last run \d\d:\d\d ET, old\)/);
+  win.PREOPEN = { available: true, at: 'x', got: Date.now() - hour, checks: [{ level: 'warn', label: 'ticks NQ', detail: 'thin' }] };
+  api.renderHealth(health);
+  assert.match(els.settingsHealth.innerHTML, /1 to look at \(last run \d\d:\d\d ET, old\)/);
+  win.PREOPEN = { available: true, at: 'x', got: Date.now(), checks: [] };
+  api.renderHealth(health);
+  assert.match(els.settingsHealth.innerHTML, /All clear\s*<button/);
 });
 
 test('the pre-open part of the card: run button, rows, a note off the Mac', () => {

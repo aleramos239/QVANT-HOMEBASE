@@ -301,7 +301,7 @@ function healthTable(w, c) {
   const roots = [...new Set([...(w.available ? w.markets.map(m => m.root) : []), ...(c.available ? Object.keys(c.roots) : [])])];
   if (!roots.length) return "";
   const rows = roots.map(r => {
-    const m = w.available && w.markets.find(x => x.root === r), n = c.available && c.roots[r];
+    const m = w.available && !w.stale && w.markets.find(x => x.root === r), n = c.available && c.roots[r];
     return `<tr><td style="padding:2px 12px 2px 0">${esc(r)}</td>
       <td style="padding:2px 12px 2px 0;${m && !["fine", "closed"].includes(m.state) ? "color:var(--destructive)" : ""}">${m ? esc(healthWords(m)) : "-"}</td>
       <td style="color:var(--muted-foreground)">${n ? esc(healthCounts(n)) : "-"}</td></tr>`;
@@ -315,7 +315,9 @@ function healthPreopen() {
   const rows = p && p.available && p.checks ? p.checks.filter(c => c.level !== "ok") : [];
   const said = !p || !p.available || p.at === null ? "Not run yet"
     : rows.length ? rows.length + " to look at" : "All clear";
-  return `<p class="wnote" style="margin-top:12px">Pre-open check: ${esc(said)}
+  const old = p && p.available && p.at !== null && Date.now() - p.got > PREOPEN_FRESH_MS;   // the banner has dropped it by now
+  const when = old ? ` (last run ${etHM(new Date(p.got).toISOString())} ET, old)` : "";
+  return `<p class="wnote" style="margin-top:12px">Pre-open check: ${esc(said + when)}
       <button class="btn btn-outline btn-sm" type="button" onclick="runPreopen()" ${HEALTH_BUSY ? "disabled" : ""}>${HEALTH_BUSY ? "Running…" : "Run now"}</button></p>`
     + rows.map(c => `<p class="mcap${c.level === "bad" ? " warn" : ""}" style="margin-top:2px"><b>${esc(c.label)}</b> ${esc(c.detail)}</p>`).join("");
 }
