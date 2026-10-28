@@ -145,7 +145,7 @@ const fakeEl = (tagName) => ({ tagName, className: '', textContent: '', title: '
   classList: { on: new Set(), toggle(c, v) { if (v) this.on.add(c); else this.on.delete(c); }, contains(c) { return this.on.has(c); } },
   append(...k) { this.children.push(...k); }, replaceChildren(...k) { this.children = k; }, blur() {} });
 function block(prefs) {
-  const w = { HBDeskClient: { state: STATE, prefs: { qty: 1, ...prefs }, gate: () => null },
+  const w = { HBDeskClient: { state: STATE, prefs: { qty: 1, ...prefs }, qtyFor: () => 1, gate: () => null },
     HBTradeUI: { tradeOf: () => ({ accounts: ['sim041'] }), liveCue: () => [], busy: () => false, flatBusy: () => false, sending: () => null } };
   const ctx = vm.createContext({ window: w, T, document: { createElement: fakeEl, activeElement: null } });
   vm.runInContext(`${lift(TL_SRC, 'mk')} globalThis.O = { ${method('paintBlock')} };`, ctx);
