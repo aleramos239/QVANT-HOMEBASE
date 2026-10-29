@@ -160,6 +160,7 @@
                                           and stitched at 1:1, 1:2 and 1:3 (homebase.backtest.walkforward). The old one
                                           is retired except the Desk's own 3:1 (3 in, 1 out, blocks, no axes), and that one
                                           only while DESKLAB_AUTO_UNSEEN is on (off, S4: 400, "The Desk 3:1 run is off: ...")
+                                          or when the body carries owner_said, the owner's typed words (1 to 400 characters)
     GET  /api/tester/walkforward/{id}    status, per-cell status (never full-window P&L), progress, eta_s
     GET  /api/tester/walkforward/{id}/result   the steps, the stitched OOS equity + stats (409 until done);
                                           ?test_months=N picks a compare job's 1:N scheme (a compare job

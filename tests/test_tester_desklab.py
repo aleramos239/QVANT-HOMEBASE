@@ -743,6 +743,12 @@ def test_with_the_start_off_the_desks_own_3to1_body_is_refused_at_the_tester(c, 
     assert started == []
     other = {**body, "axes": [{"key": "lookback", "values": [8, 10]}]}                # a search: retired, as before
     assert c.post("/api/tester/walkforward", json=other).json()["detail"] == walkforward.RETIRED
+    for said in ("", "   ", "x" * (tester_api.BP_SAID_MAX + 1), 5):                      # words that are no words: refused
+        assert c.post("/api/tester/walkforward", json={**body, "owner_said": said}).json()["detail"] == walkforward.DESK_31_OFF
+    assert started == []
+    words = {**body, "owner_said": "run the desk card's 3:1 for nq_bars"}          # his typed words start it, even with the switch off
+    assert c.post("/api/tester/walkforward", json=words).json() == {"id": "x"} and started == [words]
+    started.clear()
     monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", True)        # the Desk's own start, were it on again: the body is taken
     assert c.post("/api/tester/walkforward", json=body).json() == {"id": "x"} and started == [body]
 

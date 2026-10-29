@@ -607,9 +607,11 @@ def validate_wf(body) -> dict:
     # Only the Desk's own run of a promoted strategy as set stays: 3 months in, the next 1 out, blocks, no axes (nothing searched)
     if not OLD_SCHEMES and (compare or (select_months, test_months, step_months) != (3, 1, 4) or b.get("axes")):
         raise ValueError(RETIRED)
+    said = b.pop("owner_said", None)
     if not OLD_SCHEMES:              # that body's stitched result is the test months: only the Desk's own start sends it (S4)
         from ..charts import tester_api      # noqa: PLC0415 -- the Desk's switch lives there (the tests patch it there)
-        if not tester_api.DESKLAB_AUTO_UNSEEN:
+        # or the owner's typed words (2026-10-28: "add a path that starts the Desk card's 3:1 run only on my typed words")
+        if not tester_api.DESKLAB_AUTO_UNSEEN and not (isinstance(said, str) and said.strip() and len(said) <= tester_api.BP_SAID_MAX):
             raise ValueError(DESK_31_OFF)
     if isinstance(b.get("range"), dict) and b["range"].get("kind") == "is_months":
         raise ValueError("a walk-forward steps whole calendar months, so it cannot run on IS months only "
