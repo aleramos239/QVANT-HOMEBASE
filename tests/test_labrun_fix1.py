@@ -28,6 +28,7 @@ from tests.test_labrun_host import Desk as Kit
 WORKING = {"status": "working"}
 CANCELLED = {"status": "cancelled"}
 NO_RESUME = "Could not pick up where it left off."
+UNBOOKED = "Taken off its accounts: the Desk no longer books it today."
 OTHER_DAY = "The Desk is on another day."
 LIVE = dict(orders={1: filled()}, flat=False, rounds=[rnd(status="live", exit_=None, pnl=None, reason=None)])
 
@@ -240,12 +241,12 @@ def test_a_desk_day_that_cannot_be_picked_up_is_ended_never_replaced_by_a_shadow
         k2.r.sync()
     assert k2.spawned == [] and k2.r.day("lab_x") is None                    # no child: not desk, and never shadow
     s = k2.file()
-    assert (s["state"], s["why"]) == ("stopped", NO_RESUME)
+    assert (s["state"], s["why"]) == ("stopped", UNBOOKED if how == "empty book" else NO_RESUME)
     assert s["orders"] == before["orders"] and "rebuilt" not in s            # what the desk day wrote stays
     assert k2.stub.bodies == []
     k2.r.beat()
     assert DESK_ID not in k2.stub.said[-1]["strategies"]                     # no beat names it: the Desk's own
-    assert [x["why"] for x in k2.journal() if x["kind"] == "stop"] == [NO_RESUME]     # "Runner down" rule acts
+    assert [x["why"] for x in k2.journal() if x["kind"] == "stop"] == [s["why"]]      # "Runner down" rule acts
 
 
 def test_a_runner_without_a_desk_line_still_hosts_in_shadow_whatever_the_tell_log_holds(kits, tmp_path):

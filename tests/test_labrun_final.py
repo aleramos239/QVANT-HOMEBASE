@@ -18,7 +18,7 @@ import pytest
 
 from homebase.labrun import host, store
 from tests.labrun_desk_util import DATE, DESK_ID, ONE, StubDesk, at, feed, sidecar, snap, state  # noqa: F401
-from tests.test_labrun_fix1 import (LIVE, NO_RESUME, SHORT, a_short_day, booked_at_nine, crash, days, kits, minute,  # noqa: F401
+from tests.test_labrun_fix1 import (LIVE, NO_RESUME, UNBOOKED, SHORT, a_short_day, booked_at_nine, crash, days, kits, minute,  # noqa: F401
                                     restart)
 from tests.test_labrun_host import HEAD
 
@@ -156,7 +156,7 @@ def test_a_day_that_could_not_be_picked_up_is_not_named_after_a_second_restart_e
     store.put_desk("lab_x", sidecar(accounts=()), k.at)                      # the book is gone: it cannot be picked up
     back = [("09:20:00", [21000.0] * 2), ("09:29:01", [21000.0] * 60), ("09:30:01", [21010.0] * 60)]
     k2 = restart(kits, "09:31:30", back, snap(answered=[2], **LIVE))
-    assert k2.file()["why"] == NO_RESUME and DESK_ID not in named(k2)
+    assert k2.file()["why"] == UNBOOKED and DESK_ID not in named(k2)
     crash(k2)
     k3 = restart(kits, "09:32:30", back, snap(answered=[2], **LIVE))
     assert k3.r.day("lab_x") is None and DESK_ID not in named(k3) and k3.stub.bodies == []
