@@ -20,7 +20,7 @@ from homebase.store import secrets_store
 ADDR = "0xabc0000000000000000000000000000000000001"
 KEY = "vest:" + ADDR
 FAR = 4_000_000_000_000        # ms, far in the future
-SECRETS = ("AT-1", "RT-1", "RTID-1", "SIG-WALLET", "AT-2", "RT-2", "RTID-2", "APIKEY-1")
+SECRETS = ("AT-1", "RT-1", "RTID-1", "SIG-WALLET", "AT-2", "RT-2", "RTID-2", "APIKEY-1", "ACCT-1", "ACCT-2", "BODY-SECRET")
 
 
 def run(coro):
@@ -42,7 +42,8 @@ class Vest:
     def __init__(self):
         self.calls: list[httpx.Request] = []
         self.handlers: dict = {}
-        self.n = 0
+        self.n = 0                 # refreshes
+        self.acct_n = 0            # account tokens minted
 
     def __call__(self, req: httpx.Request) -> httpx.Response:
         self.calls.append(req)
@@ -60,8 +61,8 @@ class Vest:
             self.n += 1
             return httpx.Response(200, json=self.session("2", FAR))
         if p == "/v3/auth/account-token":
-            self.n += 1
-            return httpx.Response(200, json={"accessToken": f"ACCT-{self.n}", "accessExpiresAtMs": FAR})
+            self.acct_n += 1
+            return httpx.Response(200, json={"accessToken": f"ACCT-{self.acct_n}", "accessExpiresAtMs": FAR})
         return httpx.Response(200, json={"ok": True})
 
     @staticmethod
@@ -271,6 +272,64 @@ def test_user_level_401_refreshes_and_resends():
     assert seen == ["Bearer AT-1", "Bearer AT-2"]
 
 
+def test_refresh_403_is_not_sticky():
+    v = Vest()
+    clock = [1_000_000]
+    b = LoginBudget(clock=lambda: clock[0] / 1)
+    s = registered(v, budget=b)
+    expire_user_token(s)
+    v.handlers["/v3/auth/refresh"] = lambda req: httpx.Response(403, text="waf")
+    with pytest.raises(httpx.HTTPStatusError):
+        run(s.user_token())
+    assert not s.needs_signature
+    with pytest.raises(RuntimeError, match="backing off"):                 # still inside the budget's backoff
+        run(s.user_token())
+    assert v.paths().count("/v3/auth/refresh") == 1
+    clock[0] += 400                                                        # past BACKOFF_BASE_S
+    v.handlers.pop("/v3/auth/refresh")
+    assert run(s.user_token()) == "AT-2"
+
+
+def test_needs_signature_clears_when_another_process_re_registers():
+    v = Vest()
+    s = registered(v)
+    expire_user_token(s)
+    v.handlers["/v3/auth/refresh"] = lambda req: httpx.Response(401)
+    with pytest.raises(NeedsSignature):
+        run(s.user_token())
+    assert s.needs_signature
+    creds = secrets_store.get_credentials(KEY)
+    secrets_store.set_credentials(KEY, **{**creds, "refresh_token": "RT-9", "refresh_token_id": "RTID-9"})
+    assert not s.needs_signature
+
+
+def test_resend_keeps_a_token_a_sibling_already_replaced():
+    v = Vest()
+    s = registered(v)
+    run(s.account_token("acc1"))
+
+    def orders(req):
+        if req.headers["authorization"] == "Bearer ACCT-1":
+            s._accounts["acc1"] = ("ACCT-SIBLING", FAR)               # a sibling re-minted while we were in flight
+            return httpx.Response(401)
+        return httpx.Response(200, json={})
+    v.handlers["/v3/orders"] = orders
+    run(s.request("POST", "/v3/orders", account_id="acc1"))
+    assert v.paths().count("/v3/auth/account-token") == 1              # no second mint: the sibling's token was used
+    assert v.calls[-1].headers["authorization"] == "Bearer ACCT-SIBLING"
+
+
+def test_concurrent_user_token_refreshes_once():
+    v = Vest()
+    s = registered(v)
+    expire_user_token(s)
+
+    async def go():
+        return await asyncio.gather(s.user_token(), s.user_token())
+    assert run(go()) == ["AT-2", "AT-2"]
+    assert v.paths().count("/v3/auth/refresh") == 1
+
+
 def test_secrets_never_logged(caplog):
     caplog.set_level(logging.DEBUG)
     v = Vest()
@@ -279,7 +338,17 @@ def test_secrets_never_logged(caplog):
     run(s.user_token())
     run(s.request("GET", "/v3/x", account_id="acc1"))
     pem = secrets_store.get_credentials(KEY)["device_pem"]
-    sig = v.body("/v3/auth/refresh")["deviceSignature"]
-    assert caplog.text
-    for secret in SECRETS + ("ACCT-1", pem.splitlines()[1], sig):
+    sigs = [json.loads(c.content)["deviceSignature"] for c in v.calls if c.url.path == "/v3/auth/refresh"]
+    errs = []
+    for answer in (httpx.Response(500, text="BODY-SECRET"), httpx.Response(401, text="BODY-SECRET")):   # error paths too
+        v.handlers["/v3/auth/refresh"] = lambda req, a=answer: a
+        expire_user_token(s)
+        s.budget.login_result(KEY)                                     # lift the backoff the 500 started
+        with pytest.raises((httpx.HTTPStatusError, NeedsSignature)) as e:
+            run(s.user_token())
+        errs.append(str(e.value) + repr(e.value))
+        sigs += [json.loads(c.content)["deviceSignature"] for c in v.calls if c.url.path == "/v3/auth/refresh"][len(sigs):]
+    assert s.needs_signature and caplog.text
+    for secret in SECRETS + (pem.splitlines()[1],) + tuple(sigs):
         assert secret not in caplog.text
+        assert not any(secret in e for e in errs)

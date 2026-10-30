@@ -80,10 +80,9 @@ class VestSession:
         self._own_http = http is None
         self.budget = budget or LoginBudget()
         self._chal: dict | None = None
-        self._device: DeviceKey | None = None
         self._user: tuple[str, int] | None = None            # (access token, expiry ms)
         self._accounts: dict[str, tuple[str, int]] = {}
-        self._needs_sig = False
+        self._rejected_id: str | None = None                 # refresh_token_id Vest answered 401 to
         self._user_lock = asyncio.Lock()                      # refresh tokens rotate: one refresh at a time
         self._acct_lock = asyncio.Lock()
 
@@ -102,7 +101,9 @@ class VestSession:
     @property
     def needs_signature(self) -> bool:
         c = self._creds()
-        return bool(self._needs_sig or not c.get("refresh_token") or _now_ms() >= self.refresh_expires_ms)
+        # a 401'd token id is dead until the store holds a different one (another process may have re-registered)
+        rejected = self._rejected_id is not None and self._rejected_id == c.get("refresh_token_id")
+        return bool(rejected or not c.get("refresh_token") or _now_ms() >= self.refresh_expires_ms)
 
     async def aclose(self) -> None:
         if self._own_http and self._http is not None:
@@ -159,7 +160,7 @@ class VestSession:
             "devicePublicKey": device.public_b64()})
         resp.raise_for_status()
         j = resp.json()
-        self._device, self._chal, self._needs_sig = device, None, False
+        self._chal = None
         self._accounts.clear()
         self._take(j, device.pem(), c["primaryAddr"])
         log.info("vest %s: registered", self.key)
@@ -167,11 +168,11 @@ class VestSession:
                                       "accessExpiresAtMs", "refreshExpiresAtMs")}
 
     def _take(self, j: dict, device_pem: str, primary_addr: str) -> None:
-        """Keep the user token in memory; the refresh side goes to the secrets store."""
-        self._user = (j["accessToken"], int(j["accessExpiresAtMs"]))
+        """Store the rotated refresh side FIRST, then publish the user token in memory."""
         secrets_store.set_credentials(
             self.key, primary_addr=primary_addr, refresh_token=j["refreshToken"], refresh_token_id=j["refreshTokenId"],
             refresh_expires_ms=int(j.get("refreshExpiresAtMs") or self.refresh_expires_ms), device_pem=device_pem)
+        self._user = (j["accessToken"], int(j["accessExpiresAtMs"]))
 
     # -- renewal -----------------------------------------------------------------------------------------------
     async def _refresh(self) -> None:
@@ -183,16 +184,15 @@ class VestSession:
         why = self.budget.blocked(self.key)
         if why:
             raise LoginDeferred(why)
-        device = self._device or DeviceKey.from_pem(c["device_pem"])
+        device = DeviceKey.from_pem(c["device_pem"])
         resp = await self._auth_call("/v3/auth/refresh", {
             "refreshToken": c["refresh_token"], "requestId": str(uuid.uuid4()),
-            "deviceSignature": device.sign_refresh(c["refresh_token_id"])}, ok_codes=(200, 401, 403))
-        if resp.status_code in (401, 403):
-            self._needs_sig = True
+            "deviceSignature": device.sign_refresh(c["refresh_token_id"])}, ok_codes=(200, 401))
+        if resp.status_code == 401:       # a 403 (gateway / WAF) is transient: raised below, backoff only
+            self._rejected_id = c["refresh_token_id"]
             self._user = None
             raise NeedsSignature(f"{self.key}: refresh rejected, sign with the wallet again")
         resp.raise_for_status()
-        self._device = device
         self._take(resp.json(), c["device_pem"], c["primary_addr"])
         log.debug("vest %s: refreshed", self.key)
 
@@ -230,7 +230,8 @@ class VestSession:
             if resp.status_code != 401 or attempt:
                 resp.raise_for_status()
                 return resp
-            if account_id:
-                self._accounts.pop(account_id, None)
-            else:
+            if account_id:        # drop the cached token only if it is still the rejected one (a sibling may have re-minted)
+                if (self._accounts.get(account_id) or (None,))[0] == tok:
+                    del self._accounts[account_id]
+            elif self._user and self._user[0] == tok:
                 self._user = None
