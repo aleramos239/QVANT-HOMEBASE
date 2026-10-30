@@ -9,8 +9,9 @@ const DEMO_TAG = '<span class="tag" title="A demo account — the broker\'s prac
 function acctRow(id, extra) {
   const a = (ST.accounts || {})[id] || {label: id};   // LIVE unless demo or paper, as isDemoAcct (an unknown env is LIVE)
   const pnl = a.day_pnl;          // today: the balance now minus the balance at the 18:00 ET open (broker figures are lifetime or on their own clock)
-  const err = (!a.connected && a.error)
-    ? `<span class="kvi neg" style="font-size:11px;text-align:left;min-width:0">${esc(String(a.error).slice(0, 46))}…</span>` : "";
+  const note = a.connected ? a.notice : a.error;   // connected: the broker's notice (e.g. "login ends in 2 days")
+  const err = note
+    ? `<span class="kvi neg" style="font-size:11px;text-align:left;min-width:0">${esc(String(note).slice(0, 46))}…</span>` : "";
   return `<div class="acct">
     <span class="dot ${a.connected ? "on" : "off"}" data-ro="dot"></span>
     <span class="nm">${esc(a.label)}</span>

@@ -1137,3 +1137,33 @@ def test_an_entry_during_the_refresh_backoff_is_refused():
     _blocked_login(ad, gw)
     r = run(ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market")))
     assert not r.ok and "LoginDeferred" in r.error and not gw.api("POST")
+
+
+def _login_left(monkeypatch, ms):
+    from homebase.broker import vest_auth
+    monkeypatch.setattr(vest_auth, "_now_ms", lambda: FAR - ms)
+
+
+def test_last_12h_of_the_wallet_login_refuses_entries_not_exits(monkeypatch):
+    """I4 (R58): an entry in the last 12 h is refused, so the login's end always meets a flat account."""
+    _login_left(monkeypatch, 11 * 3_600_000)
+    ad, gw = mk()
+    assert ad.login_days_left() == pytest.approx(11 / 24)
+    r = run(ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market")))
+    assert not r.ok and r.error == "vest: wallet login ends within 12 h — sign again" and not gw.api("POST")
+    r = run(ad.place_bracket(OrderRequest("NQZ6", "Buy", 1, "Stop", price=21000, stop_price=20990)))
+    assert not r.ok and r.error == "vest: wallet login ends within 12 h — sign again"
+    gw.positions = [pos("long", "20")]
+    assert run(ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Market"))).ok        # an exit still runs
+    assert run(ad.flatten_all()).ok
+    _login_left(monkeypatch, 13 * 3_600_000)
+    gw.positions = []
+    assert run(ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market"))).ok
+
+
+def test_the_account_card_says_when_the_login_ends(monkeypatch):
+    _login_left(monkeypatch, 2 * 86_400_000 - 3_600_000)
+    ad, gw = mk()
+    assert run(ad.get_metrics())["notice"] == "login ends in 2 days"
+    _login_left(monkeypatch, 4 * 86_400_000)
+    assert "notice" not in run(ad.get_metrics())

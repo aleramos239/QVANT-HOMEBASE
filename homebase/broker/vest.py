@@ -17,6 +17,7 @@ import asyncio
 import datetime as dt
 import json
 import logging
+import math
 import time
 import uuid
 from decimal import ROUND_CEILING, ROUND_DOWN, ROUND_FLOOR, ROUND_HALF_UP, Decimal
@@ -29,6 +30,7 @@ from ..core.clock import ET
 from ..paths import state_dir
 from .base import BrokerAdapter, FillCallback, FillEvent, OrderRequest, OrderResult
 from .paper import root_of
+from . import vest_auth
 from .vest_auth import HEADERS, NeedsSignature, VestSession, urgent
 from .vest_held import HeldBook, HeldEntry, _proot, floor_room, reached, slip_ok
 
@@ -48,6 +50,7 @@ ORDER_GONE = (3017, 10010, 11004)             # cancel: already gone
 POSITION_GONE = (10009,)                      # close: no such position (10029, close already requested, is NOT gone)
 EXIT_TAGS = ("homebase:flat", "homebase:kill", "homebase:lab-flat", "homebase:chart-exit")   # with no position: never open
 UNCONFIRMED = "vest: unconfirmed — check Vest"
+LOGIN_ENDING = "vest: wallet login ends within 12 h — sign again"
 _STATUS = {"pending": "Working", "accepted": "Working", "partially_filled": "Working", "filled": "Filled",
            "cancelled": "Canceled", "rejected": "Rejected"}      # Vest order status -> the engine's words
 DETAILS_TRIES = 3                             # a closed position whose /details fails this many reads: report it by size
@@ -301,6 +304,24 @@ class VestAdapter(BrokerAdapter):
         if self._own_session:
             await self.session.aclose()
 
+    def login_days_left(self) -> Optional[float]:
+        """Days until the wallet login (refresh token) ends; None = no login stored."""
+        exp = self.session.refresh_expires_ms
+        return (exp - vest_auth._now_ms()) / 86_400_000 if exp else None
+
+    def _login_ending(self) -> Optional[str]:
+        """No new entry in the login's last 12 h: its end must meet a flat account (R58). Exits still run."""
+        left = self.login_days_left()
+        return LOGIN_ENDING if left is None or left < 0.5 else None
+
+    async def get_metrics(self) -> dict:
+        m = await super().get_metrics()
+        left = self.login_days_left()
+        if left is not None and 0 < left <= 3:
+            n = math.ceil(left)
+            m["notice"] = f"login ends in {n} day{'s' if n != 1 else ''}"
+        return m
+
     async def list_accounts(self) -> list[dict]:
         out = []
         for r in _rows(await self._api("GET", "/v3/accounts", account=False), "accounts"):
@@ -354,6 +375,8 @@ class VestAdapter(BrokerAdapter):
                 if legs or (str(held[0].get("side")).lower() == "long") == long:
                     return OrderResult(ok=False, error="vest: position already open")
                 return await self._exit(req, held[0], units, root, sp)
+            if err := self._login_ending():
+                return OrderResult(ok=False, error=err)
             # an entry: its full stop risk (none attached = unbounded) must fit above the loss floors
             risk = _dec(units) * abs(_dec(req.price) - _dec(req.stop_price)) if legs and req.stop_price is not None else None
             err = await self._floor_err(risk, rows)
@@ -707,6 +730,8 @@ class VestAdapter(BrokerAdapter):
         """A Stop entry: held here (nothing sent), checked against the floors now and again when it fires."""
         if self._sweeping:
             return OrderResult(ok=False, error="vest: flatten in progress")
+        if err := self._login_ending():
+            return OrderResult(ok=False, error=err)
         sweeps = self._sweeps
         if req.order_type != "Stop":
             return OrderResult(ok=False, error="vest: stop-limit entries are not supported")
