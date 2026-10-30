@@ -94,6 +94,12 @@ class AccountCfg:
     # entries are cancelled, open trades run to their own stop / target). The engine's day_lock, set per account
     # instead of per strategy: it does not stop a Lab strategy from sharing the account (day_take / target_take do).
     day_lock: float = 0.0
+    # Vest (keyring_key "vest:<wallet>"): the Vest account under the login ("" = a probe, no orders); the loss floors
+    # {"max_drawdown_equity": $, "daily_loss": $}, hand-set only when the API has none (none -> every entry refused);
+    # a held stop entry is skipped when price is more than slip_frac of its stop distance past the level
+    vest_account_id: str = ""
+    floors: dict = field(default_factory=dict)
+    slip_frac: float = 0.5
 
 
 HARD_MAX_ORDER_QTY = 50        # the settings route cannot store chart-trading limits above these (no longer enforced)
@@ -284,6 +290,9 @@ def save(cfg: AppCfg) -> None:
     for a in d["accounts"].values():
         if not a.get("day_lock"):
             a.pop("day_lock", None)
+        for k, default in (("vest_account_id", ""), ("floors", {}), ("slip_frac", 0.5)):   # the same, for Vest's
+            if a.get(k) == default:
+                a.pop(k, None)
     # atomic: a crash mid-write must never leave a truncated config (the desk now
     # rewrites it on its own, e.g. removing a closed account)
     path = config_path()
