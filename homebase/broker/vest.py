@@ -118,6 +118,11 @@ def _err(e: Exception) -> tuple[Optional[int], str]:
     return None, f"vest: {type(e).__name__}"
 
 
+def _same_acct(v, acct) -> bool:
+    """Vest may send an account id as a number; the desk saves it as text (R56)."""
+    return v is not None and str(v) == str(acct)
+
+
 def parse_account_state(msg: dict, *, account_id: str, vest_account_id: str, seen: dict,
                         roots: Optional[dict] = None, default_root: str = "NQ") -> list[FillEvent]:
     """Fills out of one `account_state` frame (the socket's, or one the poll built from /details). An order's
@@ -125,13 +130,13 @@ def parse_account_state(msg: dict, *, account_id: str, vest_account_id: str, see
     replayed frame, or the same order from the other feed, yields nothing. Contracts are the difference of the
     cumulative contracts, so pieces never add up to more than the order."""
     d = msg.get("data") or {}
-    if msg.get("channel") != "account_state" or d.get("account_id") != vest_account_id:
+    if msg.get("channel") != "account_state" or not _same_acct(d.get("account_id"), vest_account_id):
         return []
     roots = roots or {}
     held = [p for p in d.get("positions") or [] if p.get("symbol") == SYMBOL]
     out = []
     for o in d.get("orders") or []:
-        if o.get("symbol") != SYMBOL or o.get("account_id", vest_account_id) != vest_account_id:
+        if o.get("symbol") != SYMBOL or not _same_acct(o.get("account_id", vest_account_id), vest_account_id):
             continue
         oid = str(o.get("order_id"))
         done = _dec(o.get("executed_quantity") or 0)
@@ -161,7 +166,7 @@ def poll_changes(prev: Optional[dict], rows: list, *, vest_account_id: str) -> t
     """Fallback when the socket is down: (position ids whose size changed since the last read, the new sizes). First
     read (prev None): nothing changed, it only seeds."""
     cur = {str(r["positionId"]): _signed(r) for r in rows
-           if r.get("accountId") == vest_account_id and r.get("symbol") == SYMBOL}
+           if _same_acct(r.get("accountId"), vest_account_id) and r.get("symbol") == SYMBOL}
     if prev is None:
         return [], cur
     return [p for p in sorted(cur.keys() | prev.keys()) if cur.get(p, Decimal(0)) != prev.get(p, Decimal(0))], cur
@@ -273,15 +278,18 @@ class VestAdapter(BrokerAdapter):
 
     async def _opened(self) -> list:
         rows = _rows(await self._api("GET", "/v3/positions/opened", account=False), "positions")
-        return [r for r in rows if r.get("accountId") == self.vest_account_id]
+        return [r for r in rows if _same_acct(r.get("accountId"), self.vest_account_id)]
 
     async def _resting(self) -> list:
         rows = _rows(await self._api("GET", "/v3/positions/opened-orders", account=False), "orders")
-        return [r for r in rows if r.get("account_id") == self.vest_account_id]
+        return [r for r in rows if _same_acct(r.get("account_id"), self.vest_account_id)]
 
     # --- connection ---------------------------------------------------------------------------------
     async def connect(self) -> None:
         await (self.session.account_token(self.vest_account_id) if self.vest_account_id else self.session.user_token())
+        if self.vest_account_id and not any(_same_acct(a["id"], self.vest_account_id) for a in await self.list_accounts()):
+            # a plain error, not AccountNotOnLogin (that parks for good): an unreadable capital list must retry (R56)
+            raise RuntimeError(f"vest: account {self.vest_account_id} not on this login")
         await self._spec()
         self._connected = True
 
@@ -612,7 +620,7 @@ class VestAdapter(BrokerAdapter):
 
     async def _account_row(self) -> dict:
         rows = _rows(await self._api("GET", "/v3/accounts", account=False), "accounts")
-        row = next((r for r in rows if r.get("account_id") == self.vest_account_id), {})
+        row = next((r for r in rows if _same_acct(r.get("account_id"), self.vest_account_id)), {})
         equity = row.get("equity") or row.get("amount")
         if equity is not None and row.get(DAY_START_KEY) is None:      # the first read after 20:00 ET, any caller (R35)
             self._day_start(float(equity))
@@ -862,7 +870,7 @@ class VestAdapter(BrokerAdapter):
             ch, d = msg.get("channel"), msg.get("data") or {}
         except (ValueError, AttributeError):
             return
-        if ch not in ("command_events", "account_state") or d.get("account_id") != self.vest_account_id:
+        if ch not in ("command_events", "account_state") or not _same_acct(d.get("account_id"), self.vest_account_id):
             return
         if ch == "command_events":
             self._ws_up = True                  # the socket has spoken for this account: the poll fallback may rest

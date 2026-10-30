@@ -1080,3 +1080,28 @@ def test_socket_counts_as_up_only_for_a_frame_past_the_seq_check():
         await ad._on_message(json.dumps(acct_msg([], seq=6)))
         return stale, ad._ws_up
     assert run(go()) == (False, True)
+
+
+def test_a_numeric_account_id_matches_the_saved_text_id(monkeypatch):
+    """I2 (R56): Vest may send account ids as numbers; the desk saves them as text. Every comparison is by text."""
+    ad, gw = mk(vest_account_id="7")
+    gw.positions = [pos("long", "20", accountId=7)]
+    gw.h[("GET", "/v3/accounts")] = lambda req: httpx.Response(200, json=[{"account_id": 7, "account_type": 1,
+                                                                           "equity": "900"}])
+    assert [r["positionId"] for r in run(ad._opened())] == ["p1"]
+    assert run(ad.get_balance())["balance"] == 900.0
+    assert poll_changes(None, gw.positions, vest_account_id="7")[1] == {"p1": Decimal(20)}
+    frame = acct_msg([order_row(account_id=7)], acc=7)
+    assert len(parse_account_state(frame, account_id="vest1", vest_account_id="7", seen={})) == 1
+    run(ad._on_message(json.dumps(frame)))
+    assert ad._ws_up and ad._seen.get("o1") == Decimal(40)
+
+
+def test_connect_refuses_an_account_not_on_this_login():
+    ad, gw = mk(vest_account_id="nope")
+    with pytest.raises(RuntimeError, match="vest: account nope not on this login"):
+        run(ad.connect())
+    assert not ad.connected
+    ad, gw = mk()
+    run(ad.connect())
+    assert ad.connected
