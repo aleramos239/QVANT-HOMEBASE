@@ -487,3 +487,14 @@ def test_a_vest_login_block_never_says_tradovate():
         assert b.note_error(key, RuntimeError("429 Too Many Requests"))
     assert "Vest rate-limited" in b.blocked("vest:0xabc") and "Tradovate" not in b.blocked("vest:0xabc")
     assert "Tradovate rate-limited" in b.blocked("tv:demo:u")
+
+
+def test_a_vest_test_can_never_reach_the_network(no_network):
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(0.2)
+    with pytest.raises(OSError, match="blocked"):
+        s.connect(("192.0.2.1", 443))                   # TEST-NET-1: never routed, even if the guard is missing
+    s.close()
+    assert no_network == ["192.0.2.1"]
+    no_network.clear()                                  # this test's own hit, on purpose
