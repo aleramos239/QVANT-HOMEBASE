@@ -24,7 +24,7 @@ import os
 import re
 import threading
 import zlib
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from operator import itemgetter
@@ -93,6 +93,19 @@ def read_table(path: Path) -> tuple[list[str], list[list[str]]]:
     by a crash — the torn tail is dropped, never raised."""
     header, rows = iter_table(path)
     return header, list(rows)
+
+
+def ids_unbroken(ticks: list, a: int, b: int) -> bool:
+    """True when the trade ids run without a hole from the last tick before a to the first tick after b (ticks sorted
+    by time): every trade in [a, b] is held, so a gap marker there is stale. Tradovate numbers a contract's trades
+    one by one (the archive's own missing_ids counts holes in that run)."""
+    i = bisect_left(ticks, a, key=lambda t: t.ts_ms)
+    j = bisect_right(ticks, b, key=lambda t: t.ts_ms)
+    if i == 0 or j >= len(ticks) or not ticks[i - 1].id or not ticks[j].id:
+        return False
+    lo, hi = ticks[i - 1].id, ticks[j].id
+    ids = {t.id for t in ticks[i - 1:j + 1]}
+    return lo < hi and all(x in ids for x in range(lo, hi + 1))
 
 
 def gaps_path(path: Path) -> Path:
