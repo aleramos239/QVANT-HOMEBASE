@@ -648,13 +648,16 @@
     <div id="wstep1">
       <h2>Where do you trade?</h2>
       <p class="sub">Log in once — we'll find every account under it.</p>
-      <div class="opt sel" id="optTv"><span class="glyph">Tv</span>
+      <div class="opt sel" id="optTv" onclick="wizBroker('tv')"><span class="glyph">Tv</span>
         <span><span class="t">Tradovate</span><br><span class="sub">Username &amp; password</span></span>
+        <span class="spacer"></span><span class="radio"></span></div>
+      <div class="opt" id="optVest" onclick="wizBroker('vest')"><span class="glyph">Ve</span>
+        <span><span class="t">Vest</span><br><span class="sub">Your wallet signs in</span></span>
         <span class="spacer"></span><span class="radio"></span></div>
       <div class="opt" id="optPaper" onclick="wizPaper()"><span class="glyph">Pa</span>
         <span><span class="t">Add paper account</span><br><span class="sub">Simulated fills on live prices — never sent to a broker</span></span>
         <span class="spacer"></span><span class="radio"></span></div>
-      <div class="seg">
+      <div class="seg" id="envSeg">
         <button class="sel" type="button" id="envDemo" aria-pressed="true" onclick="setEnv('demo')">Demo — practice money</button>
         <button type="button" id="envLive" aria-pressed="false" onclick="setEnv('live')">Live — real money</button>
       </div>
@@ -691,6 +694,30 @@
       <div class="row-btns">
         <button class="btn btn-outline" onclick="wizGoto(1)">&larr; Back</button>
         <button class="btn btn-default" id="cGo" onclick="doConnect()">Find my accounts</button>
+      </div>
+    </div>
+
+    <div id="wstep2v" style="display:none">
+      <h2>Sign in to Vest <span class="sub">with your wallet</span></h2>
+      <p class="sub">Your wallet signs Vest's login message once. Homebase never sees your wallet's key, and
+        keeps the session itself on the desk server — no API key is involved.</p>
+      <div class="slabel">SAVED LOGINS</div>
+      <div id="savedLoginsV"></div>
+      <div class="opt" id="optNewV" onclick="pickLogin(null)">
+        <span><span class="t">Use a wallet…</span><br>
+        <span class="sub">sign in again with your wallet</span></span>
+        <span class="spacer"></span><span class="radio"></span></div>
+      <div id="vWallet" style="display:none">
+        <div class="slabel">1. CONNECT</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button class="btn btn-default" type="button" id="vCb" style="flex:1" onclick="vestConnect('coinbase')">Coinbase Wallet</button>
+          <button class="btn btn-outline" type="button" id="vBr" style="flex:1" onclick="vestConnect('browser')">Browser wallet</button>
+        </div>
+        <p class="wnote" id="vStatus" role="status" style="margin:0 0 10px"></p>
+      </div>
+      <div class="row-btns">
+        <button class="btn btn-outline" onclick="wizGoto(1)">&larr; Back</button>
+        <button class="btn btn-default" id="vGo" onclick="doConnect()">Find my accounts</button>
       </div>
     </div>
 
@@ -955,7 +982,7 @@
 <script src="/static/desk/strategy.js?v=11"></script>
 <script src="/static/desk/labdesk.js?v=12"></script>
 <script src="/static/desk/demo.js?v=2"></script>
-<script src="/static/desk/book.js?v=9"></script>
+<script src="/static/desk/book.js?v=10"></script>
 <script src="/static/desk/acctset.js?v=3"></script>
 <script src="/static/desk/settings.js?v=8"></script>
 <script src="/static/desk/popups.js?v=7"></script>

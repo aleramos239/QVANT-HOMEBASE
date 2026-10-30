@@ -1,0 +1,262 @@
+"""Vest Markets session: wallet-signed login, our own device key, refresh, per-account tokens.
+
+The wallet signs ONCE (the browser does it; `challenge` hands the typed data out, `register` takes the signature back). From then on
+the session renews itself with a refresh token plus a signature of OUR device key (no wallet, no Privy). The refresh token's own
+expiry (~30 days) does not move on refresh: when it is spent, `NeedsSignature` says the owner must sign again.
+
+Secrets (access / refresh tokens, signatures, the device PEM) are never logged, never in `repr`, never in an exception's text.
+Stored through `secrets_store` under `self.key` (e.g. "vest:0xabc...").
+"""
+from __future__ import annotations
+
+import asyncio
+import base64
+import contextlib
+import contextvars
+import logging
+import secrets
+import time
+import uuid
+
+import httpx
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+
+from ..store import secrets_store
+from .login_budget import LoginBudget, LoginDeferred
+
+log = logging.getLogger(__name__)
+
+BASE = "https://api-gateway.hz.vestmarkets.com"
+HEADERS = {"Origin": "https://next.vestmarkets.com", "Referer": "https://next.vestmarkets.com/"}
+CHAIN_ID = 8453
+CHALLENGE_TTL_MS = 86_400_000
+RENEW_LEFT_MS = 300_000         # a token with less than this left is renewed before use (room for a retry, R57)
+REFRESH_BACKOFF_MS = (10_000, 60_000)   # a failed refresh waits 10 s, doubling to 60 s (its own, not the login budget's)
+_URGENT = contextvars.ContextVar("vest_urgent", default=False)
+
+
+@contextlib.contextmanager
+def urgent():
+    """A kill / flatten / exit: its refresh never waits out the refresh backoff (only a 401 stops it, R57)."""
+    tok = _URGENT.set(True)
+    try:
+        yield
+    finally:
+        _URGENT.reset(tok)
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+def _b64u(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+class NeedsSignature(RuntimeError):
+    """No valid refresh token is left: the owner must sign with the wallet again."""
+
+
+class DeviceKey:
+    """ECDSA P-256 key of this machine; Vest ties the refresh token to its public half."""
+
+    def __init__(self, key: ec.EllipticCurvePrivateKey):
+        self._key = key
+
+    @classmethod
+    def new(cls) -> "DeviceKey":
+        return cls(ec.generate_private_key(ec.SECP256R1()))
+
+    @classmethod
+    def from_pem(cls, pem: str) -> "DeviceKey":
+        return cls(serialization.load_pem_private_key(pem.encode(), password=None))
+
+    def pem(self) -> str:
+        return self._key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                       serialization.NoEncryption()).decode()
+
+    def public_b64(self) -> str:
+        return _b64u(self._key.public_key().public_bytes(serialization.Encoding.DER,
+                                                         serialization.PublicFormat.SubjectPublicKeyInfo))
+
+    def sign_refresh(self, refresh_token_id: str) -> str:
+        r, s = decode_dss_signature(self._key.sign(b"vest-refresh-v1:" + refresh_token_id.encode(),
+                                                   ec.ECDSA(hashes.SHA256())))
+        return _b64u(r.to_bytes(32, "big") + s.to_bytes(32, "big"))
+
+
+class VestSession:
+    def __init__(self, key: str, *, http: httpx.AsyncClient | None = None, budget: LoginBudget | None = None):
+        self.key = key
+        self._http = http
+        self._own_http = http is None
+        self.budget = budget or LoginBudget()
+        self._chal: dict | None = None
+        self._user: tuple[str, int] | None = None            # (access token, expiry ms)
+        self._accounts: dict[str, tuple[str, int]] = {}
+        self._rejected_id: str | None = None                 # refresh_token_id Vest answered 401 to
+        self._refresh_fails = 0                               # failed refreshes in a row (not 401s)
+        self._refresh_next_ms = 0                             # no routine refresh before this
+        self._user_lock = asyncio.Lock()                      # refresh tokens rotate: one refresh at a time
+        self._acct_lock = asyncio.Lock()
+
+    def __repr__(self) -> str:
+        return (f"VestSession(key={self.key!r}, refresh_expires_ms={self.refresh_expires_ms}, "
+                f"access_expires_ms={self._user[1] if self._user else 0})")
+
+    # -- state -------------------------------------------------------------------------------------------------
+    def _creds(self) -> dict:
+        return secrets_store.get_credentials(self.key) or {}
+
+    @property
+    def refresh_expires_ms(self) -> int:
+        return int(self._creds().get("refresh_expires_ms") or 0)
+
+    @property
+    def needs_signature(self) -> bool:
+        c = self._creds()
+        # a 401'd token id is dead until the store holds a different one (another process may have re-registered)
+        rejected = self._rejected_id is not None and self._rejected_id == c.get("refresh_token_id")
+        return bool(rejected or not c.get("refresh_token") or _now_ms() >= self.refresh_expires_ms)
+
+    async def aclose(self) -> None:
+        if self._own_http and self._http is not None:
+            await self._http.aclose()
+
+    # -- http --------------------------------------------------------------------------------------------------
+    async def _send(self, method: str, path: str, **kw) -> httpx.Response:
+        if self._http is None:
+            self._http = httpx.AsyncClient(timeout=15.0)
+        kw["headers"] = {**HEADERS, **kw.get("headers", {})}
+        resp = await self._http.request(method, BASE + path, **kw)
+        if resp.status_code == 429 and path.startswith("/v3/auth/"):    # a trading call's 429 never blocks logins (R57)
+            self.budget.note_error(self.key, "status=429")
+        return resp
+
+    async def _auth_call(self, path: str, body: dict, *, ok_codes=(200,)) -> httpx.Response:
+        """A login-class call (challenge excluded): the budget's result is booked here; the error carries no body text."""
+        try:
+            resp = await self._send("POST", path, json=body)
+        except httpx.HTTPError as e:
+            self.budget.login_result(self.key, type(e).__name__)
+            raise
+        if resp.status_code not in ok_codes:
+            self.budget.login_result(self.key, f"status={resp.status_code}")
+        else:
+            self.budget.login_result(self.key)
+        return resp
+
+    # -- wallet login ------------------------------------------------------------------------------------------
+    async def challenge(self, primary_addr: str) -> dict:
+        signing = "0x" + secrets.token_hex(20)               # a fresh throwaway address per challenge
+        expiry = _now_ms() + CHALLENGE_TTL_MS
+        primary = primary_addr.lower()
+        resp = await self._send("POST", "/v3/auth/challenge", json={
+            "networkType": 0, "signingAddr": signing, "primaryAddr": primary, "chainId": CHAIN_ID, "expiryTime": expiry})
+        resp.raise_for_status()
+        j = resp.json()
+        self._chal = {"challengeId": j["challengeId"], "message": j["message"], "signingAddr": signing,
+                      "expiryTime": expiry, "primaryAddr": primary}
+        return {k: self._chal[k] for k in ("challengeId", "message", "signingAddr", "expiryTime")}
+
+    async def register(self, primary_addr: str, signature: str) -> dict:
+        c = self._chal
+        if c is None or c["primaryAddr"] != primary_addr.lower():
+            raise RuntimeError("register needs a challenge for this wallet first")
+        why = self.budget.blocked(self.key, manual=True)
+        if why:
+            raise LoginDeferred(why)
+        self.budget.record_login(self.key)
+        device = DeviceKey.new()
+        resp = await self._auth_call("/v3/auth/register", {
+            "networkType": 0, "signingAddr": c["signingAddr"], "primaryAddr": c["primaryAddr"], "signature": signature,
+            "expiryTime": c["expiryTime"], "challengeId": c["challengeId"], "chainId": CHAIN_ID, "rememberMe": True,
+            "devicePublicKey": device.public_b64()})
+        resp.raise_for_status()
+        j = resp.json()
+        if self._chal is c:              # a challenge asked for during this register is the owner's next one: kept
+            self._chal = None
+        async with self._user_lock:      # a refresh in flight on the old chain finishes first, never writes over this
+            self._accounts.clear()
+            self._take(j, device.pem(), c["primaryAddr"])
+        log.info("vest %s: registered", self.key)
+        return {k: j.get(k) for k in ("userId", "primaryAddr", "signingAddr", "isFunded", "isNewRegistration",
+                                      "accessExpiresAtMs", "refreshExpiresAtMs")}
+
+    def _take(self, j: dict, device_pem: str, primary_addr: str) -> None:
+        """Store the rotated refresh side FIRST, then publish the user token in memory."""
+        secrets_store.set_credentials(
+            self.key, primary_addr=primary_addr, refresh_token=j["refreshToken"], refresh_token_id=j["refreshTokenId"],
+            refresh_expires_ms=int(j.get("refreshExpiresAtMs") or self.refresh_expires_ms), device_pem=device_pem)
+        self._user = (j["accessToken"], int(j["accessExpiresAtMs"]))
+
+    # -- renewal -----------------------------------------------------------------------------------------------
+    async def _refresh(self) -> None:
+        c = self._creds()
+        if self.needs_signature:
+            raise NeedsSignature(f"{self.key}: sign with the wallet again")
+        # Refreshes are not wallet logins: the login budget never blocks them (R57); their own short backoff does, except
+        # for a kill / flatten / exit (urgent).
+        now = _now_ms()
+        if now < self._refresh_next_ms and not _URGENT.get():
+            raise LoginDeferred(f"vest: refresh backing off — next try in {(self._refresh_next_ms - now) // 1000 + 1} s")
+        device = DeviceKey.from_pem(c["device_pem"])
+        try:
+            resp = await self._send("POST", "/v3/auth/refresh", json={
+                "refreshToken": c["refresh_token"], "requestId": str(uuid.uuid4()),
+                "deviceSignature": device.sign_refresh(c["refresh_token_id"])})
+            if resp.status_code == 401:   # a 403 (gateway / WAF) is transient: raised below, backoff only
+                self._rejected_id = c["refresh_token_id"]
+                self._user = None
+                raise NeedsSignature(f"{self.key}: refresh rejected, sign with the wallet again")
+            resp.raise_for_status()
+        except (httpx.HTTPError, ValueError):
+            self._refresh_fails += 1
+            base, cap = REFRESH_BACKOFF_MS
+            self._refresh_next_ms = _now_ms() + min(base * 2 ** (self._refresh_fails - 1), cap)
+            raise
+        self._refresh_fails, self._refresh_next_ms = 0, 0
+        self._take(resp.json(), c["device_pem"], c["primary_addr"])
+        log.debug("vest %s: refreshed", self.key)
+
+    async def user_token(self) -> str:
+        if self._user and self._user[1] - _now_ms() > RENEW_LEFT_MS:
+            return self._user[0]
+        async with self._user_lock:
+            if not (self._user and self._user[1] - _now_ms() > RENEW_LEFT_MS):    # a sibling may have refreshed
+                await self._refresh()
+            return self._user[0]
+
+    async def account_token(self, account_id: str) -> str:
+        have = self._accounts.get(account_id)
+        if have and have[1] - _now_ms() > RENEW_LEFT_MS:
+            return have[0]
+        async with self._acct_lock:
+            have = self._accounts.get(account_id)
+            if have and have[1] - _now_ms() > RENEW_LEFT_MS:
+                return have[0]
+            resp = await self._send("POST", "/v3/auth/account-token", json={"accountId": account_id},
+                                    headers={"Authorization": f"Bearer {await self.user_token()}"})
+            resp.raise_for_status()
+            j = resp.json()
+            self._accounts[account_id] = (j["accessToken"], int(j["accessExpiresAtMs"]))
+            return j["accessToken"]
+
+    # -- calls -------------------------------------------------------------------------------------------------
+    async def request(self, method: str, path: str, *, account_id: str | None = None, **kw) -> httpx.Response:
+        """Send with the user's (or the account's) Bearer. A 401 mints a fresh token and resends ONCE; a timeout, a 5xx
+        or anything else is raised as it is, never resent (an order must not go twice)."""
+        extra = kw.pop("headers", {})
+        for attempt in (0, 1):
+            tok = await (self.account_token(account_id) if account_id else self.user_token())
+            resp = await self._send(method, path, headers={**extra, "Authorization": f"Bearer {tok}"}, **kw)
+            if resp.status_code != 401 or attempt:
+                resp.raise_for_status()
+                return resp
+            if account_id:        # drop the cached token only if it is still the rejected one (a sibling may have re-minted)
+                if (self._accounts.get(account_id) or (None,))[0] == tok:
+                    del self._accounts[account_id]
+            elif self._user and self._user[0] == tok:
+                self._user = None

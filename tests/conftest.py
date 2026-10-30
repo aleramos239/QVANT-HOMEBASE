@@ -112,3 +112,33 @@ def no_real_desk_for_the_lab_list(monkeypatch):
     except Exception:       # (a test of something that does not load the chart service)
         return
     monkeypatch.setattr(tester_api, "desk_strategy_ids", lambda: [])
+
+
+_LOCAL = ("127.0.0.1", "::1", "localhost", None)
+
+
+@pytest.fixture(autouse=True)
+def no_network(request, monkeypatch):
+    """The Vest tests never reach the network (M7): a non-local socket connect or DNS lookup raises, and the test fails
+    at teardown even if it caught the error. Other tests are untouched."""
+    hits: list = []
+    if request.path.name.startswith("test_vest"):
+        import socket
+        connect, gai = socket.socket.connect, socket.getaddrinfo
+
+        def guard(self, addr, *a, **k):
+            host = addr[0] if isinstance(addr, tuple) else addr
+            if isinstance(host, str) and host.startswith("/") or host in _LOCAL:        # a unix socket or this machine
+                return connect(self, addr, *a, **k)
+            hits.append(host)
+            raise OSError(f"network blocked in Vest tests: {host}")
+
+        def lookup(host, *a, **k):
+            if host in _LOCAL:
+                return gai(host, *a, **k)
+            hits.append(host)
+            raise socket.gaierror(f"network blocked in Vest tests: {host}")
+        monkeypatch.setattr(socket.socket, "connect", guard)
+        monkeypatch.setattr(socket, "getaddrinfo", lookup)
+    yield hits
+    assert not hits, f"a Vest test tried the network: {hits}"

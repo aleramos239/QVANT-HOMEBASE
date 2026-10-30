@@ -6,15 +6,49 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import re
+import time
 
+import httpx
 from fastapi import HTTPException, Request
 
 from .. import config as config_mod
 from ..store import secrets_store
 from ..broker.base import AccountNotOnLogin, OrderRequest
+from ..broker.login_budget import LoginDeferred
+from ..broker.vest_auth import NeedsSignature
 from ..data.marketdata import TradovateMD
+from ..desk_app import brokers
+from ..desk_app.brokers import NEEDS_SIGNATURE, is_vest_key
 
 PAPER_ID = "paper"   # the Charts page's built-in paper account (charts/paperbook.PAPER_ID)
+VEST_PENDING_S = 300       # a wallet challenge waits this long for its signature
+VEST_PENDING_MAX = 100     # challenges kept waiting at once (the oldest dropped)
+_ADDR = re.compile(r"0x[0-9a-fA-F]{40}")
+_SIG = re.compile(r"0x[0-9a-fA-F]{2,20000}")    # a smart wallet's signature is long, still hex
+_mono = time.monotonic
+
+
+def _vest_addr(body) -> str:
+    addr = body.get("address") if isinstance(body, dict) else None
+    if not isinstance(addr, str) or not _ADDR.fullmatch(addr):
+        raise HTTPException(400, "address: a wallet address (0x and 40 hex digits) required")
+    return addr.lower()
+
+
+def _vest_why(e: Exception) -> str:
+    """Why a Vest login step failed, in words that never carry what was sent (the signature) nor Vest's answer body."""
+    if isinstance(e, NeedsSignature):
+        return NEEDS_SIGNATURE
+    if isinstance(e, LoginDeferred):
+        return str(e)
+    if isinstance(e, httpx.HTTPStatusError):
+        return f"Vest refused it (HTTP {e.response.status_code})"
+    return f"the Vest login failed ({type(e).__name__})"
+
+
+def _slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
 def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed, _drop_account, _key_env, _listed,
@@ -27,7 +61,10 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
         in_use = {a.keyring_key for a in cfg.accounts.values()}
         out = []
         for key in secrets_store._load_all():
-            out.append({"key": key, "label": (key.split(":", 2)[-1] or key).upper(),
+            label = (key.split(":", 2)[-1] or key).upper()
+            if is_vest_key(key):                    # the wallet, short: 0xBBE1…1EAB
+                label = "0x" + key[7:11].upper() + "…" + key[-4:].upper()
+            out.append({"key": key, "label": label,
                         "env": _key_env(key),
                         "in_use": key in in_use})
         return {"logins": out}
@@ -41,6 +78,104 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
         secrets_store.delete_credentials(key)
         return {"ok": True}
 
+    # ------------------------------------------------------------ Vest: the wallet login
+    vest_pending: dict[str, float] = {}      # wallet address -> when its challenge was handed out
+    vest_registering: dict[str, int] = {}    # login key -> registers in flight on it (they may overlap): its session stays
+
+    async def _vest_forget(key: str) -> None:
+        """A wallet that never signed keeps no session (nothing saved under it, no entry on it, no register running)."""
+        if (vest_registering.get(key, 0) > 0 or secrets_store.get_credentials(key)
+                or any(a.keyring_key == key for a in cfg.accounts.values())):
+            return
+        sess = brokers._VEST_SESSIONS.pop(key, None)
+        if sess is not None:
+            with contextlib.suppress(Exception):
+                await sess.aclose()
+
+    async def _vest_drop(addr: str) -> None:
+        vest_pending.pop(addr, None)
+        await _vest_forget("vest:" + addr)
+
+    def _vest_on_desk(key: str, vest_account_id) -> str | None:
+        """The entry already carrying this Vest account (by its id: two entries never trade one account)."""
+        return next((aid for aid, a in cfg.accounts.items()
+                     if a.keyring_key == key and a.vest_account_id == str(vest_account_id)), None)
+
+    @app.post("/api/vest/challenge")
+    async def vest_challenge(request: Request):
+        """Step 1 of a Vest login: Vest's login message (EIP-712 typed data) for the owner's wallet to sign. It waits
+        5 minutes on the login's one shared session (R47); a new challenge for the same wallet replaces the old one."""
+        addr = _vest_addr(await request.json())
+        key = "vest:" + addr
+        why = budget.blocked(key, manual=True)      # the login it leads to would be refused: never ask for a signature
+        if why:
+            return {"ok": False, "error": why}
+        now = _mono()
+        vest_pending.pop(addr, None)                 # a new challenge replaces this wallet's old one
+        for a in [a for a, t in vest_pending.items() if now - t > VEST_PENDING_S]:
+            await _vest_drop(a)
+        while len(vest_pending) >= VEST_PENDING_MAX:
+            await _vest_drop(next(iter(vest_pending)))
+        sess = brokers.vest_session(key)
+        sess.budget = budget
+        try:
+            ch = await sess.challenge(addr)
+        except Exception as e:  # noqa: BLE001 — surface to the wizard
+            await _vest_forget(key)
+            return {"ok": False, "error": _vest_why(e)}
+        vest_pending[addr] = now
+        return {"ok": True, "typed_data": ch["message"]}
+
+    async def _vest_connect(body: dict, saved: str) -> dict:
+        """/api/connect for Vest: a saved login (its session renews itself, or it needs a new signature) or a new one
+        (the wallet signed the pending challenge; `register` books the login on the desk's budget: blocked,
+        record_login, login_result). Then the same throwaway probe as Tradovate lists the login's accounts (R3)."""
+        if saved:
+            if not secrets_store.get_credentials(saved):
+                raise HTTPException(404, f"no saved login {saved!r}")
+            key = saved
+            sess = brokers.vest_session(key)
+            sess.budget = budget
+            if sess.needs_signature:
+                return {"ok": False, "error": NEEDS_SIGNATURE, "key": key}
+        else:
+            addr = _vest_addr(body)
+            key = "vest:" + addr
+            sig = body.get("signature")
+            if not isinstance(sig, str) or not _SIG.fullmatch(sig):
+                raise HTTPException(400, "signature: the wallet's signature (0x and hex) required")
+            t = vest_pending.get(addr)
+            if t is None or _mono() - t > VEST_PENDING_S:     # (a double-click lands here; the sweep cleans up)
+                raise HTTPException(400, "no wallet challenge waiting for this address — start the login again")
+            del vest_pending[addr]                   # one try per challenge
+            sess = brokers.vest_session(key)
+            sess.budget = budget
+            vest_registering[key] = vest_registering.get(key, 0) + 1
+            failed = None
+            try:
+                await sess.register(addr, sig)
+            except Exception as e:  # noqa: BLE001 — surface to the wizard, never the signature
+                failed = e
+            finally:                                 # a cancelled request too: never a mark left behind
+                vest_registering[key] -= 1
+                if not vest_registering[key]:
+                    del vest_registering[key]
+            if failed is not None:
+                await _vest_forget(key)
+                return {"ok": False, "error": _vest_why(failed), "key": key}
+        probe = adapter_factory("probe", config_mod.AccountCfg(keyring_key=key))   # no vest_account_id: no orders
+        try:
+            await probe.connect()
+            accounts = await probe.list_accounts()
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": _vest_why(e), "key": key}
+        finally:
+            with contextlib.suppress(Exception):
+                await probe.close()
+        _listed[key] = {str(a["name"]).lower(): a for a in accounts}     # name -> row: add-many reads the id from it
+        accounts = [{**a, "on_desk": _vest_on_desk(key, a["id"]) is not None} for a in accounts]
+        return {"ok": True, "key": key, "env": "vest", "accounts": accounts}
+
     @app.post("/api/connect")
     async def connect(request: Request):
         """Validate a login (saved or new; demo by default, live on request)
@@ -50,6 +185,8 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
         body = await request.json()
         env = "live" if str(body.get("env") or "").lower() == "live" else "demo"
         saved = str(body.get("saved_key") or "")
+        if is_vest_key(saved) or (not saved and str(body.get("broker") or "").lower() == "vest"):
+            return await _vest_connect(body, saved)
         if saved:
             if not secrets_store.get_credentials(saved):
                 raise HTTPException(404, f"no saved login {saved!r}")
@@ -101,6 +238,8 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
         account_name = str(body.get("account_name") or "").strip()
         if not key or not secrets_store.get_credentials(key):
             raise HTTPException(400, "unknown login key")
+        if is_vest_key(key):     # R2: no row here to tell demo from funded
+            raise HTTPException(400, "add Vest accounts from the wizard")
         if not account_name:
             raise HTTPException(400, "account_name required")
         aid = account_name.lower()
@@ -148,6 +287,7 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
         if listed is None:
             raise HTTPException(409, "look this login's accounts up first (Find my accounts)")
         live = _key_env(key) == "live"
+        vest = is_vest_key(key)
         rows: list[dict] = []
         stop = ""                    # why the rest were not tried
         async with _add_lock:
@@ -161,35 +301,47 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
                 if low not in listed:
                     row.update(status="failed", error="not on this login")
                     continue
-                have = _on_desk(key, name)
+                have = _vest_on_desk(key, listed[low].get("id")) if vest else _on_desk(key, name)
                 if have is not None:
                     row.update(status="exists", id=have)
                     continue
-                if low in cfg.accounts:
+                aid = _slug(name) if vest else low
+                if aid in cfg.accounts:
                     row.update(status="failed", error="another entry on the desk already "
                                "uses this id")
                     continue
-                cfg.accounts[low] = config_mod.AccountCfg(
-                    keyring_key=key, account_name=name, live=live, label=name)
+                if vest:     # no floors: its entries are refused until the owner sets them (fail closed)
+                    try:     # a row Vest worded oddly fails alone; no demo flag = live (the stricter rules)
+                        v = listed[low]
+                        acct = config_mod.AccountCfg(keyring_key=key, vest_account_id=str(v["id"]),
+                                                     live=not bool(v.get("demo", False)), label=name)
+                    except (KeyError, TypeError, AttributeError) as e:
+                        row.update(status="failed", error=f"Vest's row for it is unreadable ({type(e).__name__})")
+                        continue
+                    cfg.accounts[aid] = acct
+                else:
+                    cfg.accounts[aid] = config_mod.AccountCfg(
+                        keyring_key=key, account_name=name, live=live, label=name)
                 config_mod.save(cfg)
-                engine.journal("account_added", account=low, live=live, batch=True)
-                row.update(status="added", id=low)
+                engine.journal("account_added", account=aid, live=cfg.accounts[aid].live, batch=True)
+                row.update(status="added", id=aid)
                 try:
-                    row["mode"] = await _connect_account(low, manual=True)
+                    row["mode"] = await _connect_account(aid, manual=True)
                     row["connected"] = True
-                    if row["mode"] == "login":
+                    # a Vest entry only mints its account token on the login's one session: it never logs in again
+                    if row["mode"] == "login" and not vest:
                         # the shared token did not carry it, so it spent a login: the
                         # next one could too -- stop here, the rest can be added again
                         stop = "the previous account had to log in again"
                 except Exception as e:  # noqa: BLE001 — recorded, reported per account
-                    _connect_failed(low, e)
+                    _connect_failed(aid, e)
                     row["connected"] = False
-                    row["error"] = str((acct_status.get(low) or {}).get("error") or e)[:200]
+                    row["error"] = str((acct_status.get(aid) or {}).get("error") or e)[:200]
                     if not isinstance(e, AccountNotOnLogin):
                         stop = "the connection failed (" + str(e)[:120] + ")"
         counts = {s: sum(1 for r in rows if r["status"] == s)
                   for s in ("added", "exists", "failed")}
-        engine.journal("accounts_added_batch", login=key, live=live, **counts)
+        engine.journal("accounts_added_batch", login=key, live=None if vest else live, **counts)   # a Vest row has its own
         return {"ok": not counts["failed"], "results": rows, **counts}
 
     @app.post("/api/accounts/reconnect")
