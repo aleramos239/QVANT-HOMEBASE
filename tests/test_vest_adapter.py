@@ -1010,3 +1010,73 @@ def test_chart_exit_never_opens_but_still_closes_a_position():
     gw.positions = [pos("long", "20")]
     assert run(ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Limit", price=21010, text="homebase:chart-exit"))).ok
     assert [c.url.path for c in gw.api("POST")] == [CLOSE]
+
+
+# ---- final fix (R55-R63) -----------------------------------------------------------------------------------
+class Socks:
+    """One fake private socket per connect: frames put on `q[n]` reach the adapter on its n-th connection; a None
+    ends that connection (a drop: the socket loop reconnects)."""
+
+    def __init__(self, n=3):
+        self.q = [asyncio.Queue() for _ in range(n)]
+        self.n = 0
+
+    def put(self, i, msg):
+        self.q[i].put_nowait(None if msg is None else json.dumps(msg))
+
+    def patch(self, monkeypatch):
+        socks = self
+
+        class FakeWS:
+            def __init__(self):
+                self.q = socks.q[socks.n]
+                socks.n += 1
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            def __aiter__(self):
+                async def gen():
+                    while True:
+                        m = await self.q.get()
+                        if m is None:
+                            return
+                        yield m
+                return gen()
+        monkeypatch.setattr(vest.websockets, "connect", lambda url, **kw: FakeWS())
+
+
+def test_seq_starts_over_on_every_socket_connection(monkeypatch):
+    """I1 (R55): a new connection's account_seq starts again; its fills are delivered, not dropped as stale."""
+    monkeypatch.setattr(vest, "WS_RETRY_S", 0.01, raising=False)
+    ad, gw = mk()
+    socks = Socks()
+    socks.patch(monkeypatch)
+    got = []
+
+    async def go():
+        async def on_fill(ev):
+            got.append(ev)
+        await ad.observe_fills(on_fill)
+        socks.put(0, acct_msg([order_row()], seq=50))
+        socks.put(0, None)                                       # the socket drops
+        socks.put(1, acct_msg([order_row(order_id="o2", position_id="p2")], seq=1))
+        await asyncio.sleep(0.3)
+        await ad.close()
+    run(go())
+    assert [g.raw["orderId"] for g in got] == ["o1", "o2"] and socks.n == 2
+
+
+def test_socket_counts_as_up_only_for_a_frame_past_the_seq_check():
+    ad, gw = mk()
+    ad._seq = 5
+
+    async def go():
+        await ad._on_message(json.dumps(acct_msg([], seq=3)))     # stale: not proof the socket reports
+        stale = ad._ws_up
+        await ad._on_message(json.dumps(acct_msg([], seq=6)))
+        return stale, ad._ws_up
+    assert run(go()) == (False, True)

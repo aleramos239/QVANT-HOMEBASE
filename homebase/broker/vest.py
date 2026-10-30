@@ -41,6 +41,7 @@ WS_URL = "wss://ws.hz.vestmarkets.com/ws/private"
 OUTCOME_S = 5.0                               # how long an order waits for its socket outcome before the REST reconcile
 KEEP = 1000                                   # per-order memory (ids, seen quantities, outcomes): oldest dropped past this
 POLL_S = 2.0                                  # fallback reads, only while the socket is down AND something rests / is open
+WS_RETRY_S = 1.0                              # first wait before the private socket reconnects (doubles to 30 s)
 NO_ACCT = "vest: no Vest account selected"
 NOT_SUPPORTED = "vest: modify not supported"
 ORDER_GONE = (3017, 10010, 11004)             # cancel: already gone
@@ -863,8 +864,8 @@ class VestAdapter(BrokerAdapter):
             return
         if ch not in ("command_events", "account_state") or d.get("account_id") != self.vest_account_id:
             return
-        self._ws_up = True                      # the socket has spoken for this account: the poll fallback may rest
         if ch == "command_events":
+            self._ws_up = True                  # the socket has spoken for this account: the poll fallback may rest
             if d.get("status") == "REJECTED":
                 log.warning("vest %s: command rejected, code=%s order=%s", self.account_id, d.get("error_code"), d.get("order_id"))
                 self._events[str(d.get("command_id"))] = ("Rejected", f"vest {d.get('error_code')}")
@@ -875,6 +876,7 @@ class VestAdapter(BrokerAdapter):
             if seq <= self._seq:
                 return
             self._seq = seq
+        self._ws_up = True                      # a frame past the seq check: the socket reports, the poll may rest (R55)
         for o in d.get("orders") or []:
             st = _STATUS.get(str(o.get("status")).lower())
             if st and o.get("order_id") is not None:
@@ -888,13 +890,14 @@ class VestAdapter(BrokerAdapter):
         _cap(self._seen)
 
     async def _ws_loop(self) -> None:
-        delay = 1.0
+        delay = WS_RETRY_S
         while True:
             try:
                 tok = await self.session.account_token(self.vest_account_id)
                 async with websockets.connect(WS_URL, subprotocols=["vest.v1", tok],
                                               additional_headers={"Origin": HEADERS["Origin"]}) as ws:
-                    delay = 1.0                     # _ws_up waits for the first frame
+                    delay = WS_RETRY_S              # _ws_up waits for the first frame
+                    self._seq = 0                   # account_seq starts over on every connection (R55)
                     async for raw in ws:
                         await self._on_message(raw)
             except asyncio.CancelledError:
