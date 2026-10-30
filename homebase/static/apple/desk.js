@@ -325,7 +325,7 @@
           const res = $(':scope > .labres', vStrat);
           if (res) {
             const u = $('.labres-unseen', res), p = $('.labres-prop', res);
-            if (u) { unseenH.textContent = researchWord(recordOf(grp, dl, name), !!$('.fh', u)); unseenBox.replaceChildren(u); }
+            if (u) { unseenH.textContent = u.classList.contains('full') ? u.dataset.h : researchWord(recordOf(grp, dl, name), !!$('.fh', u)); unseenBox.replaceChildren(u); }
             if (p) { propH.textContent = p.dataset.h || ''; propBox.replaceChildren(p); }
             unseenSec.dataset.for = res.dataset.for || '';
             res.remove();

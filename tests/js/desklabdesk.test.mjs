@@ -70,7 +70,7 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
     `\nDESKLAB = { strategies: ${JSON.stringify(rows)}, runner: { alive: true } }; DESKLAB_OK = ${readOk};` +
     `\nVIEW = ${JSON.stringify(view)};` +
     '\nglobalThis.api = { renderSide, renderMain, labDeskView, stratView, stratState, stratDotCls, todayRow, specOf, setBook, pickAsg, liveBookingNote, toggleStrat,' +
-    ' setLabSetting, setStratRr, pickAsg, removeAsg, deskChangesHtml, deskChangeList, putBackChange, flattenStrat, dayHeadline, dayTimeline, journalShown, todayFoot, openLabLimits, closeLabLimits, saveLabLimits, removeLabStrat, clearLabBlock, labRowsHtml, calView, shadowData, deleteLabStrat, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
+    ' setLabSetting, setStratRr, pickAsg, removeAsg, deskChangesHtml, deskChangeList, putBackChange, flattenStrat, dayHeadline, dayTimeline, journalShown, todayFoot, openLabLimits, closeLabLimits, saveLabLimits, removeLabStrat, clearLabBlock, labRowsHtml, calView, shadowData, shadowStats, shadowStatsHtml, deleteLabStrat, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
   vm.runInContext(code, ctx);
   return { ctx, api: ctx.api, els, el, posts, toasts, confirms, alerts, shown, hidden, refreshes,
     side: () => { ctx.api.renderSide(['nq930', 'lab_nq_orb'].filter((n) => ctx.ST.strategies[n]), 0, 0); return els.side.innerHTML; },
@@ -103,6 +103,29 @@ test('a shadow month: each day its net, a picked day its trades, every word from
   assert.equal((v.trades.match(/class="rrow"/g) || []).length, 2);
   const none = k.api.calView({ d: new Date(2026, 8, 1), data, day: '', shadow: true }, 'scalDay');
   assert.equal(none.note, 'no trades this month');
+});
+
+test('the shadow forward record: win rate, realized RR, Sharpe on trade days only, trades a week, per contract', () => {
+  const k = load();
+  const st = k.api.shadowStats([
+    { date: '2026-10-01', trades: [{ qty: 2, net: 400 }, { qty: 1, net: -100 }] },     // per contract: +200, -100
+    { date: '2026-10-02', trades: [] },                                                // no trade: never a $0 day in the Sharpe
+    { date: '2026-10-07', trades: [{ qty: 1, net: 300 }, { qty: 0, net: 999 }] }]);    // a qty-0 row is no trade
+  assert.equal(st.n, 3);
+  assert.equal(st.since, '2026-10-01');
+  assert.equal(st.net, 400);
+  assert.equal(Math.round(st.winRate), 67);
+  assert.equal(st.rr.toFixed(2), '2.50');                                              // avg win 250 : avg loss 100
+  assert.ok(Math.abs(st.sharpe - 200 / Math.sqrt(20000) * Math.sqrt(252)) < 1e-9);         // day nets 100, 300: mean 200, sd 141.4
+  assert.equal(st.perWeek, 3);                                                         // 3 trades over 7 days
+  const html = k.api.shadowStatsHtml(st);
+  assert.match(html, /<h2>Shadow, forward<\/h2>/);
+  assert.match(html, />Realized RR<\/span><span class="t net">1:2\.50</);
+  assert.match(html, />Trades \/ week<\/span><span class="t net">3\.0</);
+  assert.match(html, /too early to judge \(3 of 20 trades\)/);
+  assert.match(k.api.shadowStatsHtml(k.api.shadowStats([{ date: '2026-10-01', trades: [] }])), /No shadow trades yet since/);
+  assert.match(k.api.shadowStatsHtml(undefined), /Reading its shadow days/);
+  assert.match(k.view(), /<h2>Shadow, forward<\/h2>[\s\S]*<h2>Calendar<\/h2>/, 'above the calendar on the strategy page');
 });
 
 // ---- ONE ROW, NEVER TWO ------------------------------------------------------------------------------------------------
@@ -1027,7 +1050,7 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=46"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=47"><\/script>/);
   assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=5"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
@@ -1744,4 +1767,26 @@ test('a family folds its variants by their short names, the rest follow; the cyc
   assert.match(page, />1\.5R · <span class="dim">[^<]+<\/span><\/span>\s*<span class="t dim">\+\$4,000 · 210 tr<\/span><span class="t">−\$150 · 70 tr<\/span>/);
   assert.match(page, /<span class="t dim">1<\/span><\/div>/, 'booked on one account');
   assert.match(vm.runInContext('familyView("f9")', t.ctx), /not there any more/);
+});
+
+// ---- a family archived together (owner 2026-10-30): one confirm, each member's three steps; the Archive groups it under its name ----
+test('Archive family: one confirm, each Lab member archived; the Archive lists it under the family; the sidebar drops it', async () => {
+  const t = groupDesk({});
+  vm.runInContext(`DESKFAM = {families: [{id: "f1", name: "NQ ORB", members: ["lab_nq_orb"], short: {}}], ok: true};
+    var CP = []; chartPost = async (u, b) => { CP.push([u, b]); return {ok: true}; };`, t.ctx);
+  assert.match(vm.runInContext('familyView("f1")', t.ctx), /onclick="archiveFamily\(&quot;f1&quot;\)"[^>]*>Archive family<\/button>/);
+  await vm.runInContext('archiveFamily("f1")', t.ctx);
+  assert.equal(t.confirms.length, 1);
+  assert.match(t.confirms[0].title, /Archive the NQ ORB family\?/);
+  assert.deepEqual(plain(vm.runInContext('CP', t.ctx)).map((c) => c[0]), ['/api/tester/desklab/archive', '/api/tester/desklab/filed']);
+  assert.deepEqual(t.posts.map((p) => p.url), ['/api/lab-remove'], 'the Desk takes it off');
+  assert.match(t.toasts.at(-1), /NQ ORB family is archived/);
+  // the chart service now lists it archived: the family sits in the Archive, under its name, with a loose one after it
+  vm.runInContext(`DESKLAB.archived = [{name: "nq_orb", label: "NQ ORB 1.5R", root: "NQ", archived_utc: "2026-10-30T20:00:00Z"},
+    {name: "nq_gap", label: "NQ gap", root: "NQ"}];`, t.ctx);
+  assert.doesNotMatch(t.side(), /<span>NQ ORB<\/span>/, 'a family all archived leaves the sidebar');
+  const arch = vm.runInContext('archiveView()', t.ctx);
+  assert.match(arch, /<h2>NQ ORB · 1<\/h2>[\s\S]*NQ ORB 1\.5R[\s\S]*Restore family[\s\S]*<h2>No family<\/h2>[\s\S]*NQ gap/);
+  await vm.runInContext('restoreFamily("f1")', t.ctx);
+  assert.deepEqual(plain(vm.runInContext('CP', t.ctx)).at(-1), ['/api/tester/desklab/restore', { name: 'nq_orb' }], 'only the family\'s own');
 });

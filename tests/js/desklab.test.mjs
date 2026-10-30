@@ -227,8 +227,8 @@ test('every template hole in the Lab rows and page is escaped, a flag the page m
     'notes.length ? `<div class="sec"><h2>On an account the Desk would refuse:</h2><div class="agroup feed static">${notes.join("")',
     // the research blocks (labResHtml): pieces built from escaped holes
     'head ? "f fh" : "f"', 'vals.map(cell).join("")', 'unseen', 'prop', 'labResHtml(w.name, w.name)', 'labCurveHtml(w.name)',
-    // the Both column (2026-10-24): its cells go through esc (cellT), the title is esc'd, three() is a fixed class name
-    't && t !== x ? ` title="${esc(t)', 'vals.map((x, i) => cellT(x, full && full[i])).join("")', 'three(v.unseen)', 'three(v.prop)',
+    // the full-sample card (2026-10-30): one column, its class a fixed word
+    'v.unseen.full ? " full" : ""',
     // eqPlot escapes its label, aria text and end labels itself, and DeskLab.curve passes it numbers only
     'eqPlot(c.vals, c.label, c.total, c.aria, c.ends, c.days, c.notes, c.build, c.both)',
     // the open calendar (stratCal, 2026-10-20): its month, notes and shadow trades go through esc; the grid is dates and usd()
@@ -1448,11 +1448,12 @@ test('3.1 the card says 3:1 in-sample / 3:1 test months, or Old record (before 3
     assert.doesNotMatch(w, /In-sample|in-sample|Unseen|unseen|OOS|\bIS\b|\bcell/, w);
   }
   assert.deepEqual(D.results(old).unseen.head, ['Build days', 'Test days']);
-  assert.equal(D.results(wf).unseen.title, '3:1 in-sample / 3:1 test months');
+  assert.equal(D.results(wf).unseen.title, 'Full sample');      // a card with its Both shows that one column
+  assert.equal(D.results({ ...wf, both: undefined }).unseen.title, '3:1 in-sample / 3:1 test months');
   assert.equal(D.results(old).unseen.title, 'Old record (before 3:1)');
   // the numbers under the new words are the same ones
   const net = (v) => v.unseen.rows.find((x) => x.k === 'Net');
-  assert.deepEqual([net(D.results(wf)).full, net(D.results(old)).b, net(D.results(old)).v], [['+$4,000', '+$1,235', '+$5,235'], '−$5,850', '+$26,322']);
+  assert.deepEqual([net(D.results(wf)).v, net(D.results(old)).b, net(D.results(old)).v], ['+$5,235', '−$5,850', '+$26,322']);
 });
 
 test('3.1 before the first answer (or with no chart service): the 3:1 words, never the old record', () => {
@@ -1474,21 +1475,23 @@ test('Trades / week: trades over the weeks of its months (3:1) or of its start..
   assert.equal(get({ range: {}, trades: 10 }), '—');
 });
 
-test('results: the 3:1 card adds Both (Build + Unseen as one run) as a third column, its dollars short with the exact figure kept', () => {
+test('results: a 3:1 card with its full sample (Both) shows that one column only, in the results and the prop sim', () => {
   const run = (net, dd, months) => ({ id: 'w', range: { start: '2021-10-01', end: '2026-08-31' }, months, net, trades: 432, win_rate: 40.7,
     profit_factor: 1.02, max_drawdown: dd, rr: 1.48, rr_label: '1:1.48', sharpe: 0.13 });
   const head = { account: 'LucidPro 50K', eval_pass_p: 0.48, bust_p: 0.52, median_days_to_pass: 3, funded_payout_p: 0.2, funded_expected_cheque: 300 };
   const r = D.results({ walkforward: true, build: run(118301, -59267, 45), unseen: run(50643, -5865, 15), both: run(168944, -61000, 60),
     prop: { build: head, unseen: head, both: { ...head, eval_pass_p: 0.45 } } });
-  assert.deepEqual(r.unseen.head, ['In-sample', 'Test months', 'Both']);
+  assert.equal(r.unseen.title, 'Full sample');
+  assert.equal(r.unseen.head, null);
+  assert.equal(r.unseen.full, true);
   const net = r.unseen.rows.find((x) => x.k === 'Net'), dd = r.unseen.rows.find((x) => x.k === 'Max drawdown');
-  assert.deepEqual([net.b, net.v, net.o], ['+$118k', '+$50.6k', '+$169k']);
-  assert.deepEqual(net.full, ['+$118,301', '+$50,643', '+$168,944']);
-  assert.deepEqual([dd.b, dd.v, dd.o], ['−$59.3k', '−$5.9k', '−$61.0k']);
-  assert.deepEqual(r.prop.head, ['In-sample', 'Test months', 'Both']);
-  assert.equal(r.prop.rows[0].both, '45%');
+  assert.deepEqual([net, dd], [{ k: 'Net', v: '+$168,944' }, { k: 'Max drawdown', v: '−$61,000' }]);
+  assert.equal(r.prop.title, 'Prop sim · LucidPro 50K · full sample');
+  assert.equal(r.prop.head, null);
+  assert.deepEqual(r.prop.rows[0], { k: 'Passes the eval', v: '45%' });
   // no Both from the server (an older chart service): the two columns as before
   const two = D.results({ walkforward: true, build: run(1, -1, 45), unseen: run(1, -1, 15), prop: { build: head, unseen: head } });
   assert.deepEqual([two.unseen.head, two.prop.head], [['In-sample', 'Test months'], ['In-sample', 'Test months']]);
+  assert.equal(two.unseen.full, false);
   assert.equal('o' in two.unseen.rows[0] || 'both' in two.prop.rows[0], false);
 });
