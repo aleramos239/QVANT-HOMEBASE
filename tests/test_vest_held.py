@@ -605,3 +605,42 @@ def test_a_save_failure_never_kills_the_fire():
     run(go())
     assert [k["id"] for ev, k in j if ev == "vest_held_fired"] == [r.order_id]
     assert run(ad.get_order_status(r.order_id)) == "Filled"
+
+
+# ---- fix round 1 (R45, R49, R50) ---------------------------------------------------------------------------
+def test_a_cross_inside_the_bars_range_fires_on_that_push():
+    """R45: the bar's high 21020 printed before the Buy stop at 21015 was held; price came back to 21000 and now trades
+    up through the level inside the same bar (no higher high): it fires on this push, not at the next bar."""
+    b = HeldBook(vest.state_dir() / "b.json")
+    B = lambda c, h=21020.0, l=20995.0: Bar(T0, 21000.0, h, l, c, 1, "NQ", 1)      # noqa: E731
+    assert b.crossed("NQ", B(21000.0)) == []
+    b.entries.append(HeldEntry("h1", "NQZ6", "Buy", 1, 21015.0, 20.0, None, "d", None))
+    b.entries.append(HeldEntry("s1", "NQZ6", "Sell", 1, 20998.0, 20.0, None, "d", None))
+    assert [e.id for e in b.crossed("NQ", B(21016.0))] == ["h1"]
+    b.entries.remove(b.get("h1"))
+    assert b.crossed("NQ", B(21017.0)) == []                                   # no cross since the last push
+    assert [e.id for e in b.crossed("NQ", B(20997.0))] == ["s1"]               # the Sell mirror (low already 20995)
+    b2 = HeldBook(vest.state_dir() / "b2.json")
+    b2.crossed("NQ", B(21010.0))
+    b2.entries.append(HeldEntry("u", "NQZ6", "Buy", 1, 21025.0, 20.0, None, "d", None))
+    b2.entries.append(HeldEntry("d", "NQZ6", "Sell", 1, 20990.0, 20.0, None, "d", None))
+    nxt = Bar(T0 + dt.timedelta(minutes=1), 20991.0, 21031.0, 20989.0, 21000.0, 1, "NQ", 1)
+    assert [e.id for e in b2.crossed("NQ", nxt)] == ["u", "d"]   # a new bar: nearest the last close (21010), not the open
+
+
+def test_no_feed_refuses_a_held_entry():
+    """R49: with no CME feed the desk says so at once; nothing is held."""
+    ad, gw, j = mk()
+    ad.feed_ok = lambda: False
+    r = run(hold(ad))
+    assert not r.ok and r.error == "vest: no CME price feed"
+    assert ad._book.entries == [] and not gw.api("GET")                        # refused before the floor read
+
+
+def test_feed_reset_forgets_the_stale_last_close():
+    """R50: yesterday's last close above a Buy level must not refuse today's hold as 'already traded'."""
+    ad, gw, j = mk()
+    run(push(ad, bar(h=21050, c=21040)))
+    assert not run(hold(ad, level=21000)).ok                                    # the level already traded (stale)
+    ad.feed_reset()
+    assert run(hold(ad, level=21000)).ok

@@ -699,6 +699,8 @@ class VestAdapter(BrokerAdapter):
             return OrderResult(ok=False, error="vest: stop-limit entries are not supported")
         if req.price is None or req.stop_price is None:
             return OrderResult(ok=False, error="vest: a held stop entry needs its level in `price` and a stop loss")
+        if not self.feed_ok():                          # nothing could fire it: the desk says so now (R49)
+            return OrderResult(ok=False, error="vest: no CME price feed")
         units, level = units_of(req.symbol, req.qty), float(req.price)
         last = self._book.last_close(root_of(req.symbol))
         if last is not None and reached(req.side, level, last):
@@ -727,8 +729,10 @@ class VestAdapter(BrokerAdapter):
         return OrderResult(ok=True, order_id=e.id, raw={"held": True, "level": level})
 
     def feed_reset(self) -> None:
-        """The CME feed (re)connected: the next push of every root is a first push (never fires, R1)."""
+        """The CME feed (re)connected: the next push of every root is a first push (never fires, R1), and the last close
+        before the gap is forgotten (a stale one must not refuse a hold as 'already traded', R50)."""
         self._pushed.clear()
+        self._book._last.clear()
 
     def on_bar(self, root: str, bar) -> None:
         """The CME feed hook (sync, never awaits): fires at most one held entry a push. A crossed entry leaves the book

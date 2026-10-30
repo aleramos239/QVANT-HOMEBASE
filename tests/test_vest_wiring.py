@@ -34,6 +34,7 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(vest, "state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.data.marketdata.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
+    monkeypatch.setattr(brokers, "_VEST_SESSIONS", {})                          # one shared session per login, per test
 
 
 def bar(minutes=1, ts=T0, h=21010.0, root="NQ"):
@@ -221,3 +222,129 @@ def test_vest_fields_are_written_only_when_set():
     assert not {"vest_account_id", "floors", "slip_frac"} & set(raw["t1"])
     back = config_mod.load().accounts["v1"]
     assert (back.vest_account_id, back.floors, back.slip_frac) == ("9", {"daily_loss": 1000.0}, 0.25)
+
+
+# ---- fix round 1 (R44, R46, R47, R48) ----------------------------------------------------------------------
+def test_one_stream_per_price_root():
+    """R44: NQ and MNQ are one price. With NQ 5m and MNQ 1m both watched only MNQ 1m reaches Vest."""
+    ad = build_adapter("v1", AccountCfg(keyring_key=VKEY, vest_account_id="1"))
+    f = _feed_with({"v1": ad})
+    f._hist.pop(("NQ", 1))
+    f._hist[("NQ", 5)], f._hist[("MNQ", 1)] = [], []
+    calls = _spy(ad)
+    f._take(("NQ", 5), bar(minutes=5))
+    f._take(("MNQ", 1), bar(root="MNQ"))
+    f._take(("NQ", 5), bar(minutes=5, h=21011.0))
+    assert [(c[0], c[1].minutes) for c in calls] == [("MNQ", 1)]
+
+
+def test_a_smaller_stream_enabled_mid_day_is_a_first_push():
+    ad = build_adapter("v1", AccountCfg(keyring_key=VKEY, vest_account_id="1"))
+    resets = []
+    ad.feed_reset = lambda: resets.append(1)
+    f = _feed_with({"v1": ad})
+    f._hist.pop(("NQ", 1))
+    f._hist[("NQ", 5)] = []
+    calls = _spy(ad)
+    f._take(("NQ", 5), bar(minutes=5))
+    f._take(("NQ", 5), bar(minutes=5, h=21011.0))
+    assert resets == [1] and len(calls) == 2
+    f._hist[("MNQ", 1)] = []                                     # a 1m strategy is enabled
+    f._take(("NQ", 5), bar(minutes=5, h=21012.0))                # no longer the chosen stream
+    f._take(("MNQ", 1), bar(root="MNQ"))
+    assert resets == [1, 1] and [(c[0], c[1].minutes) for c in calls][2:] == [("MNQ", 1)]
+
+
+def test_reviewers_case_never_fires_below_the_level():
+    """NQ 5m's high 21020 was printed before the Buy stop at 21015 was held; price then stays near 21005 on both
+    streams. Mixed in one book, the NQ 5m push looked like a new bar with a high past the level: a buy fired below it."""
+    from homebase.broker.vest_held import HeldEntry
+    _sign()
+    ad = build_adapter("v1", AccountCfg(keyring_key=VKEY, vest_account_id="1"))
+    fired = []
+
+    async def fire(e, t, cme):
+        fired.append((e.id, cme))
+    ad._fire = fire
+    f = _feed_with({"v1": ad})
+    f._hist.pop(("NQ", 1))
+    f._hist[("NQ", 5)], f._hist[("MNQ", 1)] = [], []
+    nq5 = lambda c: Bar(T0, 21000.0, 21020.0, 20990.0, c, 1, "NQ", 5)                      # noqa: E731
+    mnq1 = lambda c, m: Bar(T0 + dt.timedelta(minutes=m), c, c + 1, c - 2, c, 1, "MNQ", 1)  # noqa: E731
+
+    async def go():
+        f._take(("NQ", 5), nq5(21005.0))
+        f._take(("MNQ", 1), mnq1(21005.0, 3))
+        ad._book.entries.append(HeldEntry("h1", "NQZ6", "Buy", 1, 21015.0, 20.0, None, ad._desk_day(), None))
+        for c, m in ((21005.5, 3), (21005.25, 3), (21006.0, 4)):
+            f._take(("NQ", 5), nq5(c))
+            f._take(("MNQ", 1), mnq1(c, m))
+        await asyncio.sleep(0)
+    run(go())
+    assert fired == [] and [e.id for e in ad._book.entries] == ["h1"]
+
+
+def test_an_expired_login_shows_on_the_card(monkeypatch):
+    """R46: a connected Vest adapter whose session now needs a signature is closed and the card says so."""
+    _sign()
+    cfg = AppCfg(accounts={"v1": AccountCfg(keyring_key=VKEY, vest_account_id="1")})
+    ad = build_adapter("v1", cfg.accounts["v1"])
+    ad._connected = True
+    acc, acct_status, _ = _make(cfg, {"v1": ad}, build_adapter)
+    acct_status["v1"] = {"connected": True, "error": None}
+    _passes(acc, monkeypatch, 1)
+    assert acct_status["v1"]["connected"] is True                # still signed in: nothing happens
+    secrets_store.set_credentials(VKEY, refresh_expires_ms=0)    # the 30-day login ran out
+    _passes(acc, monkeypatch, 1)
+    assert acct_status["v1"] == {"connected": False, "error": "needs a new wallet signature"}
+    assert ad.connected is False
+
+
+def test_one_session_per_login_shared_and_on_the_desks_budget(monkeypatch):
+    """R47/R48: every Vest entry of one login rides one VestSession (rotating refresh tokens); closing one entry never
+    closes it; it books against the desk's login budget."""
+    a1 = build_adapter("v1", AccountCfg(keyring_key=VKEY, vest_account_id="1"))
+    a2 = build_adapter("v2", AccountCfg(keyring_key=VKEY, vest_account_id="2"))
+    probe = build_adapter("probe", AccountCfg(keyring_key=VKEY))
+    other = build_adapter("v3", AccountCfg(keyring_key="vest:0xdef", vest_account_id="3"))
+    assert a1.session is a2.session is probe.session and other.session is not a1.session
+    closed = []
+
+    async def aclose():
+        closed.append(1)
+    a1.session.aclose = aclose
+    run(a1.close())
+    run(probe.close())
+    assert closed == []
+    cfg = AppCfg(accounts={"v1": AccountCfg(keyring_key=VKEY, vest_account_id="1")})
+    acc, acct_status, budget = _make(cfg, {}, build_adapter)
+    _passes(acc, monkeypatch, 1)                                 # unsigned: the connect fails, the budget is set
+    assert acct_status["v1"]["error"] == "needs a new wallet signature"
+    assert brokers._VEST_SESSIONS[VKEY].budget is budget
+
+
+def _make(cfg, adapters, factory):
+    acct_status, budget = {}, LoginBudget()
+    engine = SimpleNamespace(journal=lambda ev, **kw: None, now_et=lambda: dt.datetime(2026, 10, 29, 10, 0))
+    acc = brokers.make(cfg=cfg, engine=engine, adapters=adapters, acct_status=acct_status, budget=budget,
+                       desk=SimpleNamespace(attach=lambda *a: None), paper_http=None, paper_client=None,
+                       background=False, adapter_factory=factory, _kill_lock=asyncio.Lock)
+    return acc, acct_status, budget
+
+
+def _passes(acc, monkeypatch, n):
+    state = {"n": 0}
+
+    async def fake_sleep(_s):
+        state["n"] += 1
+        if state["n"] >= n:
+            raise _Stop
+    with monkeypatch.context() as m:
+        m.setattr(asyncio, "sleep", fake_sleep)
+        with pytest.raises(_Stop):
+            run(acc.broker_loop())
+
+
+def _sign():
+    secrets_store.set_credentials(VKEY, primary_addr="0xabc", refresh_token="RT", refresh_token_id="RTID",
+                                  refresh_expires_ms=4_000_000_000_000, device_pem=DeviceKey.new().pem())

@@ -88,16 +88,22 @@ class HeldBook:
 
     def crossed(self, root: str, bar: "Bar") -> list[HeldEntry]:
         """Entries this push trades: a Buy when the high rises to the level (a higher high than the last push of the
-        same bar, or a new bar's high), a Sell on the low. Nearest to where price stood first, at most one per
+        same bar, or a new bar's high) or the close crosses up through it since the last push; a Sell on the low / a
+        close crossing down. Nearest to the last push's close first (the bar's open if none), at most one per
         oco_group. Nothing is removed here (the caller drops what it fires or skips)."""
         r = _proot(root)
         last = self._last.get(r)
         self._last[r] = (bar.ts, bar.h, bar.l, bar.c)
         same = last is not None and last[0] == bar.ts
-        ref = last[3] if same else bar.o
+        prev = last[3] if last is not None else None           # the previous push's close
+        ref = bar.o if prev is None else prev
+        # also a close that crossed the level since the previous push: inside a range whose extreme printed before the
+        # entry was held, there is no higher high to see (R45)
         hits = [e for e in self.entries if _proot(root_of(e.symbol)) == r and (
-            (e.side == "Buy" and bar.h >= e.level and not (same and bar.h <= last[1])) or
-            (e.side == "Sell" and bar.l <= e.level and not (same and bar.l >= last[2])))]
+            (e.side == "Buy" and ((bar.h >= e.level and not (same and bar.h <= last[1]))
+                                  or (prev is not None and prev < e.level <= bar.c))) or
+            (e.side == "Sell" and ((bar.l <= e.level and not (same and bar.l >= last[2]))
+                                   or (prev is not None and prev > e.level >= bar.c))))]
         out, groups = [], set()
         for e in sorted(hits, key=lambda e: abs(e.level - ref)):
             if e.oco_group is None or e.oco_group not in groups:
