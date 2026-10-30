@@ -319,6 +319,7 @@ async function loadLogins() {
 }
 function pickLogin(key) {
   WIZ.saved = key;
+  $("#cCode").value = "";               // a one-time code belongs to the login it was sent for
   if (WIZ.broker === "vest") { vestSay(""); loadLoginsPaint(); vestPaint(); return; }
   $("#newLoginFields").style.display = key === null ? "" : "none";
   $("#optNew").classList.toggle("sel", key === null);
@@ -353,8 +354,9 @@ async function doConnect() {
     const body = WIZ.saved ? {saved_key: WIZ.saved, ...withCode}
       : WIZ.broker === "tsx" ? {broker: "tsx", username: $("#cUser").value, password: $("#cPass").value, ...withCode}
       : {username: $("#cUser").value, password: $("#cPass").value, env: WIZ.env};
-    const r = await post("/api/connect", body);
-    if (code) $("#cCode").value = "";                       // good for one try
+    let r;
+    try { r = await post("/api/connect", body); }
+    finally { if (code) $("#cCode").value = ""; }          // good for one try, even when the post fails
     if (r.ok) { codeRow.style.display = "none"; wizAccepted(r); }
     else if (r.needs_code) {
       codeRow.style.display = ""; $("#cCode").focus();
@@ -467,6 +469,8 @@ const wizOnDesk = (a) => a.on_desk !== undefined ? !!a.on_desk
 /* A Vest row's kind in words (Demo / Eval / Funded / Primary); a Tradovate row has none. */
 const vestKind = (a) => WIZ.broker !== "vest" ? "" : ({demo: "Demo", eval: "Eval", funded: "Funded", primary: "Primary"}[a.kind]
   || (a.demo === undefined ? "" : a.demo ? "Demo" : "Funded"));
+/* A TopstepX row (it carries `practice`): practice or funded, from the listed row itself. */
+const tsxKind = (a) => a.practice === undefined ? "" : a.practice ? "practice" : "funded";
 const wizAddable = () => WIZ.accounts.filter(a => !wizOnDesk(a));
 function renderAcctList() {
   const el = $("#acctList");
@@ -480,7 +484,7 @@ function renderAcctList() {
       <input type="checkbox" ${added ? "disabled" : ""} ${!added && WIZ.picks.has(a.name) ? "checked" : ""}
              onchange="wizTick(${jsArg(a.name)}, this.checked)">
       <span><span class="t">${esc(a.name)}</span><br>
-      <span class="sub">${added ? "already added" : vestKind(a) || (a.active === false ? "inactive" : "active")}</span></span>
+      <span class="sub">${added ? "already added" : vestKind(a) || tsxKind(a) || (a.active === false ? "inactive" : "active")}</span></span>
     </label>`;
   }).join("");
   el.innerHTML = `<label class="copt all ${wizAddable().length ? "" : "disabled"}">

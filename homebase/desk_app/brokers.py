@@ -13,7 +13,7 @@ from .. import config as config_mod
 from ..broker.base import AccountNotOnLogin, BrokerAdapter
 from ..broker.login_budget import LoginDeferred, is_rate_limited
 from ..broker.paper import PaperAdapter
-from ..broker.topstepx import TopstepXAdapter
+from ..broker.topstepx import TSX_BOOKING_OPEN, TopstepXAdapter
 from ..broker.topstepx_auth import NeedsCode, TsxSession
 from ..broker.tradovate import TradovateAdapter
 from ..broker.vest import VestAdapter
@@ -313,7 +313,8 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
         g = _gone.pop(aid, None)
         if g is not None:
             restored = []
-            for name, rows in (g.get("booked") or {}).items():
+            rebook = TSX_BOOKING_OPEN or not is_tsx_key(key)     # a TopstepX account is never booked yet
+            for name, rows in (g.get("booked") or {}).items() if rebook else ():
                 have = cfg.book.setdefault(name, [])
                 for r in rows:
                     if not any(x.get("account") == aid for x in have):
@@ -550,6 +551,13 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
                             await ad.close()
                         _connect_failed(aid, NeedsSignature("sign with the wallet again"))
                     continue                 # waits for the owner's wallet signature
+                if isinstance(ad, TopstepXAdapter) and ad.session.lost is not None and ad.connected:
+                    # a kick whose re-login was deferred or asked for a code: the card shows the account disconnected,
+                    # with the reason; the reconnect logs in again first (through the budget)
+                    with contextlib.suppress(Exception):
+                        await ad.close()
+                    _connect_failed(aid, ad.session.lost)
+                    continue
                 if ad is not None and ad.connected:
                     continue
                 if _t.time() < _login_cooldown.get(aid, 0):

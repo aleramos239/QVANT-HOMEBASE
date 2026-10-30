@@ -304,3 +304,57 @@ def test_deleting_a_login_closes_its_session(client):
 
 async def _closed(box):
     box.append(1)
+
+
+def test_booking_a_tsx_account_is_refused_in_words_and_the_self_test_waits_for_the_caches(client, api):
+    from homebase.config import StrategyCfg
+    connect(client)
+    client.post("/api/accounts/add-many", json={"key": KEY, "accounts": ["PRAC-V2-1"]})
+    cfg = client.app.state.cfg
+    cfg.strategies["nq930"] = StrategyCfg(symbol="NQ", qty=1, offset_pts=10.0, sl_pts=5.0, tp_pts=15.0)
+    assert topstepx.TSX_BOOKING_OPEN is False
+    r = client.post("/api/book", json={"strategy": "nq930", "assignments": [
+        {"account": "main", "qty": 1}, {"account": "prac-v2-1", "qty": 1}]})
+    assert r.status_code == 409 and r.json()["detail"] == topstepx.TSX_BOOKING_CLOSED
+    assert "nq930" not in cfg.book                                  # nothing written, not even the non-TopstepX row
+    assert client.post("/api/book", json={"strategy": "nq930", "assignments": [
+        {"account": "main", "qty": 1}]}).json()["ok"]               # other accounts book as before
+    # the self-test route stays: it waits for the caches (the stub socket is not up: unknown is not idle)
+    r = client.post("/api/selftest-order", json={"account": "prac-v2-1", "ref_price": 20000})
+    assert r.status_code == 409 and "not read yet" in r.json()["detail"]
+
+
+def test_an_account_gone_and_back_never_gets_a_tsx_booking_back(client):
+    connect(client)
+    client.post("/api/accounts/add-many", json={"key": KEY, "accounts": ["PRAC-V2-1"]})
+    gone = client.app.state.gone
+    gone["prac-v2-1"] = {"first": 0.0, "next_check": 0.0, "booked": {"nq930": [{"account": "prac-v2-1", "qty": 1}]}}
+    r = client.post("/api/accounts/reconnect", json={"account": "prac-v2-1"}).json()
+    assert r["results"]["prac-v2-1"]["ok"], r
+    assert "prac-v2-1" not in gone and not client.app.state.cfg.book.get("nq930")
+
+
+class _Stop(Exception):
+    pass
+
+
+def test_a_lost_session_shows_the_account_disconnected_with_the_reason(client, api, monkeypatch):
+    from homebase.broker.login_budget import LoginDeferred
+    connect(client)
+    client.post("/api/accounts/add-many", json={"key": KEY, "accounts": ["PRAC-V2-1"]})
+    ad, sess = client.app.state.adapters["prac-v2-1"], brokers._TSX_SESSIONS[KEY]
+    assert ad.connected
+    sess.lost = LoginDeferred("4 logins on this user in the last hour — next allowed at 11:40:00")
+
+    async def stop(_s):
+        raise _Stop
+    monkeypatch.setattr(brokers, "asyncio", type("A", (), {"sleep": staticmethod(stop), "Lock": asyncio.Lock}))
+
+    async def one_pass():
+        with pytest.raises(_Stop):
+            await client.app.state.broker_loop()
+    client.portal.call(one_pass)
+    assert not ad.connected and ad not in sess.listeners
+    acct = client.get("/api/status").json()["accounts"]["prac-v2-1"]
+    assert acct["connected"] is False and acct["error"].startswith("4 logins on this user")
+    assert client.app.state.login_cooldown["prac-v2-1"] > 0          # paced: the next pass does not log in at once

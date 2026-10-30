@@ -24,7 +24,7 @@ def test_step_1_offers_topstepx():
     assert "Code from TopstepX" in row and 'id="cCode"' in row and 'autocomplete="off"' in row
     assert INDEX.index('id="newLoginFields"') < INDEX.index('id="cCodeRow"') < INDEX.index('id="cGo"')
     assert 'id="wstep2"' in INDEX and 'id="wBroker2"' in INDEX
-    assert 'book.js?v=12' in INDEX
+    assert 'book.js?v=13' in INDEX
 
 
 def test_the_env_switch_is_hidden_for_tsx():
@@ -57,3 +57,14 @@ def test_the_password_and_code_are_cleared_on_close():
     assert 'const p = $("#cPass"); if (p) p.value = "";' in close
     assert '$("#cCode").value = ""' in close
     assert '$("#cCodeRow").style.display = "none"' in close
+
+
+def test_the_code_is_cleared_on_a_new_login_pick_and_after_every_post():
+    assert '$("#cCode").value = ""' in _fn("function pickLogin")
+    body = _fn("async function doConnect")
+    assert re.search(r'try \{ r = await post\("/api/connect", body\); \}\s*finally \{ if \(code\) \$\("#cCode"\)\.value = ""; \}', body)
+
+
+def test_step_3_shows_a_tsx_row_as_practice_or_funded():
+    assert 'const tsxKind = (a) => a.practice === undefined ? "" : a.practice ? "practice" : "funded";' in BOOK
+    assert "vestKind(a) || tsxKind(a) ||" in _fn("function renderAcctList")

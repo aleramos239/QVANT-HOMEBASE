@@ -577,6 +577,8 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
                 raise HTTPException(409, f"can't read this account ({e}) — not tested") from None
             busy = [st.strategy for st in engine.day_states_for_account(aid)
                     if st.status in ("placing", "placed", "live")]
+            if m.get("cache_seeded") is False:         # TopstepX before its caches are read: unknown is not idle
+                raise HTTPException(409, "the account's positions and orders are not read yet — try again in a moment")
             if m.get("open_positions") or m.get("working_orders") or busy:
                 raise HTTPException(409, "the account has a position, a working order or a bot at work — "
                                     "the self-test runs only on an idle account")
