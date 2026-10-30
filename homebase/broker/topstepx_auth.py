@@ -77,7 +77,9 @@ class TsxSession:
         self.taken = 0                        # times TopstepX ended the session (a later task adds to it)
         self.user_id: int | None = None
         self.expires_at = 0.0
+        self.lost: Exception | None = None    # why a kick's re-login failed (deferred, needs a code): the supervisor shows it
         self._token: str | None = None
+        self._renew_left = RENEW_LEFT_S       # renew when less than this is left (min(600 s, half the token's life))
         self._lock = asyncio.Lock()           # one login at a time
 
     def __repr__(self) -> str:
@@ -117,7 +119,10 @@ class TsxSession:
             why = str(answer.get("errorMessage") or f"status {resp.status_code}").replace(c["password"], "***")
             raise TsxLoginFailed(why)
         self._token, self.expires_at = token, _expiry(token)
+        # a short-lived token renews at half its life, not on every call
+        self._renew_left = min(RENEW_LEFT_S, max(0.0, (self.expires_at - time.time()) / 2))
         self.user_id = answer.get(USER_ID_FIELD)
+        self.lost = None
         log.info("topstepx %s: logged in", self.key)
 
     async def relogin(self, why: str) -> None:
@@ -139,10 +144,10 @@ class TsxSession:
             b.login_result(self.key)
 
     async def token(self) -> str:
-        if self._token and self.expires_at - time.time() > RENEW_LEFT_S:
+        if self._token and self.expires_at - time.time() > self._renew_left:
             return self._token
         async with self._lock:
-            if not (self._token and self.expires_at - time.time() > RENEW_LEFT_S):    # a sibling may have renewed
+            if not (self._token and self.expires_at - time.time() > self._renew_left):    # a sibling may have renewed
                 await self.relogin("renew")
             return self._token
 

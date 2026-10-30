@@ -13,7 +13,7 @@ from homebase.broker.login_budget import LoginBudget, LoginDeferred
 from homebase.broker.topstepx_auth import NeedsCode, TsxLoginFailed, TsxSession
 from homebase.store import secrets_store
 
-KEY = "topstepx:Owner"
+KEY = "tsx:owner"
 PW = "pw-SECRET-1"
 
 
@@ -152,20 +152,36 @@ def test_relogin_books_the_attempt_and_the_result_with_the_budget():
     with pytest.raises(httpx.HTTPStatusError):
         run(s.relogin("test"))
     assert b.cooling(KEY) > 0
+    assert b.blocked(KEY).startswith("TopstepX rate-limited this login (429)")      # the budget names the broker
 
 
 def test_token_renews_when_under_ten_minutes_left(monkeypatch):
     t = Tsx()
     s = make(t)
     now = time.time()
+    t.handlers["/Login"] = lambda req: httpx.Response(200, json={"token": jwt(now + 7200)})
+    run(s.login())
+    assert abs(s.expires_at - (now + 7200)) < 1                # the JWT exp is used
+    t.handlers["/Login"] = lambda req: httpx.Response(200, json={"token": jwt(now + 9000)})
+    run(s.token())
+    assert t.paths().count("/Login") == 1                      # plenty left: cached
+    monkeypatch.setattr(topstepx_auth.time, "time", lambda: now + 7200 - 500)      # under ten minutes left
+    assert run(s.token()).split(".")[1] == jwt(now + 9000).split(".")[1]
+    assert t.paths().count("/Login") == 2
+
+
+def test_a_short_lived_token_renews_at_half_its_life_not_on_every_call(monkeypatch):
+    t = Tsx()
+    s = make(t)
+    now = time.time()
     t.handlers["/Login"] = lambda req: httpx.Response(200, json={"token": jwt(now + 300)})
     run(s.login())
-    assert abs(s.expires_at - (now + 300)) < 1                 # the JWT exp is used
-    t.handlers["/Login"] = lambda req: httpx.Response(200, json={"token": jwt(now + 7200)})
-    assert run(s.token()).split(".")[1] != jwt(now + 300).split(".")[1]
-    assert t.paths().count("/Login") == 2
+    for _ in range(3):
+        run(s.token())
+    assert t.paths().count("/Login") == 1                      # 300 s left: renewed at 150 s, not now
+    monkeypatch.setattr(topstepx_auth.time, "time", lambda: now + 160)
     run(s.token())
-    assert t.paths().count("/Login") == 2                      # plenty left: cached
+    assert t.paths().count("/Login") == 2
 
 
 def test_a_token_that_is_not_a_jwt_lasts_23_hours():

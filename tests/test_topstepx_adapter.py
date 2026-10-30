@@ -20,7 +20,15 @@ ACCOUNTS = [
 
 
 def run(coro):
-    return asyncio.new_event_loop().run_until_complete(coro)
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:        # a post-fill check still waiting is the test's leftover, not an error
+        left = asyncio.all_tasks(loop)
+        for t in left:
+            t.cancel()
+        if left:
+            loop.run_until_complete(asyncio.gather(*left, return_exceptions=True))
 
 
 class Api:
@@ -300,8 +308,8 @@ def test_a_timeout_after_send_finds_the_order_by_customTag_and_never_resends(api
 
     def lookup(req):
         # the order the timed-out POST created, as the account's list shows it
-        return httpx.Response(200, json=[{"id": 1, "customTag": "other:1"},
-                                         {"id": 777, "customTag": seen["tag"]}])
+        return httpx.Response(200, json=[{"id": 1, "contractId": ENQ, "customTag": "other:1"},
+                                         {"id": 777, "contractId": ENQ, "status": 1, "customTag": seen["tag"]}])
 
     def post(req):
         import json
@@ -315,6 +323,37 @@ def test_a_timeout_after_send_finds_the_order_by_customTag_and_never_resends(api
     assert r.ok and r.order_id == "777"
     assert r.raw["sl_order_id"] is None and r.raw["bracket"] == "attached"
     assert sum(1 for p in api.paths() if p == ("POST", "/Order")) == 1
+
+
+def test_a_timeout_after_send_found_rejected_or_cancelled_is_not_ok(api):
+    seen = {}
+
+    def post(req):
+        import json
+        seen["tag"] = json.loads(req.content)["customTag"]
+        raise httpx.ReadTimeout("slow")
+
+    api.handlers[("POST", "/Order")] = post
+    a = connected(api)
+    for status, word in ((5, "rejected"), (3, "canceled")):
+        api.handlers[("GET", "/Order/account/22")] = lambda req, st=status: httpx.Response(200, json=[
+            {"id": 778, "contractId": ENQ, "status": st, "customTag": seen["tag"]}])
+        r = run(a.place_order(OrderRequest("NQ", "Buy", 1, "Limit", price=20000)))
+        assert not r.ok and r.order_id == "778" and word in r.error and not r.raw.get("outcome_unknown")
+
+
+def test_a_login_refused_inside_the_401_retry_is_not_sent_not_unknown(api, tmp_path, monkeypatch):
+    from homebase.broker.login_budget import LoginBudget
+    budget = LoginBudget()
+    s = _kick_setup(api, tmp_path, monkeypatch, budget=budget)
+    for _ in range(4):
+        budget.record_login("tsx:owner")                               # the hourly cap is reached
+    api.handlers[("POST", "/Order")] = lambda req: httpx.Response(401, json={})
+    a = adapter(api, session=s)
+    run(a.connect())
+    r = run(a.place_order(OrderRequest("NQ", "Buy", 1, "Limit", price=20000)))
+    assert not r.ok and "order not sent" in r.error and not r.raw.get("outcome_unknown")
+    assert ("GET", "/Order/account/22") not in api.paths()             # no lookup: TopstepX never took it
 
 
 def test_a_timeout_after_send_and_not_found_is_outcome_unknown(api):
@@ -370,7 +409,20 @@ def test_flatten_all_and_cancel_all_call_close_and_cancel_all_for_this_account_o
     assert run(a.cancel_all()).ok
     assert run(a.cancel_order_by_id("123")).ok
     paths = [p for p in api.paths() if p[1] != "/TradingAccount"]
-    assert paths == [("POST", "/Position/close/22"), ("POST", "/Order/cancel/22/all"), ("POST", "/Order/cancel/22/id/123")]
+    assert paths == [("POST", "/Position/close/22"), ("POST", "/Order/cancel/22/all"),     # close FIRST, then the orders
+                     ("GET", "/Position/all/account/22"),                                 # flat now: no second close
+                     ("POST", "/Order/cancel/22/all"), ("POST", "/Order/cancel/22/id/123")]
+
+
+def test_flatten_all_cancels_nothing_when_the_close_is_refused_and_closes_again_what_a_stop_opened(api):
+    api.handlers[("POST", "/Position/close/22")] = lambda req: httpx.Response(200, json={"success": False})
+    a = connected(api)
+    assert not run(a.flatten_all()).ok
+    assert ("POST", "/Order/cancel/22/all") not in api.paths()        # its stop keeps protecting the position
+    api.handlers.pop(("POST", "/Position/close/22"))
+    api.positions = [{"contractId": "CON.F.US.ENQ.Z26", "positionSize": -1}]     # a stop filled before its cancel landed
+    assert run(a.flatten_all()).ok
+    assert api.paths().count(("POST", "/Position/close/22")) == 3
 
 
 def test_a_refused_flatten_is_an_error_not_flat(api):
@@ -391,14 +443,41 @@ def test_cancel_order_by_id_refuses_a_non_numeric_id(api):
 
 
 def test_flatten_symbol_closes_every_held_contract_of_the_root(api):
-    api.handlers[("GET", "/Position/all/account/22")] = lambda req: httpx.Response(200, json=[
-        {"contractId": "CON.F.US.ENQ.U26", "positionSize": 2},          # an older contract still held
-        {"contractId": "CON.F.US.EP.Z26", "positionSize": -1},
-        {"contractId": "CON.F.US.ENQ.Z26", "positionSize": 0}])
+    api.positions = [{"contractId": "CON.F.US.ENQ.U26", "positionSize": 2},          # an older contract still held
+                     {"contractId": "CON.F.US.EP.Z26", "positionSize": -1},
+                     {"contractId": "CON.F.US.ENQ.Z26", "positionSize": 0}]
+    api.handlers[("POST", "/Position/close/22/contract/CON.F.US.ENQ.U26")] = lambda req: (
+        api.positions.pop(0), httpx.Response(200, json={"success": True}))[1]
     a = connected(api)
     r = run(a.flatten_symbol("NQ"))
     assert r.ok and r.raw["flattened"] == 1
     assert [p for p in api.paths() if "close" in p[1]] == [("POST", "/Position/close/22/contract/CON.F.US.ENQ.U26")]
+    # then the market's working orders: the held contract and, the order cache not being known, the front month
+    front = a.contract_id("NQ")
+    assert [p[1] for p in api.paths() if "/Order/cancel" in p[1]] == sorted(
+        f"/Order/cancel/22/contract/{c}" for c in {"CON.F.US.ENQ.U26", front})
+
+
+def test_flatten_symbol_cancels_what_the_order_cache_shows_resting_and_nothing_when_a_close_is_refused(api):
+    a, sink = live(api)
+    api.orders = [{"id": 5, "accountId": 22, "contractId": "CON.F.US.ENQ.H27", "status": 1, "type": 4},
+                  {"id": 6, "accountId": 22, "contractId": "CON.F.US.EP.Z26", "status": 1, "type": 4},     # ES: not NQ's
+                  {"id": 7, "accountId": 22, "contractId": "CON.F.US.ENQ.M27", "status": 2, "type": 4}]    # filled
+    run(a._on_up())
+    api.positions = [pos(1)]
+    api.handlers[("POST", f"/Position/close/22/contract/{ENQ}")] = lambda req: httpx.Response(200, json={"success": False})
+    assert not run(a.flatten_symbol("NQ")).ok
+    assert not [p for p in api.paths() if "/Order/cancel" in p[1]]      # refused close: its stop stays working
+    api.handlers.clear()
+    api.positions = []
+    calls = len(api.calls)
+    api.handlers[("POST", f"/Position/close/22/contract/{ENQ}")] = lambda req: (
+        api.positions.clear(), httpx.Response(200, json={"success": True}))[1]
+    api.positions = [pos(1)]
+    assert run(a.flatten_symbol("NQ")).ok
+    assert [c.url.path for c in api.calls[calls:] if c.method == "POST"] == [
+        f"/Position/close/22/contract/{ENQ}", "/Order/cancel/22/contract/CON.F.US.ENQ.H27",
+        f"/Order/cancel/22/contract/{ENQ}"]
 
 
 def test_get_net_position_sums_the_root_and_raises_when_unreadable(api):
@@ -527,7 +606,7 @@ def test_position_push_updates_get_net_position_without_a_rest_call(api):
     # flatten always asks the broker what is held now
     StubHub.made[-1].up = True
     api.positions = [pos(4)]
-    assert run(a.flatten_symbol("NQ")).ok and n_reads() == 4
+    assert run(a.flatten_symbol("NQ")).ok and n_reads() == 5           # before the close, and after it
     assert ("POST", f"/Position/close/22/contract/{ENQ}") in api.paths()
 
 
@@ -621,14 +700,56 @@ def test_session_taken_with_the_budget_spent_does_not_log_in_and_says_why(api, t
     assert s.taken == 2
 
 
-def test_a_failed_relogin_is_journaled_by_class_only_and_reaches_the_hub(api, tmp_path, monkeypatch):
+def test_a_failed_relogin_is_journaled_by_class_only_remembered_paced_and_kept_on_the_session(api, tmp_path, monkeypatch):
     s = _kick_setup(api, tmp_path, monkeypatch)
+    pauses = []
+
+    async def fake_pause(sec):
+        pauses.append(sec)
+    monkeypatch.setattr(topstepx, "_pause", fake_pause)
     api.handlers[("POST", "/Login")] = lambda req: httpx.Response(200, json={"errorMessage": "bad pw-SECRET-9"})
     a, sink = live(api, session=s)
-    with pytest.raises(Exception):
-        run(StubHub.made[-1].on_auth_lost())
+    hub = StubHub.made[-1]
+    hub._token = TOKEN
+    run(hub.on_auth_lost())                                            # no raise: remembered like a deferral
+    run(hub.on_auth_lost())                                            # the same dead token: no count, no line
     (kw,) = [kw for e, kw in s.rec if e == "tsx_session_taken" and "failed" in kw]
     assert kw["failed"] == "TsxLoginFailed" and "pw-SECRET-9" not in repr(s.rec)
+    assert s.taken == 1 and pauses == [topstepx.DEFER_PAUSE_S] * 2
+    assert type(s.lost).__name__ == "TsxLoginFailed"                   # the supervisor shows the account disconnected
+    api.handlers[("POST", "/Login")] = lambda req: httpx.Response(200, json={"token": "TOK-NEW"})
+    run(hub.on_auth_lost())
+    assert s.lost is None and s._token == "TOK-NEW"
+
+
+def test_a_code_asked_after_a_kick_is_kept_on_the_session_and_connect_logs_in_again(api, tmp_path, monkeypatch):
+    s = _kick_setup(api, tmp_path, monkeypatch)
+    monkeypatch.setattr(topstepx, "_pause", lambda sec: asyncio.sleep(0))
+    api.handlers[("POST", "/Login")] = lambda req: httpx.Response(200, json={"twoFactorRequired": True})
+    a, sink = live(api, session=s)
+    StubHub.made[-1]._token = TOKEN
+    run(StubHub.made[-1].on_auth_lost())
+    from homebase.broker.topstepx_auth import NeedsCode
+    assert isinstance(s.lost, NeedsCode)
+    run(a.close())
+    with pytest.raises(NeedsCode):                                     # reconnecting asks for a login again, first
+        run(a.connect())
+    api.handlers[("POST", "/Login")] = lambda req: httpx.Response(200, json={"token": "TOK-NEW"})
+    run(a.connect())
+    assert a.connected and s.lost is None
+
+
+def test_a_socket_401_on_an_expired_token_is_a_renewal_not_a_kick(api, tmp_path, monkeypatch):
+    import base64
+    import json
+    s = _kick_setup(api, tmp_path, monkeypatch)
+    seg = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).rstrip(b"=").decode()
+    old = f"{seg({'alg': 'none'})}.{seg({'exp': time.time() - 5})}.sig"
+    a, sink = live(api, session=s)
+    s._token = StubHub.made[-1]._token = old
+    run(StubHub.made[-1].on_auth_lost())
+    assert s.taken == 0 and not [e for e, _ in s.rec if e == "tsx_session_taken"]
+    assert s._token == "TOK-NEW" and api.paths().count(("POST", "/Login")) == 1
 
 
 def test_a_late_joiner_on_an_open_socket_seeds_itself_and_a_failing_read_never_raises(api):
@@ -698,3 +819,160 @@ def test_the_cache_is_not_trusted_while_on_up_is_reading_a_fresh_book(api):
     api.handlers[("GET", "/Position/all/account/22")] = positions
     run(a._on_up())
     assert seen == [False] and a._pos_ok and run(a.get_net_position("NQ")) == 2
+
+
+# ---- the order cache, the metrics the ship gate reads, the stop check (final review C1, I1, I3, I4, I5) ----------------
+def order(oid, *, status=1, type=4, side=1, contract=ENQ, account=22, **kw):
+    return {"id": oid, "accountId": account, "contractId": contract, "status": status, "type": type, "side": side,
+            "size": 1, **kw}
+
+
+def test_order_shape():
+    f = topstepx._order_fields
+    o = f(order(5, linkedOrderId=4, fillVolume=1, customTag="t"))
+    assert o == {"id": "5", "accountId": 22, "contractId": ENQ, "status": "Working", "type": "Stop", "side": "Sell",
+                 "size": 1, "filled": 1, "linked": "4", "tag": "t"}
+    assert f({"orderId": 6, "contractId": ENQ, "positionSize": -2})["side"] == "Sell"
+    odd = f(order(7, status=99, type=99, side=9))
+    assert odd["status"] is None and odd["type"] is None and odd["side"] is None       # unknown, never "not working"
+    for bad in ({"contractId": ENQ}, {"id": 1}, {"id": True, "contractId": ENQ}, order(1, size=1.5), "x"):
+        with pytest.raises(ValueError):
+            f(bad)
+
+
+def test_order_status_comes_from_the_seeded_cache_and_its_pushes(api):
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location("vpssync_gate", Path(__file__).parents[1] / "deploy/linux/vpssync_gate.py")
+    gate = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gate)
+    now = dt.datetime(2026, 10, 30, 11, 0)
+
+    def verdict(m):
+        return gate.verdict({"accounts": {"acct-1": m}, "book": {}, "strategies": {}}, now, False)
+
+    a, sink = live(api)
+    m = run(a.get_metrics())
+    assert m["working_orders"] is None and m["open_position_count"] is None and m["cache_seeded"] is False
+    assert verdict(m).startswith("no: acct-1 is not seeded")                     # unknown is never flat
+    assert run(a.get_order_status("5")) is None
+    run(a._on_up())                                                                  # seeds positions + orders
+    m = run(a.get_metrics())
+    assert (m["working_orders"], m["open_position_count"], m["cache_seeded"]) == (0, 0, True)
+    assert verdict(m) == "ok"                                                        # seeded, flat, idle: ships
+    a._on_event("RealTimeOrder", order(5))
+    assert run(a.get_order_status("5")) == "Working" and run(a.get_metrics())["working_orders"] == 1
+    assert verdict(run(a.get_metrics())).startswith("no: acct-1 has a position or working orders")
+    a._on_event("RealTimeOrder", order(5, status=2, fillVolume=1))
+    assert run(a.get_order_state("5")) == {"status": "Filled", "filled_qty": 1}
+    a._on_event("RealTimeOrder", order(6, status=3))
+    assert run(a.get_order_status("6")) == "Canceled" and run(a.get_order_status("404")) is None
+    a._on_event("RealTimeOrder", order(9, account=11))                                # another account's
+    assert "9" not in a._orders
+    a._on_event("RealTimeOrder", {"accountId": 22, "status": 1})                      # unreadable: orders unknown
+    assert a.log[-1][0] == "tsx_order_unreadable"
+    assert run(a.get_order_status("5")) is None and run(a.get_metrics())["working_orders"] is None
+    run(a._on_up())                                                                  # the next open reads them again
+    assert run(a.get_metrics())["working_orders"] == 0
+    a._on_event("RealTimeOrder", order(8, status=99))                                 # a status not known: unknown count
+    assert run(a.get_metrics())["working_orders"] is None
+    StubHub.made[-1].up = False                                                      # socket down: nothing is known
+    m = run(a.get_metrics())
+    assert m["open_position_count"] is None and m["working_orders"] is None and run(a.get_order_status("5")) is None
+
+
+def test_an_order_pushed_while_the_orders_are_read_wins_over_the_read(api):
+    a, sink = live(api)
+
+    def slow(req):
+        a._on_event("RealTimeOrder", order(5, status=3))
+        return httpx.Response(200, json=[order(5, status=1)])
+    api.handlers[("GET", "/Order/account/22")] = slow
+    run(a._on_up())
+    assert run(a.get_order_status("5")) == "Canceled"
+
+
+def test_a_trade_before_its_position_push_reads_the_net_from_the_broker(api):
+    a, sink = live(api)
+    api.positions = [pos(1)]
+    n_reads = lambda: api.paths().count(("GET", "/Position/all/account/22"))
+
+    async def go():
+        await a._on_up()
+        assert await a.get_net_position("NQ") == 1 and n_reads() == 1
+        api.positions = [pos(3)]
+        a._on_event("RealTimeTrade", trade(1, size=2))                 # the position push has not landed yet
+        assert await a.get_net_position("NQ") == 3 and n_reads() == 2  # not the stale 1
+        assert await a.get_net_position("NQ") == 3 and n_reads() == 2  # the read cleaned it
+        a._on_event("RealTimeTrade", trade(2, size=1))
+        a._on_event("RealTimePosition", pos(4))                        # its position push lands: the cache again
+        assert await a.get_net_position("NQ") == 4 and n_reads() == 2
+    run(go())
+
+
+def test_after_an_own_fill_the_balance_is_read_once_and_a_missing_stop_is_journaled_and_shown(api, monkeypatch):
+    monkeypatch.setattr(topstepx, "_pause", lambda sec: asyncio.sleep(0))
+    a, sink = live(api)
+    n_bal = lambda: api.paths().count(("GET", "/TradingAccount"))
+
+    async def go():
+        await a.observe_fills(sink)
+        await a._on_up()
+        before = n_bal()
+        api.positions = [pos(1)]
+        a._on_event("RealTimeTrade", trade(1))
+        a._on_event("RealTimeTrade", trade(2, contract="CON.F.US.EP.Z26"))
+        a._on_event("RealTimePosition", pos(1))
+        await a._post
+        assert n_bal() - before == 1                                   # one read for the burst, never per page poll
+        for _ in range(3):
+            await a.get_metrics()
+        assert n_bal() - before == 1
+    run(go())
+    assert [kw["contract"] for e, kw in a.log if e == "tsx_no_stop_seen"] == [ENQ]     # ES: flat, nothing to protect
+    m = run(a.get_metrics())
+    assert m["notice"].startswith("no stop seen on NQ")
+    assert not [p for p in api.paths() if "close" in p[1]]             # TSX_FLATTEN_IF_NO_STOP is off
+    a._on_event("RealTimeOrder", order(5))                              # the stop shows up: the warning goes
+    run(a._check_stop(ENQ))
+    assert "notice" not in run(a.get_metrics())
+
+
+def test_a_working_stop_seen_after_the_fill_journals_nothing_and_the_flatten_switch_closes(api, monkeypatch):
+    monkeypatch.setattr(topstepx, "_pause", lambda sec: asyncio.sleep(0))
+    a, sink = live(api)
+    api.positions = [pos(1)]
+
+    async def go():
+        await a.observe_fills(sink)
+        await a._on_up()
+        a._on_event("RealTimeOrder", order(5))                          # its attached stop (a sell stop)
+        a._on_event("RealTimeTrade", trade(1))
+        a._on_event("RealTimePosition", pos(1))
+        await a._post
+    run(go())
+    assert not [e for e, _ in a.log if e == "tsx_no_stop_seen"]
+    monkeypatch.setattr(topstepx, "TSX_FLATTEN_IF_NO_STOP", True)
+    a._on_event("RealTimeOrder", order(5, status=3))
+    run(a._check_stop(ENQ))
+    assert ("POST", f"/Position/close/22/contract/{ENQ}") in api.paths()
+    assert [e for e, _ in a.log][-2:] == ["tsx_no_stop_seen", "tsx_no_stop_flatten"]
+
+
+def test_the_notice_shows_the_kick_count_and_the_last_violation(api):
+    a, sink = live(api)
+    a.session.taken = 2
+    a._on_event("RealTimeRiskSettingsLockout", {"accountId": 22})
+    assert run(a.get_metrics())["notice"] == "risk lockout · session taken 2x"
+
+
+def test_an_account_gone_from_the_login_leaves_its_listeners(api):
+    s = make_session(api)
+    a, sink = live(api, session=s)
+    b = adapter(api, "PRAC-V2-1", session=s)
+    run(b.connect())
+    assert s.listeners == [a, b]
+    b.account_name = "Gone"
+    with pytest.raises(AccountNotOnLogin):
+        run(b.connect())
+    assert s.listeners == [a] and StubHub.made[-1].stopped == 0

@@ -27,7 +27,7 @@ from .. import symbols
 from ..contracts import root_of
 from .base import AccountNotOnLogin, BrokerAdapter, FillCallback, FillEvent, OrderRequest, OrderResult
 from .login_budget import LoginDeferred
-from .topstepx_auth import TsxSession
+from .topstepx_auth import NeedsCode, TsxLoginFailed, TsxSession, _expiry
 from .topstepx_ws import TsxHub
 
 log = logging.getLogger(__name__)
@@ -51,7 +51,23 @@ ROOTS = {code: root for root, code in CODES.items()}    # contract id code -> ro
 TRADE_SIDE = {0: "Buy", 1: "Sell"}                      # unconfirmed (ProjectX): a trade row's `side`
 POSITION_TYPE = {1: 1, 2: -1}                           # unconfirmed (ProjectX): a position row's `type`: long / short
 VIOLATIONS = ("RealTimeTradingAccountViolation", "RealTimeRiskSettingsLockout")
+VIOLATION_WORDS = {"RealTimeTradingAccountViolation": "account violation", "RealTimeRiskSettingsLockout": "risk lockout"}
+CANCEL_CONTRACT = "/Order/cancel/{account_id}/contract/{contract_id}"
+ORDER_STATUS = {1: "Working", 2: "Filled", 3: "Canceled", 4: "Expired", 5: "Rejected", 6: "PendingNew"}  # unconfirmed (ProjectX)
+ORDER_TYPE = {**{v: k for k, v in TYPE.items()}, 5: "TrailingStop"}
+ORDER_LINK_FIELDS = ("linkedOrderId", "parentOrderId")  # unconfirmed: an attached stop / target's parent entry
+ORDER_FILLED_FIELD = "fillVolume"                       # unconfirmed: contracts filled so far
+CUSTOM_TAG_FIELD = "customTag"
+WORKING_STATUSES = ("Working", "PendingNew")
+STOP_TYPES = ("Stop", "TrailingStop")
+# Booking a strategy onto a TopstepX account is refused until the owner lifts this, after the read-only check and the first
+# watched order (the order push's shape, attached stop / target ids, "move stop" are unconfirmed until then).
+TSX_BOOKING_OPEN = False
+TSX_BOOKING_CLOSED = "TopstepX accounts can't be booked yet: waiting for the read-only check and the first watched order"
+STOP_GRACE_S = 2.0              # after an own fill, the order push of its attached stop has this long to show up
+TSX_FLATTEN_IF_NO_STOP = False  # True: a position with no working stop seen after the grace is closed (after the spike)
 _SEEN_FILL_CAP = 20000
+_ORDER_CAP = 5000
 
 
 class _Refused(Exception):
@@ -144,6 +160,34 @@ def _trade_fields(arg) -> Optional[dict]:
             "side": side, "creationTimestamp": arg.get("creationTimestamp")}
 
 
+def _known(table: dict, v):
+    return table.get(v) if isinstance(v, int) and not isinstance(v, bool) else None
+
+
+def _order_fields(row) -> dict:
+    """The fields of an order row (a push or a REST row; the ONE place that reads its shape). A row without a readable id
+    or contract RAISES; a status / type / side it does not know reads None (unknown: never "not working")."""
+    if not isinstance(row, dict):
+        raise ValueError("order row unreadable")
+    oid = row.get("id") if row.get("id") is not None else row.get("orderId")
+    cid = row.get("contractId")
+    if not isinstance(oid, (int, str)) or isinstance(oid, bool) or str(oid) == "" or not cid:
+        raise ValueError("order row unreadable")
+    signed = row.get("positionSize")
+    size = signed if signed is not None else row.get("size")
+    size = None if size is None else _whole(size)
+    side = _known(TRADE_SIDE, row.get("side"))
+    if side is None and signed is not None and size:
+        side = "Buy" if size > 0 else "Sell"
+    filled = row.get(ORDER_FILLED_FIELD)
+    return {"id": str(oid), "accountId": row.get("accountId"), "contractId": str(cid),
+            "status": _known(ORDER_STATUS, row.get("status")), "type": _known(ORDER_TYPE, row.get("type")),
+            "side": side, "size": None if size is None else abs(size),
+            "filled": None if filled is None else _whole(filled),
+            "linked": next((str(row[k]) for k in ORDER_LINK_FIELDS if row.get(k) is not None), None),
+            "tag": row.get(CUSTOM_TAG_FIELD)}
+
+
 def _code_of(contract_id: str) -> str:
     """The market code of CON.F.US.<code>.<mY> ("" when the id is not of that shape)."""
     p = str(contract_id).split(".")
@@ -177,6 +221,13 @@ class TopstepXAdapter(BrokerAdapter):
         self._pump: Optional[asyncio.Task] = None
         self._balance = None
         self._violation: Optional[str] = None
+        self._orders: dict[str, dict] = {}              # order id -> _order_fields, THIS account only
+        self._orders_ok = False                         # the orders were read whole and pushes kept them since
+        self._orders_pushed: set = set()                # orders pushed while a seed read was in flight
+        self._dirty: set = set()                        # contracts with a new trade whose position push has not landed
+        self._touched: set = set()                      # contracts filled since the last post-fill check
+        self._post: Optional[asyncio.Task] = None       # the post-fill check (balance, then the stop)
+        self._no_stop: set = set()                      # contracts holding a position with no working stop seen
 
     @property
     def broker_key(self):
@@ -184,7 +235,12 @@ class TopstepXAdapter(BrokerAdapter):
 
     # ------------------------------------------------------------ lifecycle
     async def connect(self) -> None:
-        await self.session.token()
+        s = self.session
+        if s.lost is not None:          # a kick's re-login failed: log in again (through the budget) before reconnecting
+            async with s._lock:
+                if s.lost is not None:
+                    await s.relogin("session lost")
+        await s.token()
         self._all = await self._read(ACCOUNTS_PATH, "accounts")
         if not self.account_name:
             self._connected = True
@@ -192,6 +248,7 @@ class TopstepXAdapter(BrokerAdapter):
         want = self.account_name.lower()
         row = next((a for a in self._all if str(a.get("name", "")).lower() == want), None)
         if row is None:
+            await self.close()          # off the login's listeners (and its socket, if it was the last one)
             self._connected, self._acct_id, self._acct_row, self.pinned_ok = False, None, {}, False
             if not self._all:               # an empty list is not proof the account is gone
                 raise RuntimeError(f"{self.account_id}: login exposes no accounts")
@@ -200,7 +257,6 @@ class TopstepXAdapter(BrokerAdapter):
             err.listed, err.user_id = have, self.session.user_id
             raise err
         self._acct_id, self._acct_row, self.pinned_ok, self._connected = row.get("id"), row, True, True
-        s = self.session
         joined = self not in s.listeners
         if joined:
             s.listeners.append(self)
@@ -249,7 +305,24 @@ class TopstepXAdapter(BrokerAdapter):
             self._on_trade(arg)
         elif target == "RealTimeOrder":
             if _same(arg.get("accountId"), self._acct_id):
-                self._notify("order", arg)
+                self._on_order(arg)
+
+    def _on_order(self, arg: dict) -> None:
+        try:
+            o = _order_fields(arg)
+        except Exception as e:  # noqa: BLE001 -- we cannot tell what changed: the orders are unknown until the next seed
+            self._orders_ok = False
+            log.warning("topstepx %s: order push unreadable (%s)", self.account_id, type(e).__name__)
+            self._journal("tsx_order_unreadable", keys=sorted(arg))
+            return
+        self._orders[o["id"]] = o
+        self._orders_pushed.add(o["id"])
+        if len(self._orders) > _ORDER_CAP:      # forget the oldest finished orders, never a working one
+            for oid in [k for k, v in self._orders.items() if v["status"] in ("Filled", "Canceled", "Rejected", "Expired")]:
+                if len(self._orders) <= _ORDER_CAP:
+                    break
+                del self._orders[oid]
+        self._notify("order", arg)
 
     def _on_position(self, arg: dict) -> None:
         if arg.get("accountId") is not None and not _same(arg["accountId"], self._acct_id):
@@ -265,6 +338,7 @@ class TopstepXAdapter(BrokerAdapter):
             return
         self._pos[cid] = net
         self._pos_pushed.add(cid)
+        self._dirty.discard(cid)
         self._notify("position", arg)
 
     def _on_trade(self, arg: dict) -> None:
@@ -274,6 +348,7 @@ class TopstepXAdapter(BrokerAdapter):
                 return
             if not self._take(t, arg):      # position_after stays None until the spike shows whether a trade push
                 return              # comes before or after its position push (a cached net could be one fill stale)
+            self._dirty.add(t["contractId"])    # until its position push lands, this contract's net is read from REST
         except Exception as e:  # noqa: BLE001 -- the next on_up reads the account's trades and finds it
             log.warning("topstepx %s: trade push unreadable (%s)", self.account_id, type(e).__name__)
             self._journal("tsx_trade_unreadable", keys=sorted(arg))
@@ -299,7 +374,49 @@ class TopstepXAdapter(BrokerAdapter):
         self._out.append(FillEvent(account_id=self.account_id, symbol=ROOTS.get(code) or code or t["contractId"],
                                    side=t["side"], qty=t["size"], price=t["price"], ts=time.time(), raw=dict(row),
                                    seen=time.perf_counter()))
+        self._after_fill(t["contractId"])
         return True
+
+    def _after_fill(self, cid: str) -> None:
+        self._touched.add(cid)
+        if self._post is None or self._post.done():
+            try:
+                self._post = asyncio.get_running_loop().create_task(self._post_fill())
+            except RuntimeError:
+                pass
+
+    async def _post_fill(self) -> None:
+        """After own fills: one balance read, and a look for a working stop on each filled contract (after a grace for
+        the order push). Never raises."""
+        while self._touched:
+            await _pause(STOP_GRACE_S)
+            cids, self._touched = self._touched, set()
+            await self.get_balance()
+            for cid in sorted(cids):
+                try:
+                    await self._check_stop(cid)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("topstepx %s: stop check failed (%s)", self.account_id, self._words(e))
+
+    def _has_stop(self, cid: str, net: int) -> bool:
+        exit_side = "Sell" if net > 0 else "Buy"
+        return self._orders_ok and any(
+            o["contractId"] == cid and o["status"] in WORKING_STATUSES and o["type"] in STOP_TYPES
+            and o["side"] in (None, exit_side) for o in self._orders.values())
+
+    async def _check_stop(self, cid: str) -> None:
+        if cid in self._dirty or not (self._pos_ok and self._hub_up()):
+            await self._seed_positions()
+        net = self._pos.get(cid, 0)
+        if not net or self._has_stop(cid, net):
+            self._no_stop.discard(cid)
+            return
+        self._no_stop.add(cid)
+        log.warning("topstepx %s: no working stop seen on %s (net %d)", self.account_id, cid, net)
+        self._journal("tsx_no_stop_seen", contract=cid, net=net, orders_known=self._orders_ok)
+        if TSX_FLATTEN_IF_NO_STOP:
+            r = await self._close_and_cancel([cid], [cid])
+            self._journal("tsx_no_stop_flatten", contract=cid, ok=r.ok, error=r.error)
 
     def _kick(self) -> Optional[asyncio.Task]:
         """Start delivering queued fills, oldest first, one at a time."""
@@ -330,6 +447,13 @@ class TopstepXAdapter(BrokerAdapter):
         except Exception as e:  # noqa: BLE001
             self._pos_ok = False
             log.warning("topstepx %s: positions not read on open (%s)", self.account_id, self._words(e))
+        self._orders_ok = False
+        try:
+            await self._seed_orders()
+        except Exception as e:  # noqa: BLE001
+            self._orders_ok = False
+            log.warning("topstepx %s: orders not read on open (%s)", self.account_id, self._words(e))
+        await self.get_balance()                        # the balance may have moved while the socket was down
         try:
             rows = await self._read(TRADES_PATH.format(account_id=self._acct_id), "trades")
         except Exception as e:  # noqa: BLE001
@@ -360,9 +484,24 @@ class TopstepXAdapter(BrokerAdapter):
         if pump is not None:
             await pump
 
+    async def _seed_orders(self) -> None:
+        """Read the account's orders into the cache (a push that lands during the read wins over the read). A row it
+        cannot read raises: the orders stay unknown."""
+        self._orders_pushed = set()
+        book: dict[str, dict] = {}
+        for row in await self._read(ORDERS_PATH.format(account_id=self._acct_id), "orders"):
+            o = _order_fields(row)
+            if o["accountId"] is None or _same(o["accountId"], self._acct_id):
+                book[o["id"]] = o
+        for oid in self._orders_pushed:
+            book[oid] = self._orders[oid]
+        self._orders, self._orders_ok = book, True
+
     async def _seed_positions(self) -> dict:
-        """Read the whole book from the broker into the cache (a push that lands during the read wins over the read)."""
+        """Read the whole book from the broker into the cache (a push that lands during the read wins over the read).
+        Contracts that were dirty when the read started are clean after it (the read came after their trade)."""
         self._pos_pushed = set()
+        dirty = set(self._dirty)
         book: dict[str, int] = {}
         for p in await self._read(POSITIONS_PATH.format(account_id=self._acct_id), "positions"):
             cid = str(p.get("contractId", "")) if isinstance(p, dict) else ""
@@ -372,6 +511,7 @@ class TopstepXAdapter(BrokerAdapter):
         for cid in self._pos_pushed:
             book[cid] = self._pos[cid]
         self._pos, self._pos_ok = book, True
+        self._dirty -= dirty
         return book
 
     def _hub_up(self) -> bool:
@@ -475,6 +615,8 @@ class TopstepXAdapter(BrokerAdapter):
             resp = await self.session.request("POST", "/Order", json=body)
         except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as e:     # never reached TopstepX
             return OrderResult(ok=False, error=f"topstepx: order not sent: {self._words(e)}")
+        except (LoginDeferred, NeedsCode, TsxLoginFailed) as e:    # a login refused inside the 401 retry: the 401 means
+            return OrderResult(ok=False, error=f"topstepx: order not sent: {self._words(e)}")     # TopstepX never took it
         except Exception as e:  # noqa: BLE001 -- a timeout or a drop after the send: it may be working
             return await self._lost(tag, extra, self._words(e))
         ans = _json(resp)
@@ -491,17 +633,23 @@ class TopstepXAdapter(BrokerAdapter):
 
     async def _lost(self, tag: str, extra: dict, why: str) -> OrderResult:
         """The order may be at TopstepX: look it up by its customTag. Never resend."""
-        found = None
+        found, status = None, None
         try:
-            for o in await self._read(ORDERS_PATH.format(account_id=self._acct_id), "orders"):
-                if isinstance(o, dict) and o.get("customTag") == tag:
-                    oid = o.get("id") if o.get("id") is not None else o.get("orderId")
-                    found = None if oid is None else str(oid)
+            for row in await self._read(ORDERS_PATH.format(account_id=self._acct_id), "orders"):
+                try:
+                    o = _order_fields(row)
+                except Exception:  # noqa: BLE001 -- not readable: not found (outcome unknown, never resent)
+                    continue
+                if o["tag"] == tag:
+                    found, status = o["id"], o["status"]
                     break
         except Exception as e:  # noqa: BLE001 -- a failed lookup is unknown
             why = f"{why}; lookup failed: {self._words(e)}"
-        self._journal("tsx_order_after_error", tag=tag, found=found, why=why)
+        self._journal("tsx_order_after_error", tag=tag, found=found, status=status, why=why)
         log.warning("topstepx %s: order %s after %s", self.account_id, "found" if found else "NOT found", why)
+        if found and status in ("Rejected", "Canceled", "Expired"):     # it reached TopstepX and was turned down
+            return OrderResult(ok=False, order_id=found, raw={"found_by_tag": True, "status": status},
+                               error=f"topstepx: order {status.lower()} ({why})")
         if found:
             return OrderResult(ok=True, order_id=found, raw={"found_by_tag": True, **extra})
         return OrderResult(ok=False, raw={"outcome_unknown": True, "custom_tag": tag},
@@ -532,17 +680,55 @@ class TopstepXAdapter(BrokerAdapter):
     async def cancel_all(self) -> OrderResult:
         return await self._act(CANCEL_ALL.format(account_id=self._acct_id), "cancel all")
 
+    # Close FIRST, then cancel: a refused close cancels nothing, so a position keeps its attached stop (never naked); after
+    # the close the cancels take the stop / target it left resting, and a last read closes what a stop opened in between.
     async def flatten_all(self) -> OrderResult:
-        return await self._act(CLOSE_ALL.format(account_id=self._acct_id), "flatten")
+        """Close every position, then cancel every working order of the account (attached stops / targets too)."""
+        r = await self._act(CLOSE_ALL.format(account_id=self._acct_id), "flatten")
+        if not r.ok:
+            return r
+        c = await self._act(CANCEL_ALL.format(account_id=self._acct_id), "cancel all")
+        errors = [] if c.ok else [c.error]
+        try:
+            if any((await self._seed_positions()).values()):
+                again = await self._act(CLOSE_ALL.format(account_id=self._acct_id), "flatten")
+                if not again.ok:
+                    errors.append(again.error)
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"topstepx: positions unreadable after the flatten: {self._words(e)}")
+        return OrderResult(ok=not errors, error="; ".join(errors) or None, raw=r.raw)
 
     async def flatten_symbol(self, symbol: str) -> OrderResult:
-        """Close what is HELD in the market (an older contract after a roll too), as the broker lists it."""
+        """Close what is HELD in the market (an older contract after a roll too), as the broker lists it, then cancel the
+        market's working orders: the held contracts, and every contract the order cache shows resting (the front month
+        too while the cache is not known)."""
         if self._acct_id is None:
             return OrderResult(ok=False, error="adapter not connected")
         try:
             held = [cid for cid, n in await self._held(symbol, fresh=True) if n]    # what the broker holds NOW
+            mine = self._market(symbol)
         except Exception as e:  # noqa: BLE001
             return OrderResult(ok=False, error=f"topstepx: positions unreadable: {self._words(e)}")
+        resting = {o["contractId"] for o in self._orders.values()
+                   if mine(o["contractId"]) and o["status"] not in ("Filled", "Canceled", "Rejected", "Expired")}
+        if not self._orders_ok:
+            resting.add(self.contract_id(symbol))
+        r = await self._close_and_cancel(held, sorted(set(held) | resting))
+        if not r.ok:
+            return r
+        try:
+            left = [cid for cid, n in await self._held(symbol, fresh=True) if n]
+        except Exception as e:  # noqa: BLE001
+            return OrderResult(ok=False, error=f"topstepx: positions unreadable after the flatten: {self._words(e)}",
+                               raw=r.raw)
+        if not left:
+            return r
+        again = await self._close_and_cancel(left, [])
+        return OrderResult(ok=again.ok, error=again.error,
+                           raw={"flattened": r.raw["flattened"] + again.raw["flattened"]})
+
+    async def _close_and_cancel(self, held: list, cancel: list) -> OrderResult:
+        """Close each held contract; only when every close was taken, cancel each contract's working orders."""
         errors, n = [], 0
         for cid in held:
             r = await self._act(CLOSE_ONE.format(account_id=self._acct_id, contract_id=cid), f"flatten {cid}")
@@ -550,26 +736,53 @@ class TopstepXAdapter(BrokerAdapter):
                 n += 1
             else:
                 errors.append(r.error)
+        if not errors:
+            for cid in cancel:
+                r = await self._act(CANCEL_CONTRACT.format(account_id=self._acct_id, contract_id=cid), f"cancel {cid}")
+                if not r.ok:
+                    errors.append(r.error)
         return OrderResult(ok=not errors, error="; ".join(errors) or None, raw={"flattened": n})
 
     # ------------------------------------------------------------ reads
-    async def _held(self, symbol: str, *, fresh: bool = False) -> list[tuple[str, int]]:
-        """[(contract id, signed size)] of this account's positions in the symbol's market (a root = every month).
-        From the socket-kept cache once it was read whole and the socket is up; else (or `fresh`) from the broker."""
+    def _market(self, symbol: str):
+        """A test for contract ids of the symbol's market (a root = every month, an explicit contract = that one)."""
         s = str(symbol or "").strip().upper()
         root = root_of(s)
         if root not in CODES:
             raise ValueError(f"topstepx: unknown market {symbol!r}")
         prefix = f"CON.F.US.{CODES[root]}."
         exact = None if s == root else self.contract_id(s)
-        book = self._pos if (self._pos_ok and not fresh and self._hub_up()) else await self._seed_positions()
-        return [(cid, n) for cid, n in book.items() if ((cid == exact) if exact else cid.startswith(prefix))]
+        return (lambda cid: cid == exact) if exact else (lambda cid: cid.startswith(prefix))
+
+    async def _held(self, symbol: str, *, fresh: bool = False) -> list[tuple[str, int]]:
+        """[(contract id, signed size)] of this account's positions in the symbol's market (a root = every month).
+        From the socket-kept cache once it was read whole and the socket is up; else (or `fresh`, or a contract with a
+        trade whose position push has not landed yet) from the broker."""
+        mine = self._market(symbol)
+        cached = self._pos_ok and not fresh and self._hub_up() and not any(mine(c) for c in self._dirty)
+        book = self._pos if cached else await self._seed_positions()
+        return [(cid, n) for cid, n in book.items() if mine(cid)]
 
     async def get_net_position(self, symbol: str) -> int:
         """Net position in the symbol's market. RAISES when it cannot be read: unreadable is not flat."""
         if self._acct_id is None:
             raise RuntimeError("adapter not connected")
         return sum(n for _, n in await self._held(symbol))
+
+    def _order(self, order_id) -> Optional[dict]:
+        if not (self._orders_ok and self._hub_up()):
+            return None
+        return self._orders.get(str(order_id))
+
+    async def get_order_status(self, order_id: str) -> Optional[str]:
+        """Working / Filled / Canceled / Rejected / Expired from the order cache (the seed read, kept by the pushes). None =
+        unknown: not seeded, a push unreadable, the socket down, an order the cache does not hold or a status not known."""
+        o = self._order(order_id)
+        return o["status"] if o else None
+
+    async def get_order_state(self, order_id: str) -> dict:
+        o = self._order(order_id)
+        return {"status": o["status"] if o else None, "filled_qty": (o["filled"] or None) if o else None}
 
     async def get_balance(self) -> dict:
         if self._acct_id is None:
@@ -588,19 +801,35 @@ class TopstepXAdapter(BrokerAdapter):
         m = await super().get_metrics()
         m["account"] = self._acct_row.get("name") or None
         m["balance"] = self._balance if self._balance is not None else self._acct_row.get(BALANCE_FIELD)
-        m["positions_known"] = self._pos_ok
-        if self._pos_ok:
+        up = self._hub_up()
+        known = m["positions_known"] = self._pos_ok and up
+        if known:
             by_root: dict[str, int] = {}
             for cid, n in self._pos.items():
                 if n:
-                    code = _code_of(cid)
-                    root = ROOTS.get(code) or code or cid
-                    by_root[root] = by_root.get(root, 0) + n
+                    by_root[self._root(cid)] = by_root.get(self._root(cid), 0) + n
             m["open_positions"] = [{"symbol": r, "net": n} for r, n in by_root.items() if n]
             m["open_position_count"] = len(m["open_positions"])
+        else:
+            m["open_position_count"] = None             # unknown, never 0
+        orders = list(self._orders.values())
+        orders_known = self._orders_ok and up and all(o["status"] is not None for o in orders)
+        m["working_orders"] = sum(1 for o in orders if o["status"] in WORKING_STATUSES) if orders_known else None
+        m["cache_seeded"] = known and orders_known
         m["session_taken"] = self.session.taken
         m["tsx_violation"] = self._violation
+        bare = sorted({self._root(c) for c in self._no_stop if self._pos.get(c)})
+        words = ([f"no stop seen on {', '.join(bare)}"] if bare else []) \
+            + ([VIOLATION_WORDS.get(self._violation, self._violation)] if self._violation else []) \
+            + ([f"session taken {self.session.taken}x"] if self.session.taken else [])
+        if words:
+            m["notice"] = " · ".join(words)
         return m
+
+    @staticmethod
+    def _root(cid: str) -> str:
+        code = _code_of(cid)
+        return ROOTS.get(code) or code or cid
 
     # ------------------------------------------------------------ helpers
     def _clean(self, text: str) -> str:
@@ -638,9 +867,10 @@ def _session_taken(session: TsxSession):
     """The login's ONE handler for 'TopstepX ended this session' (the hub calls it on a socket 401 at open): one kick = one
     count, one journal line, at most one login (through the budget). It runs inside the hub's own task, so it never stops the
     hub. It takes the session's login lock, so a REST call that re-logs in at the same moment cannot make a second login:
-    if the token was already replaced, the kick is counted and no login is sent. A refused login (LoginDeferred) is
-    remembered by the token it was refused for: the hub's next refusal with that same token only asks the budget again (no
-    count, no journal line) after a pause."""
+    if the token was already replaced, the kick is counted and no login is sent. A failed login (deferred by the budget, a
+    code asked, refused) is remembered by the token it was refused for and kept on `session.lost` (the supervisor shows the
+    account disconnected with it): the hub's next refusal with that same token only asks the budget again (no count, no
+    journal line) after a pause. A token refused past its own expiry is a renewal: not counted, not journaled."""
     deferred: Optional[str] = None
 
     async def taken() -> None:
@@ -650,24 +880,25 @@ def _session_taken(session: TsxSession):
         wait = False
         async with session._lock:                   # relogin() itself takes no lock
             again = refused == deferred
+            expired = bool(refused) and _expiry(refused) <= time.time()     # refused for its age: a renewal, not a kick
             names = [a.account_name for a in list(session.listeners)]
-            if not again:
+            kick = not again and not expired
+            if kick:
                 session.taken += 1
                 session.journal("tsx_session_taken", accounts=names, count=session.taken)
             if session._token != refused:           # another path already logged in
                 deferred = None
                 return
             try:
-                await session.relogin("taken")
+                await session.relogin("renew" if expired else "taken")
                 deferred = None
-            except LoginDeferred as e:
-                deferred, wait = refused, True
-                log.warning("topstepx %s: session taken, login deferred", session.key)
-                if not again:
-                    session.journal("tsx_session_taken", accounts=names, count=session.taken, deferred=str(e))
-            except Exception as e:  # noqa: BLE001 -- the hub logs it; the journal gets the class only (no text)
-                session.journal("tsx_session_taken", accounts=names, count=session.taken, failed=type(e).__name__)
-                raise
+            except Exception as e:  # noqa: BLE001 -- any failure: remembered, paced, and shown on the card (session.lost)
+                deferred, wait, session.lost = refused, True, e
+                log.warning("topstepx %s: session taken, login %s", session.key,
+                            "deferred" if isinstance(e, LoginDeferred) else f"failed ({type(e).__name__})")
+                if kick:        # the journal gets the budget's words or the class only (no text: it could hold secrets)
+                    extra = {"deferred": str(e)} if isinstance(e, LoginDeferred) else {"failed": type(e).__name__}
+                    session.journal("tsx_session_taken", accounts=names, count=session.taken, **extra)
         if wait:
             await _pause(DEFER_PAUSE_S)
     return taken
