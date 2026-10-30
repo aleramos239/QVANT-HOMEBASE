@@ -395,6 +395,11 @@ def test_book_route_takes_row_fields_says_a_bad_row_and_journals_previous(client
     assert client.cfg.book[LAB] == [row]
 
 
+def test_a_built_in_strategy_book_drops_row_settings_without_a_400(client):
+    r = client.post("/api/book", json={"strategy": "nq930", "assignments": [{"account": "main", "qty": 1, "size": "lots"}]})
+    assert r.status_code == 200 and client.cfg.book["nq930"] == [{"account": "main", "qty": 1}]
+
+
 def test_a_size_above_the_cap_is_refused(client):
     set_limits(client)
     r = book(client, [("eval1", 2)])

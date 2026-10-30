@@ -460,7 +460,7 @@ class LabDesk:
         why = self._open_why(name)
         if why is not None:
             raise Refused(why)
-        if any(int(r.get("qty") or 0) > limits.max_qty for r in assignments(self.cfg, name)):
+        if any(r.get("size") is None and int(r.get("qty") or 0) > limits.max_qty for r in assignments(self.cfg, name)):
             raise Refused(BOOKED_FOR_MORE)   # (the rows of accounts this desk has; another pool's are not its to judge)
         rows = [dict(r) for r in self.cfg.book.get(name) or []]
         was = labcfg.limits_of(self.cfg, name)
@@ -564,10 +564,15 @@ class LabDesk:
             limits = labcfg.derive_limits(new) if labcfg.auto_of(self.cfg, name) else replace(was, max_qty=scale(was.max_qty, "Its most"))
             if limits is None or (not labcfg.auto_of(self.cfg, name) and not labcfg._whole(limits.max_qty, 1, 10)):
                 raise Refused("Its most contracts would be over 10. Lower it first.")
-        rows = [{"account": r["account"], "qty": scale(int(r["qty"]), "An account's size")} for r in self.cfg.book.get(name) or []]
+        rows = []
+        for r in self.cfg.book.get(name) or []:      # (a row keeps its settings; its size and its most move to the other contract)
+            row = {**r, "qty": scale(int(r["qty"]), "An account's size")}
+            if row.get("most") is not None:
+                row["most"] = scale(int(row["most"]), "An account's most")
+            rows.append(row)
         if rows and limits is None:
             raise Refused(SET_LIMITS_FIRST)
-        if limits is not None and any(r["qty"] > limits.max_qty for r in rows):
+        if limits is not None and any(r.get("size") is None and r["qty"] > limits.max_qty for r in rows):
             raise Refused(BOOKED_FOR_MORE)
         return new, limits, rows
 
@@ -1299,7 +1304,7 @@ class LabDesk:
                 why = LAST_TRADE if (unread and got[i] == door.ONE_AT_A_TIME) else got[i]
                 if i in uneven:
                     why = UNEVEN_PAIR
-                if why is None and q > limits.max_qty:
+                if why is None and row.get("size") is None and q > limits.max_qty:
                     why = f"Size is capped at {limits.max_qty} here."
                 if why is None and self._past(ev.intents[i], last):
                     why = PRICE_PAST

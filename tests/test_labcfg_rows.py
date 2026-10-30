@@ -39,3 +39,16 @@ def test_shaped_skips_bad_rows_and_norm_keeps_fields():
     rows = [{"account": "A", "qty": 1, "size": "risk", "risk_usd": 400}, {"account": "B", "qty": 1, "size": "x"}]
     assert labcfg._shaped(rows) == [rows[0]]
     assert labcfg._norm(["m"], None, rows[:1])["book"] == rows[:1]
+
+
+def test_a_set_row_above_the_cap_survives_the_sync_and_a_legacy_row_does_not():
+    from homebase.labrun import store
+    from tests.test_labcfg import L3, desk_cfg, rec, side
+    cfg = desk_cfg()
+    store.put(rec())
+    set_row = {"account": "main", "qty": 5, "size": "contracts"}
+    store.put_desk("pp_orb", side(book=[set_row, {"account": "eval1", "qty": 5}], limits=L3))
+    labcfg.overlay(cfg)
+    assert cfg.book["lab_pp_orb"] == [set_row]                  # the legacy row above the cap of 3 is dropped, the set row stays
+    assert labcfg.overlay(cfg) == {"added": [], "removed": [], "changed": []}      # the 2 s refresh
+    assert cfg.book["lab_pp_orb"] == [set_row]

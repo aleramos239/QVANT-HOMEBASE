@@ -186,3 +186,13 @@ def test_a_duplicate_of_a_long_name_keeps_the_name_valid(paths):
 
 def test_a_duplicate_of_something_that_is_not_there_is_a_404(mini):
     assert mini.post("/api/lab-duplicate", json={"strategy": "lab_nope"}).status_code == 404
+
+
+def test_a_set_row_is_not_held_to_the_cap_and_keeps_its_settings_on_the_switch(mini):
+    assert set_limits(mini, max_qty=1).status_code == 200
+    row = {"account": "main", "qty": 4, "size": "contracts", "stop_after": "win", "most": 5}
+    assert mini.post("/api/book", json={"strategy": LAB, "assignments": [row]}).status_code == 200
+    assert set_limits(mini, max_qty=1).status_code == 200           # lowering the cap does not refuse a set row
+    r = ident(mini, instrument="micro")
+    assert r.status_code == 200
+    assert mini.cfg.book[LAB] == [{**row, "qty": 40, "most": 50}]

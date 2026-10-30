@@ -695,7 +695,8 @@ def _enforce(cfg: AppCfg, did: str, m: dict) -> None:
     if lim is None:
         drop, why = mine, "limits unreadable" if m["frozen"] else "no limits"
     else:
-        drop, why = [r for r in mine if not _whole(r.get("qty"), 1, lim.max_qty)], "above the size cap"
+        # (a row with settings, one carrying `size`, is not held to the backtested cap: only a legacy row is)
+        drop, why = [r for r in mine if not _whole(r.get("qty"), 1, 10 ** 6 if r.get("size") else lim.max_qty)], "above the size cap"
     if drop:
         _unbook(cfg, did, drop, why)
         keep = [r for r in rows if r not in drop]

@@ -128,7 +128,10 @@ def register(app, *, cfg, engine, labdesk) -> None:
                 raise HTTPException(400, f"unknown account {aid!r}")
             if qty > 0:
                 try:
-                    rows.append(labcfg.book_row({**a, "account": aid, "qty": qty}))
+                    row = {**a, "account": aid, "qty": qty}
+                    if not labdesk.is_lab(name):     # a built-in strategy has no row settings: never a 400 for what it drops
+                        row = {"account": aid, "qty": qty}
+                    rows.append(labcfg.book_row(row))
                 except ValueError as e:
                     raise HTTPException(400, str(e)) from None
         previous = [dict(r) for r in cfg.book.get(name) or []]
@@ -138,7 +141,6 @@ def register(app, *, cfg, engine, labdesk) -> None:
                 engine.journal("book_updated", strategy=name, assignments=rows, previous=previous)
                 note = labdesk.window_note(name) if rows else None      # its window runs past the flat time: a note, never a refusal
                 return {"ok": True, "book": labdesk.book_view(), **({"note": note} if note else {})}
-            rows = [{"account": r["account"], "qty": r["qty"]} for r in rows]    # a built-in strategy has no row settings
             labdesk.check_book(name, rows)   # says nothing unless a promoted Lab strategy is on the desk
         except labdesk_mod.Refused as e:
             raise HTTPException(e.status, str(e)) from None
