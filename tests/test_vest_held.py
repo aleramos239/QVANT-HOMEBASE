@@ -542,6 +542,32 @@ def test_kill_stops_a_limit_entry_that_has_not_posted():
     assert not e.ok and "flatten in progress" in e.error and r.ok and not gw.api("POST")
 
 
+def test_a_hold_that_spans_a_flatten_is_refused():
+    ad, gw, j = mk()
+
+    async def go():
+        gate = asyncio.Event()
+
+        async def slow_accounts(req):                                             # the hold is mid floor read
+            await gate.wait()
+            return httpx.Response(200, json=[{"account_id": ACC, "account_type": 1, "amount": "50000"}])
+        gw.h[("GET", "/v3/accounts")] = slow_accounts
+        h = asyncio.ensure_future(hold(ad))
+        await asyncio.sleep(0.05)
+        r = await ad.flatten_all()                                                 # starts and ends during the read
+        gate.set()
+        return await h, r
+    e, r = run(go())
+    assert r.ok and not e.ok and "flatten in progress" in e.error and not ad._book.entries
+
+
+def test_a_hold_during_a_flatten_is_refused():
+    ad, gw, j = mk()
+    ad._sweeping = 1
+    e = run(hold(ad))
+    assert not e.ok and "flatten in progress" in e.error and not ad._book.entries
+
+
 def test_no_order_id_rewrite_claims_only_its_own_fill():
     ad, gw, j = mk()
     r = run(hold(ad))

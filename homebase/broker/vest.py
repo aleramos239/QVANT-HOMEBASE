@@ -213,6 +213,7 @@ class VestAdapter(BrokerAdapter):
         self._added: dict[str, float] = {}              # held id -> monotonic time it was added (OCO pairing)
         self._entry_lock = asyncio.Lock()               # floor guard + POST of one entry at a time (R39)
         self._sweeping = 0                              # sweeps running: entries not yet POSTed are refused (R41)
+        self._sweeps = 0                                # sweeps ever started: a hold that spans one is refused
         self._held_of: dict[str, str] = {}              # Vest order id -> held id (its fills carry the held id, R30)
         self._risk: dict[str, Decimal] = {}             # resting limit entry id -> $ at risk to its stop
         self._sp: Optional[dict] = None
@@ -522,6 +523,7 @@ class VestAdapter(BrokerAdapter):
 
     async def _sweep(self, *, close: bool) -> OrderResult:
         self._sweeping += 1                             # from here no entry, fire or limit, POSTs (R41)
+        self._sweeps += 1
         try:
             return await self._sweep_now(close=close)
         finally:
@@ -690,6 +692,9 @@ class VestAdapter(BrokerAdapter):
 
     async def _hold(self, req: OrderRequest) -> OrderResult:
         """A Stop entry: held here (nothing sent), checked against the floors now and again when it fires."""
+        if self._sweeping:
+            return OrderResult(ok=False, error="vest: flatten in progress")
+        sweeps = self._sweeps
         if req.order_type != "Stop":
             return OrderResult(ok=False, error="vest: stop-limit entries are not supported")
         if req.price is None or req.stop_price is None:
@@ -702,6 +707,8 @@ class VestAdapter(BrokerAdapter):
         err = await self._floor_err(_dec(units) * _dec(sl))
         if err:
             return OrderResult(ok=False, error=err)
+        if self._sweeping or self._sweeps != sweeps:  # a flatten ran while the floor read was awaited
+            return OrderResult(ok=False, error="vest: flatten in progress")
         day = self._desk_day()
         e = HeldEntry(HELD + uuid.uuid4().hex[:12], req.symbol, req.side, req.qty, level, sl,
                       None if req.tp_price is None else abs(float(req.tp_price) - level), day, None)
