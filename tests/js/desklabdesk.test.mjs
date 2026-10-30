@@ -411,11 +411,11 @@ test('WP1.8 sidebar accounts: a LIVE / DEMO / PAPER tag on every row, what it ho
 
 test('the Strategies count in a folded sidebar does not count the same strategy twice', () => {
   const side = SLICE('function renderSide(', '/* ---- strategy detail ---- */');
-  // the count is the rows under Strategies: a Lab row the Desk holds is its own row (one row, never two); the groups sit inside
-  // Strategies (2026-10-18), so a strategy in a group is counted there once
+  // the count is the rows under Strategies: a Lab row the Desk holds is its own row (one row, never two); families fold their
+  // variants inside Strategies (2026-10-29), so a strategy in a family is counted there once; account cycles are their own section
   assert.match(side, /DESKLAB\.strategies\.filter\(w => !labOnDesk\(w\)\)\.map/);
   assert.match(side, /head\("strat", "Strategies", names\.length \+ labIds\.length/);
-  assert.match(side, /strat \+ labRows \+ groupBlocks/);
+  assert.match(side, /famBlocks \+ loose/);
 });
 
 test('the Desk\'s own page is shown for a #lab=<name> link or a Lab view once the Desk knows the strategy', () => {
@@ -1678,4 +1678,23 @@ test('1.19: a piece with no data is left out: no answer, no turn, the cycle off,
   noPnl.ctx.ST.strategies.lab_nq_orb.accounts = []; noPnl.ctx.ST.strategies.nq930.accounts = [];
   assert.doesNotMatch(noPnl.page(), /The group today/, 'no trade closed today: no group total');
   assert.match(noPnl.page(), /<h2>Today<\/h2>/);
+});
+
+// ---- families (owner 2026-10-29): variants of one idea fold under one sidebar row; account cycles are their own section --------
+test('a family folds its variants by their short names, the rest follow; the cycle is its own section; the family page sets them side by side', () => {
+  const t = groupDesk({});
+  vm.runInContext(`DESKFAM = {families: [{id: "f1", name: "NQ ORB", members: ["lab_nq_orb"], short: {lab_nq_orb: "1.5R"}}], ok: true};
+    DESKRES = {nq_orb: {build: {net: 4000, trades: 210}, unseen: {net: -150, trades: 70}}};`, t.ctx);
+  const side = t.side();
+  assert.match(side, /<span>NQ ORB<\/span>/, 'the family is a folding header');
+  assert.match(side, /<b>1\.5R<\/b>/, 'its variant shows by its short name');
+  assert.ok(side.indexOf('NQ ORB') < side.indexOf('nq930') || !/nq930/.test(side), 'families first, then the strategies in no family');
+  assert.match(side, /<span>Account cycles<\/span>/);
+  assert.match(side, /setView\('group',&quot;g1&quot;\)[^>]*>\s*<i class="sd ok"><\/i><span class="it"><b>Apex<span class="tag">cycle<\/span><\/b>/, 'the cycle is one row, on');
+  assert.equal((side.match(/setView\('strat','lab_nq_orb'\)/g) || []).length, 1, 'a variant in a family and a cycle shows once');
+  const page = vm.runInContext('familyView("f1")', t.ctx);
+  assert.match(page, /<h1 class="sd-title">NQ ORB<\/h1>/);
+  assert.match(page, />1\.5R · <span class="dim">[^<]+<\/span><\/span>\s*<span class="t dim">\+\$4,000 · 210 tr<\/span><span class="t">−\$150 · 70 tr<\/span>/);
+  assert.match(page, /<span class="t dim">1<\/span><\/div>/, 'booked on one account');
+  assert.match(vm.runInContext('familyView("f9")', t.ctx), /not there any more/);
 });

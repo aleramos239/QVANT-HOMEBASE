@@ -146,8 +146,8 @@ html.hb-apple .hb-side .sh-t i { font-style: normal; font-weight: 510; font-size
 html.hb-apple .hb-side .sh-btn { -webkit-appearance: none; appearance: none; border: 0; width: 22px; height: 19px; border-radius: var(--hb-bubble-r); padding: 0; font-size: 0; line-height: 0; display: block;
   background: var(--a-label-pane-2); -webkit-mask: var(--sf-plus) center / 11px 11px no-repeat; mask: var(--sf-plus) center / 11px 11px no-repeat; }
 html.hb-apple .hb-side .sh-btn[onclick^="openAlgoMgr"], html.hb-apple .hb-side .sh-btn[onclick^="openGroupMgr"] { -webkit-mask: var(--sf-ellipsis) center / 13px auto no-repeat; mask: var(--sf-ellipsis) center / 13px auto no-repeat; }
-/* a group's own "open its page" button: a chevron, lit while its page is the one shown */
-html.hb-apple .hb-side .sh-btn[onclick^="setView('group'"] { -webkit-mask: var(--sf-chevron-right) center / 7px 10px no-repeat; mask: var(--sf-chevron-right) center / 7px 10px no-repeat; }
+/* a family's own "open its page" button: a chevron, lit while its page is the one shown */
+html.hb-apple .hb-side .sh-btn[onclick^="setView('group'"], html.hb-apple .hb-side .sh-btn[onclick^="setView('family'"] { -webkit-mask: var(--sf-chevron-right) center / 7px 10px no-repeat; mask: var(--sf-chevron-right) center / 7px 10px no-repeat; }
 /* a group inside Strategies: a smaller, indented header that folds its own rows; Strategies' own buttons sit side by side */
 html.hb-apple .hb-side .sh.sub { margin-top: 6px; padding-left: 14px; }
 html.hb-apple .hb-side .sh-acts { display: flex; gap: 2px; }
@@ -375,6 +375,7 @@ html.hb-apple .feed { max-height: none; overflow: visible; font-size: 13px; line
 html.hb-apple .feed-row { display: flex; flex-wrap: wrap; column-gap: 10px; padding: 6px 10px; border: 0; position: relative; cursor: default; }
 html.hb-apple .feed-row + .feed-row::before { content: ""; position: absolute; left: 10px; right: 10px; top: 0; height: 1px; background: var(--a-group-sep); }
 html.hb-apple .feed .t { flex: 0 0 76px; white-space: nowrap; font-family: var(--a-font); font-size: 11px; line-height: 16px; color: var(--a-label-2); font-variant-numeric: tabular-nums; }
+html.hb-apple .feed.fam-table .t { flex-basis: 128px; text-align: right; } html.hb-apple .feed.fam-table .t:last-child { flex-basis: 64px; }
 html.hb-apple .feed .h { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--a-label); -webkit-user-select: text; user-select: text; }
 html.hb-apple .feed .h.pos { color: var(--a-green); }
 html.hb-apple .feed .h.neg { color: var(--a-label); }

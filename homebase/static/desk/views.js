@@ -15,7 +15,7 @@ const dayPill = (st) => `<span class="${STATUS_PILL[st] || "pill idle"}" title="
 let VIEW = {k: "today"};
 try {
   const v = JSON.parse(localStorage.getItem("hb_view") || "null");
-  if (v && ["today", "strat", "activity", "lab", "group", "archive"].includes(v.k)) VIEW = v;
+  if (v && ["today", "strat", "activity", "lab", "group", "family", "archive"].includes(v.k)) VIEW = v;
 } catch (_) {}
 let SIDE_ALL = false;
 /* The sidebar's sections fold (2026-10-09): a header with a chevron hides its rows; what is folded is remembered per browser. */
@@ -158,7 +158,7 @@ const actBtn = (who) => `<button class="btn btn-quiet btn-sm act-link" onclick="
   title="Every trade, skip and order of the last 7 days: which account and when">Activity ›</button>`;
 function setView(k, name) {
   closeAsgMenus(false);
-  VIEW = k === "strat" || k === "lab" || k === "group" ? {k, name} : {k};
+  VIEW = k === "strat" || k === "lab" || k === "group" || k === "family" ? {k, name} : {k};
   try { localStorage.setItem("hb_view", JSON.stringify(VIEW)); } catch (_) {}
   if (ST) render();
   if (k === "group") loadDeskGroupRes();

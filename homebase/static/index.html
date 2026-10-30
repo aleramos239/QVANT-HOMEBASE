@@ -253,6 +253,8 @@
   .feed-empty{ color:var(--muted-foreground); font-size:13px; padding:18px 0; }
   /* a list that only reads (a Lab strategy's orders, trades and days): nothing opens, and an amount never wraps */
   .feed.static .feed-row{ cursor:default; }
+  /* a family's page: wider number columns, right-aligned, so in-sample and test months line up under their heads */
+  .feed.fam-table .t{ flex:0 0 128px; text-align:right; } .feed.fam-table .t:last-child{ flex-basis:64px; }
   .act-pick{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
   .act-pick select{ width:auto; max-width:240px; }
   .btn.act-link{ margin:14px 0 8px; }
@@ -833,20 +835,27 @@
 </div>
 
 <div class="overlay" id="groupOverlay">
-  <div class="modal" style="width:640px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="groupTitle">
+  <div class="modal" style="width:780px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="groupTitle">
     <div class="cal-head">
-      <span style="font-weight:600" id="groupTitle">Manage groups</span>
+      <span style="font-weight:600" id="groupTitle">Families and account cycles</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="groupCount"></span>
       <span class="spacer" style="flex:1"></span>
       <button class="cal-nav" onclick="closeGroupMgr()" title="Close" aria-label="Close">&times;</button>
     </div>
-    <p class="mcap" style="margin:0 0 10px">A group shows its strategies' results together. On its page, the Account cycle (off until you switch it on) makes
-      them take turns across the accounts you tick. A strategy is in one group. The same code tried two ways (an eval and a funded account) is two strategies, each in its own group.</p>
-    <div class="field" style="margin-bottom:6px"><label for="groupNewName">New group</label>
+    <p class="mcap" style="margin:0 0 10px">A <b>family</b> folds the variants of one idea (other targets or stops) under one row, with a page that sets
+      them side by side. It changes nothing that trades. An <b>account cycle</b> shows its strategies' results together and, once you switch it on
+      on its page, makes them take turns across the accounts you tick. A strategy can be in one family and one account cycle.</p>
+    <div class="field" style="margin-bottom:6px"><label for="familyNewName">New family</label>
       <div style="display:flex;gap:8px;align-items:center">
-        <input id="groupNewName" autocomplete="off" spellcheck="false" maxlength="40" placeholder="e.g. Eval — Lucid 50K"
+        <input id="familyNewName" autocomplete="off" spellcheck="false" maxlength="40" placeholder="e.g. NQ 15m FVG open+VWAP"
+          onkeydown="if(event.key==='Enter'&&!event.repeat){event.preventDefault();addFamily()}">
+        <button class="btn btn-default btn-sm" onclick="addFamily()">Add family</button>
+      </div></div>
+    <div class="field" style="margin-bottom:6px"><label for="groupNewName">New account cycle</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="groupNewName" autocomplete="off" spellcheck="false" maxlength="40" placeholder="e.g. Apex 300K"
           onkeydown="if(event.key==='Enter'&&!event.repeat){event.preventDefault();addGroup()}">
-        <button class="btn btn-default btn-sm" onclick="addGroup()">Add group</button>
+        <button class="btn btn-default btn-sm" onclick="addGroup()">Add account cycle</button>
       </div></div>
     <div id="groupList"></div>
   </div>
@@ -906,14 +915,14 @@
 <script src="/static/desk/core.js?v=4"></script>
 <script src="/static/desk/topbar.js?v=5"></script>
 <script src="/static/desk/activity.js?v=8"></script>
-<script src="/static/desk/views.js?v=1"></script>
-<script src="/static/desk/groups.js?v=6"></script>
-<script src="/static/desk/strategy.js?v=9"></script>
-<script src="/static/desk/labdesk.js?v=10"></script>
+<script src="/static/desk/views.js?v=2"></script>
+<script src="/static/desk/groups.js?v=7"></script>
+<script src="/static/desk/strategy.js?v=10"></script>
+<script src="/static/desk/labdesk.js?v=11"></script>
 <script src="/static/desk/demo.js?v=2"></script>
 <script src="/static/desk/book.js?v=7"></script>
 <script src="/static/desk/settings.js?v=8"></script>
-<script src="/static/desk/popups.js?v=5"></script>
+<script src="/static/desk/popups.js?v=6"></script>
 <script src="/static/desk/start.js?v=2"></script>
 <script src="/static/hb-glass.js?v=2"></script>
 </body>

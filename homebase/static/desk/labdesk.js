@@ -485,7 +485,7 @@ async function clearLabBlock(name, account) {
 
 function renderMain(names, issues) {
   $("#viewToday").hidden = VIEW.k !== "today";
-  $("#viewStrat").hidden = VIEW.k !== "strat" && VIEW.k !== "lab" && VIEW.k !== "group" && VIEW.k !== "archive";
+  $("#viewStrat").hidden = VIEW.k !== "strat" && VIEW.k !== "lab" && VIEW.k !== "group" && VIEW.k !== "family" && VIEW.k !== "archive";
   $("#viewActivity").hidden = VIEW.k !== "activity";
   if (VIEW.k === "today") {
     const [l1, l2] = dayHeadline(names);
@@ -498,6 +498,7 @@ function renderMain(names, issues) {
   } else if (VIEW.k === "strat") $("#viewStrat").innerHTML = stratView(VIEW.name);
   else if (VIEW.k === "lab") $("#viewStrat").innerHTML = labSafe(() => labView(VIEW.name), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${LAB_FAULT}</div>`);
   else if (VIEW.k === "group") $("#viewStrat").innerHTML = labSafe(() => groupView(VIEW.name), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${GROUP_FAULT}</div>`);
+  else if (VIEW.k === "family") $("#viewStrat").innerHTML = labSafe(() => familyView(VIEW.name), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${FAMILY_FAULT}</div>`);
   else if (VIEW.k === "archive") $("#viewStrat").innerHTML = labSafe(() => archiveView(), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${LAB_FAULT}</div>`);
 }
 
@@ -543,6 +544,7 @@ function render() {
   if (VIEW.k === "lab" && labSafe(() => DeskLab.onDesk(s.strategies, {name: VIEW.name}), false)) VIEW = {k: "strat", name: "lab_" + VIEW.name};   // the Desk knows it now: its own page
   if (VIEW.k === "strat" && !names.includes(VIEW.name)) VIEW = {k: "today"};
   if (VIEW.k === "group" && DESKGROUPS.ok === true && !groupOf(VIEW.name)) VIEW = {k: "today"};      // a group removed (here or elsewhere)
+  if (VIEW.k === "family" && DESKFAM.ok === true && !famOf(VIEW.name)) VIEW = {k: "today"};          // a family removed
   ISSUE_LVL = probs.some(c => c.level === "bad") ? "bad" : "warn";
   renderSide(names, algoVis.filter(a => !a.visible && !shelved.includes(a.name)).length, probs.length);
   renderMain(names, probs.length);

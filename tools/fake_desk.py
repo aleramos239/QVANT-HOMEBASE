@@ -727,8 +727,9 @@ TICKS_REFUSED = frozenset({8850, 8852})      # the real desk and the real chart 
 PAGE_CHART_LINE = 'const CHART = location.protocol + "//" + location.hostname + ":8852";'
 PAGE_CHART_SWAP = 'const CHART = location.origin + "/chart";'
 CHART_GETS = ("api/tester/desklab", "api/tester/watch", "api/paper/accounts", "api/status", "api/settings",
-              "api/tester/deskgroups", "api/tester/deskgroups/results")
-CHART_POSTS = tuple(f"api/tester/deskgroups/{a}" for a in ("create", "rename", "kind", "delete", "move"))   # the Desk groups
+              "api/tester/deskgroups", "api/tester/deskgroups/results", "api/tester/deskfamilies")
+CHART_POSTS = (tuple(f"api/tester/deskgroups/{a}" for a in ("create", "rename", "kind", "delete", "move"))   # the Desk groups
+               + tuple(f"api/tester/deskfamilies/{a}" for a in ("create", "rename", "delete", "move", "short")))   # and families
 RIG_FAULTS = ("stream_drop", "silent_s", "timer_placing_s", "chart_kill", "account")
 TIMER_STATE = "fake_timer@timer"             # the made-up state of timer_placing_s (no such strategy, no such account)
 
