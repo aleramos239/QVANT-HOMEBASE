@@ -194,6 +194,7 @@ class VestAdapter(BrokerAdapter):
         self._seen: dict[str, Decimal] = {}
         self._events: dict[str, tuple[str, Optional[str]]] = {}     # command / order id -> (status, error) off the socket
         self._pos_of: dict[str, str] = {}               # order id -> position id (for get_order_status)
+        self._closed_pids: dict[str, bool] = {}         # positions whose exit the poll reported: later fills on them dropped
 
     # --- plumbing ---------------------------------------------------------------------------------
     async def _api(self, method: str, path: str, *, account: bool = True, **kw):
@@ -539,11 +540,21 @@ class VestAdapter(BrokerAdapter):
         """A closed position whose /details keeps failing: its exit from the size change alone. No price (None, never
         0): the engine keeps the trade's P&L unknown rather than booking a fill at 0."""
         root = self._roots.get(pid) or self.root
+        self._closed(pid)
         return FillEvent(account_id=self.account_id, symbol=root, side="Sell" if units > 0 else "Buy",
                          qty=_contracts(abs(units), root), price=None, position_after=_contracts(net, root),
-                         ts=time.time(), raw={"positionId": pid, "units": str(abs(units)), "src": "poll",
+                         ts=time.time(), raw={"orderId": f"size:{pid}", "positionId": pid, "units": str(abs(units)),
+                                              "src": "poll",
                                               "note": "details failed: size change only"},
                          seen=time.perf_counter())
+
+    def _closed(self, pid: str) -> None:
+        self._closed_pids[pid] = True
+        _cap(self._closed_pids)
+
+    def _live(self, events: list[FillEvent]) -> list[FillEvent]:
+        """Drops fills on a position whose exit was already reported (a socket replay, a late /details row)."""
+        return [e for e in events if str(e.raw.get("positionId")) not in self._closed_pids]
 
     async def _deliver(self, events: list[FillEvent]) -> None:
         for ev in events:
@@ -580,8 +591,9 @@ class VestAdapter(BrokerAdapter):
                 bad = st in ("Canceled", "Rejected")
                 self._events[str(o["order_id"])] = (st, (f"vest {code}" if code else None) if bad else None)
         _cap(self._events)
-        await self._deliver(parse_account_state(msg, account_id=self.account_id, vest_account_id=self.vest_account_id,
-                                                seen=self._seen, roots=self._roots, default_root=self.root))
+        await self._deliver(self._live(parse_account_state(msg, account_id=self.account_id, roots=self._roots,
+                                                           vest_account_id=self.vest_account_id, seen=self._seen,
+                                                           default_root=self.root)))
         _cap(self._seen)
 
     async def _ws_loop(self) -> None:
@@ -630,38 +642,51 @@ class VestAdapter(BrokerAdapter):
                     cur[pid] = prev[pid]
                 else:
                     cur.pop(pid, None)
+
+            def give_up(pid, gone) -> bool:     # a closed position /details cannot settle: its exit by size, then drop
+                if not gone:
+                    return False
+                fails[pid] = fails.get(pid, 0) + 1
+                if fails[pid] < DETAILS_TRIES:
+                    return False
+                del fails[pid]
+                if pid not in self._closed_pids:            # its closing row was not reported already
+                    events.append(self._size_fill(pid, prev[pid], net))
+                return True
             for pid in sorted(cur) if seeding else changed:
+                gone = pid in (prev or {}) and pid not in cur
                 try:
                     frame = details_frame(pid, await self._api("GET", f"/v3/positions/{pid}/details"),
                                           vest_account_id=self.vest_account_id)
                 except Exception as e:  # noqa: BLE001 -- report nothing for this read, the next one retries; never guess
                     log.warning("vest %s: poll details read failed (%s)", self.account_id, type(e).__name__)
-                    if pid in (prev or {}) and pid not in cur:                  # closed: its exit must not be lost
-                        fails[pid] = fails.get(pid, 0) + 1
-                        if fails[pid] >= DETAILS_TRIES:
-                            del fails[pid]
-                            events.append(self._size_fill(pid, prev[pid], net))  # pid stays out of cur: dropped
-                            continue
-                    retry = True
-                    hold(pid)
+                    if not give_up(pid, gone):
+                        retry = True
+                        hold(pid)
                     continue
-                fails.pop(pid, None)
                 if seeding:                     # what is already filled is not a fill
                     for o in frame["data"]["orders"] + frame["skipped"]:
                         self._seen.setdefault(str(o.get("order_id")), _dec(o.get("executed_quantity") or 0))
                     continue
-                if frame["skipped"]:            # a row whose side is unknown: not seen, read again next time
-                    retry = True
-                    hold(pid)
+                if not frame["skipped"]:
+                    fails.pop(pid, None)
+                else:                           # a row whose side is unknown: not seen, read again next time
                     for oid in (str(o.get("order_id")) for o in frame["skipped"]):
                         if oid not in warned:
                             warned[oid] = True
                             log.warning("vest: poll skipped order %s (side unknown)", oid)
                     _cap(warned)
-                for ev in parse_account_state(frame, account_id=self.account_id, vest_account_id=self.vest_account_id,
-                                              seen=self._seen, roots=self._roots, default_root=self.root):
+                    if not give_up(pid, gone):
+                        retry = True
+                        hold(pid)
+                evs = self._live(parse_account_state(frame, account_id=self.account_id, roots=self._roots,
+                                                     vest_account_id=self.vest_account_id, seen=self._seen,
+                                                     default_root=self.root))
+                for ev in evs:
                     ev.raw["src"], ev.position_after = "poll", _contracts(net, ev.symbol)
                     events.append(ev)
+                if evs and gone:                # its exit is reported: a replay of it is not a fill
+                    self._closed(pid)
             _cap(self._seen)
             prev = None if seeding and retry else cur
             self._busy = bool(held or resting or retry)

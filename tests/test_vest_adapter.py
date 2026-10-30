@@ -868,10 +868,12 @@ def test_details_frame_skips_a_row_it_cannot_classify():
     assert sided["skipped"] == [] and sided["data"]["orders"][0]["side"] == "sell"     # the row's own side: classified
 
 
-def _poll_run(monkeypatch, ad, middle, wait=0.4):
-    """Seed the poll on gw's state, run `middle()` (the change), give the poll `wait` s; -> the fills it reported."""
+def _poll_run(monkeypatch, ad, middle, wait=0.4, after=None):
+    """Seed the poll on gw's state, run `middle()` (the change), give the poll `wait` s, then `after(sock)` (a socket
+    frame) and 0.1 s more; -> the fills reported."""
     monkeypatch.setattr(vest, "POLL_S", 0.01)
-    Sock().patch(monkeypatch)
+    sock = Sock()
+    sock.patch(monkeypatch)
     got = []
 
     async def go():
@@ -881,6 +883,9 @@ def _poll_run(monkeypatch, ad, middle, wait=0.4):
         await asyncio.sleep(0.1)                                # seeded
         middle()
         await asyncio.sleep(wait)
+        if after:
+            after(sock)
+            await asyncio.sleep(0.1)
         await ad.close()
     run(go())
     return got
@@ -925,6 +930,54 @@ def test_poll_closed_position_with_failing_details_reports_one_exit_from_the_siz
     (ev,) = got
     assert (ev.side, ev.qty, ev.price, ev.position_after, ev.symbol) == ("Sell", 1, None, 0, "NQ")
     assert ev.raw["positionId"] == "p1" and ev.raw["src"] == "poll"
+    assert ev.raw["orderId"] == "size:p1"                         # never orderless: the engine cannot take it as an entry
+
+
+def test_size_fallback_then_the_socket_replaying_the_close_reports_once(monkeypatch):
+    ad, gw = mk()
+    gw.positions, gw.details["p1"] = [pos("long", "20")], [X0]
+
+    def details(req):
+        if not gw.positions:
+            return httpx.Response(404, json={"code": 10009, "msg": "no position"})
+    gw.h[("GET", "/v3/positions/p1/details")] = details
+
+    def close():
+        gw.positions = []
+
+    def replay(sock):
+        sock.state([order_row(order_id="c1", position_id="p1", side="sell", quantity="20", executed_quantity="20")])
+    got = _poll_run(monkeypatch, ad, close, after=replay)
+    assert [g.raw["orderId"] for g in got] == ["size:p1"]
+
+
+def test_closed_position_stuck_on_unclassifiable_rows_falls_back_once(monkeypatch):
+    ad, gw = mk()
+    gw.positions, gw.details["p1"] = [pos("long", "20")], [X0]
+    reads = []
+    gw.h[("GET", "/v3/positions/p1/details")] = lambda req: reads.append(1) if not gw.positions else None
+
+    def close():
+        gw.positions = []
+        gw.details["p1"] = [{**X0, "order_id": "u1", "position_order_type": None, "order_type": "limit"}]
+    got = _poll_run(monkeypatch, ad, close)
+    assert len(reads) == 3                                       # then dropped: no more /details for p1
+    assert [(g.side, g.qty, g.raw["orderId"]) for g in got] == [("Sell", 1, "size:p1")]
+
+
+def test_closed_position_reported_by_its_closing_row_never_falls_back(monkeypatch):
+    ad, gw = mk()
+    gw.positions, gw.details["p1"] = [pos("long", "20")], [X0]
+    reads = []
+    gw.h[("GET", "/v3/positions/p1/details")] = lambda req: reads.append(1) if not gw.positions else None
+
+    def close():
+        gw.positions = []
+        gw.details["p1"] = [{**X0, "order_id": "c1", "position_order_type": "close"},
+                            {**X0, "order_id": "u1", "position_order_type": None, "order_type": "limit"}]
+    got = _poll_run(monkeypatch, ad, close)
+    assert len(reads) == 3 and "p1" in ad._closed_pids
+    assert [g.raw["orderId"] for g in got] == ["c1"]             # its close was reported: no size fill on top
 
 
 def test_poll_closed_position_details_ok_on_the_second_read_gives_the_order_fill(monkeypatch):
