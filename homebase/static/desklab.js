@@ -592,6 +592,8 @@
   var SAY_LAST = "No new trade after: a time like 11:00, before the flat time.";
   var SAY_FLAT = "Flat by: a time like 15:55, no later than 15:55.";
   var FLAT_LATEST = "15:55";
+  var SAY_FLAT_EVENING = "Flat by: a time like 23:55, no later than 23:55.";
+  var FLAT_EVENING = "23:55";        // an evening session ("-18:00" to "00:00") is flat by 23:55 (labcfg.FLAT_EVENING)
   var HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
   function deskId(name) {
@@ -740,7 +742,7 @@
     return n >= lo && n <= hi ? n : null;
   }
   // The same checks the Desk makes (labcfg.parse_limits), with its sentences, one per field. `start` = the strategy's
-  // session start ("HH:MM"); the Desk is the judge when it differs. -> {errors: {trades?, qty?, risk?, last?, flat?}, body | null}.
+  // session start ("HH:MM", or "-HH:MM" for one that opens the evening before: flat by 23:55); the Desk is the judge when it differs. -> {errors: {trades?, qty?, risk?, last?, flat?}, body | null}.
   // The body is exactly what the fields say: nothing is rounded, padded or filled in.
   function checkLimits(fields, start) {
     var f = isObj(fields) ? fields : {}, errors = {}, body = {};
@@ -755,9 +757,10 @@
     if (risk === null) errors.risk = SAY_RISK; else body.max_risk_usd = risk;
     var last = text(f.last).trim(), flat = text(f.flat).trim();
     if (!HHMM.test(last)) errors.last = SAY_LAST; else body.last_entry_et = last;
-    if (!HHMM.test(flat) || flat > FLAT_LATEST) errors.flat = SAY_FLAT; else body.flat_et = flat;
+    var eve = text(start).charAt(0) === "-", st = eve ? text(start).slice(1) : text(start);
+    if (!HHMM.test(flat) || flat > (eve ? FLAT_EVENING : FLAT_LATEST)) errors.flat = eve ? SAY_FLAT_EVENING : SAY_FLAT; else body.flat_et = flat;
     if (!errors.last && !errors.flat) {
-      var from = HHMM.test(text(start)) ? start : "";      // not known when the chart service is down: the Desk judges that part
+      var from = HHMM.test(st) ? st : "";      // not known when the chart service is down: the Desk judges that part
       if (!((from === "" || from <= last) && last < flat)) errors.last = SAY_LAST;
     }
     return { errors: errors, body: Object.keys(errors).length ? null : body };

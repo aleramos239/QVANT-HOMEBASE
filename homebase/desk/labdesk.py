@@ -715,7 +715,8 @@ class LabDesk:
             return
         mine = self.is_lab(name)
         if mine:
-            if rows and labcfg.evening(labcfg.record_of(self.cfg, name) or {}):
+            rec = labcfg.record_of(self.cfg, name) or {}
+            if rows and labcfg.evening(rec) and not labcfg.same_night(rec):     # crosses midnight: shadow only
                 raise Refused(labcfg.SAY_EVENING)
             limits = labcfg.limits_of(self.cfg, name)
             if rows and limits is None:

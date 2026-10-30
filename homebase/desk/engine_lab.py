@@ -67,6 +67,16 @@ LAB_NO_POSITION_READ = "The Desk cannot read this account's position."
 LAB_NO_STOP_ID = "Check it: the Desk does not know this trade's stop order."
 LAB_BAD_RECORD = "The Desk cannot read yesterday's record for this account."
 LAB_OLD_ORDER_WORKING = "An old order of this trade is still working. Cancel it first."
+EVENING_FROM = dt.time(18, 0)                  # the Desk day opens here (engine._day_of_et): a window from here is an evening one
+
+
+def lab_past_flat(cfg: StrategyCfg, now: dt.time) -> bool:
+    """At or after the strategy's flat time, in the order of the Desk day (18:00 ET -> 18:00). A same-night evening
+    session (accept from 18:00 or later, flat by 23:55) is past its flat time after midnight too: a position its 23:55
+    flatten did not close is flattened again until the day ends, never left alone at 00:00 (owner, 2026-10-30)."""
+    if _hhmm(cfg.accept_from_et) >= EVENING_FROM and now < EVENING_FROM:
+        return True
+    return now >= _hhmm(cfg.flat_et)
 LAB_LOST_ACT = "check it — this trade's record was lost: nothing is sent or cancelled for it"
 LAB_PLACED_CAP = 50                            # shortcut: placements a day per account, filled or not, before the
                                                # daily limit stops it (a runaway re-placer); raise if a strategy needs more
@@ -1051,7 +1061,7 @@ class LabMixin:
             return cfg, LAB_KILLED
         now = self.now_et()
         hhmm = now.strftime("%H:%M")                 # the door's own rule, by the minute (labrun/door.py)
-        if now.time() >= _hhmm(cfg.flat_et) or hhmm > cfg.accept_until_et or hhmm < cfg.accept_from_et:
+        if lab_past_flat(cfg, now.time()) or hhmm > cfg.accept_until_et or hhmm < cfg.accept_from_et:
             return cfg, LAB_TOO_LATE
         if not self.cfg.armed or cfg.shadow:
             return cfg, LAB_DISARMED
@@ -1932,7 +1942,7 @@ class LabMixin:
             # capped flatten, no cancel, no settle. L-1: ONE thing stays, and it is the engine's own -- while it is
             # placed, before the flat time and with the adapter connected, the order-status backstop that adopts a
             # fill whose push was missed and cancels the pair's other entry, exactly as a healthy placed round has it
-            if st.status == "placed" and now < _hhmm(cfg.flat_et) and ad.connected:
+            if st.status == "placed" and not lab_past_flat(cfg, now) and ad.connected:
                 await self._guard_placed(st, cfg, ad, check_position=False, event="entry_found_by_check",
                                          note="fill push missed — entry found by the order-status check")
             return
@@ -1941,7 +1951,7 @@ class LabMixin:
         check_it = self.needs_check(st)              # killed today and still placed / live: a human's job
         if check_it:
             self._journal_needs_check(st, cfg, now)
-        late = now >= _hhmm(cfg.flat_et)
+        late = lab_past_flat(cfg, now)
         closing = bool(x.get("close_sent_ms") or x.get("gone_ms"))
         if st.status == "placed" and not late and not closing:
             if ad.connected:       # a dead socket's cache is stale; reconnect reconciles
