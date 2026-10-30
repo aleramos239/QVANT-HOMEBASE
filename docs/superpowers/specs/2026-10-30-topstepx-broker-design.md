@@ -129,3 +129,22 @@ format, and what a contract id looks like for NQ / MNQ / ES / MES / GC / MGC.
   to contract-id mapping, and how the code step (if any) fits the wizard.
 - What the desk shows for TopstepX's own rule breaches (`RealTimeTradingAccountViolation`, lockouts): at least a journal line
   and the account card's status.
+
+## Before booking opens (review, 2026-10-30)
+
+Booking a strategy on a TopstepX account is refused (`TSX_BOOKING_OPEN = False`) until the owner lifts it. Before that:
+
+1. Run the read-only spike (`.spike/tsx_spike.py`) and correct the guessed paths and values (order status and type numbers,
+   position sign, practice marker, token lifetime, the code step, contract ids).
+2. Fix the review's parked items in `homebase/broker/topstepx.py`:
+   - a refused close on one of two held months must not skip the cancels on the month that did close;
+   - after a re-read, close again only when the position's sign flipped (else report not-ok), unless the spike shows a close is
+     filled when it answers;
+   - `flatten_all` reads positions first and skips the close when flat, so a refused close-all never skips the cancels;
+   - the no-stop warning clears when a late stop push lands;
+   - reseed the order cache while it is unknown (one bad push blocks deploys until the socket reopens);
+   - `TSX_FLATTEN_IF_NO_STOP` must not fire while the order cache is unknown;
+   - `positions_known` is False while a contract is dirty (just filled, position push not in yet);
+   - `_has_stop` should compare the stop's size to the position's.
+3. Wire bracket child ids (for the engine's stop checks) and "move stop" (`/Order/editStopLoss`) from what the spike shows.
+4. The first real order on a combine account goes only on the owner's word, with him watching.
