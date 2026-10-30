@@ -36,7 +36,7 @@ NO_ACCT = "vest: no Vest account selected"
 NOT_SUPPORTED = "vest: modify not supported"
 ORDER_GONE = (3017, 10010, 11004)             # cancel: already gone
 POSITION_GONE = (10009,)                      # close: no such position (10029, close already requested, is NOT gone)
-CREDIT_S = 60.0                               # a poll-reported fill stops offsetting the socket's report after this
+EXIT_TAGS = ("homebase:flat", "homebase:kill", "homebase:lab-flat")     # engine exits: with no position they never open
 UNCONFIRMED = "vest: unconfirmed — check Vest"
 _STATUS = {"pending": "Working", "accepted": "Working", "partially_filled": "Working", "filled": "Filled",
            "cancelled": "Canceled", "rejected": "Rejected"}      # Vest order status -> the engine's words
@@ -103,10 +103,11 @@ def _err(e: Exception) -> tuple[Optional[int], str]:
 
 
 def parse_account_state(msg: dict, *, account_id: str, vest_account_id: str, seen: dict,
-                        roots: Optional[dict] = None, default_root: str = "NQ",
-                        polled: Optional[dict] = None) -> list[FillEvent]:
-    """Fills out of one private-socket `account_state` frame. An order's executed_quantity is cumulative: `seen`
-    (order id -> units already reported) turns it into per-fill deltas, so a replayed frame yields nothing."""
+                        roots: Optional[dict] = None, default_root: str = "NQ") -> list[FillEvent]:
+    """Fills out of one `account_state` frame (the socket's, or one the poll built from /details). An order's
+    executed_quantity is cumulative: `seen` (order id -> units already reported) turns it into per-fill deltas, so a
+    replayed frame, or the same order from the other feed, yields nothing. Contracts are the difference of the
+    cumulative contracts, so pieces never add up to more than the order."""
     d = msg.get("data") or {}
     if msg.get("channel") != "account_state" or d.get("account_id") != vest_account_id:
         return []
@@ -118,61 +119,50 @@ def parse_account_state(msg: dict, *, account_id: str, vest_account_id: str, see
             continue
         oid = str(o.get("order_id"))
         done = _dec(o.get("executed_quantity") or 0)
-        delta = done - seen.get(oid, Decimal(0))
-        if delta <= 0:
+        before = seen.get(oid, Decimal(0))
+        if done <= before:
             continue
         seen[oid] = done
         side = "Buy" if o.get("side") == "buy" else "Sell"
-        credit = (polled or {}).get((str(o.get("position_id")), side))      # units the poll fallback already reported
-        if credit:
-            polled.pop((str(o.get("position_id")), side))
-            if time.monotonic() - credit[1] < CREDIT_S:
-                use = min(credit[0], delta)
-                delta -= use
-                if credit[0] > use:
-                    polled[(str(o.get("position_id")), side)] = (credit[0] - use, credit[1])
-                if delta <= 0:
-                    continue
         root = roots.get(str(o.get("position_id"))) or roots.get(oid) or default_root
+        qty = _contracts(done, root) - _contracts(before, root)
+        if qty <= 0:                                # units are noted in `seen`; the contract shows once they complete it
+            continue
         px = _dec(o.get("execution_price") or 0) or _dec(o.get("price") or 0)       # zero execution price: use the limit
         after = None
         if held:
             after = _contracts(sum((Decimal(0) if str(p.get("event_type", "")).endswith("CLOSED") else _signed(p)
                                     for p in held), Decimal(0)), root)
         out.append(FillEvent(account_id=account_id, symbol=root, side=side,
-                             qty=_contracts(delta, root), price=float(px) if px else None, position_after=after,
+                             qty=qty, price=float(px) if px else None, position_after=after,
                              ts=time.time(), raw={"orderId": oid, "positionId": o.get("position_id"),
-                                                  "order_type": o.get("order_type"), "units": str(delta)},
+                                                  "order_type": o.get("order_type"), "units": str(done - before)},
                              seen=time.perf_counter()))
     return out
 
 
-def poll_fills(prev: Optional[dict], rows: list, *, account_id: str, vest_account_id: str,
-               roots: Optional[dict] = None, default_root: str = "NQ",
-               polled: Optional[dict] = None) -> tuple[list[FillEvent], dict]:
-    """Fallback when the socket is down: fills = changes in the open positions between two reads (first read: seed only).
-    A close has no price on the opened list, so its price is None."""
-    cur = {r["positionId"]: (_signed(r), r.get("openPrice")) for r in rows
+def poll_changes(prev: Optional[dict], rows: list, *, vest_account_id: str) -> tuple[list, dict]:
+    """Fallback when the socket is down: (position ids whose size changed since the last read, the new sizes). First
+    read (prev None): nothing changed, it only seeds."""
+    cur = {str(r["positionId"]): _signed(r) for r in rows
            if r.get("accountId") == vest_account_id and r.get("symbol") == SYMBOL}
     if prev is None:
         return [], cur
-    roots = roots or {}
-    net = sum((v[0] for v in cur.values()), Decimal(0))
-    out = []
-    for pid in sorted(cur.keys() | prev.keys()):
-        d = cur.get(pid, (Decimal(0), None))[0] - prev.get(pid, (Decimal(0), None))[0]
-        if d == 0:
-            continue
-        root = roots.get(pid) or default_root
-        px = cur.get(pid, (None, None))[1]
-        if polled is not None:                  # the socket will report this order too: it subtracts what we reported
-            k = (pid, "Buy" if d > 0 else "Sell")
-            polled[k] = (polled.get(k, (Decimal(0), 0))[0] + abs(d), time.monotonic())
-        out.append(FillEvent(account_id=account_id, symbol=root, side="Buy" if d > 0 else "Sell",
-                             qty=_contracts(abs(d), root), price=float(px) if px else None,
-                             position_after=_contracts(net, root), ts=time.time(),
-                             raw={"positionId": pid, "units": str(abs(d)), "src": "poll"}, seen=time.perf_counter()))
-    return out, cur
+    return [p for p in sorted(cur.keys() | prev.keys()) if cur.get(p, Decimal(0)) != prev.get(p, Decimal(0))], cur
+
+
+def details_frame(pid: str, detail: dict, *, vest_account_id: str) -> dict:
+    """A position's /details orders as an `account_state` frame, so the poll reports fills through the same per-order
+    dedup as the socket. The rows may carry no side: an opening order has the position's side, a closing one the other."""
+    pos = detail.get("position") or {}
+    long_ = str(pos.get("side")).lower() == "long"
+    orders = []
+    for o in pos.get("orders") or []:
+        closing = (o.get("reduce_only") is True or str(o.get("order_type")).lower() in ("take_profit", "stop_loss")
+                   or any(w in str(o.get("position_order_type")).lower() for w in ("close", "reduce")))
+        orders.append({**o, "symbol": SYMBOL, "account_id": vest_account_id, "position_id": str(pid),
+                       "side": o.get("side") or ("buy" if long_ != closing else "sell")})
+    return {"channel": "account_state", "data": {"account_id": vest_account_id, "positions": [], "orders": orders}}
 
 
 # ---- adapter -----------------------------------------------------------------------------------------------
@@ -195,7 +185,6 @@ class VestAdapter(BrokerAdapter):
         self._busy = True                               # poll fallback: something may rest / be open
         self._seq = 0                                   # last account_seq seen on the socket
         self._seen: dict[str, Decimal] = {}
-        self._polled: dict[tuple, tuple] = {}           # (position id, side) -> (units the poll reported, when)
         self._events: dict[str, tuple[str, Optional[str]]] = {}     # command / order id -> (status, error) off the socket
         self._pos_of: dict[str, str] = {}               # order id -> position id (for get_order_status)
 
@@ -306,7 +295,7 @@ class VestAdapter(BrokerAdapter):
         units, root, sp = units_of(req.symbol, req.qty), root_of(req.symbol), await self._spec()
         long = req.side == "Buy"
         held = [p for p in await self._opened() if p.get("symbol") == SYMBOL]
-        if not held and (req.text or "").startswith("homebase:flat"):      # a flatten never opens (an SL/TP may have won the race)
+        if not held and (req.text or "").startswith(EXIT_TAGS):            # an exit never opens (an SL/TP may have won the race)
             return OrderResult(ok=True, raw={"note": "nothing to close"})
         if held:
             if legs or (str(held[0].get("side")).lower() == "long") == long:
@@ -504,7 +493,7 @@ class VestAdapter(BrokerAdapter):
                     held = None
             if held:
                 errs += tried + ["position still open"]
-            closed = first - len(held or [])
+            closed = first - len(held) if held is not None else 0           # re-read failed: closed is unknown
         return OrderResult(ok=not errs, error="; ".join(errs) or None, raw={"cancelled": cancelled, "closed": closed})
 
     # --- reads --------------------------------------------------------------------------------------
@@ -575,8 +564,7 @@ class VestAdapter(BrokerAdapter):
                 self._events[str(o["order_id"])] = (st, (f"vest {code}" if code else None) if bad else None)
         _cap(self._events)
         await self._deliver(parse_account_state(msg, account_id=self.account_id, vest_account_id=self.vest_account_id,
-                                                seen=self._seen, roots=self._roots, default_root=self.root,
-                                                polled=self._polled))
+                                                seen=self._seen, roots=self._roots, default_root=self.root))
         _cap(self._seen)
 
     async def _ws_loop(self) -> None:
@@ -616,8 +604,30 @@ class VestAdapter(BrokerAdapter):
             if self._ws_up:                     # the socket spoke while we were reading: it reports, we do not
                 prev = None
                 continue
-            events, prev = poll_fills(prev, held, account_id=self.account_id, vest_account_id=self.vest_account_id,
-                                      roots=self._roots, default_root=self.root, polled=self._polled)
-            _cap(self._polled)
-            self._busy = bool(held or resting)
+            changed, cur = poll_changes(prev, held, vest_account_id=self.vest_account_id)
+            seeding, retry, events = prev is None, False, []
+            net = sum((_signed(r) for r in held if r.get("symbol") == SYMBOL), Decimal(0))
+            for pid in sorted(cur) if seeding else changed:
+                try:
+                    frame = details_frame(pid, await self._api("GET", f"/v3/positions/{pid}/details"),
+                                          vest_account_id=self.vest_account_id)
+                except Exception as e:  # noqa: BLE001 -- report nothing for this read, the next one retries; never guess
+                    log.warning("vest %s: poll details read failed (%s)", self.account_id, type(e).__name__)
+                    retry = True
+                    if pid in (prev or {}):
+                        cur[pid] = prev[pid]
+                    else:
+                        cur.pop(pid, None)
+                    continue
+                if seeding:                     # what is already filled is not a fill
+                    for o in frame["data"]["orders"]:
+                        self._seen.setdefault(str(o.get("order_id")), _dec(o.get("executed_quantity") or 0))
+                    continue
+                for ev in parse_account_state(frame, account_id=self.account_id, vest_account_id=self.vest_account_id,
+                                              seen=self._seen, roots=self._roots, default_root=self.root):
+                    ev.raw["src"], ev.position_after = "poll", _contracts(net, ev.symbol)
+                    events.append(ev)
+            _cap(self._seen)
+            prev = None if seeding and retry else cur
+            self._busy = bool(held or resting or retry)
             await self._deliver(events)

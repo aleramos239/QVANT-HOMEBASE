@@ -11,7 +11,7 @@ import pytest
 
 from homebase.broker import vest
 from homebase.broker.base import OrderRequest
-from homebase.broker.vest import VestAdapter, parse_account_state, poll_fills, units_of
+from homebase.broker.vest import VestAdapter, details_frame, parse_account_state, poll_changes, units_of
 from homebase.broker.vest_auth import DeviceKey, VestSession
 from homebase.store import secrets_store
 
@@ -43,6 +43,7 @@ class Gateway:
         self.mark = "21030"
         self.positions: list = []
         self.orders: list = []
+        self.details: dict = {}
 
     def __call__(self, req: httpx.Request) -> httpx.Response:
         self.calls.append(req)
@@ -59,6 +60,10 @@ class Gateway:
                 {"symbol": SYM, "tickSizes": ["0.25"], "sizeDecimals": 4, "priceDecimals": 2, "capitalInitMarginRatio": "0.02"}]})
         if p == "/v3/ticker/latest":
             return httpx.Response(200, json={"tickers": [{"symbol": SYM, "markPrice": self.mark}]})
+        if p.startswith("/v3/positions/") and p.endswith("/details"):
+            pid = p.split("/")[3]
+            side = next((x["side"] for x in self.positions if x["positionId"] == pid), "long")
+            return httpx.Response(200, json={"position": {"positionId": pid, "side": side, "orders": self.details.get(pid, [])}})
         if p == "/v3/positions/opened":
             return httpx.Response(200, json={"positions": self.positions})
         if p == "/v3/positions/opened-orders":
@@ -367,14 +372,16 @@ def test_other_accounts_symbols_and_roots_ignored_or_mapped():
     assert (f.symbol, f.side, f.qty) == ("MNQ", "Sell", 2)
 
 
-def test_poll_fallback_fills_from_position_changes():
-    kw = dict(account_id="vest1", vest_account_id=ACC)
-    ev, cur = poll_fills(None, [pos(qty="20")], **kw)
-    assert ev == []                                                   # first read only seeds
-    ev, cur = poll_fills(cur, [pos(qty="60", openPrice="21001")], **kw)
-    assert [(e.side, e.qty, e.price, e.position_after) for e in ev] == [("Buy", 2, 21001.0, 3)]
-    ev, cur = poll_fills(cur, [], **kw)                               # gone: closed, price unknown
-    assert [(e.side, e.qty, e.price, e.position_after) for e in ev] == [("Sell", 3, None, 0)]
+def test_poll_changes_seeds_then_names_the_changed_positions():
+    kw = dict(vest_account_id=ACC)
+    ch, cur = poll_changes(None, [pos(qty="20")], **kw)
+    assert ch == [] and cur == {"p1": Decimal(20)}                    # first read only seeds
+    ch, cur = poll_changes(cur, [pos(qty="20")], **kw)
+    assert ch == []
+    ch, cur = poll_changes(cur, [pos(qty="60"), pos(pid="p2", qty="5")], **kw)
+    assert ch == ["p1", "p2"]
+    ch, cur = poll_changes(cur, [pos(qty="60")], **kw)                # p2 gone
+    assert ch == ["p2"] and cur == {"p1": Decimal(60)}
 
 
 def test_ws_loop_delivers_fill_and_dedupes_seq(monkeypatch):
@@ -516,15 +523,19 @@ def test_socket_counts_as_up_only_after_its_first_frame_and_poll_covers_until_th
     sock = Sock()
     sock.patch(monkeypatch)
     gw.positions = [pos("long", "20")]
+    x0 = {"order_id": "x0", "status": "filled", "quantity": "20", "executed_quantity": "20", "execution_price": "21000",
+          "position_order_type": "open"}
+    gw.details["p1"] = [x0]
     got = []
 
     async def go():
         async def on_fill(ev):
             got.append(ev)
         await ad.observe_fills(on_fill)
-        await asyncio.sleep(0.1)                                # connected, silent: poll seeds
+        await asyncio.sleep(0.1)                                # connected, silent: poll seeds (x0 is not a fill)
         assert not ad._ws_up
         gw.positions = [pos("long", "40")]
+        gw.details["p1"] = [x0, {**x0, "order_id": "x1", "position_order_type": "append", "execution_price": "21001"}]
         await asyncio.sleep(0.1)
         polled = list(got)
         sock.put({"channel": "command_events", "data": {"command_id": "x", "status": "ACCEPTED", "account_id": ACC}})
@@ -624,7 +635,7 @@ def test_sweep_reread_failing_is_not_ok():
         return httpx.Response(500) if len(calls) >= 2 else None
     gw.h[("GET", "/v3/positions/opened")] = second_read_fails
     r = run(ad.flatten_all())
-    assert not r.ok and len(gw.api("POST")) == 1                                       # closed once; the re-read said nothing
+    assert not r.ok and len(gw.api("POST")) == 1 and r.raw["closed"] == 0               # the re-read said nothing: unknown
 
 
 def _frames(sock, *states):
@@ -736,6 +747,16 @@ def test_flatten_tagged_order_with_no_position_never_opens():
     assert run(ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Market"))).ok and [c.url.path for c in gw.api("POST")] == [OPEN]
 
 
+def test_every_exit_tag_refuses_to_open_but_chart_reverse_opens():
+    for tag in vest.EXIT_TAGS:
+        ad, gw = mk()
+        r = run(ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Market", text=tag)))
+        assert r.ok and r.raw == {"note": "nothing to close"} and not gw.api("POST"), tag
+    ad, gw = mk()
+    assert run(ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Market", text="homebase:chart-reverse"))).ok
+    assert [c.url.path for c in gw.api("POST")] == [OPEN]
+
+
 def test_non_dict_200_body_is_reconciled_not_rejected():
     ad, gw = mk()
 
@@ -746,19 +767,70 @@ def test_non_dict_200_body_is_reconciled_not_rejected():
     assert run(ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market"))).ok
 
 
-def test_poll_then_socket_reports_the_fill_once():
+def _poll_frame(oid, units, pid="p1", side="long", **kw):
+    row = {"order_id": oid, "status": "filled", "quantity": "20", "executed_quantity": units, "execution_price": "21000",
+           "position_order_type": "open", **kw}
+    return details_frame(pid, {"position": {"side": side, "orders": [row]}}, vest_account_id=ACC)
+
+
+def test_poll_then_socket_reports_each_order_once():
     kw = dict(account_id="vest1", vest_account_id=ACC)
-    frame = acct_msg([order_row(quantity="20", executed_quantity="20")])
-    seen, polled = {}, {}
-    _, cur = poll_fills(None, [], **kw)
-    ev, cur = poll_fills(cur, [pos(qty="20")], polled=polled, **kw)
-    assert [e.qty for e in ev] == [1]
-    assert parse_account_state(frame, seen=seen, polled=polled, **kw) == []              # the socket's twin of the poll fill
-    seen, polled = {}, {}
-    _, cur = poll_fills(None, [], **kw)
-    _, cur = poll_fills(cur, [pos(qty="10")], polled=polled, **kw)                       # poll saw 10 of the 20
-    (rest,) = parse_account_state(frame, seen=seen, polled=polled, **kw)
-    assert rest.raw["units"] == "10" and rest.qty == 1
+    seen = {}
+    (poll,) = parse_account_state(_poll_frame("X", "20"), seen=seen, **kw)
+    assert (poll.side, poll.qty) == ("Buy", 1)
+    assert parse_account_state(acct_msg([order_row(order_id="X", quantity="20", executed_quantity="20")]),
+                               seen=seen, **kw) == []                                   # the socket's twin of the poll fill
+    seen = {}
+    (a,) = parse_account_state(_poll_frame("X", "10"), seen=seen, **kw)                 # poll saw 10 of the 20
+    rest = parse_account_state(acct_msg([order_row(order_id="X", quantity="20", executed_quantity="20")]), seen=seen, **kw)
+    assert a.qty + sum(r.qty for r in rest) == 1                                        # a 1-lot never reads 2
+    assert a.raw["units"] == "10"
+
+
+def test_poll_fill_of_one_order_does_not_offset_a_socket_fill_of_another():
+    kw = dict(account_id="vest1", vest_account_id=ACC)
+    seen = {}
+    assert len(parse_account_state(_poll_frame("X", "20"), seen=seen, **kw)) == 1
+    (y,) = parse_account_state(acct_msg([order_row(order_id="Y", quantity="20", executed_quantity="20")]), seen=seen, **kw)
+    assert y.qty == 1 and y.raw["orderId"] == "Y"
+
+
+def test_details_frame_gives_closing_orders_the_other_side():
+    f = _poll_frame("C", "20", side="long", position_order_type="close")
+    (o,) = f["data"]["orders"]
+    assert o["side"] == "sell" and o["symbol"] == SYM and o["position_id"] == "p1"
+    assert _poll_frame("S", "20", side="short")["data"]["orders"][0]["side"] == "sell"
+    assert _poll_frame("T", "20", side="short", order_type="take_profit")["data"]["orders"][0]["side"] == "buy"
+
+
+def test_poll_details_failure_reports_nothing_and_the_next_read_retries(monkeypatch):
+    monkeypatch.setattr(vest, "POLL_S", 0.01)
+    ad, gw = mk()
+    Sock().patch(monkeypatch)
+    gw.positions = [pos("long", "20")]
+    x0 = {"order_id": "x0", "status": "filled", "quantity": "20", "executed_quantity": "20", "execution_price": "21000",
+          "position_order_type": "open"}
+    gw.details["p1"] = [x0]
+    state, got = {"fail": False, "tries": 0}, []
+
+    def details(req):
+        if state["fail"]:
+            state["tries"] += 1
+            return httpx.Response(500) if state["tries"] <= 2 else None
+    gw.h[("GET", "/v3/positions/p1/details")] = details
+
+    async def go():
+        async def on_fill(ev):
+            got.append(ev)
+        await ad.observe_fills(on_fill)
+        await asyncio.sleep(0.1)                                # seeded
+        state["fail"] = True
+        gw.positions = [pos("long", "40")]
+        gw.details["p1"] = [x0, {**x0, "order_id": "x1", "position_order_type": "append"}]
+        await asyncio.sleep(0.4)
+        await ad.close()
+    run(go())
+    assert state["tries"] >= 3 and [(g.qty, g.raw["orderId"]) for g in got] == [(1, "x1")]    # nothing guessed, then once
 
 
 def test_poll_does_not_emit_when_the_socket_spoke_during_its_read(monkeypatch):
