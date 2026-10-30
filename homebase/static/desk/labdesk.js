@@ -156,7 +156,7 @@ function labDeskView(name, s) {
   const isDay = (d) => /^\d{4}-\d\d-\d\d$/.test(String(d));
   const days = (row && Array.isArray(row.days) ? row.days : []).map(DeskLab.matchLine).map(m =>
     `<div class="feed-row"><span class="t">${esc(isDay(m.date) ? shortDay(m.date) : m.date)}</span><span class="h${m.ok === false ? " warn" : ""}">${esc(m.text)}</span>${m.rebuilt ? '<span class="t dim">rebuilt</span>' : ""}<span class="t net">${esc(usdS(m.net))}</span></div>`);
-  const rows = book.map(a => acctRow(a.account, {qty: a.qty, strategy: name, locked: ro})).join("");
+  const rows = book.map(a => acctRow(a.account, {qty: a.qty, strategy: name, locked: ro, row: a})).join("");
   const free = Object.keys(accts).filter(id => !book.some(a => a.account === id));
   const addForm = !Object.keys(accts).length ? `<div class="mcap">Add an account to run this strategy.</div>`
     : lock.locked ? `<div class="mcap">${esc(lock.caption)}</div>`                // one line says how it gets accounts, no dead button

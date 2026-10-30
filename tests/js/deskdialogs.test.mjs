@@ -131,7 +131,7 @@ function load() {
 // ---- the markup ---------------------------------------------------------------------------------
 test('every dialog is role="dialog" aria-modal and has a name', () => {
   const overlays = HTML.match(/<div class="overlay" id="\w+"[^>]*>\s*<div class="modal"[^>]*>/g) || [];
-  assert.equal(overlays.length, 11);   // + the Limits dialog of a Lab strategy (Step B), + Manage groups
+  assert.equal(overlays.length, 12);   // + the account settings sheet, + the Limits dialog of a Lab strategy (Step B), + Manage groups
   for (const o of overlays) {
     assert.match(o, /role="dialog" aria-modal="true" tabindex="-1" inert/, o);   // inert until opened
     const named = /aria-label="[^"]+"/.exec(o) || /aria-labelledby="(\w+)"/.exec(o);

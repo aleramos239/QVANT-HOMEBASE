@@ -6,6 +6,18 @@ function tradeWords(a) {
   return [n ? "in a trade " + n : "", w ? w + " working" : ""].filter(Boolean).join(" · ");
 }
 const DEMO_TAG = '<span class="tag" title="A demo account — the broker\'s practice money">DEMO</span>';
+/* The size on an account row: "×N" (a Lab row with settings: "$X risk", and a small tag when it stops after a win or in profit).
+   A Lab row with a size opens the account's settings sheet on click; any other row keeps the inline size box. */
+function acctQtyHtml(id, extra) {
+  const row = extra.row, words = row ? AcctSet.label(row) : "×" + extra.qty, tag = row ? AcctSet.tag(row) : "";
+  const note = tag ? `<span class="mcap">${esc(tag)}</span>` : "";
+  if (!extra.strategy || extra.locked) return `<span class="strats">${esc(words)}</span>${note}`;
+  return (row && row.size
+    ? `<span class="strats qty-edit" title="Click for this account's settings"
+           onclick="openAcctSet(${jsArg(extra.strategy)},${jsArg(id)})">${esc(words)}</span>`
+    : `<span class="strats qty-edit" title="Click to change size"
+           onclick="editQty(event,'${extra.strategy}',${jsArg(id)},${extra.qty})">${esc(words)}</span>`) + note;
+}
 function acctRow(id, extra) {
   const a = (ST.accounts || {})[id] || {label: id};   // LIVE unless demo or paper, as isDemoAcct (an unknown env is LIVE)
   const pnl = a.day_pnl;          // today: the balance now minus the balance at the 18:00 ET open (broker figures are lifetime or on their own clock)
@@ -17,14 +29,12 @@ function acctRow(id, extra) {
     ${a.env !== "demo" && a.env !== "paper" ? '<span class="tag-live" title="A live account — real money">LIVE</span>' : ""}
     ${a.env === "paper" ? '<span class="tag-paper" title="A paper account — simulated fills on the live prints, no money">PAPER</span>' : ""}
     ${a.env === "demo" ? DEMO_TAG : ""}
-    ${extra.qty ? (extra.strategy && !extra.locked
-      ? `<span class="strats qty-edit" title="Click to change size"
-           onclick="editQty(event,'${extra.strategy}',${jsArg(id)},${extra.qty})">×${extra.qty}</span>`
-      : `<span class="strats">×${extra.qty}</span>`) : ""}
+    ${extra.qty ? acctQtyHtml(id, extra) : ""}
     ${err}<span class="spacer"></span>
     <span class="kvi" data-ro="bal">${usd(a.balance)}</span>
     <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}" data-ro="pnl" title="Today, 18:00 to 16:00 ET: balance now minus balance at 18:00">${DAY_PNL_WORDS(pnl)}</span>
     <button class="btn btn-outline btn-sm" onclick="openCal(${jsArg(a.account || a.label)})">Calendar</button>
+    ${extra.strategy && extra.row ? `<button class="btn btn-outline btn-sm"${extra.locked ? " disabled" : ` onclick="openAcctSet(${jsArg(extra.strategy)},${jsArg(id)})"`}>Settings</button>` : ""}
     ${extra.strategy ? `<button class="x"${extra.locked ? " disabled" : ""} style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
       ${extra.locked ? "" : `onclick="removeAsg('${extra.strategy}',${jsArg(id)})" `}title="Unassign">&times;</button>` : ""}
   </div>`;
@@ -167,7 +177,7 @@ async function pickAsg(strategy, account, qty) {
       `Book ${stratLabel(strategy)} on ${acctShort(account)} LIVE, qty ${was ? was + " → " : ""}${qty}?`,
       liveBookingNote(strategy, account) + bookMachine(), "Book live", false)) { refresh(); return; }
   const cur = (ST.book[strategy] || []).filter(a => a.account !== account);
-  cur.push({account, qty});
+  cur.push({...(ST.book[strategy] || []).find(a => a.account === account), account, qty});   // a booked row keeps its other fields
   setBook(strategy, cur);
 }
 function editQty(ev, strategy, account, qty) {
@@ -197,7 +207,7 @@ function editQty(ev, strategy, account, qty) {
             liveBookingNote(strategy, account) + bookMachine(), "Book live", false)) { refresh(); return; }
       }
       const cur = (ST.book[strategy] || []).map(a =>
-        a.account === account ? {account, qty: v} : a);
+        a.account === account ? {...a, qty: v} : a);
       setBook(strategy, cur);
     } else refresh();
   };

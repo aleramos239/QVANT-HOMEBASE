@@ -266,9 +266,10 @@ async function flattenStrat(name) {
    Closed net P&L of the day, in dollars: once a trade of ANY strategy booked here closes with the day at or above it, no new
    entry is taken on the account for the rest of the day (open trades run to their stop / target). 0 turns it off. */
 function dayState(a) {
-  const d = (a && a.day) || {}, v = Number(d.day_lock) || 0;
-  return d.locked ? ` <span class="neg" title="No new entry on this account for the rest of the day">stopped for the day (${usd(d.closed_net)})</span>`
-    : (v ? ` <span class="mcap" title="The day's closed P&amp;L so far">${usd(d.closed_net || 0)} of ${usd(v)}</span>` : "");
+  const d = (a && a.day) || {}, v = Number(d.day_lock) || 0, l = Number(d.day_loss) || 0;
+  return d.locked ? ` <span class="neg" title="No new entry on this account for the rest of the day">stopped for the day${d.locked === "day_loss" ? " by the loss lock" : ""} (${usd(d.closed_net)})</span>`
+    : (v ? ` <span class="mcap" title="The day's closed P&amp;L so far">${usd(d.closed_net || 0)} of ${usd(v)}</span>` : "") +
+      (l ? ` <span class="mcap" title="The account stops for the day if its closed P&amp;L falls to minus this">loss lock ${usd(l)}</span>` : "");
 }
 function dayTakeBox(id, a) {
   const d = (a && a.day) || {}, v = Number(d.day_lock) || 0, state = `<span data-ro="day">${dayState(a)}</span>`;

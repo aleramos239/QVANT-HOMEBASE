@@ -15,7 +15,7 @@
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
 <script src="/static/desklab.js?v=44"></script>
-<script src="/static/desklabset.js?v=4"></script>
+<script src="/static/desklabset.js?v=5"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
 <style>
@@ -788,6 +788,41 @@
   </div>
 </div>
 
+<div class="overlay" id="acctSetOverlay">
+  <div class="modal" style="width:420px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="asTitle">
+    <div class="cal-head">
+      <span style="font-weight:600" id="asTitle">Settings</span>
+      <span class="spacer" style="flex:1"></span>
+      <button class="cal-nav" onclick="closeAcctSet()" title="Close" aria-label="Close">&times;</button>
+    </div>
+    <div class="mcap" style="font-weight:600;margin-bottom:8px">This strategy on this account</div>
+    <div class="mcap warn" id="asCycle" hidden></div>
+    <div class="field"><label for="asSize">Size</label>
+      <select id="asSize" class="hb-field" onchange="paintAcctSet()" data-autofocus>
+        <option value="contracts">Contracts</option><option value="risk">Risk ($ a trade)</option></select></div>
+    <div class="field" id="asQtyF"><label for="asQty">Contracts</label>
+      <input id="asQty" onkeydown="acctSetKey(event)" type="text" inputmode="numeric" autocomplete="off"></div>
+    <div class="field" id="asRiskF"><label for="asRisk">Risk per trade ($)</label>
+      <input id="asRisk" onkeydown="acctSetKey(event)" type="text" inputmode="decimal" autocomplete="off" placeholder="500"></div>
+    <div class="field"><label for="asMost">Most contracts</label>
+      <div id="asMostF"><input id="asMost" onkeydown="acctSetKey(event)" type="text" inputmode="numeric" autocomplete="off"></div>
+      <span class="mcap" id="asMostOff">No limit set here. One order never goes over 100 micros.</span>
+      <button class="btn btn-outline btn-sm" id="asMostBtn" type="button" onclick="toggleAcctMost()">Remove</button></div>
+    <div class="field"><label for="asStop">Stop after</label>
+      <select id="asStop" class="hb-field"><option value="none">Never</option><option value="win">A win</option><option value="profit">In profit</option></select></div>
+    <div class="mcap" style="font-weight:600;margin:14px 0 8px">Whole account — every strategy on it</div>
+    <div class="field"><label for="asTake">Profit lock ($)</label>
+      <input id="asTake" onkeydown="acctSetKey(event)" type="text" inputmode="decimal" autocomplete="off" placeholder="OFF"></div>
+    <div class="field"><label for="asLoss">Loss lock ($)</label>
+      <input id="asLoss" onkeydown="acctSetKey(event)" type="text" inputmode="decimal" autocomplete="off" placeholder="OFF"></div>
+    <div class="mcap warn" id="asNote" role="alert" hidden></div>
+    <div class="row-btns">
+      <button class="btn btn-outline" onclick="closeAcctSet()">Cancel</button>
+      <button class="btn btn-default" id="asSave" onclick="saveAcctSet()">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="settingsOverlay">
   <div class="modal" style="width:440px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="settingsTitle">
     <div class="cal-head">
@@ -912,17 +947,18 @@
 <div id="alertBar" role="alert" hidden><span id="alertText"></span>
   <button type="button" id="alertX" title="Dismiss" aria-label="Dismiss">&times;</button></div>
 
-<script src="/static/desk/core.js?v=4"></script>
+<script src="/static/desk/core.js?v=5"></script>
 <script src="/static/desk/topbar.js?v=5"></script>
 <script src="/static/desk/activity.js?v=8"></script>
 <script src="/static/desk/views.js?v=2"></script>
 <script src="/static/desk/groups.js?v=7"></script>
 <script src="/static/desk/strategy.js?v=10"></script>
-<script src="/static/desk/labdesk.js?v=11"></script>
+<script src="/static/desk/labdesk.js?v=12"></script>
 <script src="/static/desk/demo.js?v=2"></script>
-<script src="/static/desk/book.js?v=7"></script>
+<script src="/static/desk/book.js?v=8"></script>
+<script src="/static/desk/acctset.js?v=1"></script>
 <script src="/static/desk/settings.js?v=8"></script>
-<script src="/static/desk/popups.js?v=6"></script>
+<script src="/static/desk/popups.js?v=7"></script>
 <script src="/static/desk/start.js?v=2"></script>
 <script src="/static/hb-glass.js?v=2"></script>
 </body>

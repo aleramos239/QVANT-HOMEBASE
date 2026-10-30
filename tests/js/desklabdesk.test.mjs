@@ -64,6 +64,7 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
     SLICE('const labAct = ', 'let FEED_ROWS') + SLICE('/* ---- Changes (7 days) (WP1.15)', '/* ---- end of Changes') +
     SLICE('const actDay = ', '/* Activity for one strategy or one group') +
     SLICE('/* ===== Desk views', 'function render() {') +
+    readFileSync(new URL('../../homebase/static/desk/acctset.js', import.meta.url), 'utf8') +     // AcctSet: the account row reads it
     SLICE('/* ---- account row (rendered inside strategy cards) ---- */', '/* ---- connect wizard ---- */') +
     SLICE('/* ---- strategy on/off + flatten ----', '/* ---- accounts popup ---- */') +
     `\nDESKLAB = { strategies: ${JSON.stringify(rows)}, runner: { alive: true } }; DESKLAB_OK = ${readOk};` +
@@ -981,7 +982,7 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
   assert.match(HTML, /<script src="\/static\/desklab\.js\?v=44"><\/script>/);
-  assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=4"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=5"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
   assert.equal(manifest.version >= 3, true);
