@@ -132,6 +132,7 @@ def test_feed_ok_follows_the_socket_and_a_new_socket_resets_the_gap_memory():
     f2 = _feed_with({"v1": ad})                          # a rebuilt feed (the desk's reconnect)
     f2._take(("NQ", 1), bar(h=21013.0))
     assert resets == [1, 1, 1]
+    assert ad.feed_bars("NQ", 1) == f2.bars("NQ", 1)     # the restore reads the feed's own history (R62)
 
 
 def test_only_the_smallest_timeframe_of_a_root_reaches_vest():

@@ -6,15 +6,19 @@ of the daily loss floor beside it.
 """
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 from ..core.jsonio import read_dict, write_json
 from .paper import root_of
 
 if TYPE_CHECKING:
     from ..data.feed import Bar
+
+log = logging.getLogger(__name__)
 
 PRICE_ROOT = {"MNQ": "NQ"}          # one price: an MNQ entry fires off NQ pushes and the other way round
 
@@ -52,12 +56,21 @@ class HeldBook:
                 continue
         self.day_start: dict = d.get("day_start") or {}
         self.fired: dict = d.get("fired") if isinstance(d.get("fired"), dict) else {}   # held id -> {vest, day, ok}
+        self.saved_at: Optional[float] = d.get("saved_at")       # epoch s of the file's last save before this start
+        self._loaded = {e.id for e in self.entries}                # entries from the file: the restore judges these
         self.dropped: set[str] = set()               # ids dropped this session (cancelled / skipped): "Canceled"
         self._last: dict[str, tuple] = {}            # price root -> (bar start, high, low, close) of the last push
 
     def save(self) -> None:
         write_json(self.path, {"entries": [asdict(e) for e in self.entries], "day_start": self.day_start,
-                               "fired": self.fired})
+                               "fired": self.fired, "saved_at": time.time()})
+
+    def _save_dropped(self) -> None:
+        """A drop is already journaled and gone from memory: a failed save is logged, never raised mid-push (M3)."""
+        try:
+            self.save()
+        except OSError as e:
+            log.warning("vest held book %s: save failed (%s)", self.path.name, type(e).__name__)
 
     def get(self, id: str) -> Optional[HeldEntry]:
         return next((e for e in self.entries if e.id == id), None)
@@ -71,7 +84,7 @@ class HeldBook:
         if e is not None:
             self.entries.remove(e)
             self.dropped.add(id)
-            self.save()
+            self._save_dropped()
         return e
 
     def drop_group(self, group: Optional[str]) -> list[HeldEntry]:
@@ -79,7 +92,7 @@ class HeldBook:
         if out:
             self.entries = [e for e in self.entries if e not in out]
             self.dropped.update(e.id for e in out)
-            self.save()
+            self._save_dropped()
         return out
 
     def last_close(self, root: str) -> Optional[float]:
@@ -111,16 +124,22 @@ class HeldBook:
                 groups.add(e.oco_group)
         return out
 
-    def restore(self, today: str, high: float, low: Optional[float] = None) -> list[HeldEntry]:
-        """After a restart: keep only today's entries whose level the first push (its high for a Buy, its low for a
-        Sell) has not reached; fired records of other days are dropped."""
+    def restore(self, today: str, high: float, low: Optional[float] = None,
+                on_drop: Callable[[HeldEntry], None] = lambda e: None) -> list[HeldEntry]:
+        """After a restart: keep only today's entries, and of those loaded from the file only the ones whose level the
+        price since the save (the caller's high for a Buy, low for a Sell) has not reached; fired records of other days
+        are dropped. on_drop journals each dropped entry before the save."""
         low = high if low is None else low
-        keep = [e for e in self.entries if e.day == today and not reached(e.side, e.level, high if e.side == "Buy" else low)]
+        keep = [e for e in self.entries if e.day == today and not (
+            e.id in self._loaded and reached(e.side, e.level, high if e.side == "Buy" else low))]
         fired = {k: v for k, v in self.fired.items() if isinstance(v, dict) and v.get("day") == today}
         if len(keep) != len(self.entries) or fired != self.fired:
-            self.dropped.update(e.id for e in self.entries if e not in keep)
+            gone = [e for e in self.entries if e not in keep]
+            for e in gone:
+                on_drop(e)
+            self.dropped.update(e.id for e in gone)
             self.entries, self.fired = keep, fired
-            self.save()
+            self._save_dropped()
         return list(keep)
 
 

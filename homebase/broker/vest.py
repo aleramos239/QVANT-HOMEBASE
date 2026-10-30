@@ -211,6 +211,7 @@ class VestAdapter(BrokerAdapter):
         self.floors, self.slip_frac = floors, slip_frac
         self.journal = journal or (lambda event, **kw: None)
         self.feed_ok: Callable[[], bool] = lambda: False    # the CME feed is up (wired by the desk); default: never fire
+        self.feed_bars: Callable[[str, int], list] = lambda root, minutes: []   # the feed's closed bars (MarketFeed.bars)
         self._now = lambda: dt.datetime.now(ET)
         self._mono = time.monotonic
         self._book = HeldBook(state_dir() / f"vest_held_{account_id}.json")
@@ -799,11 +800,10 @@ class VestAdapter(BrokerAdapter):
             self._pushed[root] = now
         if not self._restored and _proot(root) == _proot(self.root):       # after a restart: only levels not reached
             self._restored = True
-            before, today = list(self._book.entries), self._desk_day()
-            kept = {x.id for x in self._book.restore(today, bar.h, bar.l)}       # this push's extreme (R38)
-            for x in before:
-                if x.id not in kept:
-                    self._skip(x, "restart: the day is over" if x.day != today else "restart: traded while down")
+            today, (high, low, covered) = self._desk_day(), self._since_save(root, bar)
+            self._book.restore(today, high, low, on_drop=lambda x: self._skip(
+                x, "restart: the day is over" if x.day != today else
+                "restart: level traded while down" if covered else "restart: no price history since the save"))
         hits = self._book.crossed(root, bar)
         if not hits:
             return
@@ -815,12 +815,13 @@ class VestAdapter(BrokerAdapter):
             why = (f"late: CME {bar.c:g} is more than {self.slip_frac:g} of the {fire.sl_pts:g}-point stop past the "
                    f"level")                            # measured on the CME push, not NQ-PERP (R33)
             fire = None
-        for e in hits:
-            self._book.drop(e.id)
+        for e in hits:                                  # journaled before each save (M3)
             if e is not fire:
                 self._skip(e, why or "another held entry fired on this push")
-            for s in self._book.drop_group(e.oco_group):
+            self._book.drop(e.id)
+            for s in [x for x in self._book.entries if e.oco_group is not None and x.oco_group == e.oco_group]:
                 self._skip(s, "its other leg " + ("fired" if e is fire else "was skipped"))
+            self._book.drop_group(e.oco_group)
         if fire is not None:
             try:
                 loop = asyncio.get_running_loop()
@@ -831,6 +832,17 @@ class VestAdapter(BrokerAdapter):
             t = loop.create_task(self._fire(fire, now, bar.c))
             self._fires.add(t)
             t.add_done_callback(self._fires.discard)
+
+    def _since_save(self, root: str, bar) -> tuple[float, float, bool]:
+        """(high, low, covered) of the price since the book was last saved: the feed's closed bars that end after the
+        save plus this push. Not covered (no save time, or the feed's history starts after it): +-inf, so every held
+        entry is dropped -- a level that may have traded while the desk was down is never fired late (R62)."""
+        saved = self._book.saved_at
+        hist = self.feed_bars(root, bar.minutes)
+        if saved is None or not hist or hist[0].ts.timestamp() > saved:
+            return math.inf, -math.inf, False
+        after = [b for b in hist if b.end.timestamp() > saved]
+        return max([b.h for b in after] + [bar.h]), min([b.l for b in after] + [bar.l]), True
 
     async def _fire(self, e: HeldEntry, t: float, cme: float) -> None:
         """A crossed held entry (slippage already checked on the CME push): the market bracket path (floors, position

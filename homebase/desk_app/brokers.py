@@ -128,6 +128,7 @@ def build_feed(cfg: config_mod.AppCfg, adapters: dict) -> MarketFeed:
             if seen.get(ad) is not feed._ws:     # its first push on this socket: a (re)connect is a gap (R1)
                 seen[ad] = feed._ws
                 ad.feed_ok = lambda: feed.connected
+                ad.feed_bars = feed.bars         # the restore reads the bars since the book's save (R62)
                 ad.feed_reset()
             ad.on_bar(root, bar)
 

@@ -240,6 +240,7 @@ def test_restore_drops_a_level_the_first_push_already_reached():
     ad, gw, j = mk()
     run(hold(ad))
     ad2, gw2, j2 = mk()
+    ad2.feed_bars = history(ad2)
 
     async def go():
         await push(ad2, bar(c=20990, h=21003))                                  # back under, but its high traded it
@@ -404,12 +405,14 @@ def test_restart_restores_at_the_first_push():
     ad, gw, j = mk()
     run(hold(ad))
     ad2, gw2, j2 = mk()                                                           # a restart: the same file
+    ad2.feed_bars = history(ad2)
 
     async def go():
         await push(ad2, bar(c=21002, h=21002))                                   # the level traded while down
         await push(ad2, bar(h=21005, m=1))
     run(go())
-    assert not opens(gw2) and not ad2._book.entries and skipped(j2)
+    assert not opens(gw2) and not ad2._book.entries
+    assert [k["reason"] for k in skipped(j2)] == ["restart: level traded while down"]
 
 
 def test_cancel_drops_held():
@@ -664,3 +667,71 @@ def test_floor_guard_counts_a_slippage_allowance_per_open_and_new_position():
     gw.positions = [pos(symbol="ES-USD-PERP", openPrice="6000", quantity="20", stopLosses=[{"triggerPrice": "5970"}])]
     r = run(ad.place_bracket(OrderRequest("MNQZ6", "Buy", 1, "Market", price=21000, stop_price=21000 - 146)))
     assert not r.ok and "room $300" in r.error                                     # 1000 - (600 + 100) open
+
+
+# ---- final fix R38 (R62): the restore reads the feed's bars since the book was saved --------------------------
+def history(ad, *highs):
+    """Feed bars (1-minute, closed): one from before the book's save, then one per high after it."""
+    saved = dt.datetime.fromtimestamp(ad._book.saved_at, dt.timezone.utc).replace(second=0, microsecond=0)
+    rows = [Bar(ts=saved - dt.timedelta(minutes=5), o=20980, h=20985, l=20975, c=20980, vol=1, root="NQ", minutes=1)]
+    rows += [Bar(ts=saved + dt.timedelta(minutes=1 + i), o=20980, h=h, l=20975, c=20980, vol=1, root="NQ", minutes=1)
+             for i, h in enumerate(highs)]
+    return lambda root, minutes: rows if (root, minutes) == ("NQ", 1) else []
+
+
+def test_a_level_that_traded_while_the_desk_was_down_is_dropped_never_fired_late():
+    ad, gw, j = mk()
+    run(hold(ad))                                                               # saved at T
+    ad2, gw2, j2 = mk()                                                         # a restart: the same file
+    ad2.feed_bars = history(ad2, 20990, 21004, 20992)                           # 21004 after T: it traded
+
+    async def go():
+        await push(ad2, bar(h=20995, c=20990))                                  # the first push is under the level
+        await push(ad2, bar(h=21001, m=1))
+    run(go())
+    assert not opens(gw2) and not ad2._book.entries
+    assert [k["reason"] for k in skipped(j2)] == ["restart: level traded while down"]
+
+
+def test_a_level_the_history_never_reached_survives_the_restart_and_fires():
+    ad, gw, j = mk()
+    run(hold(ad))
+    ad2, gw2, j2 = mk()
+    ad2.feed_bars = history(ad2, 20990, 20996)
+
+    async def go():
+        await push(ad2, bar(h=20995, c=20990))
+        await push(ad2, bar(h=21001, c=21000))
+    run(go())
+    assert len(opens(gw2)) == 1 and not skipped(j2)
+
+
+def test_no_feed_history_back_to_the_save_drops_the_held_entries():
+    ad, gw, j = mk()
+    run(hold(ad))
+    ad2, gw2, j2 = mk()                                                         # feed_bars: none (fail closed)
+
+    async def go():
+        await push(ad2, bar(h=20995, c=20990))
+        await push(ad2, bar(h=21001, m=1))
+    run(go())
+    assert not opens(gw2) and not ad2._book.entries
+    assert [k["reason"] for k in skipped(j2)] == ["restart: no price history since the save"]
+
+
+# ---- final fix M3 (R64): a skip is journaled before the save; a failed save is logged, never raised mid-push ----------
+def test_a_skip_is_journaled_even_when_the_book_cannot_be_saved(monkeypatch, caplog):
+    from homebase.broker import vest_held
+    ad, gw, j = mk()
+    run(hold(ad))
+    ad.feed_ok = lambda: False
+
+    def disk_full(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(vest_held, "write_json", disk_full)
+
+    async def go():
+        await push(ad, bar(), bar(h=21001))
+    run(go())
+    assert [k["reason"] for k in skipped(j)] == ["feed down"] and not ad._book.entries and not opens(gw)
+    assert "save failed" in caplog.text
