@@ -36,10 +36,11 @@ NO_ACCT = "vest: no Vest account selected"
 NOT_SUPPORTED = "vest: modify not supported"
 ORDER_GONE = (3017, 10010, 11004)             # cancel: already gone
 POSITION_GONE = (10009,)                      # close: no such position (10029, close already requested, is NOT gone)
-EXIT_TAGS = ("homebase:flat", "homebase:kill", "homebase:lab-flat")     # engine exits: with no position they never open
+EXIT_TAGS = ("homebase:flat", "homebase:kill", "homebase:lab-flat", "homebase:chart-exit")   # with no position: never open
 UNCONFIRMED = "vest: unconfirmed — check Vest"
 _STATUS = {"pending": "Working", "accepted": "Working", "partially_filled": "Working", "filled": "Filled",
            "cancelled": "Canceled", "rejected": "Rejected"}      # Vest order status -> the engine's words
+DETAILS_TRIES = 3                             # a closed position whose /details fails this many reads: report it by size
 DEFAULTS = {"tick": Decimal("0.25"), "price_dec": 2, "lev": "50"}
 
 
@@ -153,16 +154,22 @@ def poll_changes(prev: Optional[dict], rows: list, *, vest_account_id: str) -> t
 
 def details_frame(pid: str, detail: dict, *, vest_account_id: str) -> dict:
     """A position's /details orders as an `account_state` frame, so the poll reports fills through the same per-order
-    dedup as the socket. The rows may carry no side: an opening order has the position's side, a closing one the other."""
+    dedup as the socket. The rows may carry no side: an opening order has the position's side, a closing one the other.
+    A row with no marker of either is never guessed: it goes to `skipped` (the poll retries it)."""
     pos = detail.get("position") or {}
     long_ = str(pos.get("side")).lower() == "long"
-    orders = []
+    orders, skipped = [], []
     for o in pos.get("orders") or []:
-        closing = (o.get("reduce_only") is True or str(o.get("order_type")).lower() in ("take_profit", "stop_loss")
-                   or any(w in str(o.get("position_order_type")).lower() for w in ("close", "reduce")))
+        kind = str(o.get("position_order_type")).lower().rsplit("_", 1)[-1]        # "close" or "POSITION_ORDER_TYPE_CLOSE"
+        closing = (o.get("reduce_only") is True or kind in ("close", "reduce")
+                   or str(o.get("order_type")).lower() in ("take_profit", "stop_loss"))
+        if not (o.get("side") or closing or kind in ("open", "append")):
+            skipped.append(o)
+            continue
         orders.append({**o, "symbol": SYMBOL, "account_id": vest_account_id, "position_id": str(pid),
                        "side": o.get("side") or ("buy" if long_ != closing else "sell")})
-    return {"channel": "account_state", "data": {"account_id": vest_account_id, "positions": [], "orders": orders}}
+    return {"channel": "account_state", "data": {"account_id": vest_account_id, "positions": [], "orders": orders},
+            "skipped": skipped}
 
 
 # ---- adapter -----------------------------------------------------------------------------------------------
@@ -528,6 +535,16 @@ class VestAdapter(BrokerAdapter):
         if self.vest_account_id and not self._tasks:
             self._tasks = [asyncio.ensure_future(self._ws_loop()), asyncio.ensure_future(self._poll_loop())]
 
+    def _size_fill(self, pid: str, units: Decimal, net: Decimal) -> FillEvent:
+        """A closed position whose /details keeps failing: its exit from the size change alone. No price (None, never
+        0): the engine keeps the trade's P&L unknown rather than booking a fill at 0."""
+        root = self._roots.get(pid) or self.root
+        return FillEvent(account_id=self.account_id, symbol=root, side="Sell" if units > 0 else "Buy",
+                         qty=_contracts(abs(units), root), price=None, position_after=_contracts(net, root),
+                         ts=time.time(), raw={"positionId": pid, "units": str(abs(units)), "src": "poll",
+                                              "note": "details failed: size change only"},
+                         seen=time.perf_counter())
+
     async def _deliver(self, events: list[FillEvent]) -> None:
         for ev in events:
             if self._on_fill is not None:
@@ -588,11 +605,11 @@ class VestAdapter(BrokerAdapter):
 
     async def _poll_loop(self) -> None:
         """Reads every POLL_S, only while the socket is down AND an order rests / a position is open (never otherwise)."""
-        prev = None
+        prev, fails, warned = None, {}, {}     # fails: closed position id -> /details failures in a row
         while True:
             await asyncio.sleep(POLL_S)
             if self._ws_up:
-                prev = None                     # re-seed when the fallback is needed again
+                prev, fails = None, {}          # re-seed when the fallback is needed again
                 continue
             if not self._busy:
                 continue
@@ -602,27 +619,45 @@ class VestAdapter(BrokerAdapter):
                 log.warning("vest %s: poll read failed (%s)", self.account_id, type(e).__name__)
                 continue
             if self._ws_up:                     # the socket spoke while we were reading: it reports, we do not
-                prev = None
+                prev, fails = None, {}
                 continue
             changed, cur = poll_changes(prev, held, vest_account_id=self.vest_account_id)
             seeding, retry, events = prev is None, False, []
             net = sum((_signed(r) for r in held if r.get("symbol") == SYMBOL), Decimal(0))
+
+            def hold(pid):                      # keep the old size: the next read sees the change again and retries
+                if pid in (prev or {}):
+                    cur[pid] = prev[pid]
+                else:
+                    cur.pop(pid, None)
             for pid in sorted(cur) if seeding else changed:
                 try:
                     frame = details_frame(pid, await self._api("GET", f"/v3/positions/{pid}/details"),
                                           vest_account_id=self.vest_account_id)
                 except Exception as e:  # noqa: BLE001 -- report nothing for this read, the next one retries; never guess
                     log.warning("vest %s: poll details read failed (%s)", self.account_id, type(e).__name__)
+                    if pid in (prev or {}) and pid not in cur:                  # closed: its exit must not be lost
+                        fails[pid] = fails.get(pid, 0) + 1
+                        if fails[pid] >= DETAILS_TRIES:
+                            del fails[pid]
+                            events.append(self._size_fill(pid, prev[pid], net))  # pid stays out of cur: dropped
+                            continue
                     retry = True
-                    if pid in (prev or {}):
-                        cur[pid] = prev[pid]
-                    else:
-                        cur.pop(pid, None)
+                    hold(pid)
                     continue
+                fails.pop(pid, None)
                 if seeding:                     # what is already filled is not a fill
-                    for o in frame["data"]["orders"]:
+                    for o in frame["data"]["orders"] + frame["skipped"]:
                         self._seen.setdefault(str(o.get("order_id")), _dec(o.get("executed_quantity") or 0))
                     continue
+                if frame["skipped"]:            # a row whose side is unknown: not seen, read again next time
+                    retry = True
+                    hold(pid)
+                    for oid in (str(o.get("order_id")) for o in frame["skipped"]):
+                        if oid not in warned:
+                            warned[oid] = True
+                            log.warning("vest: poll skipped order %s (side unknown)", oid)
+                    _cap(warned)
                 for ev in parse_account_state(frame, account_id=self.account_id, vest_account_id=self.vest_account_id,
                                               seen=self._seen, roots=self._roots, default_root=self.root):
                     ev.raw["src"], ev.position_after = "poll", _contracts(net, ev.symbol)

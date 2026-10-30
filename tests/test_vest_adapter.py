@@ -856,3 +856,100 @@ def test_poll_does_not_emit_when_the_socket_spoke_during_its_read(monkeypatch):
         await ad.close()
     run(go())
     assert len(reads) >= 2 and got == []
+
+
+# ---- fix round 4: R24 unclassifiable rows, R25 closed position with failing /details, R26 chart-exit ---------
+def test_details_frame_skips_a_row_it_cannot_classify():
+    f = _poll_frame("U", "20", position_order_type=None, order_type="limit")
+    assert f["data"]["orders"] == [] and [o["order_id"] for o in f["skipped"]] == ["U"]
+    assert _poll_frame("E", "20", position_order_type="POSITION_ORDER_TYPE_CLOSE")["data"]["orders"][0]["side"] == "sell"
+    sided = details_frame("p1", {"position": {"side": "long", "orders": [{"order_id": "B", "side": "sell",
+                                                                          "executed_quantity": "20"}]}}, vest_account_id=ACC)
+    assert sided["skipped"] == [] and sided["data"]["orders"][0]["side"] == "sell"     # the row's own side: classified
+
+
+def _poll_run(monkeypatch, ad, middle, wait=0.4):
+    """Seed the poll on gw's state, run `middle()` (the change), give the poll `wait` s; -> the fills it reported."""
+    monkeypatch.setattr(vest, "POLL_S", 0.01)
+    Sock().patch(monkeypatch)
+    got = []
+
+    async def go():
+        async def on_fill(ev):
+            got.append(ev)
+        await ad.observe_fills(on_fill)
+        await asyncio.sleep(0.1)                                # seeded
+        middle()
+        await asyncio.sleep(wait)
+        await ad.close()
+    run(go())
+    return got
+
+
+X0 = {"order_id": "x0", "status": "filled", "quantity": "20", "executed_quantity": "20", "execution_price": "21000",
+      "position_order_type": "open"}
+
+
+def test_poll_unclassifiable_row_is_not_reported_not_seen_and_retried(monkeypatch, caplog):
+    ad, gw = mk()
+    gw.positions, gw.details["p1"] = [pos("long", "20")], [X0]
+    reads = []
+    gw.h[("GET", "/v3/positions/p1/details")] = lambda req: reads.append(1)
+
+    def change():
+        reads.clear()
+        gw.positions = [pos("long", "40")]
+        gw.details["p1"] = [X0, {**X0, "order_id": "u1", "position_order_type": None, "order_type": "limit"}]
+    with caplog.at_level("WARNING"):
+        got = _poll_run(monkeypatch, ad, change)
+    assert got == [] and "u1" not in ad._seen
+    assert len(reads) >= 3                                       # the next reads try again (retry set)
+    assert sum("u1" in r.getMessage() for r in caplog.records) == 1
+
+
+def test_poll_closed_position_with_failing_details_reports_one_exit_from_the_size(monkeypatch):
+    ad, gw = mk()
+    gw.positions, gw.details["p1"] = [pos("long", "20")], [X0]
+    fails = []
+
+    def details(req):
+        if not gw.positions:
+            fails.append(1)
+            return httpx.Response(404, json={"code": 10009, "msg": "no position"})
+    gw.h[("GET", "/v3/positions/p1/details")] = details
+
+    def close():
+        gw.positions = []
+    got = _poll_run(monkeypatch, ad, close)
+    assert len(fails) == 3                                       # then dropped: no more /details for p1
+    (ev,) = got
+    assert (ev.side, ev.qty, ev.price, ev.position_after, ev.symbol) == ("Sell", 1, None, 0, "NQ")
+    assert ev.raw["positionId"] == "p1" and ev.raw["src"] == "poll"
+
+
+def test_poll_closed_position_details_ok_on_the_second_read_gives_the_order_fill(monkeypatch):
+    ad, gw = mk()
+    gw.positions, gw.details["p1"] = [pos("long", "20")], [X0]
+    fails = []
+
+    def details(req):
+        if not gw.positions and not fails:
+            fails.append(1)
+            return httpx.Response(404, json={"code": 10009, "msg": "no position"})
+    gw.h[("GET", "/v3/positions/p1/details")] = details
+
+    def close():
+        gw.positions = []
+        gw.details["p1"] = [X0, {**X0, "order_id": "c1", "position_order_type": "close"}]
+    got = _poll_run(monkeypatch, ad, close)
+    assert [(g.side, g.qty, g.raw["orderId"]) for g in got] == [("Sell", 1, "c1")]
+
+
+def test_chart_exit_never_opens_but_still_closes_a_position():
+    ad, gw = mk()
+    r = run(ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Limit", price=21010, text="homebase:chart-exit")))
+    assert r.ok and r.raw == {"note": "nothing to close"} and not gw.api("POST")
+    ad, gw = mk()
+    gw.positions = [pos("long", "20")]
+    assert run(ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Limit", price=21010, text="homebase:chart-exit"))).ok
+    assert [c.url.path for c in gw.api("POST")] == [CLOSE]
