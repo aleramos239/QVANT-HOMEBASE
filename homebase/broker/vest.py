@@ -385,7 +385,8 @@ class VestAdapter(BrokerAdapter):
             if err := self._login_ending():
                 return OrderResult(ok=False, error=err)
             # an entry: its full stop risk (none attached = unbounded) must fit above the loss floors
-            risk = _dec(units) * abs(_dec(req.price) - _dec(req.stop_price)) if legs and req.stop_price is not None else None
+            risk = (_dec(units) * (abs(_dec(req.price) - _dec(req.stop_price)) + self._slip())
+                    if legs and req.stop_price is not None else None)
             err = await self._floor_err(risk, rows)
             if err:
                 return OrderResult(ok=False, error=err)
@@ -690,6 +691,10 @@ class VestAdapter(BrokerAdapter):
             return f"vest: entry risk ${float(risk):,.0f} would cross the loss floor (room ${room:,.0f})"
         return None
 
+    def _slip(self) -> Decimal:
+        """Points of slippage allowed for per unit at risk (R60): a market stop fills past its trigger."""
+        return _dec((self.floors or {}).get("slip_pts", 5.0))
+
     def _open_risk(self, opened: list, resting: list) -> Optional[Decimal]:
         """$ to the stops of this account's open positions and resting entries; None if one has no known stop."""
         risk = Decimal(0)
@@ -700,7 +705,7 @@ class VestAdapter(BrokerAdapter):
                 return None
             # shortcut: from the open price, not the mark; only other symbols' positions get here (SYMBOL refuses entries)
             far = min(stops) if long_ else max(stops)
-            risk += abs(_signed(p)) * max(Decimal(0), (_dec(p["openPrice"]) - far) * (1 if long_ else -1))
+            risk += abs(_signed(p)) * (max(Decimal(0), (_dec(p["openPrice"]) - far) * (1 if long_ else -1)) + self._slip())
         for o in resting:
             if o.get("reduce_only") or str(o.get("position_order_type")).lower().endswith(("close", "reduce")):
                 continue
@@ -751,7 +756,7 @@ class VestAdapter(BrokerAdapter):
         if last is not None and reached(req.side, level, last):
             return OrderResult(ok=False, error="vest: the level already traded")
         sl = abs(level - float(req.stop_price))
-        err = await self._floor_err(_dec(units) * _dec(sl))
+        err = await self._floor_err(_dec(units) * (_dec(sl) + self._slip()))
         if err:
             return OrderResult(ok=False, error=err)
         if self._sweeping or self._sweeps != sweeps:  # a flatten ran while the floor read was awaited

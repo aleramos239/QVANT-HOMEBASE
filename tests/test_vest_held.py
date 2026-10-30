@@ -644,3 +644,23 @@ def test_feed_reset_forgets_the_stale_last_close():
     assert not run(hold(ad, level=21000)).ok                                    # the level already traded (stale)
     ad.feed_reset()
     assert run(hold(ad, level=21000)).ok
+
+
+# ---- final fix I6 (R60): a slippage allowance in the floor guard ---------------------------------------------
+def test_floor_guard_counts_a_slippage_allowance_per_open_and_new_position():
+    """slip_pts (default 5) x units ($1 a point a unit) on the new entry and on every open position."""
+    def nq(sl):
+        return run(ad.place_bracket(OrderRequest("NQZ6", "Buy", 1, "Market", price=21000, stop_price=21000 - sl)))
+    ad, gw, _ = mk(floors={"max_drawdown_equity": 49000})
+    accounts(gw, equity="50000")                                                  # room 1000
+    assert not nq(46).ok and not opens(gw)                                         # 920 fits, 920 + 100 does not
+    gw.positions.clear()
+    assert nq(45).ok                                                               # 900 + 100: just fits
+    ad, gw, _ = mk(floors={"max_drawdown_equity": 49000, "slip_pts": 2})
+    accounts(gw, equity="50000")
+    assert nq(46).ok                                                               # the account's own allowance: 40
+    ad, gw, _ = mk(floors={"max_drawdown_equity": 49000})
+    accounts(gw, equity="50000")
+    gw.positions = [pos(symbol="ES-USD-PERP", openPrice="6000", quantity="20", stopLosses=[{"triggerPrice": "5970"}])]
+    r = run(ad.place_bracket(OrderRequest("MNQZ6", "Buy", 1, "Market", price=21000, stop_price=21000 - 146)))
+    assert not r.ok and "room $300" in r.error                                     # 1000 - (600 + 100) open
