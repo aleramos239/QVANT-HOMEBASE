@@ -172,6 +172,9 @@ test('refreshView: idle says nothing; running names the step; done reads the cov
   assert.equal(DE.refreshView({ status: 'done', steps: [] }).text, 'Done');
   assert.deepEqual(DE.refreshView({ status: 'error', note: 'Fetch failed (exit 1)' }), { text: 'Failed: Fetch failed (exit 1)', busy: false, tone: 'err' });
   assert.equal(DE.refreshView({ status: 'cancelled' }).text, 'Cancelled');
+  // a demo-only Mac: the refetch's own summary, not the server's coverage report
+  assert.equal(DE.refreshView({ status: 'done', note: 'Gaps refetched: NQ 1 filled.', coverage: { sessions: 1 } }).text,
+    'Done, charts reloaded. Gaps refetched: NQ 1 filled.');
 });
 
 test('refreshView: with the report classes it says what a click can still fill, and that the charts reloaded', () => {

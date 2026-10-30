@@ -170,6 +170,7 @@ function refreshView(st) {
   }
   if (s === 'cancelled') return { text: 'Cancelled', busy: false, tone: '' };
   if (s === 'error') return { text: `Failed: ${st.note || 'unknown error'}`, busy: false, tone: 'err' };
+  if (st.note) return { text: `Done, charts reloaded. ${st.note}`, busy: false, tone: '' };    // a demo-only Mac: its own gaps
   const bits = [];
   const c = st.coverage;
   const k = c && c.classes;

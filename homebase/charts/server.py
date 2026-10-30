@@ -60,7 +60,7 @@ from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
 from .session import ET, always_open, et_wall_s, session_date, session_range_ms, split_by_session
 from .settings_store import CLOCK_CHOICES, MD_CHOICES, SettingsStore, md_only
-from .store import ARCHIVE, TickStore, splice_tail
+from .store import ARCHIVE, TickStore, gaps_path, splice_tail
 from .studies import make
 from .tapelive import TapeLive
 from .tick import SideClassifier, from_row
@@ -682,6 +682,49 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             if root == PAPER_ROOT:
                 paper.clear_pending()       # the reseeds above carried what could not be filled
 
+    async def fill_marked(root: str) -> tuple[int, int, int]:
+        """The Refresh data button on a demo-only Mac: ask Tradovate again, over this service's own md socket (its tick ids
+        are the recording's own), for every gap marked in today's recording -- a refill that failed when the socket was
+        down is never retried by the feed itself (NQ 2026-10-30 14:53-15:06). A gap Tradovate has not posted in full yet
+        (tickarchive.published_ms) is left for a later click. (ticks added, gaps filled, gaps left). Charts only: the Lab
+        runner's stream is not sent these old ticks (it never asked for them)."""
+        d = hub.today_date.get(root) or session_date(clock(), root)
+        f = store.pick(root, d)
+        if recorder is None or f is None or not f.live:
+            return 0, 0, 0
+        try:
+            marks = json.loads(gaps_path(f.path).read_text())
+        except (OSError, ValueError):
+            return 0, 0, 0
+        posted = T.tickarchive.published_ms(clock())
+        added = filled = left = 0
+        for a, b in sorted(marks, key=lambda g: g[0] - g[1]):          # the longest first: the budget may run out
+            if b > posted:
+                left += 1
+                continue
+            fd = feed_other if feed_other is not None and root in feed_other.roots else feed
+            async with refill_lock:
+                pages = min(REFILL_MAX_PAGES, REFILL_BUDGET + (REFILL_RESERVE if root in REFILL_FIRST else 0)
+                            - fd.budget_used())
+                if pages <= 0:
+                    left += 1
+                    continue
+                try:
+                    rows, reached = await refill(fd.ws, f.contract, a - 1, b + 1, max_pages=pages,
+                                                 sleep=_paced_sleep, on_request=fd.count_request)
+                except Exception as e:  # noqa: BLE001 -- the gap stays marked
+                    log(f"{root}: gap {(b - a) / 1000:.0f}s refetch failed: {e}")
+                    left += 1
+                    continue
+                added += len(recorder.append(root, f.contract, rows))
+                rest = [[a, min(b, reached)]] if reached > a else []
+                recorder.replace_gap(root, d, f.contract, [a, b], rest)
+                filled, left = filled + (not rest), left + bool(rest)
+        if added or filled:
+            log(f"{root}: Refresh data refetched {added} ticks, {filled} gap(s) filled, {left} left")
+            await reseed_async(root)
+        return added, filled, left
+
     def paper_ticks(root: str, rows: list[dict]) -> None:
         if not rows:
             return
@@ -1068,9 +1111,21 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                               Path(state) / "export" if state else None)
     app.include_router(export_rt)
 
+    def local_fill() -> str:
+        """fill_marked for every root, run on the service's loop from the Refresh run's thread: one summary line."""
+        loop = refresh_kick.get("loop")
+        if loop is None:
+            raise RuntimeError("the chart service is still starting: click again in a moment")
+
+        async def every():
+            return [(r, *await fill_marked(r)) for r in roots]
+        got = asyncio.run_coroutine_threadsafe(every(), loop).result(timeout=3600)
+        parts = [f"{r} {f} filled" + (f", {n} left" if n else "") for r, _, f, n in got if f or n]
+        return ("Gaps refetched: " + "; ".join(parts) + ".") if parts else "No marked gaps to refetch."
+
     refresh_rt = refresh_router(browser_write_ok, Path(state) if state else None, **{
         "md_ready": lambda: bool(T.accounts_by_env()["live"]),     # the live login's md token: the fill pages on no other
-        "on_finish": after_refresh, **(refresh_kw or {})})
+        "on_finish": after_refresh, "local_fill": local_fill, **(refresh_kw or {})})
     app.include_router(refresh_rt)
     app.include_router(pine_routes())      # the Pine runtime and the owner's scripts (~/.homebase/pine)
 
