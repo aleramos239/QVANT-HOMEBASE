@@ -232,7 +232,7 @@ class VestAdapter(BrokerAdapter):
         self._tasks: list[asyncio.Task] = []
         self._ws_up = False
         self._busy = True                               # poll fallback: something may rest / be open
-        self._seq = 0                                   # last account_seq seen on the socket
+        self._seq = -1                                  # last account_seq seen on the socket (a connection may start at 0)
         self._seen: dict[str, Decimal] = {}
         self._events: dict[str, tuple[str, Optional[str]]] = {}     # command / order id -> (status, error) off the socket
         self._pos_of: dict[str, str] = {}               # order id -> position id (for get_order_status)
@@ -325,7 +325,9 @@ class VestAdapter(BrokerAdapter):
     async def get_metrics(self) -> dict:
         m = await super().get_metrics()
         left = self.login_days_left()
-        if left is not None and 0 < left <= 3:
+        if left is not None and 0 < left < 0.5:
+            m["notice"] = "login ends within 12 h: sign again (new trades stopped)"
+        elif left is not None and 0 < left <= 3:
             n = math.ceil(left)
             m["notice"] = f"login ends in {n} day{'s' if n != 1 else ''}"
         return m
@@ -983,7 +985,7 @@ class VestAdapter(BrokerAdapter):
                 async with websockets.connect(WS_URL, subprotocols=["vest.v1", tok],
                                               additional_headers={"Origin": HEADERS["Origin"]}) as ws:
                     delay = WS_RETRY_S              # _ws_up waits for the first frame
-                    self._seq = 0                   # account_seq starts over on every connection (R55)
+                    self._seq = -1                  # account_seq starts over on every connection, maybe at 0 (R55)
                     try:                            # the gap since the last report, read once before the frames (R59)
                         await self._pass(reconcile=True)
                     except Exception as e:  # noqa: BLE001
@@ -1081,9 +1083,10 @@ class VestAdapter(BrokerAdapter):
                 if evs and gone:                # its exit is reported: a replay of it is not a fill
                     self._closed(pid)
             _cap(self._seen)
-            self._known = None if seeding and retry else cur
-            # an order that left while its position's read failed stays known, so the next read tries it again
-            self._known_orders = {**{o: p for o, p in self._known_orders.items() if p in again and o not in now_orders},
-                                  **now_orders}
-            self._busy = bool(held or resting or retry)
+            if reconcile or not self._ws_up:    # the socket spoke mid-read: its picture is newer than this REST read
+                self._known = None if seeding and retry else cur
+                # an order that left while its position's read failed stays known, so the next read tries it again
+                self._known_orders = {**{o: p for o, p in self._known_orders.items() if p in again and o not in now_orders},
+                                      **now_orders}
+                self._busy = bool(held or resting or retry)
         await self._deliver(events)

@@ -1233,3 +1233,32 @@ def test_a_resting_entry_that_filled_and_closed_inside_the_gap_is_reported():
     gw.orders, gw.details["p9"] = [], [{**X0, "order_id": "o9"}, {**C1, "order_id": "c9"}]
     run(ad._pass())
     assert [g.raw["orderId"] for g in got] == ["o9", "c9"] and ad._known_orders == {}
+
+
+def test_a_first_frame_numbered_zero_counts():
+    """A connection whose account_seq starts at 0: its first frame is not dropped as stale."""
+    ad, gw = mk()
+
+    async def go():
+        await ad._on_message(json.dumps(acct_msg([], seq=0)))
+        return ad._ws_up
+    assert run(go()) is True
+
+
+def test_a_poll_pass_does_not_overwrite_what_the_socket_said_while_it_read(monkeypatch):
+    """A poll pass that started before the socket's first frame keeps its REST picture out of the known state once the
+    socket has spoken, so a position the socket opened mid-read stays known (a later gap close of it is still seen)."""
+    ad, gw = mk()
+    run(ad._pass())                                                   # seeds: flat
+    gw.positions, gw.details["p1"] = [pos("long", "20")], [X0]
+    real = ad._api
+
+    async def api(method, path, *a, **kw):
+        r = await real(method, path, *a, **kw)
+        if "/details" in path and not ad._ws_up:                      # the socket speaks while the poll reads
+            ad._ws_up = True
+            ad._note_state({"positions": [{**pos("long", "40", pid="p2"), "position_id": "p2", "symbol": SYM}]})
+        return r
+    monkeypatch.setattr(ad, "_api", api)
+    run(ad._pass())
+    assert "p2" in ad._known
