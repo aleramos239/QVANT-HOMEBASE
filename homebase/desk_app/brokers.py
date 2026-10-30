@@ -248,7 +248,10 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
             # (its entries share the token), never for an entry that went private
             first = (aid not in _logged_in_once and login_id not in _login_first_spent
                      and aid not in _went_private)
-            why = budget.blocked(key, first=first, manual=manual)
+            # a TopstepX session that holds a token sends no /Login on connect: nothing to refuse (a renewal or a
+            # re-login still asks the budget, in the session)
+            holds = isinstance(ad, TopstepXAdapter) and ad.session._token is not None
+            why = None if holds else budget.blocked(key, first=first, manual=manual)
             if why:
                 raise LoginDeferred(why if fell_back_from is None else
                                     f"{str(fell_back_from)[:120]} — no login fallback: {why}")

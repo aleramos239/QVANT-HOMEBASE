@@ -88,7 +88,10 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
         if any(a.keyring_key == key for a in cfg.accounts.values()):
             raise HTTPException(409, "that login is in use by an account")
         secrets_store.delete_credentials(key)
-        brokers._TSX_SESSIONS.pop(key, None)
+        sess = brokers._TSX_SESSIONS.pop(key, None)
+        if sess is not None:
+            with contextlib.suppress(Exception):
+                await sess.aclose()
         return {"ok": True}
 
     # ------------------------------------------------------------ Vest: the wallet login
@@ -215,7 +218,10 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
         if code or not saved:
             budget.record_login(key)
             try:
-                await sess.login(code=code or None)
+                # under the session's lock: the 401 retry, a renewal and the kick handler all hold it, and a login they
+                # run at the same moment would be overwritten by (or would overwrite) this one -- a ping-pong of tokens
+                async with sess._lock:
+                    await sess.login(code=code or None)
             except NeedsCode:
                 budget.login_result(key)             # nothing was refused: the owner answers the code
                 return {"ok": False, "needs_code": True, "key": key}
@@ -223,6 +229,9 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
                 budget.login_result(key, e)
                 return {"ok": False, "error": _tsx_why(e), "key": key}
             budget.login_result(key)
+            for aid, a in cfg.accounts.items():     # the code is answered: its accounts need not wait out their cool-down
+                if a.keyring_key == key:
+                    _login_cooldown.pop(aid, None)
         probe = adapter_factory("probe", config_mod.AccountCfg(keyring_key=key))
         try:
             await probe.connect()        # reuses the token; with none (a saved login) it logs in through the budget

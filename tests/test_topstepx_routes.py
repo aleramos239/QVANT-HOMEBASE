@@ -3,8 +3,11 @@
 httpx MockTransport (the fake userapi), registered in brokers._TSX_SESSIONS exactly as build_adapter shares it."""
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -37,10 +40,21 @@ class Api:
     def __init__(self):
         self.calls: list[httpx.Request] = []
         self.login = {"token": TOKEN, "userId": 5}
+        self.hold: tuple | None = None        # (entered, gate): the NEXT /Login waits for gate, then answers token TOK-2
 
     def __call__(self, req: httpx.Request) -> httpx.Response:
         self.calls.append(req)
         p = req.url.path
+        if p == "/Login" and self.hold:
+            entered, gate = self.hold
+            self.hold = None
+
+            async def later():
+                entered.set()
+                while not gate.is_set():
+                    await asyncio.sleep(0.01)
+                return httpx.Response(200, json={"token": "TOK-2", "userId": 5})
+            return later()
         if p == "/Login":
             return httpx.Response(200, json=self.login(json.loads(req.content)) if callable(self.login) else self.login)
         if p == "/TradingAccount":
@@ -57,7 +71,8 @@ class StubHub:
     up = False
 
     def __init__(self, session, on_event, *, on_up=None, on_auth_lost=None, **kw):
-        pass
+        self.on_auth_lost = on_auth_lost
+        self._token = session._token        # what the socket was opened with
 
     async def start(self):
         pass
@@ -216,3 +231,76 @@ def test_logins_lists_tsx_with_env_tsx(client):
     assert PASSWORD not in client.get("/api/logins").text
     assert client.post("/api/logins/delete", json={"key": KEY}).json() == {"ok": True}
     assert KEY not in brokers._TSX_SESSIONS
+
+
+def spend_the_cap(client):
+    for _ in range(10):
+        client.app.state.login_budget.record_login(KEY)
+
+
+def test_the_hourly_cap_refuses_a_login_that_is_not_the_first(client, api):
+    connect(client)                                      # the first login (exempt) is spent
+    spend_the_cap(client)
+    n = len(api.logins())
+    for r in (connect(client).json(), connect(client, code="1").json(),
+              client.post("/api/connect", json={"saved_key": KEY}).json()):
+        assert r["ok"] is False and "logins on this user in the last hour" in r["error"] and r["key"] == KEY
+    assert len(api.logins()) == n
+
+
+def test_a_reconnect_on_a_held_token_is_not_refused_by_the_cap(client, api):
+    connect(client)
+    client.post("/api/accounts/add-many", json={"key": KEY, "accounts": ["PRAC-V2-1"]})
+    spend_the_cap(client)
+    booked, sent = budget_logins(client), len(api.logins())
+    r = client.post("/api/accounts/reconnect", json={"account": "prac-v2-1"}).json()["results"]["prac-v2-1"]
+    assert r["ok"] and budget_logins(client) == booked and len(api.logins()) == sent      # no /Login, no booking
+    brokers._TSX_SESSIONS[KEY]._token = None             # a real /Login is needed: the budget still refuses it
+    r = client.post("/api/accounts/reconnect", json={"account": "prac-v2-1"}).json()["results"]["prac-v2-1"]
+    assert r["ok"] is False and "logins on this user in the last hour" in r["error"] and len(api.logins()) == sent
+
+
+def test_answering_the_code_frees_the_accounts_cooldown(client, api):
+    connect(client)
+    client.post("/api/accounts/add-many", json={"key": KEY, "accounts": ["PRAC-V2-1", "Combine-50K"]})
+    api.login = lambda body: {"verificationCode": True} if "code" not in body else {"token": TOKEN, "userId": 5}
+    brokers._TSX_SESSIONS[KEY]._token = None
+    client.post("/api/accounts/reconnect", json={})      # both cards ask for a code and wait 30 minutes
+    cool = client.app.state.login_cooldown
+    assert {"prac-v2-1", "combine-50k"} <= set(cool) and "main" not in cool
+    assert client.post("/api/connect", json={"saved_key": KEY, "code": "123456"}).json()["ok"]
+    assert "prac-v2-1" not in cool and "combine-50k" not in cool
+
+
+def test_a_kick_arriving_during_the_wizards_login_makes_no_second_login(client, api):
+    connect(client)
+    client.post("/api/accounts/add-many", json={"key": KEY, "accounts": ["PRAC-V2-1"]})
+    sess = brokers._TSX_SESSIONS[KEY]
+    hub = sess.hub
+    assert hub is not None and hub._token == TOKEN
+    entered, gate = threading.Event(), threading.Event()
+    api.hold = (entered, gate)
+    before = len(api.logins())
+    with ThreadPoolExecutor(1) as pool:
+        wiz = pool.submit(connect, client, code="123456")
+        assert entered.wait(5)                           # the wizard's login is in flight, holding the session's lock
+        kick = client.portal.start_task_soon(hub.on_auth_lost)    # the old token is refused by the socket meanwhile
+        gate.wait(0.3)                                   # give the kick time to reach (and wait on) the lock
+        gate.set()
+        assert wiz.result(10).json()["ok"]
+        kick.result(10)
+    assert len(api.logins()) == before + 1               # one /Login: the kick found the token already replaced
+    assert sess._token == "TOK-2" and sess.taken == 1
+
+
+def test_deleting_a_login_closes_its_session(client):
+    secrets_store.set_credentials(KEY, username=USER, password=PASSWORD)
+    closed = []
+    sess = brokers._TSX_SESSIONS[KEY]
+    sess.aclose = lambda: _closed(closed)
+    assert client.post("/api/logins/delete", json={"key": KEY}).json() == {"ok": True}
+    assert closed == [1]
+
+
+async def _closed(box):
+    box.append(1)
