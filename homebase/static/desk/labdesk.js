@@ -85,7 +85,7 @@ function stratCal(deskId, lab) {
   const v = calView(SCAL, "scalDay");
   const seg = deskId ? `<div class="seg" role="group" aria-label="Which trades">` + [[true, "Shadow"], [false, "Live"]].map(([sh, word]) =>
     `<button class="${SCAL.shadow === sh ? "sel" : ""}" aria-pressed="${SCAL.shadow === sh}" onclick="scalMode(${sh})">${word}</button>`).join("") + `</div>` : "";
-  return `<div class="sec"><h2>Calendar</h2>${seg}
+  return `${shadowStatsHtml(SCAL.stats, typeof DESKRES === "object" && DESKRES[lab] ? DESKRES[lab].both : null)}<div class="sec"><h2>Calendar</h2>${seg}
     <div class="cal-head"><button class="cal-nav" onclick="scalStep(-1)" aria-label="Previous month">&lsaquo;</button>
       <span class="m" style="flex:1">${esc(v.month)}</span>
       <button class="cal-nav" onclick="scalStep(1)" aria-label="Next month">&rsaquo;</button></div>
@@ -96,13 +96,16 @@ function stratCal(deskId, lab) {
 async function loadScal() {
   const s = SCAL, tok = ++s.tok, shadow = s.shadow;
   s.loading = true;
-  let data = null;
+  let data = null, stats = false;
   try {
     const r = await fetch(shadow ? CHART + "/api/tester/desklab/shadow?name=" + encodeURIComponent(s.lab)
                                  : "/api/strategy-live?strategy=" + encodeURIComponent(s.deskId));
-    data = r.ok ? (shadow ? shadowData((await r.json()).days) : await r.json()) : null;
+    const j = r.ok ? await r.json() : null;
+    data = j ? (shadow ? shadowData(j.days) : j) : null;
+    if (shadow && j) stats = j.stats && typeof j.stats === "object" ? j.stats : false;      // worked out by the chart service
   } catch (_) { data = null; }
   if (SCAL !== s || s.tok !== tok) return;                             // another strategy, or the other switch, since
+  if (shadow) s.stats = stats || s.stats || false;                     // the Live switch keeps the last shadow record on screen
   s.loading = false; s.at = Date.now();
   s.data = data || {days: {}, trades: [], table: [], error: true};
   try { render(); } catch (_) { /* no page to draw on */ }
@@ -124,6 +127,31 @@ function shadowData(days) {
     for (const t of tr) out.trades.push({date: d.date, time: t.entry_t || "", side: t.side, entry: t.entry_px, exit: t.exit_px, reason: t.reason || "", net: +t.net || 0});
   }
   return out;
+}
+/* The shadow's forward record (the owner, 2026-10-30), from GET /api/tester/desklab/shadow's `stats` (per contract, after costs;
+   RR and Sharpe are the tester report's, Sharpe on the days that had a trade only), beside the strategy's full 3:1 sample, the
+   same run the results block shows. A backtest's trades a week = its trades over its months x 52 / 12. */
+const SHADOW_MIN_TRADES = 20;          // as the shadow scorecard: fewer trades say nothing yet
+function shadowStatsHtml(st, bt) {
+  const num = (v) => typeof v === "number" && isFinite(v) ? v : null;
+  const pct = (v) => num(v) == null ? "—" : Math.round(v) + "%", dec = (v, d) => num(v) == null ? "—" : v.toFixed(d);
+  const rr = (x) => typeof x.rr_label === "string" && x.rr_label ? x.rr_label : num(x.rr) == null ? "—" : "1:" + x.rr.toFixed(2);
+  const b = bt && typeof bt === "object" ? bt : null, bn = b ? num(b.trades) : null;
+  const cell = (v, dim) => `<span class="t${dim ? " dim" : " net"}" style="min-width:84px;text-align:right">${esc(v)}</span>`;
+  const row = (k, live, back, title) => `<div class="feed-row"${title ? ` title="${esc(title)}"` : ""}><span class="h">${esc(k)}</span>${cell(live)}${cell(back, true)}</div>`;
+  const body = st == null ? `<div class="eq-empty">Reading its shadow days…</div>`
+    : st === false ? `<div class="eq-empty">Its shadow days could not be read.</div>`
+    : !num(st.trades) ? `<div class="eq-empty">No shadow trades yet${st.since ? ` since ${esc(shortDay(st.since))}` : ""}.</div>`
+    : `<div class="agroup feed static">${row("", "Live", "Backtest", "Live = the shadow since its promotion; Backtest = its full 3:1 sample")}`
+      + row("Trades", String(st.trades), bn == null ? "—" : String(bn))
+      + row("Win rate", pct(st.win_rate), b ? pct(b.win_rate) : "—", "Trades that made money")
+      + row("Realized RR", rr(st), b ? rr(b) : "—", "Average win : average loss")
+      + row("Sharpe", dec(st.sharpe, 2), b ? dec(b.sharpe, 2) : "—", "Daily net of the days that had a trade, mean / sd × √252")
+      + row("Trades / week", dec(st.per_week, 1), b && bn != null && num(b.months) ? (bn / (b.months * 52 / 12)).toFixed(1) : "—")
+      + row("Avg / trade", usdS(st.net / st.trades), b && bn && num(b.net) != null ? usdS(b.net / bn) : "—", "Per contract, after costs")
+      + `</div><div class="mcap">Since ${esc(shortDay(st.since))} · net ${esc(usdS(st.net))} · per contract, after costs`
+      + `${st.trades < SHADOW_MIN_TRADES ? ` · too early to judge (${st.trades} of ${SHADOW_MIN_TRADES} trades)` : ""}</div>`;
+  return `<div class="sec"><h2>Shadow, forward</h2>${body}</div>`;
 }
 function labDeskView(name, s) {
   const c = s.cfg, lab = s.lab || {}, on = c.enabled === true, p = todayPnl(s), nm = stratLabel(name), busy = DESKLAB_BUSY === name;
@@ -381,12 +409,7 @@ async function archiveLabStrat(name, deskId) {
   const label = deskId ? stratLabel(deskId) : name;
   if (!await confirmDlg(`Archive ${label}?`, "It comes off the Desk, switched off, and its accounts come off. Its history is kept. Restore it from Archive any time.", "Archive", false)) return;
   DESKLAB_BUSY = name; if (ST) render();
-  let r = await chartPost("/api/tester/desklab/archive", {name}), err = null;
-  if (r && r.ok === true) {
-    if (deskId) { try { r = await post("/api/lab-remove", {strategy: deskId}); } catch (e) { err = e || new Error("no answer"); } }
-    else r = await chartPost("/api/tester/desklab/remove", {name});
-  }
-  if (!err && r && r.ok === true) r = await chartPost("/api/tester/desklab/filed", {name});
+  const {r, err} = await archiveSteps(name, deskId);
   DESKLAB_BUSY = "";
   if (!err && r && r.ok === true) {
     if ((VIEW.k === "strat" && VIEW.name === deskId) || (VIEW.k === "lab" && VIEW.name === name)) VIEW = {k: "archive"};
@@ -394,6 +417,58 @@ async function archiveLabStrat(name, deskId) {
   } else toast(`Could not archive ${label}: ${DeskLab.refusalText(r, err)}`, 7000);
   if (deskId) await refresh();
   loadDeskLab();
+}
+async function archiveSteps(name, deskId) {      // the three steps for one strategy -> {r, err}; no confirm, no repaint
+  let r = await chartPost("/api/tester/desklab/archive", {name}), err = null;
+  if (r && r.ok === true) {
+    if (deskId) { try { r = await post("/api/lab-remove", {strategy: deskId}); } catch (e) { err = e || new Error("no answer"); } }
+    else r = await chartPost("/api/tester/desklab/remove", {name});
+  }
+  if (!err && r && r.ok === true) r = await chartPost("/api/tester/desklab/filed", {name});
+  return {r, err};
+}
+/* ARCHIVE / RESTORE A FAMILY (the owner, 2026-10-30): one confirm, then each Lab member the Desk or the Lab still holds goes through the same
+   steps; a refusal (an open trade) leaves that one on the Desk and the rest go on. The family keeps its members, so the Archive lists them
+   under its name and the sidebar hides a family once all of it is archived. A built-in member is the Desk's own: archive it on its page. */
+async function archiveFamily(id) {
+  const f = famOf(id);
+  if (!f || DESKLAB_BUSY || DEMO) return;
+  const todo = f.members.filter(sid => sid.indexOf("lab_") === 0).map(sid => {
+    if (ST && ST.strategies && ST.strategies[sid]) return {name: sid.slice(4), deskId: sid, label: stratLabel(sid)};
+    const w = (DESKLAB.strategies || []).find(x => x.name === sid.slice(4));
+    return w ? {name: w.name, deskId: "", label: DeskLab.label(w)} : null;
+  }).filter(Boolean);
+  if (!todo.length) return toast(`The ${f.name} family has nothing on the Desk to archive.`, 6000);
+  const n = todo.length, them = n === 1 ? "It comes" : `All ${n} come`;
+  if (!await confirmDlg(`Archive the ${f.name} family?`, `${them} off the Desk, switched off, and their accounts come off. Their history is kept. Restore the family from Archive any time.`, "Archive", false)) return;
+  const failed = [];
+  for (const t of todo) {
+    DESKLAB_BUSY = t.name; if (ST) render();
+    const {r, err} = await archiveSteps(t.name, t.deskId);
+    if (err || !r || r.ok !== true) failed.push(`${t.label}: ${DeskLab.refusalText(r, err)}`);
+  }
+  DESKLAB_BUSY = "";
+  if (!failed.length) {
+    if (VIEW.k === "family" && VIEW.name === id) VIEW = {k: "archive"};
+    toast(`The ${f.name} family is archived. Restore it from Archive any time.`);
+  } else toast(`Archived ${n - failed.length} of ${n}. Not archived: ${failed.join(" · ")}`, 9000);
+  await refresh();
+  loadDeskLab();
+}
+async function restoreFamily(id) {
+  const f = famOf(id);
+  if (!f || DESKLAB_BUSY || DEMO) return;
+  const ws = (DESKLAB.archived || []).filter(w => f.members.includes(archivedId(w))), failed = [];
+  for (const w of ws) {
+    DESKLAB_BUSY = w.name; if (ST) render();
+    const r = await chartPost(w.builtin === true ? "/api/tester/desklab/restore_builtin" : "/api/tester/desklab/restore", {name: w.name});
+    if (!r || r.ok !== true) failed.push(`${w.builtin === true ? stratLabel(w.name) : DeskLab.label(w)}: ${(r && r.detail) || "no answer"}`);
+  }
+  DESKLAB_BUSY = "";
+  toast(!failed.length ? `The ${f.name} family is back on the Desk, switched off, with no account.`
+    : `Restored ${ws.length - failed.length} of ${ws.length}. Not restored: ${failed.join(" · ")}`, failed.length ? 9000 : 4000);
+  await loadDeskLab();
+  refresh();
 }
 /* DELETE from the Archive (the owner, 2026-10-22: "fully delete and remove them"): the archived copy, the strategy's history and its Lab
    draft (the draft goes to the drafts' trash). Real trades stay in the account history. A built-in is the Desk's own: no Delete. */
@@ -452,7 +527,7 @@ async function restoreBuiltin(name) {
   refresh();
 }
 function archiveView() {
-  const rows = (DESKLAB.archived || []).map(w => {
+  const row = (w) => {
     if (w.builtin === true) {
       const day = String(w.archived_utc || "").slice(0, 10);
       return `<div class="feed-row"><span class="h"><b>${esc(stratLabel(w.name))}</b> · the Desk's own${day ? " · archived " + esc(shortDay(day)) : ""}</span>
@@ -463,10 +538,17 @@ function archiveView() {
       <small class="dim">${f.map(x => esc(x.k + " " + x.v)).join(" · ")}</small></span>
       <button class="btn btn-outline btn-sm" onclick="restoreArchived(${jsArg(w.name)})"${busy || DESKLAB_BUSY ? " disabled" : ""} title="Back on the Desk, switched off, with no account">Restore</button>
       <button class="btn btn-outline btn-sm" onclick="deleteArchived(${jsArg(w.name)})"${busy || DESKLAB_BUSY ? " disabled" : ""} title="Deletes it for good: its history and its Lab draft">Delete</button></div>`;
-  }).join("");
+  };
+  // grouped by family (the owner, 2026-10-30), in the sidebar's order; the ones in no family last
+  const all = DESKLAB.archived || [], list = (ws) => `<div class="agroup feed static">${ws.map(row).join("")}</div>`;
+  const fams = DESKFAM.families.map(f => ({f, ws: all.filter(w => f.members.includes(archivedId(w)))})).filter(x => x.ws.length);
+  const loose = all.filter(w => !famOfStrat(archivedId(w)));
+  const secs = fams.map(({f, ws}) => `<div class="sec"><h2>${esc(f.name)} · ${ws.length}</h2>${list(ws)}
+      <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="restoreFamily(${jsArg(f.id)})"${DESKLAB_BUSY ? " disabled" : ""} title="All of them back on the Desk, switched off, with no account">Restore family</button></div></div>`).join("")
+    + (loose.length ? `<div class="sec">${fams.length ? "<h2>No family</h2>" : ""}${list(loose)}</div>` : "");
   return `<button class="back" onclick="setView('today')">‹ Today</button>
     <div class="sd-top"><div><h1 class="sd-title">Archive</h1><div class="sp">Off the Desk and switched off. Restore puts one back, switched off, with no account.</div></div></div>
-    <div class="sec">${rows ? `<div class="agroup feed static">${rows}</div>` : `<div class="eq-empty">No archived strategies yet.</div>`}</div>`;
+    ${secs || `<div class="sec"><div class="eq-empty">No archived strategies yet.</div></div>`}`;
 }
 /* Clear an old trade the Desk no longer owns: the Desk does it only when the account is flat and no old order is working, and says why not. */
 const LAB_CLEARING = new Map();      // "strategy@account" -> Infinity while a clear is out, then when it was answered ok
