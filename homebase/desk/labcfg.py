@@ -504,24 +504,57 @@ def _files(snap) -> set:
     return {rec.get("name") for rec, _ in _records(snap) if isinstance(rec, dict)}
 
 
+def book_row(r) -> dict:
+    """One book row as a sidecar holds it: account, qty (whole, above 0), then size ("contracts" | "risk"), risk_usd
+    (with "risk" only), stop_after ("win" | "profit"; "none" is not stored) and most (whole, 1..1000) when set. A row
+    with none of the new fields is {account, qty}, as always. ValueError with the sentence on a bad row."""
+    if not isinstance(r, dict):
+        raise ValueError("That is not an account row.")
+    aid, qty = r.get("account"), r.get("qty")
+    if not (isinstance(aid, str) and aid):
+        raise ValueError("A row needs an account.")
+    if not _whole(qty, 1, 10 ** 6):
+        raise ValueError("Size must be a whole number above 0.")
+    out = {"account": aid, "qty": qty}
+    size = r.get("size")
+    if size is not None:
+        if size not in ("contracts", "risk"):
+            raise ValueError("Size is contracts or risk.")
+        out["size"] = size
+    if size == "risk":
+        risk = r.get("risk_usd")
+        if not (_number(risk, 0, 100000) and risk > 0):
+            raise ValueError("Risk must be above $0 and at most $100,000.")
+        out["risk_usd"] = risk
+    stop = r.get("stop_after")
+    if stop is not None and stop not in ("none", "win", "profit"):
+        raise ValueError("Stop after is none, win or profit.")
+    if stop in ("win", "profit"):
+        out["stop_after"] = stop
+    if r.get("most") is not None:
+        if not _whole(r["most"], 1, 1000):
+            raise ValueError("Most contracts must be a whole number from 1 to 1000.")
+        out["most"] = r["most"]
+    return out
+
+
 def _shaped(book) -> list:
-    """Book rows as a sidecar holds them: {account: str, qty: whole, above 0}, one row an account. Anything else in
-    the list is not a booking."""
+    """Book rows as a sidecar holds them (book_row), one row an account. Anything else in the list is not a booking."""
     out, seen = [], set()
     for r in book if isinstance(book, list) else []:
-        if not isinstance(r, dict):
+        try:
+            row = book_row(r)
+        except ValueError:
             continue
-        aid, qty = r.get("account"), r.get("qty")
-        if isinstance(aid, str) and aid and aid not in seen and _whole(qty, 1, 10 ** 6):
-            seen.add(aid)
-            out.append({"account": aid, "qty": qty})
+        if row["account"] not in seen:
+            seen.add(row["account"])
+            out.append(row)
     return out
 
 
 def _norm(mark, limits, book) -> dict:
     """A sidecar's content without its stamp: what pending() compares."""
-    return {"mark": list(mark), "limits": limits,
-            "book": [{"account": str(r.get("account")), "qty": int(r.get("qty") or 0)} for r in book]}
+    return {"mark": list(mark), "limits": limits, "book": [book_row(r) for r in book]}
 
 
 def _saved(side) -> dict | None:
@@ -817,7 +850,7 @@ def commit(cfg: AppCfg, desk_id: str, limits: LabLimits | None, book: list, save
         m["saved"], m["blind"] = saved, False
     cfg.strategies[desk_id] = strategy_cfg(m["rec"], limits)
     if book or desk_id in cfg.book:          # (no rows and no key: the book stays without a key for it)
-        cfg.book[desk_id] = [{"account": r["account"], "qty": int(r["qty"])} for r in book]
+        cfg.book[desk_id] = [book_row(r) for r in book]
 
 
 def pending(cfg: AppCfg, only: str | None = None) -> list:

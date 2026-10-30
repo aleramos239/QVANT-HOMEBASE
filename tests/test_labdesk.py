@@ -1319,3 +1319,23 @@ def test_a_stopped_day_the_runner_no_longer_hosts_is_read_from_its_day_file(tmp_
     assert ld.runner_said(LAB) == {"state": "stopped", "why": "The sandbox is not working."}
     ld._alive(LAB)["info"] = {"state": "waiting", "why": None, "mode": "desk"}
     assert ld.runner_said(LAB)["state"] == "waiting"                         # a beat is newer than the file
+
+
+# ---------------------------------------------------------------- book rows with per-account settings
+def test_check_book_most_contracts_and_the_backtested_cap(tmp_path):
+    d = mkdesk(tmp_path, qty=0)                                                    # LIMITS max_qty 2
+    with pytest.raises(Refused) as e:
+        d.ld.check_book(LAB, [{"account": "a1", "qty": 25, "size": "contracts", "most": 20}])
+    assert str(e.value) == labdesk.ROW_OVER_MOST
+    d.ld.check_book(LAB, [{"account": "a1", "qty": 5, "size": "contracts"}])       # a set row is not held to the cap
+    with pytest.raises(Refused) as e:
+        d.ld.check_book(LAB, [{"account": "a1", "qty": 5}])                        # a legacy row still is
+    assert str(e.value) == "Size is capped at 2 here."
+
+
+def test_set_book_keeps_the_new_fields_in_the_sidecar_and_memory(tmp_path):
+    d = mkdesk(tmp_path, qty=0)
+    row = {"account": "a1", "qty": 1, "size": "risk", "risk_usd": 250, "stop_after": "profit", "most": 3}
+    run(d.ld.set_book(LAB, [row]))
+    assert d.cfg.book[LAB] == [row]
+    assert store.get_desk(rec()["name"])["book"] == [row]

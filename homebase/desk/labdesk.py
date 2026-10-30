@@ -75,6 +75,7 @@ OPEN = ("placing", "placed", "live")     # a round the engine still acts on
 
 NOT_ON_DESK = "That strategy is not on the Desk."
 SET_LIMITS_FIRST = "Set the limits first."
+ROW_OVER_MOST = "Size is over this account's Most contracts."
 FLATTEN_FIRST = "Flatten it first."
 NOT_SAVED = "Could not save it. Try again."
 RECORD_CHANGED = "This strategy changed. Try again."
@@ -712,8 +713,10 @@ class LabDesk:
             if rows and limits is None:
                 raise Refused(SET_LIMITS_FIRST)
             for r in rows:
-                if int(r["qty"]) > limits.max_qty:
+                if r.get("size") is None and int(r["qty"]) > limits.max_qty:     # a row with settings is not held to the backtested cap
                     raise Refused(f"Size is capped at {limits.max_qty} here.")
+                if r.get("size") == "contracts" and r.get("most") is not None and int(r["qty"]) > r["most"]:
+                    raise Refused(ROW_OVER_MOST)
             seen: dict = {}
             for r in rows:                   # one broker account once (two desk entries can be pinned to one)
                 key = getattr(self.adapters.get(r["account"]), "broker_key", r["account"])
@@ -743,7 +746,7 @@ class LabDesk:
         # the rows of accounts that are not in this desk's pool are not its to take off: they stay as they are
         others = [dict(r) for r in self.cfg.book.get(name) or [] if r.get("account") not in self.cfg.accounts]
         await self._commit(name, labcfg.limits_of(self.cfg, name),
-                           [{"account": r["account"], "qty": int(r["qty"])} for r in rows] + others)
+                           [labcfg.book_row(r) for r in rows] + others)
 
     # ------------------------------------------------------------ the switch
     async def set_enabled(self, name: str, on: bool) -> bool:

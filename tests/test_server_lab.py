@@ -382,6 +382,19 @@ def test_an_account_is_assigned_and_the_book_lives_in_the_sidecar(client):
     assert store.get_desk("pp_orb")["book"] == [] and client.cfg.book[LAB] == []
 
 
+def test_book_route_takes_row_fields_says_a_bad_row_and_journals_previous(client):
+    set_limits(client)
+    row = {"account": "eval1", "qty": 1, "size": "risk", "risk_usd": 300, "stop_after": "win", "most": 4}
+    assert book(client, [("eval1", 1)]).status_code == 200
+    r = client.post("/api/book", json={"strategy": LAB, "assignments": [row]})
+    assert r.status_code == 200 and r.json()["book"][LAB] == [row]
+    last = journal(client, "book_updated")[-1]
+    assert last["assignments"] == [row] and last["previous"] == [{"account": "eval1", "qty": 1}]
+    bad = client.post("/api/book", json={"strategy": LAB, "assignments": [{**row, "size": "lots"}]})
+    assert bad.status_code == 400 and bad.json()["detail"]
+    assert client.cfg.book[LAB] == [row]
+
+
 def test_a_size_above_the_cap_is_refused(client):
     set_limits(client)
     r = book(client, [("eval1", 2)])
