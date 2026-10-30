@@ -798,13 +798,13 @@
     <div class="mcap" style="font-weight:600;margin-bottom:8px">This strategy on this account</div>
     <div class="mcap warn" id="asCycle" hidden></div>
     <div class="field"><label for="asSize">Size</label>
-      <select id="asSize" class="hb-field" onchange="paintAcctSet()" data-autofocus>
-        <option value="contracts">Contracts</option><option value="risk">Risk ($ a trade)</option></select></div>
+      <select id="asSize" class="hb-field" onchange="acctSetSize()" data-autofocus>
+        <option value="own" id="asOwn">The strategy's own</option><option value="contracts">Contracts</option><option value="risk">Risk ($ a trade)</option></select></div>
     <div class="field" id="asQtyF"><label for="asQty">Contracts</label>
       <input id="asQty" onkeydown="acctSetKey(event)" type="text" inputmode="numeric" autocomplete="off"></div>
     <div class="field" id="asRiskF"><label for="asRisk">Risk per trade ($)</label>
       <input id="asRisk" onkeydown="acctSetKey(event)" type="text" inputmode="decimal" autocomplete="off" placeholder="500"></div>
-    <div class="field"><label for="asMost">Most contracts</label>
+    <div class="field" id="asMostW"><label>Most contracts</label>
       <div id="asMostF"><input id="asMost" onkeydown="acctSetKey(event)" type="text" inputmode="numeric" autocomplete="off"></div>
       <span class="mcap" id="asMostOff">No limit set here. One order never goes over 100 micros.</span>
       <button class="btn btn-outline btn-sm" id="asMostBtn" type="button" onclick="toggleAcctMost()">Remove</button></div>
@@ -956,7 +956,7 @@
 <script src="/static/desk/labdesk.js?v=12"></script>
 <script src="/static/desk/demo.js?v=2"></script>
 <script src="/static/desk/book.js?v=8"></script>
-<script src="/static/desk/acctset.js?v=1"></script>
+<script src="/static/desk/acctset.js?v=2"></script>
 <script src="/static/desk/settings.js?v=8"></script>
 <script src="/static/desk/popups.js?v=7"></script>
 <script src="/static/desk/start.js?v=2"></script>

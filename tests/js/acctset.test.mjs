@@ -24,7 +24,7 @@ function load({ accounts, strategies, groups = {}, book = {}, confirm = true, re
     showOverlay: (id) => shown.push(id), hideOverlay: (id) => hidden.push(id),
     esc: (s) => String(s), bookMachine: () => '', DeskLab: { refusalText: (r) => r.detail },
   });
-  vm.runInContext(CODE + '\nglobalThis.api = { AcctSet, openAcctSet, saveAcctSet, closeAcctSet, toggleAcctMost };', ctx);
+  vm.runInContext(CODE + '\nglobalThis.api = { AcctSet, openAcctSet, saveAcctSet, closeAcctSet, toggleAcctMost, acctSetSize, paintAcctSet };', ctx);
   return { api: ctx.api, ctx, els, posts, confirms, toasts, shown, hidden, refreshes, $ };
 }
 const A = load().api.AcctSet;
@@ -73,10 +73,28 @@ test('withRow replaces one account\'s row and keeps every other row as it is', (
   assert.deepEqual(plain(A.withRow([other], { account: 'c', qty: 1 })).map((r) => r.account), ['b', 'c'], 'a new account is added');
 });
 
-test('formOf: a legacy row opens as Contracts with the default Most box; a set row opens as it is', () => {
-  assert.deepEqual(plain(A.formOf({ account: 'a', qty: 3 }, 20)), { size: 'contracts', qty: 3, risk_usd: '', stop_after: 'none', most: 20 });
-  assert.deepEqual(plain(A.formOf({ account: 'a', qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win' }, 2)),
+test('formOf: a legacy row opens as "own" with no Most box; a set row opens as it is', () => {
+  assert.deepEqual(plain(A.formOf({ account: 'a', qty: 3 })), { size: 'own', qty: 3, risk_usd: '', stop_after: 'none', most: null });
+  assert.deepEqual(plain(A.formOf({ account: 'a', qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win' })),
     { size: 'risk', qty: 1, risk_usd: 500, stop_after: 'win', most: null });
+});
+
+test('rowFrom "own": {account, qty, stop_after?} only, never size or most', () => {
+  const r = A.rowFrom({ size: 'own', qty: 4, stop_after: 'win', most: 20 }, { account: 'a', qty: 3 });
+  assert.deepEqual(plain(r), { account: 'a', qty: 4, stop_after: 'win' });
+});
+
+test('needsAsk: a LIVE plain row given a size asks; a plain qty raise asks; Most up or removed on a risk row asks, on contracts not', () => {
+  const legacy = { account: 'a', qty: 2 }, r = { account: 'a', qty: 1, size: 'risk', risk_usd: 500, most: 20 };
+  const c = { account: 'a', qty: 2, size: 'contracts', most: 20 };
+  assert.equal(A.needsAsk(legacy, { ...legacy, stop_after: 'win' }, true), false);
+  assert.equal(A.needsAsk(legacy, { ...legacy, qty: 3 }, true), true);
+  assert.equal(A.needsAsk(legacy, { ...c }, true), true, 'legacy switched to Contracts');
+  assert.equal(A.needsAsk(legacy, { ...c }, false), false);
+  assert.equal(A.needsAsk(r, { ...r, most: 40 }, true), true);
+  assert.equal(A.needsAsk(r, { account: 'a', qty: 1, size: 'risk', risk_usd: 500 }, true), true, 'Most removed');
+  assert.equal(A.needsAsk(r, { ...r, most: 10 }, true), false);
+  assert.equal(A.needsAsk(c, { ...c, most: 40 }, true), false, 'a contracts row needs no ask for Most');
 });
 
 // ---- the sheet -------------------------------------------------------------------------------------------
@@ -88,7 +106,7 @@ test('open: a Lab row fills the fields; a cycle with risk shows the note', () =>
   t.api.openAcctSet('lab_x', 'live1');
   assert.deepEqual(t.shown, ['acctSetOverlay']);
   assert.equal(t.$('#asQty').value, '3');
-  assert.equal(t.$('#asMost').value, '20');
+  assert.equal(t.$('#asSize').value, 'own');
   assert.equal(t.$('#asCycle').hidden, false);
   assert.match(t.$('#asCycle').textContent, /The account cycle sizes this strategy while it is on/);
   const off = load({ book: { lab_x: [{ account: 'live1', qty: 3 }] } });
@@ -108,6 +126,58 @@ test('save on a LIVE account: a raise asks first with the live note, then posts 
   assert.deepEqual(t.posts, [{ url: '/api/book', body: { strategy: 'lab_x', assignments: [
     { account: 'live1', qty: 5, size: 'contracts' }, plain(other)] } }]);
   assert.deepEqual(t.hidden, ['acctSetOverlay']);
+});
+
+test('a legacy row with only Stop after changed posts a row with no size and no most', async () => {
+  const t = load({ book: { lab_x: [{ account: 'paper1', qty: 2 }] } });
+  t.api.openAcctSet('lab_x', 'paper1');
+  assert.equal(t.$('#asSize').value, 'own');
+  assert.equal(t.$('#asMostW').hidden, true);
+  fill(t, { asStop: 'win' });
+  await t.api.saveAcctSet();
+  assert.deepEqual(t.posts, [{ url: '/api/book', body: { strategy: 'lab_x', assignments: [{ account: 'paper1', qty: 2, stop_after: 'win' }] } }]);
+});
+
+test('a legacy LIVE row switched to Contracts asks, and gets size and Most at the default', async () => {
+  const t = load({ book: { lab_x: [{ account: 'live1', qty: 2 }] } });
+  t.api.openAcctSet('lab_x', 'live1');
+  fill(t, { asSize: 'contracts' });
+  t.api.acctSetSize();
+  assert.equal(t.$('#asMostW').hidden, false);
+  assert.equal(t.$('#asMost').value, '20');
+  await t.api.saveAcctSet();
+  assert.equal(t.confirms.length, 1);
+  assert.deepEqual(t.posts[0].body.assignments, [{ account: 'live1', qty: 2, size: 'contracts', most: 20 }]);
+});
+
+test('a LIVE risk row asks when Most is raised or removed', async () => {
+  const row = { account: 'live1', qty: 1, size: 'risk', risk_usd: 500, most: 20 };
+  const up = load({ book: { lab_x: [row] } });
+  up.api.openAcctSet('lab_x', 'live1');
+  fill(up, { asMost: '40' });
+  await up.api.saveAcctSet();
+  assert.equal(up.confirms.length, 1);
+  const off = load({ book: { lab_x: [row] } });
+  off.api.openAcctSet('lab_x', 'live1');
+  off.api.toggleAcctMost();
+  await off.api.saveAcctSet();
+  assert.equal(off.confirms.length, 1);
+  assert.ok(!('most' in off.posts[0].body.assignments[0]));
+});
+
+test('the "own" option is offered only for a size-less row, and the backstop words follow the contract', () => {
+  const t = load({ book: { lab_x: [{ account: 'paper1', qty: 3 }] } });
+  t.api.openAcctSet('lab_x', 'paper1');
+  assert.equal(t.$('#asOwn').hidden, false);
+  assert.equal(t.$('#asOwn').textContent, "The strategy's own (×3)");
+  assert.match(t.$('#asMostOff').textContent, /100 micros/);
+  const sized = load({ book: { lab_x: [{ account: 'paper1', qty: 3, size: 'contracts' }] } });
+  sized.api.openAcctSet('lab_x', 'paper1');
+  assert.equal(sized.$('#asOwn').hidden, true);
+  assert.equal(sized.$('#asOwn').disabled, true);
+  const mini = load({ strategies: { lab_x: { cfg: { kind: 'lab' }, lab: { most_default: 2 } } }, book: { lab_x: [{ account: 'paper1', qty: 1 }] } });
+  mini.api.openAcctSet('lab_x', 'paper1');
+  assert.match(mini.$('#asMostOff').textContent, /10 minis/);
 });
 
 test('save: Cancel on the live ask sends nothing; a paper account never asks', async () => {
@@ -174,7 +244,7 @@ test('save: a refused book shows the Desk\'s sentence and keeps the sheet open',
 test('the sheet is static markup with every field the code reads, closes with Esc, and render() never touches it', async () => {
   const { HTML } = await import('./deskpage.mjs');
   const markup = HTML.slice(HTML.indexOf('<div class="overlay" id="acctSetOverlay">'), HTML.indexOf('<div class="overlay" id="settingsOverlay">'));
-  for (const id of ['asTitle', 'asCycle', 'asSize', 'asQtyF', 'asQty', 'asRiskF', 'asRisk', 'asMostF', 'asMost', 'asMostOff', 'asMostBtn',
+  for (const id of ['asTitle', 'asCycle', 'asSize', 'asQtyF', 'asQty', 'asRiskF', 'asRisk', 'asMostW', 'asOwn', 'asMostF', 'asMost', 'asMostOff', 'asMostBtn',
     'asStop', 'asTake', 'asLoss', 'asNote', 'asSave']) assert.match(markup, new RegExp(`id="${id}"`), id);
   for (const w of ['This strategy on this account', 'Whole account — every strategy on it', 'Profit lock', 'Loss lock', 'Most contracts',
     'Stop after', 'Never', 'A win', 'In profit', 'role="dialog" aria-modal="true"']) assert.ok(markup.includes(w), w);
