@@ -30,6 +30,9 @@ def run(coro):
 @pytest.fixture(autouse=True)
 def store(tmp_path, monkeypatch):
     monkeypatch.setattr(secrets_store, "_store_path", lambda: tmp_path / "credentials.json")
+    monkeypatch.setattr(vest, "state_dir", lambda: tmp_path)
+    # the loss-floor guard (it refuses entries with no stop or no floors) is tested in test_vest_held.py
+    monkeypatch.setattr(VestAdapter, "_floor_err", lambda self, risk, opened=None: asyncio.sleep(0))
     secrets_store.set_credentials(KEY, primary_addr="0xabc", refresh_token="RT", refresh_token_id="RTID",
                                   refresh_expires_ms=FAR, device_pem=DeviceKey.new().pem())
 
