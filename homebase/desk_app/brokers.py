@@ -35,6 +35,11 @@ def is_vest_key(key: str) -> bool:
     return key.startswith("vest:")
 
 
+def vest_session(key: str) -> VestSession:
+    """The login's one VestSession, made on first use (R47): build_adapter and the connect routes both take it here."""
+    return _VEST_SESSIONS.get(key) or _VEST_SESSIONS.setdefault(key, VestSession(key))
+
+
 def _key_env(key: str) -> str:
     """A login key is 'tv:<env>:<user>' — the env it was verified on. The
     user part may itself hold colons (Google-linked logins are
@@ -89,8 +94,8 @@ def build_adapter(account_id: str, a: config_mod.AccountCfg) -> BrokerAdapter:
         return PaperAdapter(account_id)
     if is_vest_key(a.keyring_key):   # vest_account_id "" = a probe; no floors = every entry refused (fail closed)
         # one session per login, never owned (closed) by an entry: its refresh token rotates (R47)
-        sess = _VEST_SESSIONS.get(a.keyring_key) or _VEST_SESSIONS.setdefault(a.keyring_key, VestSession(a.keyring_key))
-        return VestAdapter(account_id, keyring_key=a.keyring_key, vest_account_id=a.vest_account_id, session=sess,
+        return VestAdapter(account_id, keyring_key=a.keyring_key, vest_account_id=a.vest_account_id,
+                           session=vest_session(a.keyring_key),
                            floors=dict(a.floors), slip_frac=a.slip_frac)
     env = "live" if a.live else "demo"
     sel = {"account_name": a.account_name} if a.account_name else None
@@ -226,7 +231,8 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
                                error=str(fell_back_from)[:200])
             _logged_in_once.add(aid)
             _login_first_spent.add(login_id)
-            budget.record_login(key)
+            if not isinstance(ad, VestAdapter):     # a Vest connect mints a token on the signed session: no login (R6)
+                budget.record_login(key)
             try:
                 await ad.connect()
             except (AccountNotOnLogin, NeedsSignature):
