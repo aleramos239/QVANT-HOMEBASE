@@ -1,0 +1,72 @@
+........................................................................ [ 13%]
+........................................................................ [ 27%]
+........................................................................ [ 41%]
+........................................................................ [ 55%]
+..........................................................F............. [ 69%]
+........................................................................ [ 83%]
+.............................F..F.........s............................. [ 97%]
+..............                                                           [100%]
+=================================== FAILURES ===================================
+_____________ test_off_is_trade_for_trade_a_fresh_wrap[big_print] ______________
+
+name = 'big_print'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_off_is_trade_for_trade_a_fresh_wrap(name):
+        """A fresh B._wrap (no layer) and the patched class give the same inputs (old keys) and the same trades on a seeded day, per session."""
+        cls = B.WRAPPED[name]
+        fresh = B._wrap(name, B.BASES[name][0])
+        assert FM.FlexMods not in fresh.__mro__
+        assert (fresh.__module__, fresh.__qualname__) == (cls.__module__, cls.__qualname__)         # the fingerprint's class path
+        tape = minute_tape(rand_bars(960, 11), "00:00")
+        ran = 0
+        for s in ("london", "pre", "nyam"):
+            out = []
+            for c in (cls, fresh):
+                try:
+                    st = c({"hold_to": "day", "tf": "5", "sess": s})
+                    st.ROLLS = frozenset()
+                    r = S.run_session(st, tape, costs=S.Costs(**getattr(c, "SCREEN_RUN", {})), daily=list(DAILY), on_error="raise")
+                    out.append(({x: v for x, v in st.p.items() if x not in FM.KEYS + FL.KEYS}, r.trades))
+                except Exception as e:                                                   # noqa: BLE001 - the same refusal from both is a match
+                    out.append((type(e).__name__, str(e)))
+            assert out[0] == out[1], (name, s)
+            ran += isinstance(out[0][0], dict)
+>       assert ran == 3
+E       assert 0 == 3
+
+engine/tests/test_flex.py:92: AssertionError
+________________ test_the_filters_the_limits_and_the_exit_table ________________
+
+    def test_the_filters_the_limits_and_the_exit_table():
+        blocks = RUN._blocks()
+>       assert [(f["block"], f["side"]) for f in B["filters"]] == [(b, s) for b, sides in blocks.FILTERS.items() for s in sides] and len(B["filters"]) == 116
+E       AssertionError: assert ([('volatility...gainst'), ...] == [('volatility...gainst'), ...]
+E         
+E         Use -v to get more diff and 146 == 116)
+E        +  where 146 = len([{'block': 'volatility', 'markets': ['NQ', 'ES', 'GC'], 'research_tier': False, 'runs': True, ...}, {'block': 'volatil...uns': True, ...}, {'block': 'momentum', 'markets': ['NQ', 'ES', 'GC'], 'research_tier': False, 'runs': True, ...}, ...])
+
+tests/test_blueprint_blocklist.py:97: AssertionError
+_______________________________ test_the_command _______________________________
+
+    def test_the_command():
+        rc, out = _run(["blocks", "--root=/nowhere/at/all", "--json"])
+        r = json.loads(out)
+        assert rc == 0 and out.count("\n") == 1 and tuple(r)[:len(CONTRACT)] == CONTRACT
+        assert (r["ok"], r["command"], r["name"], r["lines"], r["saved"]) == (True, "blocks", None, [], [])
+>       assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": len(B["families"]), "families_not_yet": 0, "filters": 116, "filters_not_yet": 0, "refused": len(B["refused"])}
+E       AssertionError: assert ({'accounts': ....}, ...], ...} == {'accounts': ....}, ...], ...}
+E         
+E         Omitting 15 identical items, use -vv to show
+E         Use -v to get more diff and {'families': ..._yet': 0, ...} == {'families': ..._yet': 0, ...}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Differing items:
+E         {'filters': 146} != {'filters': 116}
+E         Use -v to get more diff)
+
+tests/test_blueprint_blocklist.py:184: AssertionError
+=========================== short test summary info ============================
+FAILED engine/tests/test_flex.py::test_off_is_trade_for_trade_a_fresh_wrap[big_print]
+FAILED engine::test_the_filters_the_limits_and_the_exit_table - AssertionErro...
+FAILED engine::test_the_command - AssertionError: assert ({'accounts': ....},...

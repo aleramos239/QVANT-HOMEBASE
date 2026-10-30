@@ -1,0 +1,202 @@
+2026-10-21T07:40:08+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers)
+2026-10-21T07:40:08+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers): days 1-60 of 883 (180 instances)
+2026-10-21T07:40:29+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers): days 61-120 of 883 (180 instances)
+2026-10-21T07:40:49+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers): days 121-180 of 883 (180 instances)
+2026-10-21T07:41:10+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers): days 181-240 of 883 (180 instances)
+2026-10-21T07:41:31+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers): days 241-300 of 883 (180 instances)
+2026-10-21T07:41:51+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers): days 301-360 of 883 (180 instances)
+2026-10-21T07:42:12+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers): days 361-420 of 883 (180 instances)
+2026-10-21T07:42:33+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers): days 421-480 of 883 (180 instances)
+2026-10-21T07:42:54+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers): days 481-540 of 883 (180 instances)
+2026-10-21T07:43:16+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers): days 541-600 of 883 (180 instances)
+2026-10-21T07:43:36+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers): days 601-660 of 883 (180 instances)
+2026-10-21T07:43:57+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers): days 661-720 of 883 (180 instances)
+2026-10-21T07:44:18+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers): days 721-780 of 883 (180 instances)
+2026-10-21T07:44:39+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers): days 781-840 of 883 (180 instances)
+2026-10-21T07:44:59+00:00 idea vh_i1_pb_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i1_pb_15_ny-NQ-tf15/is; 3 workers): days 841-883 of 883 (180 instances)
+2026-10-21T07:45:14+00:00 wf_is vh_i1_pb_15_ny-NQ-tf15/is: 180 cells, 152,523 trades, 305.33 s of tape (wall 306 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i1_pb_15_ny: 180 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  vwap_slope15_own1-r0p5        69%   67%    1012    13,017  1.08   100%
+   2  vwap_slope30_own1-r0p5        69%   67%     839     9,404  1.07   100%
+   3  vwap_slope15_pts25-r0p5       69%   67%    1012    11,217  1.07   100%
+   4  vwap_slope30_pts25-r0p5       69%   67%     839     8,589  1.06   100%
+   5  vwap_slope60_pts25-r0p5       68%   67%     847     4,197  1.03   100%
+   6  vwap_slope60_own1-r0p5        68%   68%     847     2,322  1.02    90%
+   7  vwap_slope30_pts15-r0p5       67%   68%     843    -2,957  0.97   100%
+   8  vwap_slope15_own2-r0p5        67%   66%     947    11,282  1.04   100%
+   9  vwap_slope30_own0p5-r0p5      67%   68%     843    -2,907  0.96   100%
+  10  vwap_slope60_pts15-r0p5       67%   68%     852    -5,313  0.94   100%
+  11  vwap_slope15_pts15-r0p5       66%   68%    1020    -6,745  0.94   100%
+  12  vwap_slope15_own1p5-r0p5      66%   67%     978    -3,537  0.99    90%
+  13  vwap_slope15_own0p5-r0p5      66%   68%    1020    -6,010  0.94    80%
+  14  vwap_slope30_atr0p5-r0p5      66%   68%     843    -7,217  0.94    70%
+  15  vwap_slope15_pts40-r0p5       66%   67%     975    -5,730  0.98    40%
+  16  vwap_slope15_atr0p5-r0p5      66%   67%    1020    -8,775  0.94    70%
+  17  vwap_slope60_own0p5-r0p5      66%   68%     852    -7,318  0.91    70%
+  18  vwap_slope15_pts60-r0p5       66%   66%     923     5,558  1.02   100%
+  19  vwap_slope15_atr1-r0p5        66%   67%    1003    -9,627  0.96    40%
+  20  vwap_slope60_own2-r0p5        65%   66%     794    -5,196  0.98    80%
+  21  vwap_slope30_own2-r0p5        65%   66%     796    -5,524  0.98    80%
+  22  vwap_slope30_own1p5-r0p5      65%   67%     816   -11,844  0.94    60%
+  23  vwap_slope30_pts40-r0p5       65%   67%     813   -14,552  0.93    10%
+  24  vwap_slope30_pts60-r0p5       65%   65%     775    -4,090  0.99    70%
+  25  vwap_slope60_atr0p5-r0p5      65%   68%     852   -16,953  0.87     0%
+  26  vwap_slope60_pts60-r0p5       65%   65%     773    -4,467  0.99    70%
+  27  vwap_slope30_atr1-r0p5        65%   66%     833   -14,222  0.94    10%
+  28  vwap_slope60_atr1-r0p5        65%   66%     838    -9,937  0.96    20%
+  29  vwap_slope15_atr1p5-r0p5      65%   66%     944   -17,926  0.95    30%
+  30  vwap_slope60_atr2-r0p5        65%   63%     744    28,104  1.08   100%
+  31  vwap_slope60_own1p5-r0p5      64%   67%     817   -20,833  0.90    10%
+  32  vwap_slope60_pts40-r0p5       64%   66%     814   -20,251  0.91     0%
+  33  vwap_slope15_atr2-r0p5        64%   64%     870     4,705  1.01    90%
+  34  vwap_slope60_atr1p5-r0p5      64%   64%     791    -6,539  0.98    90%
+  35  vwap_slope30_atr1p5-r0p5      64%   65%     799   -24,381  0.93    10%
+  36  vwap_slope30_atr2-r0p5        63%   64%     738   -11,057  0.97    80%
+  37  vwap_slope15_own1p5-r0p75     59%   57%     970    22,245  1.08    90%
+  38  vwap_slope30_pts15-r0p75      59%   58%     843     2,903  1.03   100%
+  39  vwap_slope15_own1-r0p75       59%   58%    1005     7,740  1.04   100%
+  40  vwap_slope15_pts15-r0p75      58%   58%    1020       615  1.00   100%
+  41  vwap_slope15_pts25-r0p75      58%   58%    1005     6,290  1.03   100%
+  42  vwap_slope30_own0p5-r0p75     58%   58%     843       433  1.00   100%
+  43  vwap_slope15_atr0p5-r0p75     58%   58%    1020       150  1.00   100%
+  44  vwap_slope15_pts40-r0p75      58%   57%     962     9,367  1.03   100%
+  45  vwap_slope30_own1-r0p75       58%   58%     837      -403  1.00   100%
+  46  vwap_slope30_pts25-r0p75      58%   58%     837      -543  1.00   100%
+  47  vwap_slope30_atr0p5-r0p75     58%   58%     843    -2,407  0.98   100%
+  48  vwap_slope15_own0p5-r0p75     58%   58%    1020    -2,460  0.98   100%
+  49  vwap_slope30_own1p5-r0p75     57%   57%     808     1,098  1.00    80%
+  50  vwap_slope60_pts15-r0p75      57%   58%     852    -4,163  0.96   100%
+  51  vwap_slope60_atr0p5-r0p75     57%   59%     852    -8,018  0.95    70%
+  52  vwap_slope60_pts25-r0p75      57%   58%     839    -4,301  0.98    80%
+  53  vwap_slope60_atr2-r0p75       57%   54%     717    51,262  1.12   100%
+  54  vwap_slope60_own1-r0p75       57%   58%     839    -7,791  0.96    70%
+  55  vwap_slope60_own1p5-r0p75     57%   57%     808    -3,457  0.99    80%
+  56  vwap_slope15_own2-r0p75       57%   57%     923      -297  1.00    90%
+  57  vwap_slope30_pts40-r0p75      57%   57%     800    -7,460  0.97    60%
+  58  vwap_slope60_own0p5-r0p75     56%   59%     852   -10,183  0.90    30%
+  59  vwap_slope15_atr1p5-r0p75     56%   56%     915    -3,170  0.99    80%
+  60  vwap_slope15_atr2-r0p75       56%   55%     836    22,096  1.04   100%
+  61  vwap_slope15_atr1-r0p75       56%   58%     991   -21,789  0.94    10%
+  62  vwap_slope15_pts60-r0p75      56%   56%     891    -4,289  0.99   100%
+  63  vwap_slope30_own2-r0p75       56%   57%     782   -11,918  0.96    60%
+  64  vwap_slope60_atr1-r0p75       56%   57%     828    -9,762  0.97    70%
+  65  vwap_slope60_own2-r0p75       56%   56%     773    -9,172  0.97    60%
+  66  vwap_slope60_pts60-r0p75      56%   56%     752    -3,468  0.99   100%
+  67  vwap_slope60_pts40-r0p75      56%   57%     799   -14,176  0.95    20%
+  68  vwap_slope30_atr1-r0p75       56%   58%     830   -24,860  0.92    10%
+  69  vwap_slope60_atr1p5-r0p75     55%   55%     771      -464  1.00    80%
+  70  vwap_slope30_pts60-r0p75      55%   56%     759   -21,751  0.94    20%
+  71  vwap_slope30_atr1p5-r0p75     54%   56%     775   -29,170  0.93     0%
+  72  vwap_slope30_atr2-r0p75       54%   55%     715    -6,445  0.99    60%
+  73  vwap_slope15_own1-r1          53%   51%    1002    25,717  1.11   100%
+  74  vwap_slope15_pts25-r1         53%   51%    1002    24,652  1.10   100%
+  75  vwap_slope60_atr2-r1          53%   48%     699    90,164  1.20   100%
+  76  vwap_slope15_atr2-r1          52%   49%     812    77,152  1.15   100%
+  77  vwap_slope30_own1-r1          52%   51%     833     8,628  1.04   100%
+  78  vwap_slope30_pts25-r1         52%   51%     833     9,193  1.05   100%
+  79  vwap_slope30_atr2-r1          51%   49%     699    51,734  1.11   100%
+  80  vwap_slope60_pts25-r1         51%   50%     835     4,345  1.02   100%
+  81  vwap_slope30_own0p5-r1        51%   51%     843    -1,512  0.99   100%
+  82  vwap_slope60_own1-r1          51%   51%     835     1,760  1.01   100%
+  83  vwap_slope15_own0p5-r1        51%   51%    1020    -1,910  0.99   100%
+  84  vwap_slope15_atr1-r1          51%   51%     979     2,159  1.01   100%
+  85  vwap_slope15_own1p5-r1        51%   50%     956     8,591  1.02    90%
+  86  vwap_slope15_pts60-r1         50%   50%     858    10,788  1.02   100%
+  87  vwap_slope15_pts40-r1         50%   50%     949     3,439  1.01   100%
+  88  vwap_slope30_own1p5-r1        50%   50%     799    -1,671  0.99    70%
+  89  vwap_slope30_pts15-r1         50%   51%     842    -4,303  0.97   100%
+  90  vwap_slope15_atr1p5-r1        50%   50%     896     7,111  1.01    90%
+  91  vwap_slope60_pts60-r1         50%   50%     729     1,799  1.00    90%
+  92  vwap_slope60_own2-r1          50%   50%     756     1,551  1.00    80%
+  93  vwap_slope15_pts15-r1         50%   51%    1019    -7,406  0.95   100%
+  94  vwap_slope60_own1p5-r1        50%   50%     797    -2,308  0.99    70%
+  95  vwap_slope60_atr1p5-r1        50%   49%     759    17,344  1.04    90%
+  96  vwap_slope15_own2-r1          50%   50%     898    -3,672  0.99    60%
+  97  vwap_slope30_pts40-r1         50%   50%     794    -9,031  0.97    70%
+  98  vwap_slope30_pts60-r1         50%   50%     738    -8,492  0.98    60%
+  99  vwap_slope60_atr1-r1          50%   50%     817    -3,848  0.99    90%
+ 100  vwap_slope60_own0p5-r1        50%   52%     852   -10,118  0.92    70%
+ 101  vwap_slope30_atr1-r1          50%   51%     818   -16,022  0.95    30%
+ 102  vwap_slope60_pts40-r1         49%   50%     794    -7,546  0.98    70%
+ 103  vwap_slope15_atr0p5-r1        49%   51%    1020   -17,460  0.92    40%
+ 104  vwap_slope60_pts15-r1         49%   51%     851   -10,574  0.92    70%
+ 105  vwap_slope60_atr0p5-r1        48%   51%     852   -19,088  0.90    10%
+ 106  vwap_slope30_atr0p5-r1        48%   51%     843   -15,382  0.91    20%
+ 107  vwap_slope30_atr1p5-r1        48%   50%     763   -24,687  0.94    40%
+ 108  vwap_slope30_own2-r1          48%   50%     763   -28,822  0.92    40%
+ 109  vwap_slope60_atr2-r1p5        46%   43%     674    72,859  1.15   100%
+ 110  vwap_slope15_atr2-r1p5        45%   43%     774    55,789  1.10   100%
+ 111  vwap_slope30_atr2-r1p5        45%   43%     678    32,093  1.06   100%
+ 112  vwap_slope60_atr2-r2          45%   39%     665   123,870  1.26   100%
+ 113  vwap_slope60_atr1p5-r1p5      44%   41%     734    55,564  1.12   100%
+ 114  vwap_slope60_pts60-r1p5       44%   42%     706    33,636  1.08   100%
+ 115  vwap_slope15_atr1p5-r1p5      44%   42%     861    55,591  1.10   100%
+ 116  vwap_slope30_atr2-r2          43%   40%     667    80,567  1.16   100%
+ 117  vwap_slope15_own2-r1p5        43%   42%     869    28,439  1.06   100%
+ 118  vwap_slope15_pts60-r1p5       43%   42%     826    26,406  1.05   100%
+ 119  vwap_slope15_atr2-r2          43%   39%     758    99,803  1.17   100%
+ 120  vwap_slope30_pts60-r1p5       43%   42%     712    16,872  1.04   100%
+ 121  vwap_slope30_atr1p5-r1p5      43%   42%     740    18,290  1.04    90%
+ 122  vwap_slope60_own2-r1p5        43%   42%     740    14,860  1.04    80%
+ 123  vwap_slope15_atr1-r1p5        43%   41%     961    24,946  1.06   100%
+ 124  vwap_slope15_pts40-r1p5       42%   41%     914    15,814  1.04   100%
+ 125  vwap_slope60_pts40-r1p5       42%   41%     774    14,244  1.04   100%
+ 126  vwap_slope30_own2-r1p5        42%   42%     746    -2,974  0.99    60%
+ 127  vwap_slope15_own1p5-r1p5      42%   41%     927     8,932  1.02    70%
+ 128  vwap_slope15_own1-r1p5        42%   41%     994    15,609  1.05   100%
+ 129  vwap_slope15_pts25-r1p5       42%   41%     994    14,059  1.05   100%
+ 130  vwap_slope60_own1p5-r1p5      42%   41%     781     8,361  1.02    70%
+ 131  vwap_slope60_atr1-r1p5        42%   40%     808    21,708  1.06   100%
+ 132  vwap_slope30_own1-r1p5        41%   41%     828     5,638  1.02    90%
+ 133  vwap_slope30_pts25-r1p5       41%   41%     828     6,043  1.02   100%
+ 134  vwap_slope15_pts15-r1p5       41%   41%    1018     3,008  1.02   100%
+ 135  vwap_slope30_pts40-r1p5       41%   42%     772    -3,558  0.99    90%
+ 136  vwap_slope60_pts60-r2         41%   38%     702    60,747  1.13   100%
+ 137  vwap_slope60_own1-r1p5        41%   41%     830     4,870  1.02    90%
+ 138  vwap_slope60_pts25-r1p5       41%   41%     830     6,200  1.03   100%
+ 139  vwap_slope30_pts15-r1p5       41%   41%     841      -599  1.00   100%
+ 140  vwap_slope30_atr1-r1p5        41%   41%     803    -5,892  0.98    80%
+ 141  vwap_slope30_own1p5-r1p5      41%   42%     778   -13,667  0.96    50%
+ 142  vwap_slope30_pts60-r2         40%   38%     708    40,618  1.09   100%
+ 143  vwap_slope15_own0p5-r1p5      40%   41%    1019    -4,151  0.98   100%
+ 144  vwap_slope60_atr1p5-r2        40%   38%     722    47,072  1.10   100%
+ 145  vwap_slope15_pts60-r2         40%   38%     818    42,053  1.08   100%
+ 146  vwap_slope60_pts15-r1p5       40%   41%     849    -5,946  0.96   100%
+ 147  vwap_slope30_own0p5-r1p5      40%   41%     842    -5,808  0.96   100%
+ 148  vwap_slope30_atr1p5-r2        40%   39%     731    22,211  1.05    90%
+ 149  vwap_slope15_atr1p5-r2        40%   38%     840    47,525  1.09   100%
+ 150  vwap_slope60_own2-r2          39%   37%     728    44,473  1.11   100%
+ 151  vwap_slope15_atr0p5-r1p5      39%   42%    1019   -28,501  0.89    10%
+ 152  vwap_slope30_atr0p5-r1p5      39%   41%     842   -20,738  0.90    30%
+ 153  vwap_slope15_own2-r2          39%   37%     850    35,840  1.07    80%
+ 154  vwap_slope60_atr0p5-r1p5      39%   41%     850   -21,750  0.90    10%
+ 155  vwap_slope30_own2-r2          38%   37%     735    18,825  1.04    80%
+ 156  vwap_slope60_own0p5-r1p5      38%   41%     851   -18,714  0.87    50%
+ 157  vwap_slope15_atr1-r2          38%   35%     948    49,808  1.11   100%
+ 158  vwap_slope60_own1p5-r2        38%   36%     773    28,208  1.08   100%
+ 159  vwap_slope15_own1p5-r2        37%   36%     914    31,194  1.07   100%
+ 160  vwap_slope15_pts40-r2         37%   36%     898    28,518  1.06   100%
+ 161  vwap_slope60_pts40-r2         37%   36%     762    25,222  1.07   100%
+ 162  vwap_slope30_own1p5-r2        37%   36%     768    18,393  1.05    80%
+ 163  vwap_slope30_pts40-r2         37%   36%     759    13,539  1.04   100%
+ 164  vwap_slope60_atr1-r2          37%   35%     798    41,098  1.10   100%
+ 165  vwap_slope30_atr1-r2          37%   36%     793    18,923  1.05   100%
+ 166  vwap_slope60_pts25-r2         35%   34%     826    13,461  1.05   100%
+ 167  vwap_slope60_own1-r2          35%   34%     826    10,311  1.04    90%
+ 168  vwap_slope15_pts25-r2         35%   34%     988     7,943  1.02   100%
+ 169  vwap_slope15_own1-r2          35%   34%     988     5,183  1.02    80%
+ 170  vwap_slope15_own0p5-r2        35%   35%    1017      -933  0.99   100%
+ 171  vwap_slope30_own1-r2          34%   34%     823    -1,352  1.00    60%
+ 172  vwap_slope30_pts25-r2         34%   34%     823    -1,052  1.00   100%
+ 173  vwap_slope15_pts15-r2         34%   34%    1014      -651  1.00   100%
+ 174  vwap_slope30_own0p5-r2        34%   34%     840    -3,375  0.98   100%
+ 175  vwap_slope30_pts15-r2         33%   34%     838    -7,377  0.96   100%
+ 176  vwap_slope15_atr0p5-r2        33%   34%    1016   -16,314  0.94    60%
+ 177  vwap_slope60_atr0p5-r2        33%   34%     848   -11,477  0.95    90%
+ 178  vwap_slope60_own0p5-r2        33%   35%     849   -13,066  0.92    70%
+ 179  vwap_slope60_pts15-r2         33%   34%     847   -11,523  0.93   100%
+ 180  vwap_slope30_atr0p5-r2        33%   34%     841   -15,769  0.93    60%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i1_pb_15_ny <n> (blueprint_wf_pick).

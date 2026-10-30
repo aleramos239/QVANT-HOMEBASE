@@ -1,0 +1,142 @@
+2026-10-21T09:25:01+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers)
+2026-10-21T09:25:01+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers): days 1-60 of 883 (360 instances)
+2026-10-21T09:25:38+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers): days 61-120 of 883 (360 instances)
+2026-10-21T09:26:13+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers): days 121-180 of 883 (360 instances)
+2026-10-21T09:26:50+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers): days 181-240 of 883 (360 instances)
+2026-10-21T09:27:28+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers): days 241-300 of 883 (360 instances)
+2026-10-21T09:28:06+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers): days 301-360 of 883 (360 instances)
+2026-10-21T09:28:45+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers): days 361-420 of 883 (360 instances)
+2026-10-21T09:29:23+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers): days 421-480 of 883 (360 instances)
+2026-10-21T09:30:02+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers): days 481-540 of 883 (360 instances)
+2026-10-21T09:30:41+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers): days 541-600 of 883 (360 instances)
+2026-10-21T09:31:19+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers): days 601-660 of 883 (360 instances)
+2026-10-21T09:31:56+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers): days 661-720 of 883 (360 instances)
+2026-10-21T09:32:35+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers): days 721-780 of 883 (360 instances)
+2026-10-21T09:33:14+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers): days 781-840 of 883 (360 instances)
+2026-10-21T09:33:53+00:00 idea vh_i15_flip_long_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_flip_long_5_ny-NQ-tf5/is; 3 workers): days 841-883 of 883 (360 instances)
+2026-10-21T09:34:21+00:00 wf_is vh_i15_flip_long_5_ny-NQ-tf5/is: 120 cells, 143,880 trades, 559.23 s of tape (wall 560 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i15_flip_long_5_ny: 120 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  linepdvwap_pts40-r0p5         69%   67%     804    23,804  1.12   100%
+   2  linepdvwap_atr0p5-r0p5        69%   67%     860     6,430  1.08   100%
+   3  linepdvwap_atr2-r0p5          68%   67%     755    25,735  1.09   100%
+   4  linepdvwap_atr1p5-r0p5        68%   67%     809    17,594  1.07   100%
+   5  linepdvwap_pts25-r0p5         67%   67%     849      -326  1.00   100%
+   6  linepdvwap_pts60-r0p5         67%   65%     723    19,363  1.07   100%
+   7  linepdvwap_atr1-r0p5          66%   66%     852      -328  1.00   100%
+   8  lineglobex_atr1-r0p5          66%   67%    1926    -8,089  0.98    80%
+   9  linepdvwap_pts15-r0p5         66%   68%     859    -7,176  0.92   100%
+  10  lineglobex_pts40-r0p5         65%   66%    1761   -22,369  0.95    50%
+  11  lineweek_atr0p5-r0p5          65%   68%    1113   -14,077  0.88    20%
+  12  lineweek_atr1-r0p5            65%   67%    1108   -22,417  0.90     0%
+  13  lineglobex_atr1p5-r0p5        65%   66%    1825   -19,055  0.97    70%
+  14  lineglobex_pts25-r0p5         65%   67%    1905   -37,960  0.89     0%
+  15  lineweek_atr1p5-r0p5          64%   66%    1043   -25,092  0.92    10%
+  16  lineweek_pts40-r0p5           64%   66%    1014   -24,061  0.91     0%
+  17  lineweek_pts15-r0p5           64%   68%    1112   -18,193  0.85     0%
+  18  lineweek_atr2-r0p5            64%   66%     964   -31,821  0.92     0%
+  19  lineglobex_pts60-r0p5         64%   65%    1592   -34,488  0.95    30%
+  20  lineglobex_atr0p5-r0p5        64%   67%    1946   -29,119  0.86     0%
+  21  lineglobex_atr2-r0p5          64%   66%    1671   -56,659  0.92     0%
+  22  lineweek_pts60-r0p5           63%   65%     936   -31,564  0.92    10%
+  23  lineweek_pts25-r0p5           63%   67%    1090   -35,640  0.83     0%
+  24  lineglobex_pts15-r0p5         62%   68%    1943   -50,182  0.78     0%
+  25  linepdvwap_pts60-r0p75        60%   56%     697    60,957  1.20   100%
+  26  linepdvwap_atr1p5-r0p75       60%   59%     790    12,760  1.04   100%
+  27  linepdvwap_pts25-r0p75        59%   58%     844    13,134  1.08   100%
+  28  linepdvwap_atr2-r0p75         59%   57%     723    42,348  1.12   100%
+  29  linepdvwap_atr1-r0p75         58%   57%     848    16,273  1.08   100%
+  30  linepdvwap_atr0p5-r0p75       58%   58%     860     3,525  1.03   100%
+  31  linepdvwap_pts40-r0p75        58%   57%     786    15,226  1.06   100%
+  32  linepdvwap_pts15-r0p75        58%   58%     859    -2,551  0.98   100%
+  33  lineglobex_pts40-r0p75        57%   57%    1730    -3,230  0.99   100%
+  34  lineglobex_atr1-r0p75         57%   57%    1915    -5,170  0.99    90%
+  35  lineweek_pts40-r0p75          56%   57%     996   -10,084  0.97    80%
+  36  lineglobex_pts25-r0p75        56%   58%    1887   -24,718  0.94    60%
+  37  lineweek_atr1p5-r0p75         56%   57%    1021   -13,259  0.97    60%
+  38  lineglobex_atr1p5-r0p75       56%   57%    1770   -23,245  0.97    60%
+  39  lineglobex_atr2-r0p75         56%   56%    1606   -17,089  0.98    60%
+  40  lineglobex_pts60-r0p75        56%   57%    1536   -35,044  0.95    70%
+  41  lineweek_atr0p5-r0p75         55%   58%    1113   -14,727  0.90    60%
+  42  lineweek_pts25-r0p75          55%   58%    1082   -21,608  0.91    10%
+  43  lineweek_atr1-r0p75           55%   57%    1102   -22,673  0.92    20%
+  44  lineweek_pts60-r0p75          55%   57%     909   -37,511  0.92    10%
+  45  lineglobex_atr0p5-r0p75       54%   58%    1946   -36,194  0.86     0%
+  46  lineweek_atr2-r0p75           54%   57%     928   -55,767  0.89     0%
+  47  lineweek_pts15-r0p75          54%   58%    1112   -28,028  0.82     0%
+  48  linepdvwap_pts60-r1           54%   50%     683    60,148  1.18   100%
+  49  linepdvwap_atr2-r1            53%   51%     710    37,005  1.09   100%
+  50  linepdvwap_pts40-r1           53%   50%     775    31,810  1.11   100%
+  51  lineglobex_pts15-r0p75        53%   58%    1943   -57,057  0.80     0%
+  52  linepdvwap_atr0p5-r1          52%   51%     860     8,505  1.07   100%
+  53  linepdvwap_atr1p5-r1          52%   51%     777    13,822  1.04   100%
+  54  linepdvwap_pts15-r1           52%   51%     858     5,293  1.04   100%
+  55  linepdvwap_pts25-r1           52%   51%     841    10,291  1.05   100%
+  56  linepdvwap_atr1-r1            52%   51%     845    12,410  1.05   100%
+  57  lineweek_pts60-r1             51%   51%     893    -4,707  0.99    70%
+  58  lineglobex_pts60-r1           50%   51%    1505   -13,100  0.98    70%
+  59  lineweek_atr2-r1              50%   51%     913   -12,117  0.98    60%
+  60  lineglobex_atr2-r1            50%   50%    1575    12,555  1.01   100%
+  61  lineglobex_pts40-r1           50%   51%    1703   -22,377  0.97    70%
+  62  lineglobex_atr1p5-r1          49%   50%    1732   -15,518  0.98    80%
+  63  lineweek_pts40-r1             49%   51%     982   -21,883  0.94    30%
+  64  lineglobex_atr1-r1            49%   50%    1898   -19,057  0.97    90%
+  65  lineglobex_pts25-r1           49%   51%    1869   -30,281  0.94    70%
+  66  lineweek_atr1p5-r1            49%   50%    1001   -20,104  0.96    30%
+  67  lineweek_atr1-r1              48%   50%    1092   -24,453  0.93    50%
+  68  lineweek_atr0p5-r1            48%   51%    1113   -17,872  0.90    50%
+  69  lineweek_pts25-r1             48%   51%    1072   -27,318  0.90     0%
+  70  lineglobex_atr0p5-r1          47%   50%    1946   -33,729  0.89    30%
+  71  linepdvwap_atr2-r1p5          46%   43%     703    65,548  1.15   100%
+  72  linepdvwap_pts60-r1p5         46%   43%     679    61,594  1.16   100%
+  73  lineglobex_pts15-r1           46%   51%    1939   -62,136  0.81     0%
+  74  lineweek_pts15-r1             46%   51%    1111   -37,379  0.80     0%
+  75  linepdvwap_atr0p5-r1p5        44%   40%     860    27,030  1.18   100%
+  76  lineweek_pts60-r1p5           44%   44%     884     2,919  1.01   100%
+  77  linepdvwap_pts25-r1p5         44%   41%     835    29,175  1.12   100%
+  78  linepdvwap_pts40-r1p5         44%   41%     764    38,964  1.12   100%
+  79  linepdvwap_pts60-r2           44%   39%     678    88,723  1.22   100%
+  80  lineglobex_pts60-r1p5         43%   44%    1486    -8,609  0.99   100%
+  81  lineweek_atr2-r1p5            43%   44%     902   -22,703  0.96    30%
+  82  linepdvwap_atr1-r1p5          43%   41%     837    34,257  1.12   100%
+  83  lineglobex_atr2-r1p5          43%   43%    1552     4,057  1.00    70%
+  84  linepdvwap_atr2-r2            43%   39%     702    72,012  1.16   100%
+  85  linepdvwap_pts15-r1p5         43%   41%     856    12,116  1.08   100%
+  86  linepdvwap_atr1p5-r1p5        43%   42%     759    11,954  1.03   100%
+  87  lineweek_atr1p5-r1p5          42%   41%     985    22,275  1.05   100%
+  88  lineweek_pts40-r1p5           42%   42%     969     3,514  1.01    80%
+  89  lineweek_pts60-r2             42%   40%     883    47,548  1.09   100%
+  90  lineglobex_pts40-r1p5         42%   42%    1674     4,949  1.01    80%
+  91  lineglobex_atr1p5-r1p5        42%   41%    1700    27,045  1.03   100%
+  92  lineglobex_pts60-r2           41%   40%    1484    39,764  1.04   100%
+  93  lineweek_atr2-r2              41%   41%     902       652  1.00    60%
+  94  lineglobex_atr2-r2            41%   40%    1549    10,954  1.01    70%
+  95  lineglobex_atr1-r1p5          40%   40%    1871     7,246  1.01   100%
+  96  lineweek_pts25-r1p5           40%   41%    1064   -15,926  0.95    90%
+  97  lineglobex_pts25-r1p5         40%   41%    1853   -30,702  0.95    80%
+  98  lineweek_atr1-r1p5            39%   40%    1082   -27,973  0.93    10%
+  99  linepdvwap_atr1p5-r2          38%   37%     757    20,052  1.05   100%
+ 100  linepdvwap_pts40-r2           38%   36%     763    37,073  1.10   100%
+ 101  linepdvwap_pts25-r2           38%   35%     831    41,626  1.16   100%
+ 102  lineweek_atr1p5-r2            38%   37%     981    27,671  1.05   100%
+ 103  lineweek_atr0p5-r1p5          38%   40%    1113   -21,747  0.90    40%
+ 104  lineglobex_atr1p5-r2          38%   37%    1690    35,950  1.04   100%
+ 105  lineweek_pts15-r1p5           37%   41%    1106   -31,109  0.85     0%
+ 106  lineglobex_pts40-r2           37%   37%    1663       768  1.00    90%
+ 107  lineglobex_pts15-r1p5         37%   41%    1934   -52,901  0.86     0%
+ 108  lineglobex_atr0p5-r1p5        37%   40%    1945   -44,830  0.88    10%
+ 109  linepdvwap_atr1-r2            37%   35%     829    30,674  1.09   100%
+ 110  lineweek_pts40-r2             37%   38%     964   -22,571  0.95    30%
+ 111  linepdvwap_pts15-r2           36%   34%     854    15,659  1.09   100%
+ 112  linepdvwap_atr0p5-r2          36%   35%     860    13,475  1.08   100%
+ 113  lineweek_atr1-r2              35%   34%    1073    26,138  1.06   100%
+ 114  lineglobex_atr1-r2            35%   34%    1855    47,600  1.07   100%
+ 115  lineweek_pts25-r2             35%   35%    1058    -3,862  0.99    90%
+ 116  lineglobex_pts25-r2           34%   35%    1845   -28,550  0.95    80%
+ 117  lineweek_atr0p5-r2            32%   34%    1111   -15,934  0.93    90%
+ 118  lineweek_pts15-r2             32%   35%    1105   -27,770  0.88    10%
+ 119  lineglobex_pts15-r2           32%   34%    1929   -48,771  0.88    10%
+ 120  lineglobex_atr0p5-r2          31%   34%    1945   -45,960  0.89    30%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i15_flip_long_5_ny <n> (blueprint_wf_pick).

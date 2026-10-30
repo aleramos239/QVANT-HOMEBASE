@@ -1,0 +1,31 @@
+{
+ "name": "vh_i18_es_avwap_onh_5_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 18: The VWAP anchored at the overnight high is the average cost of everyone who bought since the night's top; a decided cross of it, on the 09:30 VWAP's side, changes control. Who loses: the trapped overnight buyers / sellers.",
+ "family": "avwap_flip",
+ "markets": [
+  "ES"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "vol_m": [
+   0.0,
+   1.5,
+   2.5
+  ]
+ },
+ "fixed": {
+  "line": "onh",
+  "also": "rth",
+  "hold": 2
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

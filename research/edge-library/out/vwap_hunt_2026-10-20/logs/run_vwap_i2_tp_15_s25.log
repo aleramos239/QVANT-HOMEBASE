@@ -1,0 +1,108 @@
+2026-10-21T02:10:18+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers)
+2026-10-21T02:10:18+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 1-60 of 948 (297 instances)
+2026-10-21T02:12:06+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 61-120 of 948 (297 instances)
+2026-10-21T02:13:24+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 121-180 of 948 (297 instances)
+2026-10-21T02:14:47+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 181-240 of 948 (297 instances)
+2026-10-21T02:15:58+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 241-300 of 948 (297 instances)
+2026-10-21T02:16:53+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 301-360 of 948 (297 instances)
+2026-10-21T02:17:39+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 361-420 of 948 (297 instances)
+2026-10-21T02:18:22+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 421-480 of 948 (297 instances)
+2026-10-21T02:19:01+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 481-540 of 948 (297 instances)
+2026-10-21T02:19:40+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 541-600 of 948 (297 instances)
+2026-10-21T02:20:21+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 601-660 of 948 (297 instances)
+2026-10-21T02:20:59+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 661-720 of 948 (297 instances)
+2026-10-21T02:21:34+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 721-780 of 948 (297 instances)
+2026-10-21T02:22:09+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 781-840 of 948 (297 instances)
+2026-10-21T02:22:47+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 841-900 of 948 (297 instances)
+2026-10-21T02:23:26+00:00 taught vwap_i2_tp_15_s25: pass 1 of 1, NQ 15-minute bars (vwap_i2_tp_15_s25-NQ-tf15 + vwap_i2_tp_15_s25__ctl-NQ-tf15; 2 workers): days 901-948 of 948 (297 instances)
+2026-10-21T02:24:24+00:00 bp_build vwap_i2_tp_15_s25-NQ-tf15: 9 cells, 20,448 trades, 842.54 s of tape (wall 846 s, 2 workers)
+2026-10-21T02:24:26+00:00 null_bp vwap_i2_tp_15_s25__ctl-NQ-tf15: 90 cells, 660,844 trades, 842.54 s of tape (wall 846 s, 2 workers)
+vwap_i2_tp_15_s25: vwap_trend_pull (x 0.1, max_loss 2), both sides, 15-minute bars, stop 25 / target 37.5 points, up to 4 trades a session pass over 3 passes (nyam mid pm); the sheet leaves out 6 things the video says (listed below); verdict: 15-minute bars make -$9 a trade on 2,272 trades and hold 1 of 10 lines (misses P3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, P4.1, P4.2); the neighbours average -$5 a trade.
+
+BUILD DAYS 2021-09-22 .. 2025-06-30 (948 session days), 1 contract after costs. The unseen days (2025-07-01 on) were not read.
+
+=== 15-MINUTE BARS ===
+
+                                                    the taught cell (stop 25 / target 37.5)  average of the 9 cells
+trades                                                                                2,272                   2,272
+net                                                                                -$20,543                -$13,265
+win rate                                                                             40.4 %                  40.8 %
+average trade                                                                           -$9                     -$6
+profit factor                                                                          0.97                    0.98
+average win                                                                            $717                    $711
+average loss                                                                          -$501                   -$499
+average win / average loss                                                             1.43                    1.48
+worst drawdown, daily                                                               $49,368                 $36,762
+worst drawdown, open losses counted                                                 $49,492                 $37,117
+Sharpe                                                                                -0.38                   -0.27
+months won                                                                           41.3 %                  46.4 %
+best month, share of the profit                                                      12.7 %                  13.4 %
+longest run of losing days                                                                9                    10.3
+prop eval odds, 30 days (LucidPro 50K, no DLL)                                       22.5 %                  24.3 %
+prop payout odds (stress, "live is worse", beside)                           12.7 % (4.8 %)          13.1 % (4.9 %)
+prop eval odds, stress                                                               17.9 %                  17.5 %
+
+The neighbours (the 8 others): average trade -$5, they hold 1.1 of 10 lines on average (the taught cell holds 1).
+
+THE NINE CELLS: average trade (lines held)
+            target 28.25  target 37.5   target 47
+stop 18.75    -$8 (1/10)  -$15 (1/10)  -$7 (1/10)
+stop 25       -$7 (1/10)   -$9 (1/10)  -$5 (1/10)
+stop 31.25    -$5 (1/10)   -$2 (1/10)   $6 (2/10)
+
+LINES on the taught cell (the pipeline's own functions and words)
+  P3.2 FAIL average trade -$9 (need above $0)
+  P3.3 PASS 2,272 trades (need 200)
+  P3.4 missed (a label, asks nothing) long -$17,662, short -$2,881 (need both above $0)
+  P3.7 missed (a label, asks nothing) without its best 5 % of trades (114 of 2272) the box makes -$105,587 (need above $0)
+  P3.8 missed (a label, asks nothing) 19 of 46 months won, 41.3 % (need 70 % or more)
+  P3.9 missed (a label, asks nothing) best month 2022-09 is 12.66 % of the profit of the months won (need 10 % or less)
+  P3.10 missed (a label, asks nothing) longest run of losing days: 9 (need 8 or fewer)
+  3.3 FAIL default variant: profit factor 0.97 over 2,272 trades (need 1.2 or more)
+  3.4 FAIL default variant: net -$20,543 / worst drawdown $49,492 = -0.42, open losses counted (need 3 or more)
+  3.5 FAIL default variant: Sharpe -0.38 on 948 session days (need 1 or more)
+  3.6 FAIL default variant: worst drawdown $4,949 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)
+  3.7 FAIL default variant: makes money in 22.3 % of 1,000 reshuffled runs (need 80 % or more)
+  3.8 FAIL default variant: -$43,316 without its best 1 % of days (10 of 948 session days; they made $22,773 of -$20,543; need above $0)
+  P4.1 FAIL the box's average trade is above $0 in 22.3 % of 1,000 reshuffled runs (need 75 % or more)
+  P4.2 FAIL beats 60.65 % of the random-entry runs of the same box on try 1 (need above 95 % = 100 - 5 / 1 try)
+
+PER YEAR, then combined: the taught cell
+year      trades       net  avg trade     win    PF  drawdown
+2021*        145    $2,735        $19  42.8 %  1.07    $5,852
+2022         703   $16,768        $24  42.5 %  1.08   $10,240
+2023         577  -$12,283       -$21  40.2 %  0.93   $21,600
+2024         544  -$14,221       -$26  39.0 %  0.91   $23,521
+2025*        303  -$13,542       -$45  37.3 %  0.86   $21,088
+combined   2,272  -$20,543        -$9  40.4 %  0.97   $49,368
+
+PER YEAR, then combined: the average of the 9 cells
+year      trades       net  avg trade     win    PF  drawdown
+2021*        146     -$128        -$1  41.3 %  0.99    $8,271
+2022         701   $14,932        $21  42.7 %  1.07   $12,379
+2023         579   -$9,627       -$17  40.6 %  0.94   $20,035
+2024         542   -$9,556       -$18  39.8 %  0.94   $21,693
+2025*        304   -$8,886       -$29  38.6 %  0.90   $16,842
+combined   2,272  -$13,265        -$6  40.8 %  0.98   $36,762
+
+NOT RUN (the person who wrote the sheet)
+  - PRE-REGISTERED in out/vwap_hunt_2026-10-20/PREREG.md before any run; nothing tuned on a result.
+  - 1-MINUTE SHEETS run the New York passes only (machine time); 5 / 15-minute sheets every pass the family runs except pre (08:25-09:30), which the brief does not ask for.
+  - THE SESSION VWAP of the engine restarts at every pass start (09:30, 11:00, 13:30; 03:00 London; 00:00 Asia; 18:00 evening); 'rth' / 'us' anchors stay at 09:30 for the New York passes.
+  - THE CAP: 4 trades per session pass (several passes: a day can hold more, and a trade of one pass may still be open when the next pass enters).
+  - COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).
+  - THE TEST DAYS are read only by `bp.py taught wf` (the 3:1 block walk-forward, once), its output sent to a log unread until SELECTION.md is written.
+
+ALSO TRUE OF THE RUN (the lane)
+  - CAPPED PER SESSION PASS, NOT PER DAY: max_trades 4 counts inside each pass (3 passes: nyam, mid, pm), so a day can hold up to 12 trades; a family's own loss or trade count (max_loss) counts inside one pass too.
+  - The passes are independent: a trade of one pass may still be open when another pass enters (one position at a time holds inside a pass only).
+  - Every trade is flat by 15:58 ET (13:13 on an equity half day); no entry in the last 5 minutes of a pass.
+  - Costs: $4.00 a round turn and 1 tick of slippage on market and stop fills, 1 contract (the engine's own).
+
+HONEST LIMITS
+  - One video's rule, read on the build days (2021-09-22 .. 2025-06-30): in-sample.
+  - The family's settings and the exits are the video's own: nothing was tuned, searched or picked.
+  - The neighbours are shown to see how fragile the rule is; they are not alternatives to choose from.
+  - The unseen days (2025-07-01 on) were not read: a person has to ask for that, and it is read once.
+  - The random entries are the pipeline's own (any bar of the session pass, matched by day and pass): they do not wait for the family's entry window.
+NEXT: This is the rule as taught, in-sample. The unseen days are read once, and only when a person asks for it.

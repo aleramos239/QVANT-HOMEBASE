@@ -1,0 +1,29 @@
+{
+ "name": "vh_i28_daymove_5_pm",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 28: At 15:00 a day that has already moved far from its open keeps going into the close (Gao-Han-Li-Zhou 2018: late-day momentum). Who loses: the afternoon faders and the close's forced hedgers.",
+ "family": "day_move",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "pm"
+ ],
+ "params": {
+  "k": [
+   0.15,
+   0.25,
+   0.35
+  ]
+ },
+ "fixed": {
+  "at": "15:00"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

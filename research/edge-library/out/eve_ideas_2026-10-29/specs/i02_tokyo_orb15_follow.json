@@ -1,0 +1,29 @@
+{
+ "name": "i02_tokyo_orb15_follow",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: follow the first break of the 19:00 opening range",
+ "family": "win_break",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "r_end": [
+   "19:15"
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "r_start": "19:00",
+  "mode": "follow"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

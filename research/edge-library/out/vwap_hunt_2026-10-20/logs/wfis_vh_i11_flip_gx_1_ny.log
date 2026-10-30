@@ -1,0 +1,142 @@
+2026-10-21T07:25:05+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers)
+2026-10-21T07:25:05+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers): days 1-60 of 883 (360 instances)
+2026-10-21T07:25:57+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers): days 61-120 of 883 (360 instances)
+2026-10-21T07:26:52+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers): days 121-180 of 883 (360 instances)
+2026-10-21T07:27:46+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers): days 181-240 of 883 (360 instances)
+2026-10-21T07:28:39+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers): days 241-300 of 883 (360 instances)
+2026-10-21T07:29:35+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers): days 301-360 of 883 (360 instances)
+2026-10-21T07:30:32+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers): days 361-420 of 883 (360 instances)
+2026-10-21T07:31:31+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers): days 421-480 of 883 (360 instances)
+2026-10-21T07:32:30+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers): days 481-540 of 883 (360 instances)
+2026-10-21T07:33:29+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers): days 541-600 of 883 (360 instances)
+2026-10-21T07:34:27+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers): days 601-660 of 883 (360 instances)
+2026-10-21T07:35:24+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers): days 661-720 of 883 (360 instances)
+2026-10-21T07:36:17+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers): days 721-780 of 883 (360 instances)
+2026-10-21T07:37:13+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers): days 781-840 of 883 (360 instances)
+2026-10-21T07:38:09+00:00 idea vh_i11_flip_gx_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i11_flip_gx_1_ny-NQ-tf1/is; 3 workers): days 841-883 of 883 (360 instances)
+2026-10-21T07:38:49+00:00 wf_is vh_i11_flip_gx_1_ny-NQ-tf1/is: 120 cells, 399,280 trades, 822.1 s of tape (wall 823 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i11_flip_gx_1_ny: 120 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  hold1_pts25-r0p5              69%   67%    3618    31,533  1.05   100%
+   2  hold1_pts15-r0p5              67%   68%    3844   -15,871  0.96   100%
+   3  hold1_atr1p5-r0p5             66%   68%    3844   -31,181  0.95   100%
+   4  hold1_atr2-r0p5               66%   68%    3709   -44,401  0.94    30%
+   5  hold2_atr2-r0p5               66%   67%    3586   -33,064  0.95    50%
+   6  hold1_atr1-r0p5               66%   68%    3925   -26,795  0.93   100%
+   7  hold2_atr1p5-r0p5             66%   68%    3686   -40,499  0.93    80%
+   8  hold1_pts40-r0p5              66%   67%    3195   -27,110  0.97   100%
+   9  hold2_pts15-r0p5              66%   68%    3675   -33,800  0.91   100%
+  10  hold2_atr1-r0p5               66%   68%    3713   -31,702  0.92   100%
+  11  hold1_pts60-r0p5              65%   66%    2700   -12,850  0.99   100%
+  12  hold2_pts25-r0p5              65%   67%    3496   -50,789  0.92    40%
+  13  hold2_pts40-r0p5              65%   67%    3100   -61,425  0.93    20%
+  14  hold2_pts60-r0p5              65%   66%    2644   -37,266  0.96    80%
+  15  hold3_pts60-r0p5              65%   66%    2615   -39,050  0.96    70%
+  16  hold3_atr1-r0p5               65%   69%    3581   -66,214  0.84     0%
+  17  hold3_pts40-r0p5              64%   67%    3025   -90,775  0.89     0%
+  18  hold3_pts15-r0p5              64%   68%    3553   -59,137  0.85    10%
+  19  hold3_atr1p5-r0p5             64%   68%    3564   -91,071  0.85     0%
+  20  hold3_pts25-r0p5              64%   67%    3398   -86,002  0.86     0%
+  21  hold3_atr2-r0p5               64%   68%    3487  -116,858  0.85     0%
+  22  hold1_atr0p5-r0p5             64%   68%    3936   -41,239  0.81   100%
+  23  hold2_atr0p5-r0p5             63%   69%    3715   -45,660  0.79   100%
+  24  hold3_atr0p5-r0p5             62%   69%    3581   -54,714  0.75    20%
+  25  hold1_pts25-r0p75             59%   58%    3480    27,720  1.04   100%
+  26  hold1_pts15-r0p75             58%   58%    3804    -1,511  1.00   100%
+  27  hold1_atr1p5-r0p75            58%   58%    3790   -10,440  0.99   100%
+  28  hold1_atr2-r0p75              57%   58%    3564   -33,526  0.96    90%
+  29  hold2_atr1p5-r0p75            57%   58%    3658   -28,217  0.96    90%
+  30  hold2_atr1-r0p75              57%   58%    3707   -27,908  0.94   100%
+  31  hold1_atr1-r0p75              57%   58%    3906   -32,144  0.94   100%
+  32  hold3_pts60-r0p75             56%   56%    2413     3,023  1.00   100%
+  33  hold2_pts15-r0p75             56%   58%    3646   -38,079  0.92   100%
+  34  hold1_pts40-r0p75             56%   57%    2959   -37,256  0.96    80%
+  35  hold1_pts60-r0p75             56%   56%    2474    -6,196  0.99    90%
+  36  hold2_pts40-r0p75             56%   57%    2931   -42,979  0.96    80%
+  37  hold2_pts60-r0p75             56%   57%    2446   -18,089  0.99    80%
+  38  hold2_atr2-r0p75              56%   58%    3489   -68,566  0.93    20%
+  39  hold2_pts25-r0p75             56%   58%    3389   -55,456  0.93    50%
+  40  hold3_atr2-r0p75              56%   58%    3419   -64,676  0.93    30%
+  41  hold3_pts40-r0p75             56%   57%    2900   -68,895  0.93    20%
+  42  hold3_pts25-r0p75             55%   58%    3321   -72,954  0.90     0%
+  43  hold3_atr1p5-r0p75            55%   58%    3545   -91,630  0.88     0%
+  44  hold3_atr1-r0p75              55%   59%    3580   -74,035  0.85     0%
+  45  hold3_pts15-r0p75             55%   58%    3534   -62,831  0.87    20%
+  46  hold1_atr0p5-r0p75            55%   59%    3936   -38,994  0.86   100%
+  47  hold2_atr0p5-r0p75            54%   59%    3715   -47,660  0.82    90%
+  48  hold3_atr0p5-r0p75            54%   60%    3581   -54,554  0.79    30%
+  49  hold3_pts60-r1                51%   50%    2313    51,673  1.04   100%
+  50  hold1_pts60-r1                51%   50%    2360    40,705  1.03   100%
+  51  hold1_atr1p5-r1               51%   51%    3732   -27,473  0.97   100%
+  52  hold2_pts60-r1                50%   50%    2322    -4,923  1.00   100%
+  53  hold1_pts25-r1                50%   51%    3362   -12,408  0.99   100%
+  54  hold2_atr1-r1                 50%   51%    3702   -35,273  0.94   100%
+  55  hold1_pts15-r1                50%   51%    3768   -28,687  0.95   100%
+  56  hold1_atr2-r1                 50%   51%    3470   -53,015  0.95    50%
+  57  hold1_atr1-r1                 50%   51%    3896   -40,124  0.93   100%
+  58  hold2_atr2-r1                 50%   50%    3404   -23,956  0.98   100%
+  59  hold2_pts40-r1                50%   50%    2827   -36,933  0.97    50%
+  60  hold2_pts15-r1                50%   51%    3615   -32,570  0.94   100%
+  61  hold1_pts40-r1                50%   50%    2824   -34,481  0.97    50%
+  62  hold2_pts25-r1                49%   51%    3326   -52,804  0.94    60%
+  63  hold3_pts40-r1                49%   50%    2788   -61,992  0.94    20%
+  64  hold2_atr1p5-r1               49%   51%    3618   -82,582  0.90    10%
+  65  hold3_atr2-r1                 49%   51%    3359   -74,631  0.93    10%
+  66  hold3_atr1p5-r1               49%   51%    3521   -68,309  0.92    50%
+  67  hold3_pts25-r1                49%   51%    3268   -69,342  0.92    20%
+  68  hold1_atr0p5-r1               48%   52%    3936   -44,584  0.86   100%
+  69  hold3_pts15-r1                48%   51%    3519   -64,206  0.89    30%
+  70  hold3_atr1-r1                 48%   52%    3577   -81,753  0.86     0%
+  71  hold2_atr0p5-r1               48%   52%    3715   -41,970  0.86   100%
+  72  hold3_atr0p5-r1               47%   53%    3581   -63,109  0.79     0%
+  73  hold2_pts60-r1p5              44%   43%    2215    87,670  1.06   100%
+  74  hold1_pts60-r1p5              44%   43%    2234    78,939  1.06   100%
+  75  hold3_pts60-r1p5              44%   43%    2207    66,037  1.05   100%
+  76  hold1_pts40-r1p5              42%   41%    2688    18,813  1.02   100%
+  77  hold2_pts40-r1p5              42%   42%    2687     2,742  1.00   100%
+  78  hold3_pts40-r1p5              41%   41%    2671   -18,114  0.99   100%
+  79  hold2_pts60-r2                41%   38%    2169   163,059  1.11   100%
+  80  hold1_pts25-r1p5              41%   41%    3241    -8,769  0.99   100%
+  81  hold2_atr2-r1p5               40%   41%    3287   -16,523  0.99   100%
+  82  hold1_pts60-r2                40%   38%    2182   131,892  1.09   100%
+  83  hold3_pts60-r2                40%   39%    2174   100,959  1.07   100%
+  84  hold2_pts25-r1p5              40%   41%    3229   -31,901  0.97    60%
+  85  hold1_atr1p5-r1p5             40%   41%    3653   -45,512  0.95    80%
+  86  hold2_atr1p5-r1p5             40%   40%    3557   -27,148  0.97   100%
+  87  hold1_atr2-r1p5               40%   41%    3328   -60,572  0.95    50%
+  88  hold1_pts15-r1p5              40%   41%    3707   -36,633  0.95    90%
+  89  hold1_atr1-r1p5               40%   42%    3865   -53,725  0.93   100%
+  90  hold3_pts25-r1p5              40%   41%    3182   -48,678  0.95    30%
+  91  hold2_pts15-r1p5              39%   41%    3582   -45,443  0.93    70%
+  92  hold3_atr2-r1p5               39%   41%    3265   -61,735  0.95    50%
+  93  hold3_atr1p5-r1p5             39%   41%    3481   -81,859  0.92    10%
+  94  hold2_atr1-r1p5               39%   42%    3690   -84,655  0.88    20%
+  95  hold3_atr1-r1p5               38%   41%    3574   -75,136  0.89    20%
+  96  hold2_atr0p5-r1p5             38%   41%    3715   -41,015  0.89   100%
+  97  hold3_pts15-r1p5              38%   41%    3502   -69,358  0.90    20%
+  98  hold1_atr0p5-r1p5             38%   42%    3935   -57,195  0.85    60%
+  99  hold3_atr0p5-r1p5             38%   42%    3581   -65,584  0.82    10%
+ 100  hold1_pts40-r2                37%   36%    2604    30,289  1.02   100%
+ 101  hold2_pts40-r2                36%   36%    2623     5,238  1.00   100%
+ 102  hold3_pts40-r2                36%   36%    2605     2,710  1.00   100%
+ 103  hold2_atr2-r2                 35%   34%    3208    23,743  1.02   100%
+ 104  hold1_atr2-r2                 34%   35%    3231    -5,094  1.00   100%
+ 105  hold1_pts25-r2                34%   34%    3168    -7,452  0.99   100%
+ 106  hold2_pts25-r2                34%   35%    3166   -30,024  0.97    70%
+ 107  hold3_pts25-r2                34%   35%    3129   -35,621  0.97    50%
+ 108  hold3_atr2-r2                 34%   35%    3199   -45,426  0.96    50%
+ 109  hold1_atr1p5-r2               34%   34%    3594   -44,171  0.96    70%
+ 110  hold2_pts15-r2                33%   34%    3554   -42,226  0.94    90%
+ 111  hold1_pts15-r2                33%   34%    3672   -44,943  0.94    90%
+ 112  hold2_atr1p5-r2               33%   34%    3502   -42,408  0.96    70%
+ 113  hold1_atr1-r2                 33%   35%    3848   -63,012  0.92    70%
+ 114  hold2_atr1-r2                 32%   34%    3679   -59,716  0.92    70%
+ 115  hold3_atr1p5-r2               32%   34%    3438   -88,177  0.92    10%
+ 116  hold1_atr0p5-r2               32%   35%    3935   -53,525  0.87    90%
+ 117  hold3_pts15-r2                32%   34%    3484   -66,991  0.91    30%
+ 118  hold3_atr1-r2                 32%   35%    3565   -80,160  0.89    10%
+ 119  hold2_atr0p5-r2               32%   35%    3715   -52,305  0.87    90%
+ 120  hold3_atr0p5-r2               31%   36%    3580   -74,695  0.81     0%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i11_flip_gx_1_ny <n> (blueprint_wf_pick).

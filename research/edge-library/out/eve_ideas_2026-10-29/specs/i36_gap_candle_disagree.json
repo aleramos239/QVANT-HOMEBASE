@@ -1,0 +1,28 @@
+{
+ "name": "i36_gap_candle_disagree",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: trade the 18:00 candle when the gap points the other way",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "mode": [
+   "follow"
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "gap_disagree"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

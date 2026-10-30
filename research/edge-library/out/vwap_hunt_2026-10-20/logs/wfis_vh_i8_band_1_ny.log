@@ -1,0 +1,142 @@
+2026-10-22T06:25:43+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers)
+2026-10-22T06:25:43+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers): days 1-60 of 883 (360 instances)
+2026-10-22T06:26:11+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers): days 61-120 of 883 (360 instances)
+2026-10-22T06:26:38+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers): days 121-180 of 883 (360 instances)
+2026-10-22T06:27:08+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers): days 181-240 of 883 (360 instances)
+2026-10-22T06:27:37+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers): days 241-300 of 883 (360 instances)
+2026-10-22T06:28:06+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers): days 301-360 of 883 (360 instances)
+2026-10-22T06:28:35+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers): days 361-420 of 883 (360 instances)
+2026-10-22T06:29:05+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers): days 421-480 of 883 (360 instances)
+2026-10-22T06:29:33+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers): days 481-540 of 883 (360 instances)
+2026-10-22T06:30:00+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers): days 541-600 of 883 (360 instances)
+2026-10-22T06:30:28+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers): days 601-660 of 883 (360 instances)
+2026-10-22T06:30:55+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers): days 661-720 of 883 (360 instances)
+2026-10-22T06:31:21+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers): days 721-780 of 883 (360 instances)
+2026-10-22T06:31:48+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers): days 781-840 of 883 (360 instances)
+2026-10-22T06:32:15+00:00 idea vh_i8_band_1_ny, 3:1 in-sample: pass 1 of 1, NQ 1-minute bars (vh_i8_band_1_ny-NQ-tf1/is; 3 workers): days 841-883 of 883 (360 instances)
+2026-10-22T06:32:35+00:00 wf_is vh_i8_band_1_ny-NQ-tf1/is: 120 cells, 708,847 trades, 409.69 s of tape (wall 411 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i8_band_1_ny: 120 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  band2p5_atr2-r0p5             66%   67%    3873   -21,642  0.97    90%
+   2  band2p5_pts25-r0p5            66%   67%    3811   -38,669  0.94    70%
+   3  band2p5_pts40-r0p5            66%   67%    3518   -22,697  0.98   100%
+   4  band2p5_pts15-r0p5            65%   68%    4000   -44,290  0.90    80%
+   5  band2_pts25-r0p5              65%   67%    7020  -100,615  0.92    40%
+   6  band1p5_pts25-r0p5            65%   67%    7758  -118,017  0.91    30%
+   7  band2_pts40-r0p5              65%   67%    6518  -100,032  0.94    60%
+   8  band2p5_atr1p5-r0p5           65%   67%    3986   -32,734  0.94   100%
+   9  band2_atr2-r0p5               65%   67%    7099  -133,436  0.90    10%
+  10  band1p5_pts15-r0p5            65%   68%    7825  -101,655  0.88    50%
+  11  band2_pts15-r0p5              65%   68%    7207   -95,553  0.88    40%
+  12  band2p5_pts60-r0p5            65%   65%    3159    -5,791  1.00   100%
+  13  band1p5_pts40-r0p5            65%   67%    7395  -161,175  0.92    10%
+  14  band2_atr1p5-r0p5             65%   67%    7199  -123,576  0.88    10%
+  15  band2p5_atr1-r0p5             65%   67%    4080   -45,120  0.89    90%
+  16  band1p5_atr1-r0p5             65%   68%    7829  -103,761  0.87    80%
+  17  band1p5_atr2-r0p5             65%   67%    7802  -177,188  0.88     0%
+  18  band1p5_atr1p5-r0p5           65%   68%    7825  -151,505  0.87     0%
+  19  band2_pts60-r0p5              64%   65%    5758  -107,927  0.95    40%
+  20  band2_atr1-r0p5               64%   68%    7258  -101,182  0.86    80%
+  21  band1p5_pts60-r0p5            64%   65%    6543  -128,362  0.95    40%
+  22  band1p5_atr0p5-r0p5           63%   69%    7830   -97,615  0.77   100%
+  23  band2p5_atr0p5-r0p5           62%   69%    4110   -55,025  0.75    60%
+  24  band2_atr0p5-r0p5             62%   69%    7280  -100,770  0.75    60%
+  25  band2p5_pts25-r0p75           57%   58%    3749   -20,826  0.97   100%
+  26  band2p5_pts15-r0p75           57%   58%    3981   -35,729  0.93   100%
+  27  band2p5_atr2-r0p75            56%   57%    3817   -30,758  0.97    90%
+  28  band2_pts25-r0p75             56%   58%    6942   -96,693  0.94    50%
+  29  band2p5_pts40-r0p75           56%   57%    3385   -37,890  0.97    80%
+  30  band2p5_pts60-r0p75           56%   56%    2961     6,656  1.00   100%
+  31  band2p5_atr1p5-r0p75          56%   57%    3958   -33,082  0.95    90%
+  32  band2_pts40-r0p75             56%   57%    6265  -118,015  0.95    60%
+  33  band1p5_pts15-r0p75           56%   58%    7820  -110,465  0.90    50%
+  34  band2_pts15-r0p75             56%   58%    7196  -102,399  0.90    50%
+  35  band2_pts60-r0p75             56%   56%    5319   -82,496  0.97    60%
+  36  band2_atr2-r0p75              56%   58%    7069  -153,251  0.91    10%
+  37  band1p5_atr2-r0p75            56%   58%    7785  -162,050  0.92    10%
+  38  band1p5_pts25-r0p75           55%   58%    7691  -162,174  0.91    10%
+  39  band1p5_pts40-r0p75           55%   57%    7122  -184,213  0.93    10%
+  40  band2p5_atr1-r0p75            55%   58%    4068   -50,922  0.90    90%
+  41  band2_atr1p5-r0p75            55%   58%    7183  -163,477  0.88     0%
+  42  band1p5_atr1-r0p75            55%   58%    7829  -127,026  0.87    40%
+  43  band1p5_pts60-r0p75           55%   56%    5974  -175,866  0.94    20%
+  44  band1p5_atr1p5-r0p75          55%   58%    7823  -193,102  0.87     0%
+  45  band2_atr1-r0p75              55%   58%    7249  -114,976  0.88    50%
+  46  band1p5_atr0p5-r0p75          54%   59%    7830  -103,070  0.80    90%
+  47  band2p5_atr0p5-r0p75          54%   59%    4109   -53,396  0.81    90%
+  48  band2_atr0p5-r0p75            53%   59%    7278  -105,107  0.79    40%
+  49  band2p5_pts15-r1              50%   51%    3962   -24,853  0.96   100%
+  50  band2p5_atr2-r1               50%   50%    3778   -14,197  0.99   100%
+  51  band2p5_pts25-r1              50%   51%    3688   -25,997  0.97   100%
+  52  band2p5_pts60-r1              50%   50%    2802    -6,328  1.00   100%
+  53  band2p5_pts40-r1              50%   50%    3268   -25,972  0.98    80%
+  54  band2_pts40-r1                49%   50%    6042  -135,073  0.94    20%
+  55  band2_pts60-r1                49%   50%    4966  -151,154  0.95    10%
+  56  band2_pts15-r1                49%   51%    7184  -104,611  0.91    40%
+  57  band2_atr2-r1                 49%   51%    7025  -173,195  0.91     0%
+  58  band2p5_atr1p5-r1             49%   50%    3933   -44,732  0.95    80%
+  59  band1p5_atr2-r1               48%   51%    7763  -203,347  0.91     0%
+  60  band2p5_atr1-r1               48%   51%    4059   -53,096  0.91    70%
+  61  band1p5_pts15-r1              48%   51%    7810  -131,285  0.89    30%
+  62  band1p5_pts25-r1              48%   51%    7604  -174,056  0.91    20%
+  63  band1p5_pts40-r1              48%   50%    6846  -227,024  0.92    10%
+  64  band2_pts25-r1                48%   51%    6832  -159,763  0.91    20%
+  65  band1p5_pts60-r1              48%   50%    5558  -241,937  0.92     0%
+  66  band2_atr1p5-r1               48%   51%    7178  -157,402  0.90    10%
+  67  band1p5_atr1p5-r1             48%   51%    7819  -194,016  0.89     0%
+  68  band1p5_atr1-r1               48%   51%    7828  -148,647  0.87    20%
+  69  band2_atr1-r1                 48%   51%    7247  -132,413  0.88    20%
+  70  band2p5_atr0p5-r1             47%   52%    4107   -51,863  0.84    90%
+  71  band1p5_atr0p5-r1             46%   52%    7830  -122,235  0.80    40%
+  72  band2_atr0p5-r1               46%   52%    7277  -117,648  0.79    30%
+  73  band2p5_pts60-r1p5            43%   43%    2617    27,317  1.02    90%
+  74  band2_pts60-r1p5              42%   43%    4484  -112,366  0.96    10%
+  75  band2p5_pts40-r1p5            41%   42%    3091   -20,694  0.99   100%
+  76  band2p5_atr2-r1p5             41%   40%    3688    23,213  1.02   100%
+  77  band2p5_pts25-r1p5            41%   41%    3591   -17,384  0.98   100%
+  78  band2p5_pts15-r1p5            40%   41%    3913   -16,962  0.98   100%
+  79  band2_pts40-r1p5              40%   42%    5635  -127,715  0.95    20%
+  80  band1p5_pts60-r1p5            40%   43%    4961  -344,514  0.89     0%
+  81  band2p5_atr1p5-r1p5           40%   40%    3897   -10,453  0.99   100%
+  82  band2p5_pts60-r2              39%   40%    2513   -32,897  0.98    20%
+  83  band1p5_pts40-r1p5            39%   42%    6315  -273,610  0.91     0%
+  84  band1p5_pts25-r1p5            39%   41%    7398  -157,072  0.93    20%
+  85  band2_pts25-r1p5              39%   41%    6670  -147,100  0.93    10%
+  86  band2_atr2-r1p5               39%   41%    6938  -131,872  0.94    50%
+  87  band2_atr1p5-r1p5             39%   41%    7156  -146,209  0.92    30%
+  88  band1p5_atr2-r1p5             39%   40%    7692  -162,408  0.94    40%
+  89  band1p5_atr1-r1p5             39%   41%    7828  -138,632  0.90    50%
+  90  band2p5_atr1-r1p5             38%   41%    4038   -61,822  0.91    80%
+  91  band2_pts15-r1p5              38%   41%    7143  -142,437  0.90    20%
+  92  band2_pts60-r2                38%   39%    4190   -78,290  0.97    10%
+  93  band1p5_atr1p5-r1p5           38%   41%    7808  -233,867  0.89     0%
+  94  band1p5_pts15-r1p5            38%   41%    7783  -177,362  0.88    20%
+  95  band2p5_atr0p5-r1p5           38%   41%    4104   -52,971  0.86    90%
+  96  band2_atr1-r1p5               38%   41%    7240  -144,995  0.89    30%
+  97  band1p5_pts60-r2              37%   39%    4622  -223,113  0.93    10%
+  98  band1p5_atr0p5-r1p5           37%   42%    7830  -130,230  0.82    30%
+  99  band2p5_pts40-r2              37%   37%    2959    -5,156  1.00    90%
+ 100  band2_atr0p5-r1p5             36%   42%    7276  -128,974  0.81    10%
+ 101  band2_pts40-r2                35%   36%    5293  -129,987  0.95    20%
+ 102  band2p5_pts25-r2              34%   35%    3501   -44,629  0.96    40%
+ 103  band2p5_atr2-r2               34%   34%    3602     2,602  1.00   100%
+ 104  band1p5_pts40-r2              34%   37%    5906  -369,619  0.88     0%
+ 105  band2p5_atr1p5-r2             34%   34%    3844     3,459  1.00   100%
+ 106  band2p5_pts15-r2              33%   34%    3876   -35,199  0.96   100%
+ 107  band2_pts25-r2                33%   35%    6482  -170,663  0.92     0%
+ 108  band2_atr1p5-r2               33%   34%    7116   -87,289  0.96    70%
+ 109  band1p5_pts25-r2              33%   35%    7170  -238,240  0.90     0%
+ 110  band1p5_pts15-r2              33%   34%    7740  -127,015  0.92    60%
+ 111  band2_atr2-r2                 33%   34%    6778  -180,822  0.93     0%
+ 112  band2p5_atr1-r2               32%   34%    4023   -55,747  0.93    80%
+ 113  band1p5_atr2-r2               32%   34%    7500  -169,575  0.94     0%
+ 114  band1p5_atr1p5-r2             32%   34%    7785  -193,845  0.91    10%
+ 115  band2_pts15-r2                32%   34%    7101  -133,679  0.91    30%
+ 116  band1p5_atr1-r2               32%   35%    7825  -147,525  0.90    50%
+ 117  band2p5_atr0p5-r2             32%   35%    4099   -52,901  0.87    90%
+ 118  band2_atr1-r2                 31%   34%    7228  -158,932  0.89    10%
+ 119  band1p5_atr0p5-r2             31%   35%    7830  -137,680  0.83    10%
+ 120  band2_atr0p5-r2               31%   35%    7276  -128,784  0.83    10%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i8_band_1_ny <n> (blueprint_wf_pick).

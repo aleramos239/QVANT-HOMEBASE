@@ -1,0 +1,22 @@
+hunt_dm_vwflip15_rth_midpm: 3:1 walk-forward in blocks, 15 test months (2022-01 .. 2026-09), 7 stood aside; test days read 2025-07-01 .. 2026-09-22
+stitched: 102 trades, net $14,137, avg $139, win 50.0 %, PF 1.40, worst DD $4,777; build-day months $14,449 (89), test-day months $-312 (13)
+  P6.1 PASS the 3:1 walk-forward made $14,137 on its test months, one contract after costs (need above $0)
+  P6.2 PASS beats 98.1 % of 4,000 random tables, each month its pick's exit cell (need above 95 %)
+  P6.3 PASS win rate 50 % on 102 trades at a realized reward-to-risk of 1.40 (average win $966, average loss $689): breakeven 41.63 %, need 44.63 % or more (+3 points) (row P3.15 on the stitched months)
+  P6.4 FAIL 102 trades on the test months (need 200)
+  2022-01  pts40-r1p875    13  $2,703
+  2022-05  stood aside      0  $0
+  2022-09  pts30-r2p5      16  $5,111
+  2023-01  pts30-r2p5       8  $108
+  2023-05  pts40-r1p5      13  $-2,052
+  2023-09  pts50-r1p5       7  $2,787
+  2024-01  pts40-r1p125    17  $6,577
+  2024-05  stood aside      0  $0
+  2024-09  pts40-r1p125    15  $-785
+  2025-01  stood aside      0  $0
+  2025-05  stood aside      0  $0
+  2025-09  stood aside      0  $0
+  2026-01  pts50-r1p5      13  $-312
+  2026-05  stood aside      0  $0
+  2026-09  stood aside      0  $0
+next month (2026-10): stand aside

@@ -1,0 +1,68 @@
+3:1 IN-SAMPLE TABLE of i40_hour_sweep_fade: 60 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  s_end2000_atr2-r0p5           68%   66%     529     9,134  1.11   100%
+   2  s_end2000_pts15-r0p5          68%   68%     529      -356  0.99   100%
+   3  s_end2000_pts25-r0p5          67%   65%     529     6,499  1.08   100%
+   4  s_end2000_own2-r0p5           67%   64%     529     6,464  1.10   100%
+   5  s_end2000_atr1-r0p5           66%   66%     529    -1,151  0.97    90%
+   6  s_end2000_atr1p5-r0p5         66%   64%     529     3,934  1.06   100%
+   7  s_end2000_own1p5-r0p5         65%   66%     529      -806  0.98   100%
+   8  s_end2000_own1-r0p5           65%   64%     529     1,229  1.04   100%
+   9  s_end2000_atr0p5-r0p5         62%   67%     529    -4,261  0.83    70%
+  10  s_end2000_pts40-r0p5          62%   61%     529     4,934  1.04    80%
+  11  s_end2000_own0p5-r0p5         61%   64%     529    -2,836  0.86    90%
+  12  s_end2000_atr2-r0p75          60%   55%     529    19,389  1.19   100%
+  13  s_end2000_pts60-r0p5          59%   58%     529     7,624  1.05    90%
+  14  s_end2000_pts25-r0p75         58%   56%     529     8,734  1.09   100%
+  15  s_end2000_pts15-r0p75         58%   58%     529      -931  0.99   100%
+  16  s_end2000_atr1-r0p75          58%   56%     529     3,754  1.07   100%
+  17  s_end2000_own1p5-r0p75        58%   57%     529     2,194  1.03    90%
+  18  s_end2000_own2-r0p75          58%   56%     529     7,044  1.09    80%
+  19  s_end2000_atr1p5-r0p75        57%   56%     529     3,204  1.04    90%
+  20  s_end2000_own1-r0p75          57%   57%     529      -311  0.99   100%
+  21  s_end2000_atr0p5-r0p75        55%   57%     529    -2,066  0.93   100%
+  22  s_end2000_pts40-r0p75         54%   55%     529    -4,991  0.97    60%
+  23  s_end2000_atr2-r1             53%   47%     529    31,119  1.27   100%
+  24  s_end2000_pts60-r0p75         53%   52%     529     4,494  1.03    50%
+  25  s_end2000_own0p5-r0p75        52%   55%     529    -3,191  0.88   100%
+  26  s_end2000_pts25-r1            52%   51%     529     5,959  1.05   100%
+  27  s_end2000_pts60-r1            51%   50%     529     5,574  1.03    60%
+  28  s_end2000_own1p5-r1           51%   50%     529     3,374  1.05    90%
+  29  s_end2000_atr1-r1             51%   49%     529     4,174  1.06   100%
+  30  s_end2000_pts15-r1            51%   51%     529    -1,666  0.98    90%
+  31  s_end2000_own1-r1             50%   50%     529     1,359  1.03   100%
+  32  s_end2000_atr1p5-r1           50%   49%     529     7,029  1.07    90%
+  33  s_end2000_own2-r1             50%   48%     529     8,944  1.10    90%
+  34  s_end2000_pts60-r1p5          50%   47%     529    20,714  1.12    50%
+  35  s_end2000_pts40-r1            49%   50%     529    -6,766  0.96    40%
+  36  s_end2000_pts60-r2            49%   46%     529    22,309  1.12    70%
+  37  s_end2000_atr0p5-r1           48%   51%     529    -3,451  0.91    80%
+  38  s_end2000_own0p5-r1           47%   49%     529    -2,316  0.92   100%
+  39  s_end2000_pts40-r1p5          46%   48%     529   -10,816  0.94    40%
+  40  s_end2000_pts40-r2            45%   46%     529    -5,886  0.97    50%
+  41  s_end2000_pts25-r1p5          44%   44%     529     1,639  1.01   100%
+  42  s_end2000_atr2-r1p5           43%   37%     529    38,879  1.29   100%
+  43  s_end2000_atr0p5-r1p5         43%   40%     529     4,459  1.11   100%
+  44  s_end2000_pts15-r1p5          43%   42%     529     2,114  1.02   100%
+  45  s_end2000_atr1p5-r1p5         42%   38%     529    19,359  1.17   100%
+  46  s_end2000_own1-r1p5           42%   42%     529       369  1.01    80%
+  47  s_end2000_own2-r1p5           41%   37%     529    20,964  1.20   100%
+  48  s_end2000_pts25-r2            41%   41%     529     3,314  1.02    90%
+  49  s_end2000_atr1-r1p5           41%   39%     529     5,804  1.07   100%
+  50  s_end2000_own1p5-r1p5         41%   39%     529     8,714  1.10   100%
+  51  s_end2000_atr2-r2             39%   34%     529    35,579  1.25   100%
+  52  s_end2000_own0p5-r1p5         39%   39%     529      -926  0.97   100%
+  53  s_end2000_pts15-r2            37%   37%     529      -566  0.99   100%
+  54  s_end2000_atr0p5-r2           36%   33%     529     5,854  1.13   100%
+  55  s_end2000_own2-r2             36%   33%     529    15,924  1.14    90%
+  56  s_end2000_atr1-r2             35%   32%     529    13,299  1.15   100%
+  57  s_end2000_own1p5-r2           35%   32%     529    17,179  1.19   100%
+  58  s_end2000_own1-r2             35%   34%     529     1,894  1.03    90%
+  59  s_end2000_atr1p5-r2           35%   31%     529    21,599  1.17   100%
+  60  s_end2000_own0p5-r2           34%   33%     529     1,224  1.03   100%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+REAL OR LUCK (the only lines that block; PF, Sharpe, drawdown and avg trade are shown, never block):
+  [PASS] boxes        42 of 60 boxes made money in-sample (need 60%): the average of the boxes, not the best
+  [ .. ] picked box   not picked yet: the owner picks a box, then the other lines are read
+NEXT: The owner picks a box by its number: bp.py wf pick i40_hour_sweep_fade <n> (blueprint_wf_pick).

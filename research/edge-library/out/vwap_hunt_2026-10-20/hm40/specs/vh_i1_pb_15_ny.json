@@ -1,0 +1,36 @@
+{
+ "name": "vh_i1_pb_15_ny",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 1: The VWAP is the session's average traded price; in a trend its first test is defended by the side in profit. Who loses: the traders who fade the trend at the VWAP.",
+ "family": "jj_fair",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "vwap_slope": [
+   15,
+   30,
+   60
+  ]
+ },
+ "fixed": {
+  "entry": "mom",
+  "fair": "vwap",
+  "min_room": 0.0,
+  "max_loss": 99,
+  "end": "15:00",
+  "wick": "off",
+  "pullback": "on",
+  "cont": "off"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 20,
+  "dir": "both"
+ }
+}

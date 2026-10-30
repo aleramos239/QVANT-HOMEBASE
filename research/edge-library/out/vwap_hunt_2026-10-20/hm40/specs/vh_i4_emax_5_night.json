@@ -1,0 +1,31 @@
+{
+ "name": "vh_i4_emax_5_night",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 4: When the fast average crosses the day's fair price, control has changed sides (WEAK PRIOR). Who loses: the side that must exit.",
+ "family": "vwap_ema_x",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "asia",
+  "london",
+  "eve"
+ ],
+ "params": {
+  "n": [
+   9,
+   21,
+   50
+  ]
+ },
+ "fixed": {
+  "anchor": "rth"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

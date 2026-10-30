@@ -1,0 +1,34 @@
+{
+ "name": "i21_quiet_day_break",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: follow the 18:00-19:00 range break after a quiet day",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "rq": [
+   0.6,
+   0.8,
+   1.0
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "brk_win",
+  "rg": "quiet",
+  "r_start": "18:00",
+  "r_end": "19:00",
+  "mode": "follow"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

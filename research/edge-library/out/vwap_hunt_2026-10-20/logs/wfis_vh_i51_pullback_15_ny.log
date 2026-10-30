@@ -1,0 +1,202 @@
+2026-10-22T04:01:03+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers)
+2026-10-22T04:01:03+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers): days 1-60 of 883 (540 instances)
+2026-10-22T04:01:32+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers): days 61-120 of 883 (540 instances)
+2026-10-22T04:02:02+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers): days 121-180 of 883 (540 instances)
+2026-10-22T04:02:30+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers): days 181-240 of 883 (540 instances)
+2026-10-22T04:02:58+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers): days 241-300 of 883 (540 instances)
+2026-10-22T04:03:25+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers): days 301-360 of 883 (540 instances)
+2026-10-22T04:03:54+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers): days 361-420 of 883 (540 instances)
+2026-10-22T04:04:24+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers): days 421-480 of 883 (540 instances)
+2026-10-22T04:04:55+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers): days 481-540 of 883 (540 instances)
+2026-10-22T04:05:25+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers): days 541-600 of 883 (540 instances)
+2026-10-22T04:06:04+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers): days 601-660 of 883 (540 instances)
+2026-10-22T04:06:40+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers): days 661-720 of 883 (540 instances)
+2026-10-22T04:07:08+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers): days 721-780 of 883 (540 instances)
+2026-10-22T04:07:34+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers): days 781-840 of 883 (540 instances)
+2026-10-22T04:08:00+00:00 idea vh_i51_pullback_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i51_pullback_15_ny-NQ-tf15/is; 3 workers): days 841-883 of 883 (540 instances)
+2026-10-22T04:08:19+00:00 wf_is vh_i51_pullback_15_ny-NQ-tf15/is: 180 cells, 138,571 trades, 435.01 s of tape (wall 436 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i51_pullback_15_ny: 180 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  level0p79_own0p5-r0p5         69%   68%     940     2,815  1.04   100%
+   2  level0p79_atr0p5-r0p5         68%   68%     939      -106  1.00   100%
+   3  level0p79_own1-r0p5           68%   67%     940     6,605  1.05   100%
+   4  level0p62_atr0p5-r0p5         67%   66%     799     3,704  1.03   100%
+   5  level0p62_own0p5-r0p5         67%   65%     799    10,139  1.09   100%
+   6  level0p62_atr1-r0p5           66%   65%     791    11,971  1.06   100%
+   7  level0p79_pts15-r0p5          66%   68%     940    -6,875  0.93    90%
+   8  level0p79_own1p5-r0p5         66%   67%     936    -5,954  0.97    90%
+   9  level0p79_pts40-r0p5          66%   66%     923    -1,257  0.99    80%
+  10  level0p62_pts25-r0p5          66%   67%     797    -8,158  0.94    40%
+  11  level0p79_atr1-r0p5           66%   66%     930    -4,555  0.98    60%
+  12  level0p62_own1-r0p5           66%   66%     789    -2,236  0.99    60%
+  13  level0p62_pts15-r0p5          65%   68%     799    -8,776  0.90    70%
+  14  level0p62_pts40-r0p5          65%   66%     787    -3,638  0.98    60%
+  15  level0p5_atr1-r0p5            65%   63%     632    17,222  1.11   100%
+  16  level0p5_pts40-r0p5           65%   65%     632       667  1.00   100%
+  17  level0p79_pts25-r0p5          65%   67%     938   -16,697  0.90    10%
+  18  level0p5_own1-r0p5            65%   61%     626    41,371  1.17   100%
+  19  level0p5_pts25-r0p5           65%   67%     636   -11,549  0.90    10%
+  20  level0p5_own0p5-r0p5          64%   63%     634    10,769  1.08   100%
+  21  level0p79_own2-r0p5           64%   66%     931   -16,984  0.94    70%
+  22  level0p5_atr1p5-r0p5          64%   62%     627    21,312  1.09   100%
+  23  level0p5_pts15-r0p5           64%   68%     636   -12,469  0.83     0%
+  24  level0p79_atr1p5-r0p5         63%   65%     903   -22,647  0.94    20%
+  25  level0p5_pts60-r0p5           63%   63%     627       957  1.00   100%
+  26  level0p5_atr0p5-r0p5          63%   66%     636   -11,224  0.89    10%
+  27  level0p62_pts60-r0p5          63%   63%     769    -6,196  0.98    70%
+  28  level0p79_pts60-r0p5          62%   64%     897   -25,453  0.92    10%
+  29  level0p62_own1p5-r0p5         62%   63%     772   -13,303  0.96    50%
+  30  level0p5_atr2-r0p5            62%   60%     625    20,995  1.07   100%
+  31  level0p62_atr1p5-r0p5         61%   63%     778   -21,177  0.93    10%
+  32  level0p5_own1p5-r0p5          61%   58%     620    33,900  1.11   100%
+  33  level0p62_own2-r0p5           60%   60%     762     6,742  1.02   100%
+  34  level0p5_own2-r0p5            60%   56%     614    53,624  1.15   100%
+  35  level0p79_atr2-r0p5           60%   62%     880   -40,135  0.91     0%
+  36  level0p79_atr0p5-r0p75        59%   59%     939     3,044  1.02   100%
+  37  level0p79_own0p5-r0p75        59%   58%     940     4,245  1.04   100%
+  38  level0p62_atr2-r0p5           59%   60%     762   -26,918  0.93    20%
+  39  level0p79_own1-r0p75          58%   58%     938     4,433  1.02   100%
+  40  level0p5_pts60-r0p75          58%   54%     624    40,824  1.16   100%
+  41  level0p5_atr1-r0p75           58%   54%     632    38,117  1.19   100%
+  42  level0p5_pts40-r0p75          57%   56%     630    14,475  1.08   100%
+  43  level0p5_atr1p5-r0p75         57%   52%     625    59,295  1.22   100%
+  44  level0p62_pts25-r0p75         57%   58%     793    -3,697  0.98    80%
+  45  level0p5_own2-r0p75           57%   52%     609    88,124  1.24   100%
+  46  level0p79_pts25-r0p75         57%   58%     935    -5,310  0.97    80%
+  47  level0p62_own0p5-r0p75        57%   56%     798     6,348  1.04   100%
+  48  level0p5_atr2-r0p75           57%   52%     620    58,565  1.18   100%
+  49  level0p79_pts15-r0p75         57%   58%     938    -8,237  0.93   100%
+  50  level0p62_atr0p5-r0p75        57%   56%     798     2,108  1.01   100%
+  51  level0p62_atr1-r0p75          56%   55%     784    13,629  1.05   100%
+  52  level0p5_own1p5-r0p75         56%   52%     615    59,175  1.17   100%
+  53  level0p62_own1-r0p75          56%   56%     779     7,494  1.03   100%
+  54  level0p62_pts15-r0p75         56%   58%     799    -8,661  0.92    70%
+  55  level0p5_own0p5-r0p75         56%   53%     633    25,178  1.15   100%
+  56  level0p5_pts25-r0p75          56%   58%     634    -9,346  0.93    30%
+  57  level0p5_own2-r1              56%   49%     606   109,821  1.30   100%
+  58  level0p62_pts40-r0p75         56%   57%     779   -10,431  0.96    30%
+  59  level0p5_own1-r0p75           56%   53%     625    35,910  1.12   100%
+  60  level0p5_pts15-r0p75          56%   58%     636    -9,329  0.89    50%
+  61  level0p79_atr1-r0p75          55%   57%     913   -17,737  0.94    20%
+  62  level0p79_own1p5-r0p75        55%   57%     932   -20,128  0.93    50%
+  63  level0p62_pts60-r0p75         55%   55%     764     8,024  1.02   100%
+  64  level0p79_pts60-r0p75         55%   56%     885   -20,475  0.95    30%
+  65  level0p5_own2-r1p5            55%   48%     604   123,834  1.33   100%
+  66  level0p5_own2-r2              55%   48%     603   110,403  1.29   100%
+  67  level0p62_own2-r0p75          55%   53%     756    27,561  1.06   100%
+  68  level0p5_own1p5-r1            55%   49%     612    85,937  1.24   100%
+  69  level0p5_atr0p5-r0p75         55%   56%     636    -5,389  0.96    70%
+  70  level0p79_pts40-r0p75         54%   57%     904   -32,891  0.89     0%
+  71  level0p5_pts60-r1             54%   49%     623    61,733  1.22   100%
+  72  level0p79_own2-r0p75          54%   57%     925   -44,620  0.88    20%
+  73  level0p79_atr1p5-r0p75        54%   56%     883   -42,717  0.90     0%
+  74  level0p62_own1p5-r0p75        53%   53%     768     1,688  1.00    90%
+  75  level0p5_atr1p5-r1            53%   48%     622    72,887  1.25   100%
+  76  level0p5_own1p5-r1p5          53%   46%     608   115,528  1.32   100%
+  77  level0p5_pts40-r1             53%   49%     629    34,734  1.16   100%
+  78  level0p5_atr2-r1              53%   49%     616    57,141  1.16   100%
+  79  level0p5_own1p5-r2            53%   46%     607   121,412  1.33   100%
+  80  level0p5_atr1-r1              53%   47%     632    54,667  1.25   100%
+  81  level0p5_own1-r1              53%   49%     622    52,022  1.16   100%
+  82  level0p79_atr0p5-r1           52%   51%     938     6,143  1.03   100%
+  83  level0p62_pts60-r1            52%   50%     759    35,554  1.10   100%
+  84  level0p5_own0p5-r1            52%   46%     631    47,921  1.25   100%
+  85  level0p79_own0p5-r1           52%   50%     940     9,735  1.08   100%
+  86  level0p62_atr2-r0p75          52%   53%     755   -20,920  0.95    60%
+  87  level0p62_atr1p5-r0p75        52%   54%     769   -29,316  0.92     0%
+  88  level0p5_pts25-r1             52%   50%     634     7,269  1.05   100%
+  89  level0p79_atr2-r0p75          52%   55%     864   -62,081  0.88     0%
+  90  level0p79_pts15-r1            51%   51%     938     1,898  1.01   100%
+  91  level0p79_own1-r1             51%   51%     937     3,072  1.01   100%
+  92  level0p62_own2-r1             51%   49%     749    32,524  1.07   100%
+  93  level0p62_own0p5-r1           51%   49%     796    13,526  1.08   100%
+  94  level0p5_atr2-r1p5            50%   47%     612    54,327  1.15   100%
+  95  level0p62_pts40-r1            50%   51%     775    -4,615  0.98   100%
+  96  level0p62_atr1-r1             50%   49%     778    20,843  1.07   100%
+  97  level0p5_atr2-r2              50%   45%     608    84,553  1.23   100%
+  98  level0p62_atr0p5-r1           50%   49%     796     8,331  1.05   100%
+  99  level0p62_own1-r1             50%   48%     776    20,651  1.06   100%
+ 100  level0p62_own1p5-r1           50%   49%     763     9,243  1.02    90%
+ 101  level0p5_pts60-r1p5           50%   45%     619    70,449  1.23   100%
+ 102  level0p62_atr2-r1             50%   49%     749     3,959  1.01    80%
+ 103  level0p79_pts25-r1            50%   51%     925   -10,850  0.95    70%
+ 104  level0p5_own1-r1p5            49%   44%     617    79,952  1.24   100%
+ 105  level0p62_pts25-r1            49%   51%     790   -14,785  0.93    20%
+ 106  level0p62_own2-r1p5           49%   46%     746    65,501  1.14   100%
+ 107  level0p79_pts40-r1            49%   51%     895   -31,240  0.91     0%
+ 108  level0p79_pts60-r1            49%   52%     878   -50,407  0.89     0%
+ 109  level0p5_atr1p5-r1p5          49%   44%     617    66,747  1.21   100%
+ 110  level0p62_pts15-r1            49%   51%     799   -12,051  0.90    50%
+ 111  level0p79_atr1-r1             49%   51%     901   -29,994  0.92    10%
+ 112  level0p5_atr0p5-r1            48%   48%     633     1,488  1.01   100%
+ 113  level0p62_atr1p5-r1           48%   49%     764    -8,666  0.98    70%
+ 114  level0p5_pts60-r2             48%   42%     618    89,863  1.29   100%
+ 115  level0p5_pts15-r1             48%   51%     635   -10,820  0.89    50%
+ 116  level0p62_own2-r2             48%   45%     746    60,091  1.13   100%
+ 117  level0p79_atr2-r1             48%   51%     862   -58,858  0.89     0%
+ 118  level0p5_own1-r2              48%   42%     614    98,929  1.29   100%
+ 119  level0p79_own2-r1             47%   50%     910   -38,685  0.90    30%
+ 120  level0p79_atr1p5-r1           47%   51%     875   -59,950  0.87     0%
+ 121  level0p5_pts40-r1p5           47%   42%     626    56,396  1.24   100%
+ 122  level0p79_own1p5-r1           47%   51%     929   -45,666  0.86     0%
+ 123  level0p5_atr1-r1p5            47%   40%     627    88,257  1.36   100%
+ 124  level0p62_pts60-r1p5          47%   45%     752    40,337  1.11   100%
+ 125  level0p5_atr1p5-r2            47%   42%     614    67,844  1.20   100%
+ 126  level0p62_atr2-r1p5           47%   46%     745    22,025  1.05   100%
+ 127  level0p62_atr2-r2             46%   44%     745    33,945  1.07    80%
+ 128  level0p62_pts40-r1p5          45%   43%     771    29,896  1.10   100%
+ 129  level0p79_atr2-r1p5           45%   48%     856   -50,134  0.91     0%
+ 130  level0p62_pts60-r2            45%   43%     749    44,084  1.11   100%
+ 131  level0p5_pts25-r1p5           45%   41%     631    29,266  1.17   100%
+ 132  level0p62_atr1p5-r1p5         45%   44%     756    23,936  1.06   100%
+ 133  level0p62_own1p5-r1p5         45%   44%     756    18,371  1.04    80%
+ 134  level0p5_pts40-r2             44%   39%     622    67,347  1.27   100%
+ 135  level0p62_own1-r1p5           44%   41%     772    42,622  1.12   100%
+ 136  level0p62_atr1-r1p5           44%   42%     773    36,428  1.11   100%
+ 137  level0p79_atr2-r2             44%   46%     856   -47,329  0.92     0%
+ 138  level0p62_own1p5-r2           44%   42%     754    40,609  1.09   100%
+ 139  level0p5_atr1-r2              44%   37%     624    84,044  1.32   100%
+ 140  level0p79_pts60-r1p5          44%   47%     872   -59,923  0.88     0%
+ 141  level0p79_atr1p5-r1p5         43%   46%     871   -49,094  0.90     0%
+ 142  level0p62_atr1p5-r2           43%   41%     754    40,974  1.09   100%
+ 143  level0p5_own0p5-r1p5          43%   39%     630    36,075  1.16   100%
+ 144  level0p62_own0p5-r1p5         42%   39%     793    27,953  1.13   100%
+ 145  level0p79_own0p5-r1p5         42%   41%     939     8,609  1.06   100%
+ 146  level0p79_atr0p5-r1p5         42%   42%     929      -266  1.00   100%
+ 147  level0p79_pts15-r1p5          42%   41%     934     3,664  1.02   100%
+ 148  level0p62_pts25-r1p5          42%   42%     786    -3,909  0.98   100%
+ 149  level0p79_pts60-r2            41%   45%     866   -67,074  0.87     0%
+ 150  level0p62_atr0p5-r1p5         41%   39%     794    22,129  1.12   100%
+ 151  level0p79_atr1p5-r2           41%   44%     867   -47,048  0.91     0%
+ 152  level0p62_pts40-r2            41%   39%     767    30,182  1.09   100%
+ 153  level0p79_pts40-r1p5          41%   45%     887   -53,893  0.86     0%
+ 154  level0p79_own1-r1p5           41%   41%     934    -4,286  0.98    80%
+ 155  level0p62_atr1-r2             41%   38%     767    53,102  1.16   100%
+ 156  level0p5_atr0p5-r1p5          40%   39%     633     7,238  1.05   100%
+ 157  level0p62_pts15-r1p5          40%   41%     796    -6,479  0.96   100%
+ 158  level0p5_pts15-r1p5           40%   41%     634    -4,311  0.96   100%
+ 159  level0p79_pts25-r1p5          40%   43%     917   -28,508  0.90     0%
+ 160  level0p79_atr1-r1p5           40%   44%     888   -54,032  0.87     0%
+ 161  level0p62_own1-r2             40%   37%     766    42,171  1.11   100%
+ 162  level0p5_pts25-r2             40%   36%     629    36,584  1.20   100%
+ 163  level0p79_own2-r1p5           40%   44%     894   -67,011  0.85     0%
+ 164  level0p5_own0p5-r2            39%   35%     627    44,552  1.18   100%
+ 165  level0p79_own1p5-r1p5         39%   42%     911   -48,924  0.87     0%
+ 166  level0p79_pts40-r2            38%   41%     882   -51,998  0.87     0%
+ 167  level0p79_own2-r2             37%   40%     890   -47,120  0.90     0%
+ 168  level0p62_pts25-r2            37%   37%     785     3,110  1.01   100%
+ 169  level0p62_own0p5-r2           37%   33%     790    43,680  1.20   100%
+ 170  level0p79_atr0p5-r2           36%   36%     921     4,121  1.02   100%
+ 171  level0p79_atr1-r2             36%   40%     886   -54,634  0.87     0%
+ 172  level0p5_pts15-r2             36%   35%     633     8,438  1.07   100%
+ 173  level0p62_atr0p5-r2           36%   33%     791    30,906  1.15   100%
+ 174  level0p79_own0p5-r2           36%   34%     939    10,849  1.07   100%
+ 175  level0p79_pts25-r2            36%   38%     912   -25,948  0.91    10%
+ 176  level0p5_atr0p5-r2            35%   33%     633     9,973  1.06   100%
+ 177  level0p79_own1-r2             35%   35%     928    -9,347  0.97    60%
+ 178  level0p79_pts15-r2            35%   36%     929    -7,961  0.96   100%
+ 179  level0p62_pts15-r2            34%   35%     795    -5,955  0.96   100%
+ 180  level0p79_own1p5-r2           34%   38%     904   -64,656  0.84     0%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i51_pullback_15_ny <n> (blueprint_wf_pick).

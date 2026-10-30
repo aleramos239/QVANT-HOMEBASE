@@ -1,0 +1,32 @@
+{
+ "name": "vh_i24_gc_touch_5_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 24: The first return to the VWAP after a run away meets the execution algorithms that benchmark to it. Who loses: those who chased the run.",
+ "family": "vwap_touch",
+ "markets": [
+  "GC"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "away": [
+   30,
+   60,
+   90
+  ]
+ },
+ "fixed": {
+  "anchor": "us",
+  "near": 2
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

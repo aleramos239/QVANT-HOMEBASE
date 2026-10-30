@@ -1,0 +1,142 @@
+2026-10-21T09:26:01+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers)
+2026-10-21T09:26:01+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers): days 1-60 of 883 (360 instances)
+2026-10-21T09:26:49+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers): days 61-120 of 883 (360 instances)
+2026-10-21T09:27:37+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers): days 121-180 of 883 (360 instances)
+2026-10-21T09:28:25+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers): days 181-240 of 883 (360 instances)
+2026-10-21T09:29:14+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers): days 241-300 of 883 (360 instances)
+2026-10-21T09:30:02+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers): days 301-360 of 883 (360 instances)
+2026-10-21T09:30:50+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers): days 361-420 of 883 (360 instances)
+2026-10-21T09:31:36+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers): days 421-480 of 883 (360 instances)
+2026-10-21T09:32:24+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers): days 481-540 of 883 (360 instances)
+2026-10-21T09:33:12+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers): days 541-600 of 883 (360 instances)
+2026-10-21T09:34:02+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers): days 601-660 of 883 (360 instances)
+2026-10-21T09:34:49+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers): days 661-720 of 883 (360 instances)
+2026-10-21T09:35:38+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers): days 721-780 of 883 (360 instances)
+2026-10-21T09:36:26+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers): days 781-840 of 883 (360 instances)
+2026-10-21T09:37:14+00:00 idea vh_i15_touch_ext_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i15_touch_ext_5_ny-NQ-tf5/is; 3 workers): days 841-883 of 883 (360 instances)
+2026-10-21T09:37:49+00:00 wf_is vh_i15_touch_ext_5_ny-NQ-tf5/is: 120 cells, 160,861 trades, 706.89 s of tape (wall 708 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i15_touch_ext_5_ny: 120 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  linepdl_atr2-r0p5             67%   66%    1265    31,845  1.06   100%
+   2  linepdl_atr1p5-r0p5           67%   66%    1314    24,019  1.06   100%
+   3  linepdh_atr1-r0p5             67%   66%    1251     9,846  1.04   100%
+   4  lineonh_atr1p5-r0p5           67%   66%    1568    16,293  1.03   100%
+   5  linepdh_pts25-r0p5            67%   67%    1254    -5,451  0.97    90%
+   6  linepdh_atr1p5-r0p5           67%   65%    1237    26,542  1.07   100%
+   7  linepdl_pts40-r0p5            67%   67%    1346    -2,454  0.99    90%
+   8  lineonh_pts60-r0p5            66%   66%    1552    19,347  1.03   100%
+   9  linepdl_atr1-r0p5             66%   67%    1343    -6,412  0.98    80%
+  10  linepdl_pts60-r0p5            66%   66%    1290     2,525  1.01   100%
+  11  lineonh_pts40-r0p5            66%   67%    1608   -12,702  0.97    80%
+  12  lineonh_atr1-r0p5             66%   67%    1602   -12,808  0.96    70%
+  13  linepdh_pts40-r0p5            66%   67%    1254   -14,946  0.96    50%
+  14  linepdl_pts25-r0p5            66%   67%    1346   -16,454  0.93    30%
+  15  linepdh_atr2-r0p5             66%   65%    1190    20,715  1.04   100%
+  16  linepdl_atr0p5-r0p5           66%   67%    1346    -8,639  0.94   100%
+  17  lineonh_atr2-r0p5             66%   66%    1506    -9,874  0.98    70%
+  18  linepdh_atr0p5-r0p5           65%   68%    1254   -15,036  0.90    40%
+  19  linepdl_pts15-r0p5            65%   68%    1346   -15,374  0.89    70%
+  20  lineonh_pts25-r0p5            65%   67%    1609   -25,281  0.91    20%
+  21  linepdh_pts15-r0p5            65%   68%    1254   -17,421  0.87    50%
+  22  lineonh_atr0p5-r0p5           65%   68%    1608   -27,607  0.86     0%
+  23  linepdh_pts60-r0p5            64%   66%    1215   -45,790  0.91    10%
+  24  lineonh_pts15-r0p5            64%   68%    1609   -31,721  0.82     0%
+  25  lineonh_atr2-r0p75            58%   56%    1458    70,668  1.10   100%
+  26  linepdl_atr2-r0p75            58%   56%    1216    47,031  1.08   100%
+  27  linepdl_atr1p5-r0p75          58%   57%    1297    25,602  1.05   100%
+  28  linepdh_atr1p5-r0p75          58%   56%    1214    34,019  1.07   100%
+  29  lineonh_pts40-r0p75           58%   57%    1608    11,783  1.02   100%
+  30  lineonh_pts60-r0p75           58%   56%    1534    34,544  1.05   100%
+  31  linepdh_atr1-r0p75            58%   56%    1248    26,798  1.08   100%
+  32  linepdl_pts60-r0p75           57%   57%    1278    11,183  1.02   100%
+  33  lineonh_atr1p5-r0p75          57%   57%    1549    13,539  1.02   100%
+  34  linepdl_pts40-r0p75           57%   57%    1346    -4,054  0.99   100%
+  35  linepdh_pts25-r0p75           57%   58%    1254    -8,716  0.97    90%
+  36  linepdh_pts40-r0p75           57%   57%    1254    -8,321  0.98    80%
+  37  linepdl_atr1-r0p75            57%   57%    1340    -8,050  0.98    90%
+  38  lineonh_pts25-r0p75           56%   58%    1609   -21,491  0.94    60%
+  39  lineonh_atr1-r0p75            56%   57%    1597   -12,138  0.97    90%
+  40  linepdh_atr0p5-r0p75          56%   58%    1254   -14,386  0.92    60%
+  41  linepdl_pts25-r0p75           56%   58%    1346   -23,534  0.92    20%
+  42  linepdh_pts15-r0p75           56%   58%    1254   -18,166  0.89    20%
+  43  linepdl_pts15-r0p75           55%   58%    1346   -20,959  0.89    10%
+  44  linepdh_atr2-r0p75            55%   56%    1133   -14,472  0.98    50%
+  45  lineonh_atr0p5-r0p75          55%   59%    1608   -35,452  0.86     0%
+  46  linepdh_pts60-r0p75           55%   57%    1196   -52,329  0.91    10%
+  47  lineonh_pts15-r0p75           55%   58%    1609   -31,821  0.86     0%
+  48  linepdl_atr0p5-r0p75          55%   57%    1346   -20,224  0.90    30%
+  49  lineonh_atr2-r1               52%   50%    1402    81,222  1.10   100%
+  50  linepdl_atr1p5-r1             52%   50%    1261    56,781  1.10   100%
+  51  lineonh_pts60-r1              52%   50%    1481    52,491  1.07   100%
+  52  lineonh_atr1p5-r1             52%   49%    1519    63,919  1.09   100%
+  53  linepdl_pts60-r1              51%   51%    1207     3,837  1.01    90%
+  54  linepdl_atr2-r1               51%   49%    1158    51,628  1.08   100%
+  55  lineonh_pts40-r1              51%   50%    1608    20,353  1.03   100%
+  56  linepdh_atr1-r1               51%   50%    1246    21,156  1.05   100%
+  57  linepdl_pts40-r1              50%   51%    1346    -5,244  0.99   100%
+  58  linepdh_pts25-r1              50%   51%    1254    -6,311  0.98    90%
+  59  lineonh_pts25-r1              50%   51%    1609   -10,181  0.98    90%
+  60  linepdl_atr1-r1               50%   50%    1331    -6,859  0.98   100%
+  61  linepdh_pts40-r1              50%   51%    1254   -17,416  0.96    70%
+  62  linepdh_pts60-r1              50%   51%    1125   -27,675  0.96    60%
+  63  linepdl_pts25-r1              49%   51%    1346   -15,804  0.95    70%
+  64  lineonh_atr0p5-r1             49%   51%    1608   -19,367  0.93    70%
+  65  linepdh_atr2-r1               49%   50%    1092    -4,293  0.99    70%
+  66  linepdh_atr1p5-r1             49%   50%    1176    -6,604  0.99    90%
+  67  lineonh_atr1-r1               49%   50%    1592   -20,663  0.96    70%
+  68  linepdh_atr0p5-r1             49%   50%    1254   -10,171  0.95   100%
+  69  lineonh_pts15-r1              49%   51%    1609   -24,971  0.90    20%
+  70  linepdl_atr0p5-r1             48%   50%    1346   -19,199  0.92    60%
+  71  linepdh_pts15-r1              48%   51%    1254   -25,151  0.88     0%
+  72  linepdl_pts15-r1              47%   51%    1346   -30,044  0.86     0%
+  73  linepdl_atr2-r1p5             44%   43%    1094    43,519  1.06   100%
+  74  lineonh_atr2-r1p5             44%   43%    1319    54,354  1.06   100%
+  75  linepdl_pts60-r1p5            44%   44%    1129       704  1.00   100%
+  76  lineonh_pts60-r1p5            44%   43%    1376    39,511  1.05   100%
+  77  linepdh_pts60-r1p5            44%   44%    1067       212  1.00   100%
+  78  linepdh_atr2-r1p5             43%   42%    1042    32,747  1.05   100%
+  79  linepdl_pts40-r1p5            43%   42%    1287    11,277  1.02   100%
+  80  lineonh_atr1p5-r1p5           42%   41%    1435    59,775  1.08   100%
+  81  lineonh_pts40-r1p5            42%   41%    1558    31,328  1.04   100%
+  82  linepdl_atr1p5-r1p5           42%   40%    1180    41,040  1.07   100%
+  83  linepdh_pts40-r1p5            42%   42%    1191   -11,509  0.98    60%
+  84  linepdh_atr1p5-r1p5           41%   41%    1126     9,576  1.02   100%
+  85  linepdl_atr1-r1p5             41%   41%    1303    12,213  1.02   100%
+  86  lineonh_atr2-r2               41%   39%    1287   100,267  1.11   100%
+  87  lineonh_pts25-r1p5            41%   41%    1609     5,504  1.01   100%
+  88  lineonh_atr1-r1p5             41%   40%    1563    24,798  1.04   100%
+  89  lineonh_pts60-r2              41%   38%    1339    97,034  1.11   100%
+  90  linepdl_atr2-r2               41%   39%    1067    42,467  1.06   100%
+  91  linepdl_pts60-r2              40%   40%    1097    18,322  1.02   100%
+  92  linepdl_pts25-r1p5            40%   41%    1346   -10,679  0.97    90%
+  93  linepdh_pts60-r2              40%   39%    1032    31,167  1.05   100%
+  94  linepdh_atr1-r1p5             40%   41%    1207   -15,173  0.97    80%
+  95  linepdh_pts25-r1p5            40%   41%    1254   -20,651  0.95    80%
+  96  linepdh_atr2-r2               39%   39%    1018    27,693  1.04    90%
+  97  lineonh_pts15-r1p5            39%   41%    1609   -20,556  0.93    90%
+  98  lineonh_atr0p5-r1p5           39%   41%    1607   -31,648  0.91    40%
+  99  linepdh_pts15-r1p5            39%   41%    1254   -22,681  0.90    40%
+ 100  linepdl_atr0p5-r1p5           39%   40%    1345   -17,230  0.94    60%
+ 101  linepdh_atr0p5-r1p5           38%   39%    1253    -8,002  0.97   100%
+ 102  linepdl_pts15-r1p5            38%   41%    1346   -28,324  0.89    10%
+ 103  linepdl_pts40-r2              38%   37%    1237    32,767  1.05   100%
+ 104  linepdh_pts40-r2              38%   37%    1160    21,360  1.04   100%
+ 105  linepdl_atr1p5-r2             37%   36%    1147    32,052  1.05   100%
+ 106  linepdh_atr1p5-r2             37%   36%    1092    35,817  1.06   100%
+ 107  lineonh_atr1p5-r2             37%   36%    1385    44,535  1.06   100%
+ 108  lineonh_pts40-r2              37%   36%    1491    32,456  1.04   100%
+ 109  lineonh_atr1-r2               35%   33%    1520    49,995  1.08   100%
+ 110  linepdl_atr1-r2               35%   34%    1265    17,960  1.03   100%
+ 111  linepdl_pts25-r2              35%   35%    1329    -4,841  0.99    90%
+ 112  lineonh_pts25-r2              35%   34%    1594     3,299  1.01   100%
+ 113  linepdh_atr1-r2               34%   35%    1174    -5,946  0.99   100%
+ 114  linepdh_pts25-r2              34%   35%    1237   -21,088  0.95    80%
+ 115  lineonh_pts15-r2              33%   34%    1609   -15,541  0.95   100%
+ 116  linepdl_atr0p5-r2             33%   33%    1339    -8,141  0.97   100%
+ 117  linepdl_pts15-r2              32%   34%    1346   -26,939  0.90    50%
+ 118  linepdh_atr0p5-r2             32%   33%    1252    -8,323  0.97   100%
+ 119  linepdh_pts15-r2              32%   34%    1254   -25,686  0.90    50%
+ 120  lineonh_atr0p5-r2             31%   34%    1605   -46,500  0.88    10%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i15_touch_ext_5_ny <n> (blueprint_wf_pick).

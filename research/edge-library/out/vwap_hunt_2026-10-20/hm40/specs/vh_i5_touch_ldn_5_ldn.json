@@ -1,0 +1,30 @@
+{
+ "name": "vh_i5_touch_ldn_5_ldn",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 5: The first return to the VWAP after a run away meets the execution algorithms that benchmark to it. Who loses: those who chased the run.",
+ "family": "vwap_touch",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "london"
+ ],
+ "params": {
+  "away": [
+   80,
+   160,
+   240
+  ]
+ },
+ "fixed": {
+  "anchor": "london",
+  "near": 3
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

@@ -1,0 +1,32 @@
+{
+ "name": "vh_i11_flip_gx_5_ny",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 11: Two anchors agree: the day session's and the whole Globex day's average buyers on the same side. Who loses: the side trapped against both.",
+ "family": "avwap_flip",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "hold": [
+   1,
+   2,
+   3
+  ]
+ },
+ "fixed": {
+  "line": "rth",
+  "also": "globex"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

@@ -1,0 +1,2802 @@
+[
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 4,
+"box": "off_min15_pts40-r0p5",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 5,
+"box": "off_min15_pts60-r0p5",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 9,
+"box": "off_min15_pts25-r0p5",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 14,
+"box": "off_min15_own0p5-r0p5",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 16,
+"box": "off_min15_pts15-r0p5",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 29,
+"box": "off_min15_own1-r0p5",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 32,
+"box": "off_min15_pts40-r0p75",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 38,
+"box": "off_min15_pts60-r0p75",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 41,
+"box": "off_min15_pts25-r0p75",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 44,
+"box": "off_min15_pts15-r0p75",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 46,
+"box": "off_min15_own1p5-r0p5",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 51,
+"box": "off_min15_own0p5-r0p75",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 62,
+"box": "off_min15_own2-r0p5",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 63,
+"box": "off_min15_own1-r0p75",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 70,
+"box": "off_min15_own2-r0p75",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 72,
+"box": "off_min15_own1p5-r0p75",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 75,
+"box": "off_min15_own2-r1",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 77,
+"box": "off_min15_own2-r1p5",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 78,
+"box": "off_min15_own2-r2",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 81,
+"box": "off_min15_pts40-r1",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 84,
+"box": "off_min15_own1p5-r1",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 89,
+"box": "off_min15_own1p5-r1p5",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 92,
+"box": "off_min15_own1p5-r2",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 95,
+"box": "off_min15_pts60-r1",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 97,
+"box": "off_min15_own1-r1",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 100,
+"box": "off_min15_pts15-r1",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 106,
+"box": "off_min15_own0p5-r1",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 107,
+"box": "off_min15_pts25-r1",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 117,
+"box": "off_min15_own1-r1p5",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 120,
+"box": "off_min15_own1-r2",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 127,
+"box": "off_min15_own0p5-r1p5",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 134,
+"box": "off_min15_pts60-r1p5",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 135,
+"box": "off_min15_pts40-r1p5",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 136,
+"box": "off_min15_own0p5-r2",
+"var": "off_min15",
+"kind": "own"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 137,
+"box": "off_min15_pts15-r1p5",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 140,
+"box": "off_min15_pts25-r1p5",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 152,
+"box": "off_min15_pts60-r2",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 163,
+"box": "off_min15_pts40-r2",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 164,
+"box": "off_min15_pts15-r2",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b018_pd_bracket_on",
+"n": 170,
+"box": "off_min15_pts25-r2",
+"var": "off_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 1,
+"box": "min_rng_atr2_pts40-r0p5",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 5,
+"box": "min_rng_atr2_pts25-r0p5",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 6,
+"box": "min_rng_atr2_pts60-r0p5",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 16,
+"box": "min_rng_atr2_own0p5-r0p5",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 23,
+"box": "min_rng_atr2_pts15-r0p5",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 28,
+"box": "min_rng_atr2_own1-r0p5",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 31,
+"box": "min_rng_atr2_own1p5-r0p5",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 34,
+"box": "min_rng_atr2_pts25-r0p75",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 37,
+"box": "min_rng_atr2_own0p5-r0p75",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 40,
+"box": "min_rng_atr2_pts40-r0p75",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 50,
+"box": "min_rng_atr2_pts15-r0p75",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 56,
+"box": "min_rng_atr2_own2-r0p5",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 61,
+"box": "min_rng_atr2_pts60-r0p75",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 64,
+"box": "min_rng_atr2_own1-r0p75",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 67,
+"box": "min_rng_atr2_own1p5-r0p75",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 70,
+"box": "min_rng_atr2_own2-r0p75",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 78,
+"box": "min_rng_atr2_pts15-r1",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 79,
+"box": "min_rng_atr2_pts25-r1",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 80,
+"box": "min_rng_atr2_pts40-r1",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 85,
+"box": "min_rng_atr2_pts60-r1",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 87,
+"box": "min_rng_atr2_own2-r1",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 90,
+"box": "min_rng_atr2_own0p5-r1",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 100,
+"box": "min_rng_atr2_own1p5-r1",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 101,
+"box": "min_rng_atr2_own2-r1p5",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 106,
+"box": "min_rng_atr2_own1-r1",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 107,
+"box": "min_rng_atr2_own2-r2",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 115,
+"box": "min_rng_atr2_own1p5-r1p5",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 118,
+"box": "min_rng_atr2_own1p5-r2",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 121,
+"box": "min_rng_atr2_own1-r1p5",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 124,
+"box": "min_rng_atr2_own1-r2",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 129,
+"box": "min_rng_atr2_pts15-r1p5",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 133,
+"box": "min_rng_atr2_pts40-r1p5",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 136,
+"box": "min_rng_atr2_own0p5-r1p5",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 137,
+"box": "min_rng_atr2_pts25-r1p5",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 143,
+"box": "min_rng_atr2_pts60-r1p5",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 155,
+"box": "min_rng_atr2_pts60-r2",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 160,
+"box": "min_rng_atr2_own0p5-r2",
+"var": "min_rng_atr2",
+"kind": "own"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 161,
+"box": "min_rng_atr2_pts40-r2",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 166,
+"box": "min_rng_atr2_pts15-r2",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b032_lon_break",
+"n": 169,
+"box": "min_rng_atr2_pts25-r2",
+"var": "min_rng_atr2",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 4,
+"box": "r_start0100_pts40-r0p5",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 5,
+"box": "r_start0100_pts15-r0p5",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 6,
+"box": "r_start0000_pts15-r0p5",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 7,
+"box": "r_start0000_pts40-r0p5",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 9,
+"box": "r_start0300_pts40-r0p5",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 11,
+"box": "r_start0100_pts25-r0p5",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 13,
+"box": "r_start0000_pts25-r0p5",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 14,
+"box": "r_start0300_pts25-r0p5",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 15,
+"box": "r_start0000_own0p5-r0p5",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 16,
+"box": "r_start0000_pts60-r0p5",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 17,
+"box": "r_start0100_own0p5-r0p5",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 18,
+"box": "r_start0300_own0p5-r0p5",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 19,
+"box": "r_start0300_pts15-r0p5",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 21,
+"box": "r_start0100_pts60-r0p5",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 22,
+"box": "r_start0300_pts60-r0p5",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 28,
+"box": "r_start0100_own1-r0p5",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 29,
+"box": "r_start0000_own1-r0p5",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 30,
+"box": "r_start0300_own1-r0p5",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 33,
+"box": "r_start0300_own1p5-r0p5",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 34,
+"box": "r_start0000_own1p5-r0p5",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 35,
+"box": "r_start0100_own1p5-r0p5",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 36,
+"box": "r_start0100_pts15-r0p75",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 37,
+"box": "r_start0000_pts15-r0p75",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 38,
+"box": "r_start0000_pts40-r0p75",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 40,
+"box": "r_start0100_pts25-r0p75",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 41,
+"box": "r_start0100_pts40-r0p75",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 42,
+"box": "r_start0000_pts25-r0p75",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 43,
+"box": "r_start0300_pts40-r0p75",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 44,
+"box": "r_start0300_pts15-r0p75",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 45,
+"box": "r_start0300_pts25-r0p75",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 46,
+"box": "r_start0000_own0p5-r0p75",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 47,
+"box": "r_start0100_own0p5-r0p75",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 53,
+"box": "r_start0300_own2-r0p5",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 55,
+"box": "r_start0300_own0p5-r0p75",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 57,
+"box": "r_start0000_pts60-r0p75",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 58,
+"box": "r_start0000_own2-r0p5",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 59,
+"box": "r_start0100_own2-r0p5",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 60,
+"box": "r_start0100_pts60-r0p75",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 63,
+"box": "r_start0300_pts60-r0p75",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 64,
+"box": "r_start0000_own1-r0p75",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 65,
+"box": "r_start0100_own1-r0p75",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 66,
+"box": "r_start0300_own1-r0p75",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 67,
+"box": "r_start0000_own1p5-r0p75",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 68,
+"box": "r_start0300_own1p5-r0p75",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 69,
+"box": "r_start0100_own1p5-r0p75",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 70,
+"box": "r_start0000_own2-r0p75",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 71,
+"box": "r_start0100_own2-r0p75",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 72,
+"box": "r_start0300_own2-r0p75",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 74,
+"box": "r_start0100_pts15-r1",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 75,
+"box": "r_start0000_own2-r1",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 76,
+"box": "r_start0100_own2-r1",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 77,
+"box": "r_start0000_pts15-r1",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 79,
+"box": "r_start0000_own1p5-r1",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 80,
+"box": "r_start0000_own2-r1p5",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 81,
+"box": "r_start0000_own2-r2",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 82,
+"box": "r_start0100_own1p5-r1",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 83,
+"box": "r_start0300_own2-r1",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 84,
+"box": "r_start0100_own2-r1p5",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 85,
+"box": "r_start0100_own2-r2",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 86,
+"box": "r_start0300_own1p5-r1",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 88,
+"box": "r_start0300_own2-r1p5",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 89,
+"box": "r_start0300_pts15-r1",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 90,
+"box": "r_start0000_own1p5-r1p5",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 91,
+"box": "r_start0300_own2-r2",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 92,
+"box": "r_start0000_own1-r1",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 93,
+"box": "r_start0000_own1p5-r2",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 94,
+"box": "r_start0100_own1p5-r1p5",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 95,
+"box": "r_start0100_own1-r1",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 97,
+"box": "r_start0100_own1p5-r2",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 98,
+"box": "r_start0100_pts60-r1",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 99,
+"box": "r_start0000_pts60-r1",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 100,
+"box": "r_start0300_own1-r1",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 103,
+"box": "r_start0000_pts40-r1",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 104,
+"box": "r_start0100_pts25-r1",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 105,
+"box": "r_start0300_own1p5-r1p5",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 106,
+"box": "r_start0300_pts60-r1",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 107,
+"box": "r_start0300_pts40-r1",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 109,
+"box": "r_start0100_own0p5-r1",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 110,
+"box": "r_start0100_pts40-r1",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 111,
+"box": "r_start0300_own1p5-r2",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 112,
+"box": "r_start0000_own0p5-r1",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 113,
+"box": "r_start0000_pts25-r1",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 116,
+"box": "r_start0300_own0p5-r1",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 117,
+"box": "r_start0300_pts25-r1",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 118,
+"box": "r_start0000_own1-r1p5",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 121,
+"box": "r_start0100_own1-r1p5",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 122,
+"box": "r_start0000_own1-r2",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 124,
+"box": "r_start0100_own1-r2",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 125,
+"box": "r_start0300_own1-r1p5",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 126,
+"box": "r_start0300_own1-r2",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 127,
+"box": "r_start0000_pts15-r1p5",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 128,
+"box": "r_start0100_pts15-r1p5",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 131,
+"box": "r_start0000_own0p5-r1p5",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 133,
+"box": "r_start0100_own0p5-r1p5",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 134,
+"box": "r_start0100_pts40-r1p5",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 135,
+"box": "r_start0000_pts40-r1p5",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 136,
+"box": "r_start0300_pts40-r1p5",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 137,
+"box": "r_start0300_pts15-r1p5",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 138,
+"box": "r_start0100_pts25-r1p5",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 139,
+"box": "r_start0000_pts60-r1p5",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 140,
+"box": "r_start0300_own0p5-r1p5",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 141,
+"box": "r_start0100_pts60-r1p5",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 142,
+"box": "r_start0300_pts60-r1p5",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 143,
+"box": "r_start0000_pts25-r1p5",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 144,
+"box": "r_start0300_pts25-r1p5",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 154,
+"box": "r_start0000_own0p5-r2",
+"var": "r_start0000",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 155,
+"box": "r_start0100_own0p5-r2",
+"var": "r_start0100",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 156,
+"box": "r_start0300_own0p5-r2",
+"var": "r_start0300",
+"kind": "own"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 159,
+"box": "r_start0000_pts60-r2",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 160,
+"box": "r_start0100_pts60-r2",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 161,
+"box": "r_start0000_pts15-r2",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 162,
+"box": "r_start0300_pts60-r2",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 164,
+"box": "r_start0100_pts15-r2",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 165,
+"box": "r_start0300_pts40-r2",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 166,
+"box": "r_start0100_pts25-r2",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 167,
+"box": "r_start0300_pts25-r2",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 168,
+"box": "r_start0100_pts40-r2",
+"var": "r_start0100",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 169,
+"box": "r_start0300_pts15-r2",
+"var": "r_start0300",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 170,
+"box": "r_start0000_pts40-r2",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b033_on_bracket",
+"n": 171,
+"box": "r_start0000_pts25-r2",
+"var": "r_start0000",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 1,
+"box": "r_start0800_pts25-r0p5",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 2,
+"box": "r_start0800_pts40-r0p5",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 5,
+"box": "r_start0800_pts15-r0p5",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 17,
+"box": "r_start0800_pts60-r0p5",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 29,
+"box": "r_start0800_own1-r0p5",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 31,
+"box": "r_start0800_own0p5-r0p5",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 35,
+"box": "r_start0800_own1p5-r0p5",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 36,
+"box": "r_start0800_own2-r0p5",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 37,
+"box": "r_start0800_pts15-r0p75",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 38,
+"box": "r_start0800_pts25-r0p75",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 45,
+"box": "r_start0800_pts40-r0p75",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 58,
+"box": "r_start0800_own1-r0p75",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 60,
+"box": "r_start0800_own2-r0p75",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 61,
+"box": "r_start0800_pts60-r0p75",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 68,
+"box": "r_start0800_own1p5-r0p75",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 70,
+"box": "r_start0800_own0p5-r0p75",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 73,
+"box": "r_start0800_own2-r1",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 75,
+"box": "r_start0800_pts15-r1",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 85,
+"box": "r_start0800_pts40-r1",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 88,
+"box": "r_start0800_own2-r1p5",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 89,
+"box": "r_start0800_pts25-r1",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 90,
+"box": "r_start0800_own1p5-r1",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 94,
+"box": "r_start0800_own1-r1",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 95,
+"box": "r_start0800_pts60-r1",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 100,
+"box": "r_start0800_own2-r2",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 109,
+"box": "r_start0800_own0p5-r1",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 113,
+"box": "r_start0800_own1p5-r1p5",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 116,
+"box": "r_start0800_own1p5-r2",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 119,
+"box": "r_start0800_own1-r1p5",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 123,
+"box": "r_start0800_pts25-r1p5",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 127,
+"box": "r_start0800_pts15-r1p5",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 131,
+"box": "r_start0800_pts40-r1p5",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 133,
+"box": "r_start0800_pts60-r1p5",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 134,
+"box": "r_start0800_own1-r2",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 143,
+"box": "r_start0800_own0p5-r1p5",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 155,
+"box": "r_start0800_pts60-r2",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 161,
+"box": "r_start0800_pts25-r2",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 163,
+"box": "r_start0800_pts15-r2",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 164,
+"box": "r_start0800_own0p5-r2",
+"var": "r_start0800",
+"kind": "own"
+},
+{
+"store": "nq_b039_pre_bracket",
+"n": 165,
+"box": "r_start0800_pts40-r2",
+"var": "r_start0800",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 1,
+"box": "r_end0400_own2-r0p5",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 2,
+"box": "r_end0400_pts15-r0p5",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 3,
+"box": "r_end0400_own1p5-r0p5",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 4,
+"box": "r_end0400_pts40-r0p5",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 9,
+"box": "r_end0400_own0p5-r0p5",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 12,
+"box": "r_end0400_pts25-r0p5",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 15,
+"box": "r_end0400_own1-r0p5",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 18,
+"box": "r_end0400_pts60-r0p5",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 37,
+"box": "r_end0400_own1-r0p75",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 38,
+"box": "r_end0400_own2-r0p75",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 39,
+"box": "r_end0400_own1p5-r0p75",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 42,
+"box": "r_end0400_pts15-r0p75",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 46,
+"box": "r_end0400_pts25-r0p75",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 48,
+"box": "r_end0400_pts60-r0p75",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 54,
+"box": "r_end0400_own0p5-r0p75",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 55,
+"box": "r_end0400_pts40-r0p75",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 70,
+"box": "r_end0400_own2-r1",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 73,
+"box": "r_end0400_own1p5-r1",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 74,
+"box": "r_end0400_own1-r1",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 77,
+"box": "r_end0400_pts60-r1",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 82,
+"box": "r_end0400_pts15-r1",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 84,
+"box": "r_end0400_own0p5-r1",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 89,
+"box": "r_end0400_pts25-r1",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 96,
+"box": "r_end0400_pts40-r1",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 108,
+"box": "r_end0400_own2-r1p5",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 113,
+"box": "r_end0400_own1-r1p5",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 114,
+"box": "r_end0400_own1p5-r1p5",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 116,
+"box": "r_end0400_own2-r2",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 118,
+"box": "r_end0400_own0p5-r1p5",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 120,
+"box": "r_end0400_pts60-r1p5",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 122,
+"box": "r_end0400_pts15-r1p5",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 124,
+"box": "r_end0400_pts40-r1p5",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 129,
+"box": "r_end0400_pts25-r1p5",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 137,
+"box": "r_end0400_own1p5-r2",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 141,
+"box": "r_end0400_own1-r2",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 152,
+"box": "r_end0400_own0p5-r2",
+"var": "r_end0400",
+"kind": "own"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 153,
+"box": "r_end0400_pts60-r2",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 159,
+"box": "r_end0400_pts40-r2",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 160,
+"box": "r_end0400_pts25-r2",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b041_london_kz_bracket",
+"n": 165,
+"box": "r_end0400_pts15-r2",
+"var": "r_end0400",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 1,
+"box": "sq_typeinside_pts40-r0p5",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 2,
+"box": "sq_typeinside_pts25-r0p5",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 3,
+"box": "sq_typeinside_own1-r0p5",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 12,
+"box": "sq_typeinside_pts15-r0p5",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 13,
+"box": "sq_typeinside_own0p5-r0p5",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 14,
+"box": "sq_typeinside_own1p5-r0p5",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 19,
+"box": "sq_typeinside_own2-r0p5",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 22,
+"box": "sq_typeinside_pts60-r0p5",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 31,
+"box": "sq_typeinside_pts25-r0p75",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 32,
+"box": "sq_typeinside_own0p5-r0p75",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 33,
+"box": "sq_typeinside_pts40-r0p75",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 37,
+"box": "sq_typeinside_own1-r0p75",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 38,
+"box": "sq_typeinside_pts15-r0p75",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 40,
+"box": "sq_typeinside_own1p5-r0p75",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 52,
+"box": "sq_typeinside_own2-r0p75",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 53,
+"box": "sq_typeinside_pts60-r0p75",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 61,
+"box": "sq_typeinside_pts25-r1",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 62,
+"box": "sq_typeinside_own0p5-r1",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 65,
+"box": "sq_typeinside_own1-r1",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 67,
+"box": "sq_typeinside_pts40-r1",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 69,
+"box": "sq_typeinside_pts15-r1",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 73,
+"box": "sq_typeinside_own2-r1",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 82,
+"box": "sq_typeinside_pts60-r1",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 84,
+"box": "sq_typeinside_own1p5-r1",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 97,
+"box": "sq_typeinside_pts15-r1p5",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 98,
+"box": "sq_typeinside_own0p5-r1p5",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 99,
+"box": "sq_typeinside_pts25-r1p5",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 101,
+"box": "sq_typeinside_pts40-r1p5",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 102,
+"box": "sq_typeinside_own1-r1p5",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 105,
+"box": "sq_typeinside_own1p5-r1p5",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 114,
+"box": "sq_typeinside_pts60-r1p5",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 115,
+"box": "sq_typeinside_own2-r1p5",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 127,
+"box": "sq_typeinside_pts60-r2",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 131,
+"box": "sq_typeinside_own0p5-r2",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 132,
+"box": "sq_typeinside_own2-r2",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 134,
+"box": "sq_typeinside_pts40-r2",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 137,
+"box": "sq_typeinside_own1-r2",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 138,
+"box": "sq_typeinside_pts25-r2",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 143,
+"box": "sq_typeinside_pts15-r2",
+"var": "sq_typeinside",
+"kind": "pts"
+},
+{
+"store": "nq_b044_squeeze",
+"n": 149,
+"box": "sq_typeinside_own1p5-r2",
+"var": "sq_typeinside",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 3,
+"box": "ib_min30_pts15-r0p5",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 5,
+"box": "ib_min15_pts15-r0p5",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 7,
+"box": "ib_min30_pts25-r0p5",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 8,
+"box": "ib_min30_pts40-r0p5",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 9,
+"box": "ib_min30_pts60-r0p5",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 10,
+"box": "ib_min30_own0p5-r0p5",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 12,
+"box": "ib_min15_pts25-r0p5",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 13,
+"box": "ib_min30_own1-r0p5",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 14,
+"box": "ib_min15_pts40-r0p5",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 16,
+"box": "ib_min15_own1-r0p5",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 17,
+"box": "ib_min15_pts60-r0p5",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 21,
+"box": "ib_min15_own0p5-r0p5",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 24,
+"box": "ib_min30_own1p5-r0p5",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 25,
+"box": "ib_min15_own1p5-r0p5",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 33,
+"box": "ib_min15_own2-r0p5",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 35,
+"box": "ib_min30_own2-r0p5",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 37,
+"box": "ib_min30_pts60-r0p75",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 38,
+"box": "ib_min15_pts15-r0p75",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 39,
+"box": "ib_min30_own1-r0p75",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 40,
+"box": "ib_min30_pts15-r0p75",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 43,
+"box": "ib_min15_pts60-r0p75",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 45,
+"box": "ib_min30_pts40-r0p75",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 46,
+"box": "ib_min30_pts25-r0p75",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 49,
+"box": "ib_min15_pts25-r0p75",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 51,
+"box": "ib_min30_own1p5-r0p75",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 52,
+"box": "ib_min15_pts40-r0p75",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 54,
+"box": "ib_min30_own0p5-r0p75",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 55,
+"box": "ib_min15_own1-r0p75",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 58,
+"box": "ib_min15_own1p5-r0p75",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 59,
+"box": "ib_min30_own2-r0p75",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 67,
+"box": "ib_min15_own0p5-r0p75",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 72,
+"box": "ib_min30_own1p5-r1",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 73,
+"box": "ib_min30_own2-r1",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 75,
+"box": "ib_min15_own2-r0p75",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 76,
+"box": "ib_min30_own2-r1p5",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 77,
+"box": "ib_min30_own2-r2",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 79,
+"box": "ib_min30_own1-r1",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 80,
+"box": "ib_min30_own1p5-r1p5",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 83,
+"box": "ib_min30_own1p5-r2",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 87,
+"box": "ib_min15_own1p5-r1",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 88,
+"box": "ib_min30_pts60-r1",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 89,
+"box": "ib_min15_own1-r1",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 90,
+"box": "ib_min15_own2-r1",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 93,
+"box": "ib_min15_pts40-r1",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 98,
+"box": "ib_min30_pts15-r1",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 99,
+"box": "ib_min30_pts25-r1",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 100,
+"box": "ib_min30_pts40-r1",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 101,
+"box": "ib_min15_own2-r1p5",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 102,
+"box": "ib_min15_pts15-r1",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 103,
+"box": "ib_min15_pts25-r1",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 104,
+"box": "ib_min30_own0p5-r1",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 106,
+"box": "ib_min15_own2-r2",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 108,
+"box": "ib_min30_own1-r1p5",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 109,
+"box": "ib_min15_own0p5-r1",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 111,
+"box": "ib_min15_pts60-r1",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 117,
+"box": "ib_min15_own1p5-r1p5",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 118,
+"box": "ib_min30_own1-r2",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 121,
+"box": "ib_min15_own1p5-r2",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 123,
+"box": "ib_min15_own1-r1p5",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 126,
+"box": "ib_min30_pts60-r1p5",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 130,
+"box": "ib_min15_own1-r2",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 131,
+"box": "ib_min15_pts60-r1p5",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 133,
+"box": "ib_min30_own0p5-r1p5",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 136,
+"box": "ib_min30_pts40-r1p5",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 138,
+"box": "ib_min15_pts25-r1p5",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 139,
+"box": "ib_min30_pts15-r1p5",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 142,
+"box": "ib_min15_pts40-r1p5",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 145,
+"box": "ib_min15_own0p5-r1p5",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 146,
+"box": "ib_min15_pts15-r1p5",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 150,
+"box": "ib_min30_pts60-r2",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 153,
+"box": "ib_min30_pts25-r1p5",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 154,
+"box": "ib_min15_pts60-r2",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 156,
+"box": "ib_min30_own0p5-r2",
+"var": "ib_min30",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 162,
+"box": "ib_min30_pts40-r2",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 163,
+"box": "ib_min15_own0p5-r2",
+"var": "ib_min15",
+"kind": "own"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 164,
+"box": "ib_min15_pts40-r2",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 168,
+"box": "ib_min15_pts25-r2",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 171,
+"box": "ib_min30_pts15-r2",
+"var": "ib_min30",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 172,
+"box": "ib_min15_pts15-r2",
+"var": "ib_min15",
+"kind": "pts"
+},
+{
+"store": "nq_b089_ib_break",
+"n": 173,
+"box": "ib_min30_pts25-r2",
+"var": "ib_min30",
+"kind": "pts"
+}
+]

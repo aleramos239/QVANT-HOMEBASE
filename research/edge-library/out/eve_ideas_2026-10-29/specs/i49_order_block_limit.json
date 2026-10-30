@@ -1,0 +1,31 @@
+{
+ "name": "i49_order_block_limit",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: limit at the open of the last opposite candle before a displacement",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "k": [
+   1.5,
+   2.0,
+   2.5
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "ob",
+  "ttl": 12
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

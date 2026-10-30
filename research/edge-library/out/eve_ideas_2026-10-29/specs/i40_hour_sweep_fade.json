@@ -1,0 +1,30 @@
+{
+ "name": "i40_hour_sweep_fade",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: fade a sweep of the first-hour range between 19:00 and 20:00",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "s_end": [
+   "20:00"
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "sweep",
+  "r_start": "18:00",
+  "r_end": "19:00"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

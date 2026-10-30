@@ -1,0 +1,27 @@
+{
+ "name": "vh_i59_vwapadx_15_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 59: An untried engine family on the hunt's own route (hm60, 3:1 in-sample, wide exits judged broadly). Who loses: as the family's own rationale.",
+ "family": "vwap_adx",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "adx_min": [
+   15.0,
+   20.0,
+   25.0
+  ]
+ },
+ "fixed": {},
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "long"
+ }
+}

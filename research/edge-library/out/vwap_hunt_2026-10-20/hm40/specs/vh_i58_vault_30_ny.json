@@ -1,0 +1,29 @@
+{
+ "name": "vh_i58_vault_30_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 58: An untried engine family on the hunt's own route (hm60, 3:1 in-sample, wide exits judged broadly). Who loses: as the family's own rationale.",
+ "family": "vault_break",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "30"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "k": [
+   0.2,
+   0.3,
+   0.4
+  ]
+ },
+ "fixed": {},
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

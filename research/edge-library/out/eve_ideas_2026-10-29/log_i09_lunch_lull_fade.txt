@@ -1,0 +1,68 @@
+3:1 IN-SAMPLE TABLE of i09_lunch_lull_fade: 60 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  r_end2230_atr1p5-r0p5         65%   64%     577     4,192  1.07   100%
+   2  r_end2230_atr1-r0p5           65%   68%     577    -5,113  0.89    20%
+   3  r_end2230_atr0p5-r0p5         64%   70%     577    -5,738  0.78    60%
+   4  r_end2230_pts15-r0p5          63%   63%     577        17  1.00   100%
+   5  r_end2230_atr2-r0p5           62%   61%     577     2,992  1.04    90%
+   6  r_end2230_own2-r0p5           60%   65%     577    -5,338  0.81    60%
+   7  r_end2230_own1p5-r0p5         59%   66%     577    -6,173  0.75    40%
+   8  r_end2230_pts25-r0p5          59%   58%     577     4,027  1.06   100%
+   9  r_end2230_own1-r0p5           58%   68%     577    -7,158  0.65    10%
+  10  r_end2230_own0p5-r0p5         58%   69%     577    -6,258  0.62    50%
+  11  r_end2230_atr1p5-r0p75        57%   55%     577     5,802  1.08    90%
+  12  r_end2230_atr0p5-r0p75        56%   60%     577    -4,998  0.84    90%
+  13  r_end2230_pts15-r0p75         56%   55%     577       632  1.01   100%
+  14  r_end2230_pts40-r0p5          56%   53%     577     6,997  1.10   100%
+  15  r_end2230_pts60-r0p5          55%   51%     577    13,627  1.18    90%
+  16  r_end2230_atr1-r0p75          55%   59%     577    -8,993  0.86    10%
+  17  r_end2230_atr2-r0p75          55%   52%     577     8,802  1.11    80%
+  18  r_end2230_pts25-r0p75         54%   53%     577     3,397  1.05   100%
+  19  r_end2230_pts60-r0p75         54%   51%     577    12,437  1.15    70%
+  20  r_end2230_pts40-r0p75         54%   51%     577     8,527  1.11   100%
+  21  r_end2230_own1p5-r0p75        53%   58%     577    -5,483  0.81    60%
+  22  r_end2230_pts60-r1            53%   51%     577     9,112  1.11    70%
+  23  r_end2230_own1-r0p75          53%   58%     577    -4,188  0.82    90%
+  24  r_end2230_pts40-r1            53%   51%     577     6,792  1.08   100%
+  25  r_end2230_own2-r0p75          53%   57%     577    -5,858  0.83    30%
+  26  r_end2230_pts60-r1p5          53%   51%     577     7,087  1.08    30%
+  27  r_end2230_pts60-r2            53%   51%     577     7,057  1.08    30%
+  28  r_end2230_pts25-r1            53%   51%     577     4,732  1.06   100%
+  29  r_end2230_pts40-r1p5          52%   50%     577     5,797  1.07    90%
+  30  r_end2230_pts40-r2            52%   50%     577     9,392  1.11    90%
+  31  r_end2230_atr2-r1             52%   51%     577     3,872  1.04    70%
+  32  r_end2230_pts15-r1            51%   51%     577       557  1.01    90%
+  33  r_end2230_atr1p5-r1           51%   48%     577     9,392  1.12    90%
+  34  r_end2230_pts25-r1p5          51%   50%     577     4,107  1.05   100%
+  35  r_end2230_own0p5-r0p75        51%   61%     577    -6,608  0.67    50%
+  36  r_end2230_atr2-r1p5           51%   50%     577     2,272  1.03    70%
+  37  r_end2230_atr2-r2             51%   51%     577       477  1.01    60%
+  38  r_end2230_pts25-r2            51%   50%     577     1,612  1.02    90%
+  39  r_end2230_atr0p5-r1           50%   53%     577    -4,168  0.89    80%
+  40  r_end2230_atr1-r1             49%   52%     577    -8,383  0.88    20%
+  41  r_end2230_pts15-r1p5          48%   47%     577     2,827  1.04   100%
+  42  r_end2230_atr1p5-r1p5         48%   47%     577     2,057  1.02    90%
+  43  r_end2230_pts15-r2            47%   46%     577     4,272  1.06   100%
+  44  r_end2230_atr1p5-r2           47%   47%     577     1,222  1.01    80%
+  45  r_end2230_own2-r1             46%   51%     577    -6,368  0.84    50%
+  46  r_end2230_own1p5-r1           46%   50%     577    -4,753  0.86    40%
+  47  r_end2230_own1-r1             45%   50%     577    -4,903  0.82    70%
+  48  r_end2230_own0p5-r1           43%   54%     577    -8,648  0.64    30%
+  49  r_end2230_atr1-r1p5           41%   42%     577    -3,603  0.95    60%
+  50  r_end2230_atr0p5-r1p5         39%   42%     577    -3,863  0.91   100%
+  51  r_end2230_own1p5-r1p5         39%   42%     577    -4,553  0.88    90%
+  52  r_end2230_atr1-r2             38%   40%     577    -7,393  0.91    30%
+  53  r_end2230_own2-r1p5           38%   41%     577    -5,748  0.87    40%
+  54  r_end2230_own1-r1p5           37%   41%     577    -4,298  0.86    60%
+  55  r_end2230_own0p5-r1p5         35%   43%     577    -7,738  0.71    80%
+  56  r_end2230_own2-r2             34%   35%     577    -3,333  0.93    40%
+  57  r_end2230_own1-r2             33%   34%     577    -1,503  0.95    80%
+  58  r_end2230_own1p5-r2           33%   35%     577    -4,028  0.90    60%
+  59  r_end2230_atr0p5-r2           32%   36%     577    -6,323  0.87   100%
+  60  r_end2230_own0p5-r2           31%   37%     577    -6,453  0.78   100%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+REAL OR LUCK (the only lines that block; PF, Sharpe, drawdown and avg trade are shown, never block):
+  [FAIL] boxes        30 of 60 boxes made money in-sample (need 60%): the average of the boxes, not the best
+  [ .. ] picked box   not picked yet: the owner picks a box, then the other lines are read
+NEXT: The owner picks a box by its number: bp.py wf pick i09_lunch_lull_fade <n> (blueprint_wf_pick).

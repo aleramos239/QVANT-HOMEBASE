@@ -1,0 +1,29 @@
+{
+ "name": "vh_i8_z_5_night",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 8: A stretch far from the average price reverts (the owner asked; fades have lost before). Who loses: the late chasers.",
+ "family": "vwap_z",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "asia",
+  "london",
+  "eve"
+ ],
+ "params": {
+  "zth": [
+   1.5,
+   2.0,
+   2.5
+  ]
+ },
+ "fixed": {},
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

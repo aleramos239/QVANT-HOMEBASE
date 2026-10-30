@@ -1,0 +1,22 @@
+hunt_dm_noise15_ny: 3:1 walk-forward in blocks, 15 test months (2022-01 .. 2026-09), 3 stood aside; test days read 2025-07-01 .. 2026-09-22
+stitched: 442 trades, net $-30,683, avg $-69, win 37.8 %, PF 0.86, worst DD $45,711; build-day months $-20,804 (396), test-day months $-9,879 (46)
+  P6.1 FAIL the 3:1 walk-forward made $-30,683 on its test months, one contract after costs (need above $0)
+  P6.2 FAIL beats 13.75 % of 4,000 random tables, each month its pick's exit cell (need above 95 %)
+  P6.3 FAIL win rate 37.78 % on 442 trades at a realized reward-to-risk of 1.41 (average win $1,090, average loss $773): breakeven 41.51 %, need 44.51 % or more (+3 points) (row P3.15 on the stitched months)
+  P6.4 PASS 442 trades on the test months (need 200)
+  2022-01  pts50-r1p5      46  $-864
+  2022-05  pts40-r1p5      39  $504
+  2022-09  pts40-r1p125    37  $5,232
+  2023-01  pts50-r1p2      38  $5,198
+  2023-05  pts30-r2p5      33  $4,958
+  2023-09  pts30-r2p5      39  $-14,916
+  2024-01  pts40-r1p5      39  $3,224
+  2024-05  pts50-r1p2      32  $-9,438
+  2024-09  pts40-r1p125    30  $-5,520
+  2025-01  pts40-r1p5      40  $-6,120
+  2025-05  pts40-r1p875    23  $-3,062
+  2025-09  stood aside      0  $0
+  2026-01  pts30-r2        46  $-9,879
+  2026-05  stood aside      0  $0
+  2026-09  stood aside      0  $0
+next month (2026-10): stand aside

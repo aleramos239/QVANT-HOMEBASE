@@ -1,0 +1,29 @@
+{
+ "name": "vh_i52_rsi2_5_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 52: An untried engine family on the hunt's own route (hm60, 3:1 in-sample, wide exits judged broadly). Who loses: as the family's own rationale.",
+ "family": "rsi2",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "th": [
+   5.0,
+   10.0,
+   15.0
+  ]
+ },
+ "fixed": {},
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

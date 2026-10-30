@@ -1,0 +1,35 @@
+{
+ "name": "vh_i7_orb_5_ny",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 7: An opening-range break that agrees with the day's average price is the day choosing a side. Who loses: the opening-range faders.",
+ "family": "win_break",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "r_end": [
+   "09:45",
+   "10:00",
+   "10:30"
+  ]
+ },
+ "fixed": {
+  "r_start": "09:30",
+  "entry": "market",
+  "mode": "follow",
+  "wait": "0",
+  "gate": "vwap_dev",
+  "g_lvl": 0.0,
+  "g_side": "with"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

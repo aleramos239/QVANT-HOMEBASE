@@ -1,0 +1,29 @@
+{
+ "name": "f100_pdc15",
+ "reason": "A fair value gap marks one-sided urgency that price tends to return to, so this tests: 15m, with the prior close side",
+ "family": "fvg_lab",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "min_gap": [
+   0.1,
+   0.25,
+   0.5
+  ]
+ },
+ "fixed": {
+  "side": "pdc"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

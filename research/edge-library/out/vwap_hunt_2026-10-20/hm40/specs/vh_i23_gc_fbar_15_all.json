@@ -1,0 +1,32 @@
+{
+ "name": "vh_i23_gc_fbar_15_all",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 23: The first bar of a session carries the session's opening flow: a decided first bar is followed. Who loses: the faders of the open.",
+ "family": "first_bar_mom",
+ "markets": [
+  "GC"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "asia",
+  "london",
+  "nyam",
+  "mid",
+  "pm",
+  "eve"
+ ],
+ "params": {
+  "k": [
+   0.5,
+   1.0,
+   1.5
+  ]
+ },
+ "fixed": {},
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

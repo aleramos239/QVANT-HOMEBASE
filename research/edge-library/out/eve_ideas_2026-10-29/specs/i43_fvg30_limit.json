@@ -1,0 +1,30 @@
+{
+ "name": "i43_fvg30_limit",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: 30m fair value gap limit (the 1h bar is not built)",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "30"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "min_gap": [
+   0.0,
+   0.1,
+   0.25
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "fvg"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

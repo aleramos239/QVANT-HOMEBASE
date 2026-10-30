@@ -1,0 +1,202 @@
+2026-10-21T09:52:13+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers)
+2026-10-21T09:52:13+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers): days 1-60 of 883 (540 instances)
+2026-10-21T09:52:41+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers): days 61-120 of 883 (540 instances)
+2026-10-21T09:53:07+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers): days 121-180 of 883 (540 instances)
+2026-10-21T09:53:33+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers): days 181-240 of 883 (540 instances)
+2026-10-21T09:54:00+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers): days 241-300 of 883 (540 instances)
+2026-10-21T09:54:28+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers): days 301-360 of 883 (540 instances)
+2026-10-21T09:54:57+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers): days 361-420 of 883 (540 instances)
+2026-10-21T09:55:26+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers): days 421-480 of 883 (540 instances)
+2026-10-21T09:55:55+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers): days 481-540 of 883 (540 instances)
+2026-10-21T09:56:24+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers): days 541-600 of 883 (540 instances)
+2026-10-21T09:56:52+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers): days 601-660 of 883 (540 instances)
+2026-10-21T09:57:20+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers): days 661-720 of 883 (540 instances)
+2026-10-21T09:57:46+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers): days 721-780 of 883 (540 instances)
+2026-10-21T09:58:15+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers): days 781-840 of 883 (540 instances)
+2026-10-21T09:58:41+00:00 idea vh_i16_emax_5_night, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i16_emax_5_night-NQ-tf5/is; 3 workers): days 841-883 of 883 (540 instances)
+2026-10-21T09:59:02+00:00 wf_is vh_i16_emax_5_night-NQ-tf5/is: 180 cells, 629,239 trades, 405.76 s of tape (wall 408 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i16_emax_5_night: 180 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  fast_n5_pts60-r0p5            68%   67%    2871    42,551  1.04   100%
+   2  fast_n9_pts60-r0p5            67%   67%    2535     4,775  1.00    90%
+   3  fast_n13_pts60-r0p5           67%   67%    2363    -1,337  1.00    90%
+   4  fast_n9_pts40-r0p5            67%   67%    2915   -14,240  0.98    80%
+   5  fast_n9_pts25-r0p5            67%   67%    3430   -20,430  0.96   100%
+   6  fast_n13_atr2-r0p5            66%   68%    3343   -42,677  0.92    50%
+   7  fast_n5_own2-r0p5             66%   66%    3459    -2,236  1.00   100%
+   8  fast_n5_atr2-r0p5             66%   67%    4286   -24,409  0.96    90%
+   9  fast_n13_pts25-r0p5           66%   67%    3088   -25,202  0.95   100%
+  10  fast_n9_atr2-r0p5             66%   67%    3722   -25,813  0.96    90%
+  11  fast_n9_own2-r0p5             66%   67%    3114   -13,286  0.98   100%
+  12  fast_n13_pts15-r0p5           66%   68%    3454   -29,411  0.92   100%
+  13  fast_n5_pts40-r0p5            66%   67%    3342   -47,678  0.95    80%
+  14  fast_n5_pts25-r0p5            66%   67%    3936   -46,614  0.93    80%
+  15  fast_n13_pts40-r0p5           66%   67%    2678   -44,187  0.94    40%
+  16  fast_n9_atr1p5-r0p5           66%   67%    3983   -31,927  0.93   100%
+  17  fast_n5_own1p5-r0p5           66%   66%    3895   -21,930  0.97   100%
+  18  fast_n13_own2-r0p5            66%   67%    2863   -63,847  0.92     0%
+  19  fast_n9_pts15-r0p5            66%   68%    3847   -42,953  0.90    90%
+  20  fast_n5_atr1p5-r0p5           65%   68%    4642   -55,793  0.90    50%
+  21  fast_n13_own1p5-r0p5          65%   68%    3177   -72,243  0.89     0%
+  22  fast_n9_own1p5-r0p5           65%   66%    3483   -37,292  0.95    70%
+  23  fast_n13_atr1p5-r0p5          65%   68%    3557   -65,598  0.86     0%
+  24  fast_n5_pts15-r0p5            65%   68%    4494   -65,896  0.87    70%
+  25  fast_n5_own1-r0p5             65%   66%    4513   -46,447  0.93    90%
+  26  fast_n13_own1-r0p5            65%   68%    3526   -67,709  0.87     0%
+  27  fast_n9_own1-r0p5             65%   67%    3930   -50,745  0.91    40%
+  28  fast_n13_atr1-r0p5            64%   69%    3667   -57,923  0.82    10%
+  29  fast_n9_atr1-r0p5             64%   68%    4116   -61,394  0.83    10%
+  30  fast_n5_atr1-r0p5             63%   68%    4887   -87,933  0.80     0%
+  31  fast_n9_own0p5-r0p5           63%   68%    4156   -63,024  0.80    40%
+  32  fast_n13_own0p5-r0p5          62%   69%    3697   -71,998  0.75     0%
+  33  fast_n5_own0p5-r0p5           62%   68%    4946   -91,889  0.77     0%
+  34  fast_n13_atr0p5-r0p5          61%   70%    3696   -57,619  0.69    30%
+  35  fast_n9_atr0p5-r0p5           60%   69%    4158   -71,652  0.66    10%
+  36  fast_n5_atr0p5-r0p5           59%   69%    4950   -86,585  0.65    10%
+  37  fast_n5_pts60-r0p75           58%   57%    2642    38,152  1.03   100%
+  38  fast_n9_pts40-r0p75           58%   58%    2750      -345  1.00   100%
+  39  fast_n13_pts40-r0p75          57%   58%    2550    -7,140  0.99   100%
+  40  fast_n9_atr2-r0p75            57%   58%    3586   -10,469  0.99    90%
+  41  fast_n9_pts25-r0p75           57%   58%    3268   -17,732  0.98   100%
+  42  fast_n5_atr2-r0p75            57%   58%    4063   -26,947  0.97    80%
+  43  fast_n13_pts25-r0p75          57%   58%    2975   -17,195  0.97   100%
+  44  fast_n5_own2-r0p75            57%   57%    3164    23,964  1.02   100%
+  45  fast_n9_own2-r0p75            57%   57%    2914    27,514  1.03   100%
+  46  fast_n9_pts15-r0p75           57%   58%    3784   -25,461  0.95   100%
+  47  fast_n9_pts60-r0p75           57%   57%    2374   -15,826  0.99    70%
+  48  fast_n5_pts40-r0p75           57%   58%    3105   -23,475  0.98    80%
+  49  fast_n13_atr2-r0p75           57%   58%    3254   -36,591  0.95    60%
+  50  fast_n13_own2-r0p75           57%   58%    2719   -48,486  0.95     0%
+  51  fast_n13_pts15-r0p75          57%   58%    3413   -30,802  0.93    90%
+  52  fast_n5_own1p5-r0p75          57%   57%    3627   -20,408  0.98    90%
+  53  fast_n13_atr1p5-r0p75         56%   59%    3522   -52,298  0.91    50%
+  54  fast_n9_atr1p5-r0p75          56%   58%    3922   -31,553  0.95    90%
+  55  fast_n13_pts60-r0p75          56%   57%    2208   -48,862  0.96    10%
+  56  fast_n13_own1-r0p75           56%   58%    3486   -41,739  0.93    50%
+  57  fast_n9_own1p5-r0p75          56%   57%    3310   -34,310  0.96    90%
+  58  fast_n5_atr1p5-r0p75          56%   58%    4535   -58,755  0.92    70%
+  59  fast_n5_own1-r0p75            56%   57%    4358   -36,582  0.95   100%
+  60  fast_n13_own1p5-r0p75         56%   58%    3053   -72,257  0.91     0%
+  61  fast_n5_pts25-r0p75           56%   58%    3716   -63,269  0.92    40%
+  62  fast_n9_own1-r0p75            56%   57%    3839   -20,346  0.97   100%
+  63  fast_n5_pts15-r0p75           55%   58%    4386   -69,579  0.89    30%
+  64  fast_n9_atr1-r0p75            55%   58%    4111   -47,434  0.89    70%
+  65  fast_n13_atr1-r0p75           55%   59%    3662   -65,193  0.84     0%
+  66  fast_n5_atr1-r0p75            54%   59%    4858   -90,667  0.83     0%
+  67  fast_n9_own0p5-r0p75          54%   57%    4156   -49,624  0.87   100%
+  68  fast_n5_own0p5-r0p75          53%   58%    4940   -86,125  0.82    10%
+  69  fast_n13_own0p5-r0p75         53%   59%    3696   -66,524  0.81     0%
+  70  fast_n13_atr0p5-r0p75         52%   60%    3696   -65,789  0.71     0%
+  71  fast_n9_atr0p5-r0p75          51%   60%    4156   -72,129  0.72    10%
+  72  fast_n9_own2-r1               51%   50%    2784    81,209  1.07   100%
+  73  fast_n5_pts60-r1              51%   50%    2526    60,236  1.04   100%
+  74  fast_n13_own2-r1              51%   50%    2619    51,724  1.05   100%
+  75  fast_n9_pts60-r1              51%   50%    2299    45,154  1.03   100%
+  76  fast_n13_pts60-r1             51%   50%    2149    12,044  1.01   100%
+  77  fast_n9_atr2-r1               51%   50%    3478     5,058  1.01   100%
+  78  fast_n9_pts25-r1              50%   51%    3171    -8,924  0.99    90%
+  79  fast_n13_pts15-r1             50%   51%    3372   -17,793  0.97    90%
+  80  fast_n13_atr2-r1              50%   51%    3155   -35,580  0.95    70%
+  81  fast_n9_pts15-r1              50%   51%    3728   -21,697  0.96    90%
+  82  fast_n9_pts40-r1              50%   50%    2637   -10,423  0.99    80%
+  83  fast_n13_pts25-r1             50%   51%    2892   -15,518  0.98    90%
+  84  fast_n5_atr0p5-r0p75          50%   60%    4950  -101,025  0.68     0%
+  85  fast_n5_atr1p5-r1             50%   51%    4444   -26,411  0.97   100%
+  86  fast_n5_own2-r1               50%   50%    2991       836  1.00   100%
+  87  fast_n5_atr2-r1               50%   50%    3900   -13,775  0.99    90%
+  88  fast_n13_atr1p5-r1            50%   51%    3485   -37,775  0.94    50%
+  89  fast_n5_pts40-r1              50%   50%    2950   -36,755  0.97    60%
+  90  fast_n13_own1-r1              50%   51%    3419   -44,736  0.94    50%
+  91  fast_n9_own1p5-r1             50%   49%    3191     3,481  1.00   100%
+  92  fast_n13_own1p5-r1            49%   51%    2965   -45,620  0.95    20%
+  93  fast_n9_atr1p5-r1             49%   51%    3857   -34,783  0.95    90%
+  94  fast_n5_own1-r1               49%   50%    4229   -27,266  0.97   100%
+  95  fast_n5_pts25-r1              49%   51%    3585   -49,350  0.95    40%
+  96  fast_n5_own1p5-r1             49%   50%    3446   -10,149  0.99   100%
+  97  fast_n9_own1-r1               49%   50%    3761   -20,989  0.97   100%
+  98  fast_n13_pts40-r1             49%   50%    2437   -51,798  0.95    30%
+  99  fast_n9_atr1-r1               49%   51%    4105   -46,900  0.91    70%
+ 100  fast_n13_atr1-r1              49%   52%    3660   -56,545  0.88    20%
+ 101  fast_n5_atr1-r1               48%   52%    4836   -90,109  0.85    10%
+ 102  fast_n5_pts15-r1              48%   51%    4303   -91,302  0.87     0%
+ 103  fast_n9_own0p5-r1             47%   50%    4153   -53,007  0.88    90%
+ 104  fast_n13_own0p5-r1            47%   52%    3696   -72,124  0.82     0%
+ 105  fast_n5_own0p5-r1             47%   51%    4931   -91,389  0.84     0%
+ 106  fast_n9_atr0p5-r1             46%   53%    4156   -69,464  0.76    20%
+ 107  fast_n13_atr0p5-r1            46%   53%    3695   -67,920  0.74     0%
+ 108  fast_n5_atr0p5-r1             44%   53%    4950   -99,585  0.72     0%
+ 109  fast_n9_own2-r1p5             42%   39%    2641   143,451  1.12   100%
+ 110  fast_n5_pts60-r1p5            42%   40%    2426   101,396  1.06   100%
+ 111  fast_n13_pts60-r1p5           41%   40%    2088    62,608  1.04    90%
+ 112  fast_n9_pts60-r1p5            41%   40%    2217    70,222  1.05    90%
+ 113  fast_n9_atr2-r1p5             41%   40%    3296    58,281  1.06   100%
+ 114  fast_n5_own2-r1p5             41%   40%    2786    76,126  1.05   100%
+ 115  fast_n9_pts40-r1p5            41%   40%    2518    44,258  1.04   100%
+ 116  fast_n13_pts15-r1p5           41%   41%    3305     4,155  1.01   100%
+ 117  fast_n5_atr2-r1p5             41%   41%    3669    20,229  1.02   100%
+ 118  fast_n13_pts40-r1p5           41%   40%    2350    26,005  1.02   100%
+ 119  fast_n13_atr2-r1p5            41%   41%    3029       899  1.00   100%
+ 120  fast_n13_own2-r1p5            41%   39%    2492    60,687  1.05   100%
+ 121  fast_n9_own1p5-r1p5           41%   39%    3023    60,378  1.05   100%
+ 122  fast_n5_pts40-r1p5            40%   40%    2776       826  1.00   100%
+ 123  fast_n13_own1-r1p5            40%   40%    3331    -2,924  1.00   100%
+ 124  fast_n9_pts25-r1p5            40%   41%    3042    -9,413  0.99   100%
+ 125  fast_n13_own1p5-r1p5          40%   40%    2852    36,517  1.04   100%
+ 126  fast_n5_pts25-r1p5            40%   41%    3396   -19,339  0.98    90%
+ 127  fast_n5_own1p5-r1p5           40%   40%    3222     1,452  1.00   100%
+ 128  fast_n13_atr1p5-r1p5          40%   41%    3412   -29,068  0.96    80%
+ 129  fast_n9_atr1p5-r1p5           40%   40%    3746     2,201  1.00   100%
+ 130  fast_n5_atr1p5-r1p5           40%   40%    4270    -6,120  0.99   100%
+ 131  fast_n9_pts15-r1p5            40%   41%    3635   -29,495  0.96    90%
+ 132  fast_n13_pts25-r1p5           40%   41%    2779   -28,456  0.97    80%
+ 133  fast_n5_own1-r1p5             40%   40%    4015   -11,430  0.99   100%
+ 134  fast_n9_own1-r1p5             40%   39%    3632     4,387  1.00   100%
+ 135  fast_n13_atr1-r1p5            39%   41%    3650   -42,740  0.92    70%
+ 136  fast_n5_atr1-r1p5             39%   41%    4786   -79,819  0.89    30%
+ 137  fast_n9_atr1-r1p5             39%   41%    4086   -53,169  0.91    60%
+ 138  fast_n5_pts15-r1p5            39%   41%    4177   -78,748  0.90     0%
+ 139  fast_n9_own0p5-r1p5           38%   41%    4133   -53,102  0.90    80%
+ 140  fast_n13_own0p5-r1p5          38%   41%    3688   -61,702  0.87    30%
+ 141  fast_n5_own0p5-r1p5           38%   41%    4891   -84,409  0.87    10%
+ 142  fast_n9_atr0p5-r1p5           37%   42%    4156   -60,269  0.82    60%
+ 143  fast_n13_atr0p5-r1p5          37%   43%    3695   -65,545  0.78    10%
+ 144  fast_n5_pts60-r2              35%   34%    2389    75,889  1.04   100%
+ 145  fast_n9_pts60-r2              35%   34%    2189    68,974  1.04   100%
+ 146  fast_n5_atr0p5-r1p5           35%   42%    4948  -101,462  0.75     0%
+ 147  fast_n13_pts15-r2             35%   34%    3260    21,960  1.03   100%
+ 148  fast_n13_pts60-r2             35%   34%    2067    30,457  1.02    70%
+ 149  fast_n9_pts40-r2              35%   34%    2456    61,151  1.05   100%
+ 150  fast_n5_own2-r2               35%   34%    2698    63,938  1.04   100%
+ 151  fast_n9_own1p5-r2             35%   33%    2928   103,513  1.09   100%
+ 152  fast_n5_atr2-r2               34%   34%    3520    26,840  1.02   100%
+ 153  fast_n13_atr2-r2              34%   34%    2946     7,871  1.01    90%
+ 154  fast_n9_own2-r2               34%   33%    2573   115,673  1.09   100%
+ 155  fast_n13_own1-r2              34%   33%    3278    41,383  1.05   100%
+ 156  fast_n9_atr2-r2               34%   33%    3193    45,693  1.05   100%
+ 157  fast_n5_atr1p5-r2             34%   34%    4111     9,871  1.01   100%
+ 158  fast_n13_pts40-r2             34%   34%    2305    17,235  1.01   100%
+ 159  fast_n5_own1p5-r2             34%   33%    3077    36,717  1.03   100%
+ 160  fast_n5_pts40-r2              34%   34%    2696    16,946  1.01    90%
+ 161  fast_n9_atr1p5-r2             34%   34%    3643    11,738  1.01   100%
+ 162  fast_n9_pts15-r2              34%   34%    3562   -15,588  0.98   100%
+ 163  fast_n13_own2-r2              34%   33%    2440    22,405  1.02   100%
+ 164  fast_n9_pts25-r2              34%   34%    2948    -9,882  0.99    80%
+ 165  fast_n9_own1-r2               34%   33%    3529    41,814  1.04   100%
+ 166  fast_n13_pts25-r2             34%   34%    2718   -14,582  0.98    80%
+ 167  fast_n13_atr1p5-r2            33%   35%    3336   -45,079  0.94    40%
+ 168  fast_n5_own1-r2               33%   34%    3857   -20,298  0.98   100%
+ 169  fast_n5_pts25-r2              33%   34%    3250   -33,380  0.97    60%
+ 170  fast_n13_own1p5-r2            33%   33%    2769     2,924  1.00   100%
+ 171  fast_n9_atr1-r2               33%   34%    4059   -37,101  0.94   100%
+ 172  fast_n5_pts15-r2              32%   34%    4072   -73,768  0.91    30%
+ 173  fast_n9_own0p5-r2             32%   34%    4114   -48,976  0.92   100%
+ 174  fast_n5_atr1-r2               32%   34%    4721   -74,279  0.91    40%
+ 175  fast_n13_atr1-r2              32%   35%    3638   -66,652  0.89    20%
+ 176  fast_n13_own0p5-r2            32%   35%    3671   -64,014  0.88    30%
+ 177  fast_n5_own0p5-r2             31%   34%    4849   -75,531  0.89    70%
+ 178  fast_n13_atr0p5-r2            31%   36%    3695   -57,705  0.82    70%
+ 179  fast_n9_atr0p5-r2             31%   35%    4155   -56,355  0.84   100%
+ 180  fast_n5_atr0p5-r2             29%   36%    4947  -108,933  0.76     0%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i16_emax_5_night <n> (blueprint_wf_pick).

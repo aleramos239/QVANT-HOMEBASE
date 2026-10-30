@@ -1,0 +1,214 @@
+2026-10-21T11:50:19+00:00 idea vh_i18_es_st_adx_15_ny, 3:1 test months of box mult3_own1-r1p5: pass 1 of 1, ES 15-minute bars (vh_i18_es_st_adx_15_ny-ES-tf15/oos; 3 workers)
+2026-10-21T11:50:19+00:00 idea vh_i18_es_st_adx_15_ny, 3:1 test months of box mult3_own1-r1p5: pass 1 of 1, ES 15-minute bars (vh_i18_es_st_adx_15_ny-ES-tf15/oos; 3 workers): days 1-20 of 290 (3 instances)
+2026-10-21T11:50:20+00:00 idea vh_i18_es_st_adx_15_ny, 3:1 test months of box mult3_own1-r1p5: pass 1 of 1, ES 15-minute bars (vh_i18_es_st_adx_15_ny-ES-tf15/oos; 3 workers): days 21-41 of 290 (3 instances)
+2026-10-21T11:50:21+00:00 idea vh_i18_es_st_adx_15_ny, 3:1 test months of box mult3_own1-r1p5: pass 1 of 1, ES 15-minute bars (vh_i18_es_st_adx_15_ny-ES-tf15/oos; 3 workers): days 42-62 of 290 (3 instances)
+2026-10-21T11:50:22+00:00 idea vh_i18_es_st_adx_15_ny, 3:1 test months of box mult3_own1-r1p5: pass 1 of 1, ES 15-minute bars (vh_i18_es_st_adx_15_ny-ES-tf15/oos; 3 workers): days 63-82 of 290 (3 instances)
+2026-10-21T11:50:22+00:00 idea vh_i18_es_st_adx_15_ny, 3:1 test months of box mult3_own1-r1p5: pass 1 of 1, ES 15-minute bars (vh_i18_es_st_adx_15_ny-ES-tf15/oos; 3 workers): days 83-104 of 290 (3 instances)
+2026-10-21T11:50:23+00:00 idea vh_i18_es_st_adx_15_ny, 3:1 test months of box mult3_own1-r1p5: pass 1 of 1, ES 15-minute bars (vh_i18_es_st_adx_15_ny-ES-tf15/oos; 3 workers): days 105-124 of 290 (3 instances)
+2026-10-21T11:50:23+00:00 idea vh_i18_es_st_adx_15_ny, 3:1 test months of box mult3_own1-r1p5: pass 1 of 1, ES 15-minute bars (vh_i18_es_st_adx_15_ny-ES-tf15/oos; 3 workers): days 125-145 of 290 (3 instances)
+2026-10-21T11:50:24+00:00 idea vh_i18_es_st_adx_15_ny, 3:1 test months of box mult3_own1-r1p5: pass 1 of 1, ES 15-minute bars (vh_i18_es_st_adx_15_ny-ES-tf15/oos; 3 workers): days 146-167 of 290 (3 instances)
+2026-10-21T11:50:25+00:00 idea vh_i18_es_st_adx_15_ny, 3:1 test months of box mult3_own1-r1p5: pass 1 of 1, ES 15-minute bars (vh_i18_es_st_adx_15_ny-ES-tf15/oos; 3 workers): days 168-187 of 290 (3 instances)
+2026-10-21T11:50:25+00:00 idea vh_i18_es_st_adx_15_ny, 3:1 test months of box mult3_own1-r1p5: pass 1 of 1, ES 15-minute bars (vh_i18_es_st_adx_15_ny-ES-tf15/oos; 3 workers): days 188-208 of 290 (3 instances)
+2026-10-21T11:50:26+00:00 idea vh_i18_es_st_adx_15_ny, 3:1 test months of box mult3_own1-r1p5: pass 1 of 1, ES 15-minute bars (vh_i18_es_st_adx_15_ny-ES-tf15/oos; 3 workers): days 209-229 of 290 (3 instances)
+2026-10-21T11:50:27+00:00 idea vh_i18_es_st_adx_15_ny, 3:1 test months of box mult3_own1-r1p5: pass 1 of 1, ES 15-minute bars (vh_i18_es_st_adx_15_ny-ES-tf15/oos; 3 workers): days 230-250 of 290 (3 instances)
+2026-10-21T11:50:28+00:00 idea vh_i18_es_st_adx_15_ny, 3:1 test months of box mult3_own1-r1p5: pass 1 of 1, ES 15-minute bars (vh_i18_es_st_adx_15_ny-ES-tf15/oos; 3 workers): days 251-270 of 290 (3 instances)
+2026-10-21T11:50:28+00:00 idea vh_i18_es_st_adx_15_ny, 3:1 test months of box mult3_own1-r1p5: pass 1 of 1, ES 15-minute bars (vh_i18_es_st_adx_15_ny-ES-tf15/oos; 3 workers): days 271-290 of 290 (3 instances)
+2026-10-21T11:50:29+00:00 wf_oos vh_i18_es_st_adx_15_ny-ES-tf15/oos: 1 cells, 189 trades, 9.77 s of tape (wall 10 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i18_es_st_adx_15_ny-ES-tf15: 180 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  mult4_atr2-r0p5               70%   67%     407    14,397  1.14   100%
+   2  mult4_pts15-r0p5              70%   66%     407    13,610  1.16   100%
+   3  mult4_own0p5-r0p5             68%   66%     407    13,447  1.12   100%
+   4  mult4_pts10-r0p5              68%   68%     407       147  1.00   100%
+   5  mult4_atr1p5-r0p5             68%   68%     407    -1,266  0.99   100%
+   6  mult4_atr1-r0p5               67%   68%     407    -3,503  0.94   100%
+   7  mult3_pts10-r0p5              67%   67%     530      -670  0.99   100%
+   8  mult3_pts15-r0p5              66%   65%     530     6,655  1.05   100%
+   9  mult2_atr1p5-r0p5             66%   66%     834    -3,648  0.98   100%
+  10  mult3_atr1p5-r0p5             66%   66%     530       205  1.00   100%
+  11  mult3_own0p5-r0p5             65%   65%     530     5,180  1.04   100%
+  12  mult3_atr2-r0p5               65%   65%     530     2,230  1.02   100%
+  13  mult4_pts6-r0p5               65%   68%     407    -6,716  0.85   100%
+  14  mult2_atr1-r0p5               65%   67%     834   -15,111  0.88   100%
+  15  mult2_own0p5-r0p5             65%   66%     834   -12,561  0.93   100%
+  16  mult2_pts15-r0p5              64%   66%     829   -10,704  0.95   100%
+  17  mult2_pts10-r0p5              64%   67%     834   -17,774  0.88   100%
+  18  mult2_atr2-r0p5               64%   65%     833    -7,132  0.97   100%
+  19  mult2_pts6-r0p5               64%   68%     834   -17,536  0.82   100%
+  20  mult4_own1-r0p5               63%   59%     407    30,034  1.18   100%
+  21  mult4_pts4-r0p5               63%   69%     407    -8,116  0.75   100%
+  22  mult3_atr1-r0p5               63%   66%     530   -12,682  0.85    70%
+  23  mult2_own1-r0p5               63%   62%     817    11,807  1.04   100%
+  24  mult3_pts6-r0p5               62%   68%     530   -14,532  0.77    50%
+  25  mult2_pts4-r0p5               62%   69%     834   -18,998  0.72    90%
+  26  mult4_pts15-r0p75             61%   57%     407    21,410  1.20   100%
+  27  mult3_own1-r0p5               61%   60%     528     5,526  1.02   100%
+  28  mult4_atr0p5-r0p5             61%   69%     407   -12,090  0.68    20%
+  29  mult3_pts4-r0p5               61%   69%     530   -14,270  0.68    60%
+  30  mult4_atr2-r0p75              60%   58%     407    12,922  1.10   100%
+  31  mult4_own0p5-r0p75            60%   58%     407    12,634  1.09   100%
+  32  mult4_pts10-r0p75             60%   58%     407     5,384  1.07   100%
+  33  mult4_atr1p5-r0p75            59%   58%     407     6,210  1.06   100%
+  34  mult3_pts15-r0p75             59%   56%     530    16,142  1.11   100%
+  35  mult2_atr0p5-r0p5             58%   68%     834   -26,524  0.67     0%
+  36  mult2_own1p5-r0p5             58%   58%     778     7,738  1.02   100%
+  37  mult3_atr0p5-r0p5             58%   66%     530   -14,045  0.71    70%
+  38  mult3_pts10-r0p75             58%   57%     530     3,230  1.03   100%
+  39  mult4_own1p5-r0p5             58%   56%     401    20,296  1.10   100%
+  40  mult4_own1-r0p75              58%   54%     407    33,597  1.18   100%
+  41  mult3_atr1p5-r0p75            58%   57%     530     3,655  1.03   100%
+  42  mult3_atr2-r0p75              58%   58%     530      -182  1.00    90%
+  43  mult3_own0p5-r0p75            57%   58%     530    -2,282  0.99   100%
+  44  mult2_atr2-r0p75              57%   55%     832    21,372  1.08   100%
+  45  mult3_own1p5-r0p5             57%   56%     521     9,066  1.03   100%
+  46  mult4_atr1-r0p75              57%   59%     407    -5,590  0.93   100%
+  47  mult2_own2-r0p5               57%   55%     767    20,332  1.06   100%
+  48  mult4_pts6-r0p75              57%   59%     407    -5,540  0.90   100%
+  49  mult2_pts10-r0p75             56%   58%     833   -11,144  0.94   100%
+  50  mult2_own0p5-r0p75            56%   57%     834    -3,324  0.98   100%
+  51  mult2_pts6-r0p75              56%   59%     834   -11,924  0.90   100%
+  52  mult2_atr1-r0p75              56%   58%     834   -13,436  0.92   100%
+  53  mult2_atr1p5-r0p75            56%   57%     834    -6,598  0.97   100%
+  54  mult3_own1-r0p75              56%   54%     528    22,613  1.09   100%
+  55  mult4_own2-r0p5               56%   52%     401    30,471  1.15   100%
+  56  mult4_own1-r1                 56%   50%     407    47,660  1.25   100%
+  57  mult3_pts6-r0p75              56%   59%     530    -8,658  0.88   100%
+  58  mult2_pts15-r0p75             56%   57%     827   -10,470  0.96   100%
+  59  mult4_own1p5-r0p75            56%   51%     401    38,208  1.19   100%
+  60  mult4_own0p5-r1               56%   53%     407    19,134  1.12   100%
+  61  mult4_pts15-r1                56%   51%     407    24,772  1.20   100%
+  62  mult2_own1-r0p75              55%   54%     813    25,586  1.08   100%
+  63  mult3_own2-r0p5               55%   54%     520    13,895  1.05   100%
+  64  mult4_own1p5-r1               55%   50%     401    42,671  1.21   100%
+  65  mult4_own2-r0p75              55%   51%     401    41,408  1.20   100%
+  66  mult4_own1-r1p5               55%   49%     407    56,010  1.28   100%
+  67  mult4_own1p5-r1p5             55%   49%     401    56,496  1.27   100%
+  68  mult4_own1p5-r2               55%   49%     401    52,758  1.25   100%
+  69  mult4_own2-r1                 55%   49%     401    54,471  1.26   100%
+  70  mult4_own2-r1p5               55%   49%     401    51,496  1.25   100%
+  71  mult4_own2-r2                 55%   49%     401    51,921  1.25   100%
+  72  mult4_own1-r2                 54%   47%     407    67,872  1.34   100%
+  73  mult3_atr1-r0p75              54%   57%     530   -11,158  0.90   100%
+  74  mult3_own1p5-r0p75            54%   52%     521    28,404  1.11   100%
+  75  mult3_pts15-r1                54%   50%     530    25,592  1.15   100%
+  76  mult2_own1p5-r0p75            54%   52%     774    24,904  1.07   100%
+  77  mult4_atr0p5-r0p75            54%   60%     407   -10,528  0.76    80%
+  78  mult3_own1-r1                 53%   50%     528    36,550  1.14   100%
+  79  mult4_atr2-r1                 53%   53%     407     4,522  1.03   100%
+  80  mult2_own2-r0p75              53%   52%     763    24,073  1.06   100%
+  81  mult3_pts10-r1                53%   51%     530    13,305  1.11   100%
+  82  mult4_pts4-r0p75              53%   60%     407    -9,816  0.76   100%
+  83  mult4_pts10-r1                53%   51%     407     6,410  1.07   100%
+  84  mult3_own2-r0p75              53%   51%     519    27,024  1.09   100%
+  85  mult3_own1p5-r1               53%   49%     521    43,654  1.16   100%
+  86  mult2_own1-r1                 53%   49%     811    51,718  1.15   100%
+  87  mult3_atr1p5-r1               52%   52%     530     2,318  1.01   100%
+  88  mult3_own2-r1                 52%   49%     519    38,699  1.13   100%
+  89  mult3_own1p5-r1p5             52%   47%     521    61,478  1.22   100%
+  90  mult2_atr2-r1                 52%   50%     829    25,622  1.09   100%
+  91  mult3_own2-r1p5               52%   48%     519    48,049  1.17   100%
+  92  mult3_own2-r2                 52%   48%     519    50,299  1.17   100%
+  93  mult3_own1p5-r2               52%   47%     521    64,678  1.23   100%
+  94  mult2_pts4-r0p75              52%   60%     834   -23,061  0.73    80%
+  95  mult2_own1p5-r1               52%   50%     773    36,496  1.10   100%
+  96  mult3_atr2-r1                 52%   51%     530     5,805  1.03   100%
+  97  mult3_own0p5-r1               52%   52%     530     4,592  1.02   100%
+  98  mult4_atr1p5-r1               52%   51%     407     3,147  1.03   100%
+  99  mult2_own2-r1                 52%   50%     762    22,640  1.06   100%
+ 100  mult3_own1-r1p5               52%   47%     528    56,876  1.22   100%
+ 101  mult2_atr1p5-r1               51%   50%     834    16,402  1.07   100%
+ 102  mult2_pts15-r1                51%   51%     824     9,142  1.03   100%
+ 103  mult3_own1-r2                 51%   45%     528    69,600  1.27   100%
+ 104  mult3_pts4-r0p75              51%   60%     530   -16,345  0.71    50%
+ 105  mult4_atr1-r1                 51%   52%     407    -4,440  0.95   100%
+ 106  mult3_atr0p5-r0p75            51%   57%     530   -12,270  0.79    90%
+ 107  mult2_own1p5-r1p5             51%   48%     772    48,912  1.13   100%
+ 108  mult2_pts10-r1                51%   51%     833    -4,082  0.98   100%
+ 109  mult2_own2-r1p5               51%   49%     762    33,077  1.08   100%
+ 110  mult2_atr0p5-r0p75            50%   58%     834   -26,086  0.73    10%
+ 111  mult2_own2-r2                 50%   48%     762    34,264  1.09   100%
+ 112  mult2_own0p5-r1               50%   50%     834     1,739  1.01   100%
+ 113  mult4_own0p5-r1p5             50%   47%     407    19,510  1.11   100%
+ 114  mult2_own1-r1p5               50%   46%     810    62,922  1.18   100%
+ 115  mult2_own1p5-r2               50%   47%     772    46,237  1.12   100%
+ 116  mult4_atr0p5-r1               49%   53%     407    -6,453  0.87   100%
+ 117  mult3_pts15-r1p5              49%   44%     530    38,330  1.21   100%
+ 118  mult2_atr1-r1                 49%   50%     834   -13,674  0.93   100%
+ 119  mult4_pts15-r1p5              48%   45%     407    21,510  1.15   100%
+ 120  mult3_atr1-r1                 48%   50%     530   -10,020  0.92   100%
+ 121  mult2_pts6-r1                 48%   52%     834   -18,198  0.87   100%
+ 122  mult4_pts6-r1                 48%   52%     407    -9,616  0.86   100%
+ 123  mult2_own1-r2                 48%   44%     809    62,376  1.17   100%
+ 124  mult4_own0p5-r2               48%   44%     407    33,997  1.19   100%
+ 125  mult3_pts6-r1                 48%   52%     530   -12,332  0.86   100%
+ 126  mult2_pts4-r1                 47%   53%     834   -17,498  0.82   100%
+ 127  mult3_atr2-r1p5               47%   45%     530    21,292  1.10   100%
+ 128  mult4_pts4-r1                 47%   52%     407    -8,916  0.81   100%
+ 129  mult3_own0p5-r1p5             47%   45%     530    19,330  1.09   100%
+ 130  mult2_atr2-r1p5               47%   44%     827    46,654  1.14   100%
+ 131  mult4_atr2-r1p5               47%   46%     407     3,222  1.02   100%
+ 132  mult3_pts4-r1                 46%   52%     530   -13,970  0.77    80%
+ 133  mult3_pts15-r2                46%   41%     530    46,280  1.24   100%
+ 134  mult3_atr1p5-r1p5             45%   44%     530    12,718  1.07   100%
+ 135  mult4_pts15-r2                45%   42%     407    26,034  1.17   100%
+ 136  mult2_atr0p5-r1               45%   51%     834   -21,186  0.80    90%
+ 137  mult3_atr2-r2                 45%   42%     530    30,280  1.13   100%
+ 138  mult2_pts15-r1p5              45%   44%     822    11,037  1.04   100%
+ 139  mult2_atr2-r2                 45%   41%     827    66,580  1.20   100%
+ 140  mult4_atr2-r2                 45%   43%     407    14,110  1.08   100%
+ 141  mult3_pts10-r1p5              45%   42%     530    15,442  1.11   100%
+ 142  mult3_own0p5-r2               45%   42%     530    28,442  1.13   100%
+ 143  mult2_atr1p5-r1p5             44%   42%     833    21,443  1.08   100%
+ 144  mult2_pts10-r1p5              44%   43%     832    13,410  1.06   100%
+ 145  mult4_pts10-r1p5              44%   43%     407     5,197  1.05   100%
+ 146  mult3_atr0p5-r1               43%   50%     530   -15,445  0.77    80%
+ 147  mult2_own0p5-r1p5             43%   42%     833     7,706  1.03   100%
+ 148  mult2_pts15-r2                42%   42%     822     5,900  1.02   100%
+ 149  mult3_atr1p5-r2               42%   40%     530    17,068  1.09   100%
+ 150  mult4_atr1p5-r1p5             42%   44%     407   -14,578  0.90    40%
+ 151  mult4_pts6-r1p5               42%   42%     407    -1,703  0.98   100%
+ 152  mult2_atr1-r1p5               41%   41%     834      -498  1.00   100%
+ 153  mult3_pts6-r1p5               41%   42%     530    -1,932  0.98   100%
+ 154  mult2_atr1p5-r2               41%   38%     832    33,622  1.11   100%
+ 155  mult3_pts10-r2                40%   38%     530    15,530  1.10   100%
+ 156  mult4_atr1-r1p5               40%   42%     407    -9,878  0.91    80%
+ 157  mult3_atr1-r1p5               40%   43%     530   -18,608  0.87    50%
+ 158  mult4_pts10-r2                40%   38%     407     7,172  1.06   100%
+ 159  mult2_pts6-r1p5               40%   42%     834   -15,648  0.90   100%
+ 160  mult2_own0p5-r2               39%   38%     833    18,768  1.07   100%
+ 161  mult4_atr0p5-r1p5             39%   42%     407    -7,928  0.86   100%
+ 162  mult4_atr1p5-r2               39%   40%     407    -7,790  0.95    50%
+ 163  mult2_pts10-r2                38%   38%     832       122  1.00   100%
+ 164  mult2_pts4-r1p5               37%   43%     834   -22,236  0.80   100%
+ 165  mult2_atr0p5-r1p5             37%   41%     834   -19,186  0.84   100%
+ 166  mult2_atr1-r2                 37%   36%     834     2,426  1.01   100%
+ 167  mult4_pts4-r1p5               36%   42%     407   -12,540  0.78    70%
+ 168  mult3_atr1-r2                 35%   37%     530   -11,695  0.92    90%
+ 169  mult4_pts6-r2                 35%   36%     407    -2,628  0.97   100%
+ 170  mult3_pts4-r1p5               35%   42%     530   -19,395  0.74    30%
+ 171  mult3_pts6-r2                 35%   36%     530    -4,545  0.96   100%
+ 172  mult4_atr1-r2                 35%   37%     407    -9,866  0.92    90%
+ 173  mult3_atr0p5-r1p5             35%   40%     530   -15,508  0.81    80%
+ 174  mult2_pts6-r2                 34%   36%     834   -13,248  0.92   100%
+ 175  mult4_pts4-r2                 33%   36%     407    -7,316  0.88   100%
+ 176  mult4_atr0p5-r2               32%   36%     407    -9,690  0.85   100%
+ 177  mult2_pts4-r2                 32%   36%     834   -21,436  0.83   100%
+ 178  mult2_atr0p5-r2               30%   34%     834   -21,524  0.84   100%
+ 179  mult3_pts4-r2                 30%   35%     530   -18,158  0.77    60%
+ 180  mult3_atr0p5-r2               28%   34%     530   -21,770  0.76    10%
+PICKED: box mult3_own1-r1p5 (2026-10-21T11:44:16+00:00, claude: the owner's standing word of 2026-10-20 (PREREG_HM40 s4 / Amendment B rule)). It never changes.
+TEST MONTHS of box mult3_own1-r1p5: 189 trades, win   45%, net -21,044, 14 months
+  2022-01   19 trades  win   58%  net 6,086
+  2022-05   17 trades  win   47%  net -9,043
+  2022-09   10 trades  win   50%  net 4,110
+  2023-01    9 trades  win   56%  net 3,426
+  2023-05   12 trades  win   33%  net -448
+  2023-09    9 trades  win   56%  net 2,102
+  2024-01   18 trades  win   39%  net -4,334
+  2024-05   19 trades  win   37%  net -4,664
+  2024-09   22 trades  win   50%  net 800
+  2025-01    8 trades  win   38%  net -1,644
+  2025-05   10 trades  win   60%  net -1,140
+  2025-09   15 trades  win   20%  net -10,922
+  2026-01   11 trades  win   36%  net -4,632
+  2026-05   10 trades  win   60%  net -740

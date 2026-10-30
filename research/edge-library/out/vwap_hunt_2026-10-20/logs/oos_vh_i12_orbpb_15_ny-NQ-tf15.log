@@ -1,0 +1,214 @@
+2026-10-21T07:39:39+00:00 idea vh_i12_orbpb_15_ny, 3:1 test months of box or_min15_atr2-r1: pass 1 of 1, NQ 15-minute bars (vh_i12_orbpb_15_ny-NQ-tf15/oos; 3 workers)
+2026-10-21T07:39:39+00:00 idea vh_i12_orbpb_15_ny, 3:1 test months of box or_min15_atr2-r1: pass 1 of 1, NQ 15-minute bars (vh_i12_orbpb_15_ny-NQ-tf15/oos; 3 workers): days 1-20 of 290 (3 instances)
+2026-10-21T07:39:40+00:00 idea vh_i12_orbpb_15_ny, 3:1 test months of box or_min15_atr2-r1: pass 1 of 1, NQ 15-minute bars (vh_i12_orbpb_15_ny-NQ-tf15/oos; 3 workers): days 21-41 of 290 (3 instances)
+2026-10-21T07:39:41+00:00 idea vh_i12_orbpb_15_ny, 3:1 test months of box or_min15_atr2-r1: pass 1 of 1, NQ 15-minute bars (vh_i12_orbpb_15_ny-NQ-tf15/oos; 3 workers): days 42-62 of 290 (3 instances)
+2026-10-21T07:39:41+00:00 idea vh_i12_orbpb_15_ny, 3:1 test months of box or_min15_atr2-r1: pass 1 of 1, NQ 15-minute bars (vh_i12_orbpb_15_ny-NQ-tf15/oos; 3 workers): days 63-82 of 290 (3 instances)
+2026-10-21T07:39:42+00:00 idea vh_i12_orbpb_15_ny, 3:1 test months of box or_min15_atr2-r1: pass 1 of 1, NQ 15-minute bars (vh_i12_orbpb_15_ny-NQ-tf15/oos; 3 workers): days 83-104 of 290 (3 instances)
+2026-10-21T07:39:43+00:00 idea vh_i12_orbpb_15_ny, 3:1 test months of box or_min15_atr2-r1: pass 1 of 1, NQ 15-minute bars (vh_i12_orbpb_15_ny-NQ-tf15/oos; 3 workers): days 105-124 of 290 (3 instances)
+2026-10-21T07:39:44+00:00 idea vh_i12_orbpb_15_ny, 3:1 test months of box or_min15_atr2-r1: pass 1 of 1, NQ 15-minute bars (vh_i12_orbpb_15_ny-NQ-tf15/oos; 3 workers): days 125-145 of 290 (3 instances)
+2026-10-21T07:39:44+00:00 idea vh_i12_orbpb_15_ny, 3:1 test months of box or_min15_atr2-r1: pass 1 of 1, NQ 15-minute bars (vh_i12_orbpb_15_ny-NQ-tf15/oos; 3 workers): days 146-167 of 290 (3 instances)
+2026-10-21T07:39:45+00:00 idea vh_i12_orbpb_15_ny, 3:1 test months of box or_min15_atr2-r1: pass 1 of 1, NQ 15-minute bars (vh_i12_orbpb_15_ny-NQ-tf15/oos; 3 workers): days 168-187 of 290 (3 instances)
+2026-10-21T07:39:46+00:00 idea vh_i12_orbpb_15_ny, 3:1 test months of box or_min15_atr2-r1: pass 1 of 1, NQ 15-minute bars (vh_i12_orbpb_15_ny-NQ-tf15/oos; 3 workers): days 188-208 of 290 (3 instances)
+2026-10-21T07:39:47+00:00 idea vh_i12_orbpb_15_ny, 3:1 test months of box or_min15_atr2-r1: pass 1 of 1, NQ 15-minute bars (vh_i12_orbpb_15_ny-NQ-tf15/oos; 3 workers): days 209-229 of 290 (3 instances)
+2026-10-21T07:39:47+00:00 idea vh_i12_orbpb_15_ny, 3:1 test months of box or_min15_atr2-r1: pass 1 of 1, NQ 15-minute bars (vh_i12_orbpb_15_ny-NQ-tf15/oos; 3 workers): days 230-250 of 290 (3 instances)
+2026-10-21T07:39:48+00:00 idea vh_i12_orbpb_15_ny, 3:1 test months of box or_min15_atr2-r1: pass 1 of 1, NQ 15-minute bars (vh_i12_orbpb_15_ny-NQ-tf15/oos; 3 workers): days 251-270 of 290 (3 instances)
+2026-10-21T07:39:49+00:00 idea vh_i12_orbpb_15_ny, 3:1 test months of box or_min15_atr2-r1: pass 1 of 1, NQ 15-minute bars (vh_i12_orbpb_15_ny-NQ-tf15/oos; 3 workers): days 271-290 of 290 (3 instances)
+2026-10-21T07:39:50+00:00 wf_oos vh_i12_orbpb_15_ny-NQ-tf15/oos: 1 cells, 154 trades, 10.72 s of tape (wall 11 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i12_orbpb_15_ny-NQ-tf15: 180 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  or_min30_atr1-r0p5            68%   67%     418     3,733  1.03   100%
+   2  or_min60_atr1-r0p5            68%   66%     322     7,402  1.09   100%
+   3  or_min15_atr1-r0p5            68%   67%     485     2,885  1.02   100%
+   4  or_min30_atr0p5-r0p5          67%   67%     418     1,673  1.03   100%
+   5  or_min15_atr2-r0p5            67%   64%     485    32,105  1.15   100%
+   6  or_min30_pts40-r0p5           67%   66%     418     3,123  1.03   100%
+   7  or_min15_pts25-r0p5           67%   67%     485    -1,805  0.98    90%
+   8  or_min60_atr2-r0p5            67%   61%     322    42,112  1.31   100%
+   9  or_min30_pts25-r0p5           67%   67%     418    -1,667  0.98    90%
+  10  or_min15_atr0p5-r0p5          67%   67%     485    -1,760  0.97   100%
+  11  or_min15_pts40-r0p5           66%   67%     485    -1,630  0.99    70%
+  12  or_min30_own0p5-r0p5          66%   65%     418    10,288  1.08   100%
+  13  or_min15_pts60-r0p5           66%   66%     485     3,785  1.02   100%
+  14  or_min60_own0p5-r0p5          66%   62%     322    17,967  1.17   100%
+  15  or_min60_pts60-r0p5           66%   64%     322     8,162  1.07   100%
+  16  or_min30_pts60-r0p5           66%   64%     418     8,028  1.05   100%
+  17  or_min60_atr0p5-r0p5          66%   67%     322    -2,228  0.95    80%
+  18  or_min60_pts40-r0p5           66%   66%     322    -3,138  0.96    30%
+  19  or_min30_atr2-r0p5            65%   62%     418    26,423  1.14   100%
+  20  or_min60_pts25-r0p5           65%   67%     322    -5,388  0.91    10%
+  21  or_min15_own1-r0p5            65%   61%     485    41,205  1.18   100%
+  22  or_min60_atr1p5-r0p5          65%   63%     322     8,197  1.07   100%
+  23  or_min15_atr1p5-r0p5          65%   66%     485   -12,030  0.94    20%
+  24  or_min15_own0p5-r0p5          65%   65%     485    -2,845  0.98    90%
+  25  or_min30_atr1p5-r0p5          64%   65%     418    -9,097  0.95    30%
+  26  or_min30_pts15-r0p5           64%   68%     418    -8,172  0.83     0%
+  27  or_min15_pts15-r0p5           64%   68%     485    -9,790  0.82     0%
+  28  or_min30_own1-r0p5            63%   59%     418    39,108  1.19   100%
+  29  or_min60_own1-r0p5            63%   55%     322    57,737  1.38   100%
+  30  or_min15_own1p5-r0p5          62%   60%     485    31,670  1.10   100%
+  31  or_min60_pts15-r0p5           62%   68%     322    -9,023  0.76     0%
+  32  or_min15_own2-r0p5            60%   59%     485    24,685  1.07   100%
+  33  or_min30_pts25-r0p75          60%   58%     418     6,808  1.08   100%
+  34  or_min60_pts25-r0p75          59%   58%     322     3,112  1.05   100%
+  35  or_min15_pts60-r0p75          59%   56%     485    29,270  1.13   100%
+  36  or_min60_atr0p5-r0p75         59%   57%     322     3,202  1.06   100%
+  37  or_min60_own0p5-r0p75         59%   53%     322    35,087  1.28   100%
+  38  or_min30_pts40-r0p75          59%   56%     418    12,403  1.09   100%
+  39  or_min60_atr1p5-r0p75         58%   54%     322    27,622  1.19   100%
+  40  or_min30_atr0p5-r0p75         58%   57%     418     2,963  1.04   100%
+  41  or_min30_own0p5-r0p75         58%   55%     418    25,548  1.16   100%
+  42  or_min15_atr2-r0p75           58%   55%     485    41,300  1.15   100%
+  43  or_min15_pts25-r0p75          58%   58%     485       -35  1.00   100%
+  44  or_min15_atr1p5-r0p75         58%   56%     485    12,305  1.06   100%
+  45  or_min60_pts40-r0p75          57%   57%     322     3,112  1.03   100%
+  46  or_min30_atr1-r0p75           57%   58%     418    -2,502  0.98    80%
+  47  or_min15_pts40-r0p75          57%   57%     485     2,920  1.02   100%
+  48  or_min30_atr1p5-r0p75         57%   55%     418    14,188  1.07   100%
+  49  or_min60_atr1-r0p75           57%   56%     322     3,217  1.03   100%
+  50  or_min60_atr2-r0p75           57%   51%     322    46,427  1.28   100%
+  51  or_min60_own1p5-r0p5          57%   53%     322    35,832  1.19   100%
+  52  or_min60_pts60-r0p75          57%   54%     322    17,967  1.13   100%
+  53  or_min15_own0p5-r0p75         57%   55%     485    12,120  1.07   100%
+  54  or_min15_atr0p5-r0p75         57%   57%     485    -1,640  0.98   100%
+  55  or_min15_own1p5-r0p75         57%   54%     485    48,490  1.14   100%
+  56  or_min30_atr2-r0p75           57%   53%     418    36,878  1.16   100%
+  57  or_min30_own1p5-r0p5          57%   57%     418    -5,942  0.98    60%
+  58  or_min30_pts60-r0p75          57%   54%     418    18,533  1.10   100%
+  59  or_min30_pts15-r0p75          56%   58%     418    -3,832  0.93    90%
+  60  or_min15_atr1-r0p75           56%   58%     485    -8,840  0.95    30%
+  61  or_min15_own1-r0p75           56%   54%     485    23,720  1.08   100%
+  62  or_min15_own2-r0p75           56%   54%     485    41,120  1.10   100%
+  63  or_min60_own1-r0p75           56%   50%     322    42,582  1.23   100%
+  64  or_min60_own2-r0p5            56%   52%     322    31,562  1.15   100%
+  65  or_min15_pts15-r0p75          55%   58%     485    -8,660  0.87    30%
+  66  or_min60_atr2-r1              55%   48%     322    55,617  1.31   100%
+  67  or_min60_own2-r0p75           55%   50%     322    45,287  1.21   100%
+  68  or_min15_atr2-r1              54%   49%     485    64,520  1.22   100%
+  69  or_min60_own2-r1              54%   48%     322    60,087  1.28   100%
+  70  or_min30_own2-r0p5            54%   56%     418   -20,337  0.94     0%
+  71  or_min15_own1p5-r1            54%   50%     485    65,085  1.18   100%
+  72  or_min60_own1p5-r0p75         54%   50%     322    30,632  1.15   100%
+  73  or_min60_pts60-r1             54%   48%     322    36,462  1.24   100%
+  74  or_min15_own2-r1              54%   50%     485    66,060  1.16   100%
+  75  or_min30_own1-r0p75           54%   53%     418     8,243  1.03   100%
+  76  or_min30_pts25-r1             54%   50%     418    13,193  1.13   100%
+  77  or_min60_own1p5-r1            53%   48%     322    46,012  1.22   100%
+  78  or_min60_own2-r1p5            53%   50%     322    32,602  1.15   100%
+  79  or_min60_own2-r2              53%   50%     322    30,487  1.14   100%
+  80  or_min60_atr0p5-r1            53%   50%     322     6,692  1.10   100%
+  81  or_min60_own0p5-r1            53%   46%     322    41,932  1.30   100%
+  82  or_min60_own1p5-r1p5          53%   48%     322    43,582  1.20   100%
+  83  or_min60_pts15-r0p75          53%   58%     322    -9,473  0.80     0%
+  84  or_min60_pts25-r1             53%   51%     322     6,662  1.09   100%
+  85  or_min30_atr0p5-r1            53%   50%     418     9,248  1.12   100%
+  86  or_min30_own0p5-r1            53%   48%     418    37,563  1.22   100%
+  87  or_min60_own1-r1              52%   48%     322    40,652  1.21   100%
+  88  or_min15_pts60-r1             52%   49%     485    35,285  1.14   100%
+  89  or_min60_own1p5-r2            52%   49%     322    34,272  1.16   100%
+  90  or_min15_own1-r1              52%   50%     485    33,490  1.11   100%
+  91  or_min30_atr2-r1              52%   49%     418    33,598  1.13   100%
+  92  or_min30_own1p5-r0p75         52%   52%     418    -5,772  0.98    60%
+  93  or_min30_atr1-r1              52%   50%     418    11,028  1.07   100%
+  94  or_min30_own2-r0p75           52%   52%     418    -6,167  0.98    60%
+  95  or_min60_own1-r1p5            52%   45%     322    54,007  1.27   100%
+  96  or_min60_own1-r2              52%   44%     322    69,762  1.36   100%
+  97  or_min15_own2-r1p5            52%   48%     485    73,360  1.17   100%
+  98  or_min15_pts40-r1             52%   49%     485    15,710  1.09   100%
+  99  or_min30_pts40-r1             51%   49%     418    15,708  1.10   100%
+ 100  or_min60_atr1-r1              51%   49%     322    11,377  1.09   100%
+ 101  or_min30_pts60-r1             51%   48%     418    24,728  1.12   100%
+ 102  or_min60_atr2-r1p5            51%   45%     322    47,452  1.25   100%
+ 103  or_min15_atr0p5-r1            51%   50%     485     3,790  1.04   100%
+ 104  or_min15_atr1-r1              51%   50%     485     7,205  1.04   100%
+ 105  or_min15_own0p5-r1            51%   48%     485    20,905  1.11   100%
+ 106  or_min15_own2-r2              51%   47%     485    62,210  1.15   100%
+ 107  or_min60_atr2-r2              51%   44%     322    55,432  1.29   100%
+ 108  or_min15_pts25-r1             51%   51%     485      -315  1.00   100%
+ 109  or_min30_own2-r1              50%   50%     418     9,548  1.03    90%
+ 110  or_min30_own1p5-r1            50%   50%     418     6,628  1.02    90%
+ 111  or_min30_pts15-r1             50%   51%     418    -2,477  0.96   100%
+ 112  or_min60_pts40-r1             50%   50%     322     2,252  1.02   100%
+ 113  or_min15_own1p5-r1p5          50%   46%     485    72,405  1.19   100%
+ 114  or_min30_atr1p5-r1            50%   49%     418     9,008  1.04    90%
+ 115  or_min15_atr1p5-r1            50%   49%     485     3,500  1.01    90%
+ 116  or_min60_atr1p5-r1            50%   48%     322    15,072  1.09   100%
+ 117  or_min30_own1-r1              50%   49%     418     5,103  1.02   100%
+ 118  or_min30_own2-r1p5            50%   50%     418       183  1.00    60%
+ 119  or_min30_own2-r2              49%   49%     418    -1,767  1.00    50%
+ 120  or_min15_own1p5-r2            49%   44%     485    93,255  1.24   100%
+ 121  or_min15_pts15-r1             49%   51%     485    -6,255  0.92    60%
+ 122  or_min15_atr2-r1p5            49%   43%     485    77,640  1.24   100%
+ 123  or_min15_own1-r1p5            48%   44%     485    56,395  1.17   100%
+ 124  or_min60_pts15-r1             48%   51%     322    -6,408  0.88    20%
+ 125  or_min30_own1p5-r1p5          47%   48%     418    -3,642  0.99    50%
+ 126  or_min30_own1p5-r2            47%   47%     418     9,043  1.03    80%
+ 127  or_min30_atr2-r1p5            47%   44%     418    32,788  1.12   100%
+ 128  or_min60_pts60-r1p5           47%   44%     322    22,072  1.13   100%
+ 129  or_min30_own1-r1p5            47%   45%     418    19,888  1.07   100%
+ 130  or_min15_pts60-r1p5           46%   42%     485    62,315  1.22   100%
+ 131  or_min15_atr2-r2              46%   40%     485    93,290  1.27   100%
+ 132  or_min60_own0p5-r1p5          46%   41%     322    32,467  1.20   100%
+ 133  or_min60_pts60-r2             46%   41%     322    35,007  1.20   100%
+ 134  or_min15_own1-r2              45%   40%     485    76,000  1.22   100%
+ 135  or_min30_atr2-r2              45%   42%     418    36,233  1.13   100%
+ 136  or_min30_own1-r2              45%   43%     418    34,683  1.11   100%
+ 137  or_min60_atr1p5-r1p5          45%   44%     322     8,782  1.05    90%
+ 138  or_min60_pts40-r1p5           45%   41%     322    23,477  1.18   100%
+ 139  or_min30_pts60-r1p5           44%   42%     418    23,388  1.10   100%
+ 140  or_min60_atr1p5-r2            44%   42%     322    18,542  1.10   100%
+ 141  or_min15_pts60-r2             44%   38%     485    85,125  1.28   100%
+ 142  or_min30_own0p5-r1p5          44%   41%     418    21,968  1.11   100%
+ 143  or_min30_atr0p5-r1p5          43%   40%     418    13,073  1.14   100%
+ 144  or_min30_pts40-r1p5           43%   40%     418    25,978  1.15   100%
+ 145  or_min60_own0p5-r2            43%   39%     322    32,452  1.19   100%
+ 146  or_min30_atr1-r1p5            43%   40%     418    22,753  1.12   100%
+ 147  or_min30_pts25-r1p5           43%   40%     418    13,443  1.11   100%
+ 148  or_min15_own0p5-r1p5          42%   40%     485    19,850  1.09   100%
+ 149  or_min15_pts40-r1p5           42%   40%     485    23,005  1.11   100%
+ 150  or_min30_pts15-r1p5           42%   41%     418     4,673  1.06   100%
+ 151  or_min15_atr1-r1p5            42%   40%     485    21,360  1.10   100%
+ 152  or_min60_atr0p5-r1p5          42%   40%     322     6,932  1.09   100%
+ 153  or_min30_pts60-r2             42%   39%     418    33,873  1.13   100%
+ 154  or_min15_atr1p5-r1p5          42%   41%     485     7,720  1.03    80%
+ 155  or_min30_atr1p5-r1p5          42%   43%     418   -12,752  0.95    10%
+ 156  or_min60_atr1-r1p5            42%   40%     322    10,362  1.07   100%
+ 157  or_min60_pts25-r1p5           41%   41%     322       717  1.01   100%
+ 158  or_min15_atr0p5-r1p5          41%   40%     485     5,900  1.05   100%
+ 159  or_min15_pts25-r1p5           41%   40%     485     2,515  1.02   100%
+ 160  or_min30_atr1p5-r2            40%   40%     418     6,408  1.02    70%
+ 161  or_min60_pts15-r1p5           40%   41%     322    -2,578  0.96   100%
+ 162  or_min15_atr1p5-r2            40%   37%     485    29,995  1.10   100%
+ 163  or_min15_pts15-r1p5           40%   41%     485    -4,720  0.95   100%
+ 164  or_min60_pts40-r2             39%   38%     322    10,387  1.07   100%
+ 165  or_min30_own0p5-r2            39%   37%     418    17,043  1.08   100%
+ 166  or_min60_atr1-r2              39%   36%     322    19,702  1.13   100%
+ 167  or_min30_pts25-r2             39%   34%     418    29,318  1.23   100%
+ 168  or_min30_pts40-r2             39%   36%     418    23,993  1.12   100%
+ 169  or_min15_own0p5-r2            38%   36%     485    29,020  1.12   100%
+ 170  or_min15_pts40-r2             38%   35%     485    36,295  1.16   100%
+ 171  or_min30_pts15-r2             38%   34%     418    15,848  1.20   100%
+ 172  or_min60_pts25-r2             38%   34%     322    17,347  1.17   100%
+ 173  or_min30_atr1-r2              37%   36%     418    13,048  1.06   100%
+ 174  or_min30_atr0p5-r2            37%   33%     418    19,553  1.18   100%
+ 175  or_min60_atr0p5-r2            37%   33%     322    13,747  1.16   100%
+ 176  or_min15_atr1-r2              36%   34%     485    24,290  1.11   100%
+ 177  or_min15_pts25-r2             36%   34%     485    17,705  1.11   100%
+ 178  or_min60_pts15-r2             36%   34%     322     4,717  1.07   100%
+ 179  or_min15_pts15-r2             34%   34%     485      -350  1.00   100%
+ 180  or_min15_atr0p5-r2            34%   32%     485     9,460  1.08   100%
+PICKED: box or_min15_atr2-r1 (2026-10-21T07:26:13+00:00, claude: the owner's standing word of 2026-10-20 (PREREG_HM40 s4 / Amendment B rule)). It never changes.
+TEST MONTHS of box or_min15_atr2-r1: 154 trades, win   51%, net -15,826, 14 months
+  2022-01   14 trades  win   50%  net 3,414
+  2022-05   11 trades  win   36%  net -10,404
+  2022-09   10 trades  win   60%  net 760
+  2023-01   12 trades  win   75%  net 4,892
+  2023-05    8 trades  win   25%  net -3,177
+  2023-09    7 trades  win   43%  net 252
+  2024-01    9 trades  win   56%  net -206
+  2024-05   15 trades  win   53%  net -610
+  2024-09   13 trades  win   46%  net -3,847
+  2025-01    6 trades  win   50%  net 3,281
+  2025-05   13 trades  win   62%  net 3,833
+  2025-09   11 trades  win   55%  net -804
+  2026-01   13 trades  win   54%  net -1,407
+  2026-05   12 trades  win   33%  net -11,803

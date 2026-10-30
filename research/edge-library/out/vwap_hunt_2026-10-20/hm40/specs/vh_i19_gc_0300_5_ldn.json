@@ -1,0 +1,29 @@
+{
+ "name": "vh_i19_gc_0300_5_ldn",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 19: The London open is gold's own handover from Asia: a decided first candle sets the morning's side. Who loses: the Asia range traders.",
+ "family": "open_candle",
+ "markets": [
+  "GC"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "london"
+ ],
+ "params": {
+  "body_r": [
+   0.4,
+   0.55,
+   0.7
+  ]
+ },
+ "fixed": {
+  "start": "0300"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

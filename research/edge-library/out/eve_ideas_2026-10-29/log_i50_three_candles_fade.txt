@@ -1,0 +1,68 @@
+3:1 IN-SAMPLE TABLE of i50_three_candles_fade: 60 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  nbars3_atr1-r0p5              65%   66%    2358   -13,362  0.96   100%
+   2  nbars3_atr0p5-r0p5            65%   68%    2498   -24,182  0.88    80%
+   3  nbars3_pts15-r0p5             65%   67%    2387   -15,653  0.93   100%
+   4  nbars3_own2-r0p5              65%   67%    2449   -17,496  0.93    80%
+   5  nbars3_own1p5-r0p5            64%   68%    2490   -31,535  0.85    80%
+   6  nbars3_pts25-r0p5             64%   63%    2165     3,850  1.01   100%
+   7  nbars3_own1-r0p5              64%   68%    2514   -26,421  0.83    90%
+   8  nbars3_atr1p5-r0p5            63%   64%    2156    -9,089  0.98   100%
+   9  nbars3_pts40-r0p5             62%   60%    1852    25,302  1.07   100%
+  10  nbars3_own0p5-r0p5            61%   68%    2524   -32,406  0.74    70%
+  11  nbars3_atr2-r0p5              61%   59%    1929    30,524  1.07   100%
+  12  nbars3_pts60-r0p5             59%   57%    1559    29,569  1.07   100%
+  13  nbars3_atr0p5-r0p75           57%   58%    2487   -13,443  0.95   100%
+  14  nbars3_pts15-r0p75            57%   58%    2338    -7,652  0.97   100%
+  15  nbars3_own2-r0p75             56%   57%    2418    -1,212  1.00    60%
+  16  nbars3_atr1-r0p75             56%   57%    2301   -15,704  0.96    90%
+  17  nbars3_pts25-r0p75            56%   55%    2039     8,539  1.02   100%
+  18  nbars3_own1p5-r0p75           56%   59%    2474   -26,436  0.89    60%
+  19  nbars3_own1-r0p75             56%   59%    2503   -23,667  0.88    90%
+  20  nbars3_pts40-r0p75            55%   54%    1678    30,513  1.08   100%
+  21  nbars3_atr1p5-r0p75           55%   54%    1998    17,728  1.04   100%
+  22  nbars3_atr2-r0p75             54%   53%    1717    28,627  1.06    80%
+  23  nbars3_own0p5-r0p75           53%   59%    2522   -30,583  0.80    70%
+  24  nbars3_pts60-r0p75            53%   54%    1394   -14,076  0.97    30%
+  25  nbars3_atr2-r1                52%   50%    1567    35,162  1.07    90%
+  26  nbars3_pts25-r1               51%   50%    1920    15,640  1.04   100%
+  27  nbars3_atr1p5-r1              51%   49%    1866    32,721  1.07    90%
+  28  nbars3_atr1-r1                51%   50%    2229     6,574  1.01    90%
+  29  nbars3_own2-r1                51%   50%    2378     3,323  1.01    70%
+  30  nbars3_pts15-r1               51%   51%    2277   -11,213  0.96   100%
+  31  nbars3_atr0p5-r1              50%   52%    2476   -14,859  0.95    90%
+  32  nbars3_pts40-r1               50%   51%    1551    -8,469  0.98    50%
+  33  nbars3_own1p5-r1              50%   51%    2461   -14,489  0.95    70%
+  34  nbars3_pts60-r1               49%   51%    1301   -21,864  0.95    30%
+  35  nbars3_own1-r1                49%   52%    2498   -23,877  0.89    60%
+  36  nbars3_atr2-r1p5              49%   45%    1413    78,018  1.18   100%
+  37  nbars3_pts60-r1p5             48%   48%    1223    13,533  1.03    40%
+  38  nbars3_atr2-r2                48%   45%    1306    59,716  1.14   100%
+  39  nbars3_pts60-r2               48%   47%    1190    22,940  1.05    50%
+  40  nbars3_own0p5-r1              47%   52%    2522   -32,628  0.82    70%
+  41  nbars3_atr1p5-r1p5            47%   46%    1659    11,974  1.02    80%
+  42  nbars3_pts40-r1p5             46%   47%    1424   -22,271  0.95    40%
+  43  nbars3_atr1p5-r2              45%   43%    1565    42,585  1.09    90%
+  44  nbars3_pts40-r2               45%   45%    1377     1,402  1.00    50%
+  45  nbars3_atr1-r1p5              44%   42%    2086    44,686  1.09    90%
+  46  nbars3_pts25-r1p5             44%   45%    1775   -15,160  0.96    90%
+  47  nbars3_pts15-r1p5             43%   44%    2177   -12,973  0.96   100%
+  48  nbars3_own2-r1p5              43%   43%    2299     2,929  1.01    70%
+  49  nbars3_own1p5-r1p5            42%   42%    2420    -9,760  0.97    60%
+  50  nbars3_own1-r1p5              41%   41%    2484    -3,211  0.99    70%
+  51  nbars3_atr1-r2                41%   40%    1948    29,988  1.06    90%
+  52  nbars3_pts25-r2               41%   42%    1673   -23,132  0.94    80%
+  53  nbars3_atr0p5-r1p5            41%   43%    2454   -27,196  0.92    80%
+  54  nbars3_own0p5-r1p5            39%   42%    2517   -21,558  0.90   100%
+  55  nbars3_pts15-r2               38%   39%    2086   -16,454  0.96    80%
+  56  nbars3_own2-r2                38%   38%    2234     1,524  1.00    70%
+  57  nbars3_atr0p5-r2              36%   36%    2418    -8,587  0.98    90%
+  58  nbars3_own1p5-r2              36%   36%    2374   -11,296  0.97    70%
+  59  nbars3_own1-r2                35%   36%    2460    -8,840  0.97    60%
+  60  nbars3_own0p5-r2              33%   36%    2514   -24,661  0.89    60%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+REAL OR LUCK (the only lines that block; PF, Sharpe, drawdown and avg trade are shown, never block):
+  [FAIL] boxes        24 of 60 boxes made money in-sample (need 60%): the average of the boxes, not the best
+  [ .. ] picked box   not picked yet: the owner picks a box, then the other lines are read
+NEXT: The owner picks a box by its number: bp.py wf pick i50_three_candles_fade <n> (blueprint_wf_pick).

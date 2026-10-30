@@ -1,0 +1,29 @@
+{
+ "name": "i45_prev_candle_break_after_small",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: previous candle break only after a small candle",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "nr": [
+   0.5,
+   0.75
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "pcb"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

@@ -1,0 +1,68 @@
+3:1 IN-SAMPLE TABLE of i06_hk_orb15_follow: 60 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  r_end2145_atr1-r0p5           65%   68%     908    -9,602  0.88    20%
+   2  r_end2145_own0p5-r0p5         65%   67%     908    -5,882  0.93    80%
+   3  r_end2145_atr1p5-r0p5         64%   67%     908   -13,782  0.88    30%
+   4  r_end2145_atr2-r0p5           63%   64%     908    -2,897  0.98    80%
+   5  r_end2145_own1-r0p5           61%   62%     908   -10,762  0.93    10%
+   6  r_end2145_atr0p5-r0p5         60%   68%     908   -13,127  0.71    30%
+   7  r_end2145_pts15-r0p5          60%   65%     908   -18,082  0.81    10%
+   8  r_end2145_own1p5-r0p5         56%   56%     908      -477  1.00   100%
+   9  r_end2145_atr1-r0p75          56%   59%     908   -10,907  0.89    40%
+  10  r_end2145_pts25-r0p5          56%   59%     908   -16,777  0.87    10%
+  11  r_end2145_atr1p5-r0p75        55%   57%     908   -10,872  0.92    30%
+  12  r_end2145_own0p5-r0p75        55%   58%     908   -13,207  0.88    30%
+  13  r_end2145_own1-r0p75          54%   53%     908     2,558  1.02   100%
+  14  r_end2145_atr2-r0p75          53%   53%     908    -3,577  0.98    40%
+  15  r_end2145_pts40-r0p5          53%   53%     908    -3,947  0.97    70%
+  16  r_end2145_pts15-r0p75         52%   56%     908   -16,232  0.85    10%
+  17  r_end2145_own2-r0p5           52%   53%     908    -4,942  0.97    60%
+  18  r_end2145_atr0p5-r0p75        51%   58%     908   -14,397  0.75    30%
+  19  r_end2145_own1p5-r0p75        50%   51%     908    -3,267  0.98    80%
+  20  r_end2145_atr1-r1             50%   52%     908   -10,907  0.91    20%
+  21  r_end2145_pts25-r0p75         50%   52%     908   -11,632  0.92    60%
+  22  r_end2145_atr2-r1             49%   47%     908    12,683  1.07    90%
+  23  r_end2145_pts60-r0p5          49%   51%     908   -13,067  0.93    10%
+  24  r_end2145_own1-r1             49%   49%     908      -507  1.00   100%
+  25  r_end2145_pts40-r0p75         48%   50%     908    -9,102  0.95    60%
+  26  r_end2145_own2-r0p75          48%   49%     908    -9,227  0.95    30%
+  27  r_end2145_atr1p5-r1           48%   49%     908    -9,102  0.94    30%
+  28  r_end2145_own1p5-r1           48%   49%     908    -6,322  0.97    60%
+  29  r_end2145_own0p5-r1           47%   50%     908   -13,552  0.89    40%
+  30  r_end2145_pts60-r0p75         47%   49%     908   -12,262  0.93    20%
+  31  r_end2145_pts15-r1            47%   50%     908   -15,067  0.88    20%
+  32  r_end2145_pts40-r1            47%   48%     908    -9,002  0.95    40%
+  33  r_end2145_own2-r1             46%   47%     908    -1,287  0.99    70%
+  34  r_end2145_pts60-r1            46%   47%     908    -6,237  0.97    30%
+  35  r_end2145_own1p5-r1p5         46%   46%     908     6,343  1.03   100%
+  36  r_end2145_atr0p5-r1           46%   51%     908   -10,882  0.83    70%
+  37  r_end2145_pts25-r1            46%   49%     908   -15,782  0.90    30%
+  38  r_end2145_pts60-r1p5          46%   47%     908    -6,842  0.96    30%
+  39  r_end2145_pts40-r1p5          46%   46%     908    -1,907  0.99    70%
+  40  r_end2145_own2-r1p5           46%   47%     908    -6,587  0.97    40%
+  41  r_end2145_own2-r2             46%   47%     908   -12,897  0.94    30%
+  42  r_end2145_pts60-r2            46%   46%     908    -2,542  0.99    30%
+  43  r_end2145_own1p5-r2           46%   46%     908    -3,412  0.98    70%
+  44  r_end2145_pts40-r2            45%   45%     908      -357  1.00    80%
+  45  r_end2145_atr2-r1p5           45%   43%     908    13,158  1.07    90%
+  46  r_end2145_own1-r1p5           45%   46%     908    -4,622  0.97    60%
+  47  r_end2145_atr2-r2             44%   43%     908     5,528  1.03    70%
+  48  r_end2145_own1-r2             44%   43%     908     3,078  1.02    90%
+  49  r_end2145_pts25-r1p5          43%   46%     908   -23,887  0.86    20%
+  50  r_end2145_atr1p5-r1p5         42%   41%     908    10,083  1.06   100%
+  51  r_end2145_pts25-r2            42%   45%     908   -23,302  0.86    10%
+  52  r_end2145_own0p5-r1p5         41%   42%     908    -4,207  0.97   100%
+  53  r_end2145_pts15-r1p5          41%   44%     908   -18,182  0.87    20%
+  54  r_end2145_atr1p5-r2           40%   39%     908     5,143  1.03    90%
+  55  r_end2145_atr1-r1p5           39%   42%     908   -14,077  0.90    30%
+  56  r_end2145_pts15-r2            37%   42%     908   -24,817  0.83     0%
+  57  r_end2145_atr0p5-r1p5         37%   42%     908   -15,267  0.80    80%
+  58  r_end2145_own0p5-r2           36%   37%     908    -8,262  0.94   100%
+  59  r_end2145_atr1-r2             35%   36%     908    -5,332  0.96    70%
+  60  r_end2145_atr0p5-r2           31%   35%     908   -16,622  0.80    80%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+REAL OR LUCK (the only lines that block; PF, Sharpe, drawdown and avg trade are shown, never block):
+  [FAIL] boxes        8 of 60 boxes made money in-sample (need 60%): the average of the boxes, not the best
+  [ .. ] picked box   not picked yet: the owner picks a box, then the other lines are read
+NEXT: The owner picks a box by its number: bp.py wf pick i06_hk_orb15_follow <n> (blueprint_wf_pick).

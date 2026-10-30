@@ -1,0 +1,31 @@
+{
+ "name": "i09_lunch_lull_fade",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: fade the break of the 21:30 range in the Tokyo lunch",
+ "family": "win_break",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "r_end": [
+   "22:30"
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "r_start": "21:30",
+  "mode": "fade",
+  "w_start": "22:30",
+  "w_end": "23:30"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

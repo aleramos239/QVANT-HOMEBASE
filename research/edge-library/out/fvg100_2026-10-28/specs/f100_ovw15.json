@@ -1,0 +1,29 @@
+{
+ "name": "f100_ovw15",
+ "reason": "A fair value gap marks one-sided urgency that price tends to return to, so this tests: 15m, open and VWAP agree",
+ "family": "fvg_lab",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "min_gap": [
+   0.1,
+   0.25,
+   0.5
+  ]
+ },
+ "fixed": {
+  "side": "ovw"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

@@ -1,0 +1,30 @@
+{
+ "name": "f100_sweep_f15",
+ "reason": "A fair value gap marks one-sided urgency that price tends to return to, so this tests: gap after a first-15-min high/low sweep",
+ "family": "fvg_lab",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "min_gap": [
+   0.1,
+   0.25,
+   0.5
+  ]
+ },
+ "fixed": {
+  "trig": "sweep",
+  "lvl": "f15"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

@@ -1,0 +1,22 @@
+vwap_i5_touch_us160_1_s40: 3:1 walk-forward in blocks, 15 test months (2022-01 .. 2026-09), 7 stood aside; test days read 2025-07-01 .. 2026-09-22
+stitched: 386 trades, net $-20,419, avg $-53, win 39.1 %, PF 0.90, worst DD $21,606; build-day months $-7,208 (287), test-day months $-13,211 (99)
+  P6.1 FAIL the 3:1 walk-forward made $-20,419 on its test months, one contract after costs (need above $0)
+  P6.2 FAIL beats 29.28 % of 4,000 random tables, each month its pick's exit cell (need above 95 %)
+  P6.3 FAIL win rate 39.12 % on 386 trades at a realized reward-to-risk of 1.39 (average win $1,164, average loss $835): breakeven 41.77 %, need 44.77 % or more (+3 points) (row P3.15 on the stitched months)
+  P6.4 PASS 386 trades on the test months (need 200)
+  2022-01  pts40-r1p875    73  $-2,452
+  2022-05  stood aside      0  $0
+  2022-09  pts50-r1p2      47  $-8,813
+  2023-01  stood aside      0  $0
+  2023-05  stood aside      0  $0
+  2023-09  stood aside      0  $0
+  2024-01  pts50-r1p5      29  $5,614
+  2024-05  pts50-r1p2      30  $4,175
+  2024-09  pts40-r1p875    49  $-1,631
+  2025-01  pts50-r0p9      59  $-4,101
+  2025-05  stood aside      0  $0
+  2025-09  pts50-r1p5      28  $-13,142
+  2026-01  stood aside      0  $0
+  2026-05  pts30-r2p5      71  $-69
+  2026-09  stood aside      0  $0
+next month (2026-10): stand aside

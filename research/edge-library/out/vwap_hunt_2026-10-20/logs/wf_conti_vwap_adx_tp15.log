@@ -1,0 +1,22 @@
+conti_vwap_adx_tp15: 3:1 walk-forward in blocks, 15 test months (2022-01 .. 2026-09), 8 stood aside; test days read 2025-07-01 .. 2026-09-22
+stitched: 53 trades, net $4,643, avg $88, win 60.4 %, PF 1.48, worst DD $4,409; build-day months $4,044 (39), test-day months $599 (14)
+  P6.1 PASS the 3:1 walk-forward made $4,643 on its test months, one contract after costs (need above $0)
+  P6.2 FAIL beats 69.8 % of 4,000 random tables, each month its pick's exit cell (need above 95 %)
+  P6.3 PASS win rate 60.38 % on 53 trades at a realized reward-to-risk of 0.97 (average win $447, average loss $460): breakeven 50.72 %, need 53.72 % or more (+3 points) (row P3.15 on the stitched months)
+  P6.4 FAIL 53 trades on the test months (need 200)
+  2022-01  struct-r1        8  $3,763
+  2022-05  stood aside      0  $0
+  2022-09  stood aside      0  $0
+  2023-01  struct-r1        8  $1,888
+  2023-05  stood aside      0  $0
+  2023-09  struct-r1        9  $594
+  2024-01  struct-r1        6  $-749
+  2024-05  stood aside      0  $0
+  2024-09  stood aside      0  $0
+  2025-01  struct-r1        8  $-1,452
+  2025-05  stood aside      0  $0
+  2025-09  stood aside      0  $0
+  2026-01  stood aside      0  $0
+  2026-05  struct-r1        7  $127
+  2026-09  struct-r1        7  $472
+next month (2026-10): struct-r1

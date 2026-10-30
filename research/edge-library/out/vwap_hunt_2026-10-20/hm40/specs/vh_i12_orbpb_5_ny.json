@@ -1,0 +1,31 @@
+{
+ "name": "vh_i12_orbpb_5_ny",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 12: After the opening range breaks, the first return to the day's average price is where the breakout's side adds. Who loses: the faders at the VWAP.",
+ "family": "orb_vwap_pb",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "or_min": [
+   15,
+   30,
+   60
+  ]
+ },
+ "fixed": {
+  "near": 0
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

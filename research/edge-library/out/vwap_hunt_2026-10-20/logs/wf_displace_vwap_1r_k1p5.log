@@ -1,0 +1,22 @@
+displace_vwap_1r_k1p5: 3:1 walk-forward in blocks, 15 test months (2022-01 .. 2026-09), 7 stood aside; test days read 2025-07-01 .. 2026-09-22
+stitched: 143 trades, net $12,778, avg $89, win 55.9 %, PF 1.17, worst DD $13,787; build-day months $14,577 (107), test-day months $-1,799 (36)
+  P6.1 PASS the 3:1 walk-forward made $12,778 on its test months, one contract after costs (need above $0)
+  P6.2 FAIL beats 93.55 % of 4,000 random tables, each month its pick's exit cell (need above 95 %)
+  P6.3 PASS win rate 55.94 % on 143 trades at a realized reward-to-risk of 0.92 (average win $1,103, average loss $1,198): breakeven 52.06 %, need 55.06 % or more (+3 points) (row P3.15 on the stitched months)
+  P6.4 FAIL 143 trades on the test months (need 200)
+  2022-01  stood aside      0  $0
+  2022-05  struct-r0p75    19  $10,884
+  2022-09  stood aside      0  $0
+  2023-01  stood aside      0  $0
+  2023-05  struct-r1       19  $-2,306
+  2023-09  struct-r0p75    16  $3,931
+  2024-01  struct-r1p25    19  $-3,251
+  2024-05  struct-r0p75    17  $-1,258
+  2024-09  stood aside      0  $0
+  2025-01  struct-r1       17  $6,577
+  2025-05  stood aside      0  $0
+  2025-09  stood aside      0  $0
+  2026-01  struct-r1p25    17  $3,952
+  2026-05  struct-r1       19  $-5,751
+  2026-09  stood aside      0  $0
+next month (2026-10): struct-r0p75

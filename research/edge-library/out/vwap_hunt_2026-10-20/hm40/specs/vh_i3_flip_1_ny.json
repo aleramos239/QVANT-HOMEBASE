@@ -1,0 +1,31 @@
+{
+ "name": "vh_i3_flip_1_ny",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 3: A cross of the anchored day-average price that holds means control changed sides. Who loses: the side still positioned for the old trend.",
+ "family": "vwap_flip",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "1"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "hold": [
+   1,
+   2,
+   3
+  ]
+ },
+ "fixed": {
+  "anchor": "rth"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

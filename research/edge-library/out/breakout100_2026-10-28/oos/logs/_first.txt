@@ -1,0 +1,5 @@
+
+real	0m5.706s
+user	0m5.217s
+sys	0m0.290s
+15_pts25-r1  34.25s user 8.82s system 232% cpu 18.540 total

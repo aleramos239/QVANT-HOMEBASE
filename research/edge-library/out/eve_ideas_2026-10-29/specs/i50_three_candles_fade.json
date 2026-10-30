@@ -1,0 +1,29 @@
+{
+ "name": "i50_three_candles_fade",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: fade three same-colour 15m candles",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "nbars": [
+   3
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "streak",
+  "mode": "fade"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

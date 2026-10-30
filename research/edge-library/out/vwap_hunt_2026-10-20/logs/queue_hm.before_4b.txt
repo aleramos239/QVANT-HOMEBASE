@@ -1,0 +1,240 @@
+# Amendment O (2026-10-21): batch 4a, every untried family
+# Amendment I (2026-10-21): research workflow picks first
+# Amendment H (2026-10-21 ~06:45 ET): idea 26 rv_fade first
+# portfolio hunt on hm60: ideas with chosen in-sample versions finish first (C6 needs the whole idea), then stage 1, batch 2, stages 2-4
+wfw vh_i41_c930_5_ny
+wfw vh_i41_c930_15_ny
+wfr vh_i40_bigprint_15_ny
+wfr vh_i41_c930_15_ny
+wfr vh_i41_c930_5_ny
+wfr vh_i42_ddiv_15_ny
+wfr vh_i43_fvgodir_15_ny
+wfr vh_i44_ibtouch_15_ny
+wfr vh_i45_ifvg_15_ny
+wfr vh_i46_liq_15_ny
+wfr vh_i47_openfade_15_ny
+wfr vh_i47_openfade_5_ny
+wfr vh_i48_openfvg_15_ny
+wfr vh_i49_orbclose_15_ny
+wfr vh_i50_pinbar_15_ny
+wfr vh_i50_pinbar_5_ny
+wfr vh_i51_pullback_15_ny
+wfr vh_i52_rsi2_15_ny
+wfr vh_i52_rsi2_5_ny
+wfr vh_i53_sfp_15_ny
+wfr vh_i53_sfp_5_ny
+wfr vh_i54_sweeprev_15_ny
+wfr vh_i55_tema_15_ny
+wfr vh_i56_vabreak_15_ny
+wfr vh_i57_vareclaim_15_ny
+wfr vh_i58_vault_30_ny
+wfr vh_i59_vwapadx_15_ny
+wfr vh_i60_wincandle_15_ny
+wfr vh_i60_wincandle_5_ny
+wfr vh_i61_squeeze_15_ny
+wfw vh_i16_emax_15_ny
+wfw vh_i11_flip_gx_1_ny
+roos vh_i27_onrorb_15_ny-NQ-tf15
+roos vh_i27_es_onrorb_15_ny-ES-tf15
+roos vh_i17_rvbrk_15_ny-NQ-tf15
+oos vh_i27_onrorb_15_ny-NQ-tf15 adx_min20_own1-r2
+oos vh_i27_es_onrorb_15_ny-ES-tf15 adx_min20_own1-r0p75
+roos vh_i18_es_st_adx_15_ny-ES-tf15
+oos vh_i17_rvbrk_15_ny-NQ-tf15 m1p5_atr2-r0p75
+oos vh_i18_es_st_adx_15_ny-ES-tf15 mult3_own1-r1p5
+roos vh_i17_rvbrk_5_ny-NQ-tf5
+roos vh_i17_rvbrk_n_5_ny-NQ-tf5
+oos vh_i17_rvbrk_5_ny-NQ-tf5 m2_atr2-r2
+roos vh_i16_emavwap_rv_5_ny-NQ-tf5
+oos vh_i17_rvbrk_n_5_ny-NQ-tf5 n40_atr2-r1p5
+oos vh_i16_emavwap_rv_5_ny-NQ-tf5 fast_n13_own1-r1p5
+roos vh_i10_adx_touch_5_ny-NQ-tf5
+roos vh_i10_adx_tp_5_ny-NQ-tf5
+oos vh_i10_adx_touch_5_ny-NQ-tf5 g_lvl30_pts60-r2
+oos vh_i10_adx_tp_5_ny-NQ-tf5 g_lvl30_atr1p5-r2
+roos vh_i1_pb_1_ny-NQ-tf1
+roos vh_i1_pb_5_ny-NQ-tf5
+oos vh_i1_pb_1_ny-NQ-tf1 vwap_slope30_pts60-r2
+roos vh_i11_touch_gx_5_ny-NQ-tf5
+roos vh_i6_g_disp_5_ny-NQ-tf5
+roos vh_i6_g_disp_15_ny-NQ-tf15
+roos vh_i6_g_cbrk_15_ny-NQ-tf15
+oos vh_i1_pb_5_ny-NQ-tf5 vwap_slope60_atr1-r0p75
+oos vh_i11_touch_gx_5_ny-NQ-tf5 away160_atr2-r1p5
+roos vh_i6_g_donch_5_ny-NQ-tf5
+roos vh_i6_g_donch_15_ny-NQ-tf15
+oos vh_i6_g_disp_5_ny-NQ-tf5 k1p5_own1p5-r2
+oos vh_i6_g_disp_15_ny-NQ-tf15 k2_atr2-r2
+oos vh_i6_g_cbrk_15_ny-NQ-tf15 backrange_own1p5-r2
+oos vh_i6_g_donch_5_ny-NQ-tf5 n20_own2-r0p75
+roos vh_i6_g_donch_5_night-NQ-tf5
+oos vh_i6_g_donch_15_ny-NQ-tf15 n40_own1p5-r0p5
+roos vh_i12_orbpb_5_ny-NQ-tf5
+roos vh_i12_orbpb_1_ny-NQ-tf1
+roos vh_i12_orbpb_15_ny-NQ-tf15
+oos vh_i6_g_donch_5_night-NQ-tf5 n20_own2-r2
+oos vh_i12_orbpb_1_ny-NQ-tf1 or_min30_own1p5-r0p5
+oos vh_i12_orbpb_5_ny-NQ-tf5 or_min60_own1-r0p5
+oos vh_i12_orbpb_15_ny-NQ-tf15 or_min15_atr2-r1
+roos vh_i7_orb_15_ny-NQ-tf15
+roos vh_i7_orbc_short_5_ny-NQ-tf5
+roos vh_i7_orbc_long_5_ny-NQ-tf5
+roos vh_i7_orb_5_ny-NQ-tf5
+roos vh_i7_orb_1_ny-NQ-tf1
+oos vh_i7_orb_15_ny-NQ-tf15 r_end1000_own2-r1
+roos vh_i2_tp_5_ny-NQ-tf5
+roos vh_i2_tp_15_ny-NQ-tf15
+oos vh_i7_orbc_short_5_ny-NQ-tf5 or_min60_own2-r0p5
+oos vh_i7_orbc_long_5_ny-NQ-tf5 or_min60_own0p5-r1p5
+oos vh_i7_orb_5_ny-NQ-tf5 r_end1000_own2-r1
+oos vh_i7_orb_1_ny-NQ-tf1 r_end1030_own1p5-r2
+oos vh_i2_tp_5_ny-NQ-tf5 x0p05_atr2-r2
+oos vh_i2_tp_15_ny-NQ-tf15 x0p2_atr1p5-r1p5
+wfw vh_i27_onrorb_15_ny
+wfw vh_i27_es_onrorb_15_ny
+wfr vh_i27_onrorb_15_ny
+wfr vh_i27_es_onrorb_15_ny
+wfr vh_i31_es_rvbrk_15_ny
+wfr vh_i31_gc_rvbrk_15_ny
+wfw vh_i18_es_st_adx_15_ny
+wfr vh_i26_rv_5_ny
+wfr vh_i26_es_rv_5_ny
+wfr vh_i26_rv_1_ny
+wfr vh_i26_es_rv_1_ny
+wfr vh_i26_rv_15_ny
+wfr vh_i26_es_rv_15_ny
+wfr vh_i26_rv_5_night
+wfr vh_i26_es_rv_5_night
+wfr vh_i26_rv_look_5_ny
+wfr vh_i26_es_rv_look_5_ny
+wfw vh_i17_rvbrk_n_5_ny
+wfw vh_i17_rvbrk_5_ny
+wfw vh_i17_rvbrk_15_ny
+wfw vh_i16_emavwap_rv_5_ny
+wfw vh_i10_adx_tp_5_ny
+wfw vh_i10_adx_touch_5_ny
+wfw vh_i1_pb_5_ny
+wfw vh_i1_pb_1_ny
+wfw vh_i11_touch_gx_5_ny
+wfw vh_i6_g_donch_5_ny
+wfw vh_i6_g_donch_5_night
+wfw vh_i6_g_donch_15_ny
+wfw vh_i6_g_disp_5_ny
+wfw vh_i6_g_disp_15_ny
+wfw vh_i6_g_cbrk_15_ny
+wfw vh_i12_orbpb_5_ny
+wfw vh_i12_orbpb_1_ny
+wfw vh_i12_orbpb_15_ny
+wfw vh_i7_orbc_short_5_ny
+wfw vh_i7_orbc_long_5_ny
+wfw vh_i7_orb_5_ny
+wfw vh_i7_orb_1_ny
+wfw vh_i7_orb_15_ny
+wfw vh_i2_tp_5_ny
+wfw vh_i2_tp_15_ny
+wfr vh_i7_orb_5_ny
+wfr vh_i7_orbc_long_5_ny
+wfr vh_i7_orbc_short_5_ny
+wfr vh_i7_orb_15_ny
+wfr vh_i7_orb_1_ny
+wfr vh_i12_orbpb_5_ny
+wfr vh_i12_orbpb_15_ny
+wfr vh_i12_orbpb_1_ny
+wfr vh_i6_g_cbrk_5_ny
+wfr vh_i6_g_disp_5_ny
+wfr vh_i6_g_donch_5_ny
+wfr vh_i6_g_fvg_5_ny
+wfr vh_i6_g_cbrk_15_ny
+wfr vh_i6_g_disp_15_ny
+wfr vh_i6_g_donch_15_ny
+wfr vh_i6_g_fvg_15_ny
+wfr vh_i6_g_cbrk_5_night
+wfr vh_i6_g_disp_5_night
+wfr vh_i6_g_donch_5_night
+wfr vh_i6_g_fvg_5_night
+wfr vh_i11_flip_gx_5_ny
+wfr vh_i11_touch_gx_5_ny
+wfr vh_i11_flip_gx_15_ny
+wfr vh_i11_flip_gx_1_ny
+wfr vh_i1_pb_5_ny
+wfr vh_i1_pb_15_ny
+wfr vh_i1_pb_1_ny
+wfr vh_i2_tp_5_ny
+wfr vh_i2_tp_15_ny
+wfr vh_i2_tp_1_ny
+wfr vh_i21_es_pb_5_ny
+wfr vh_i21_gc_pb_5_ny
+wfr vh_i22_es_fvgos_15_ny
+wfr vh_i22_gc_fvgos_15_ny
+wfr vh_i23_fbar_5_all
+wfr vh_i23_es_fbar_15_all
+wfr vh_i23_gc_fbar_15_all
+wfr vh_i24_es_touch_5_ny
+wfr vh_i24_gc_touch_5_ny
+wfr vh_i25_es_orbpb_5_ny
+wfr vh_i25_gc_orbpb_5_ny
+wfr vh_i5_touch_us_5_ny
+wfr vh_i5_touch_us_15_ny
+wfr vh_i5_touch_us_1_ny
+wfr vh_i5_touch_day_5_asia
+wfr vh_i5_touch_ldn_5_ldn
+wfr vh_i3_flip_5_ny
+wfr vh_i13_reclaim_5_ny
+wfr vh_i9_bbrk_5_ny
+wfr vh_i9_noise_long_5_ny
+wfr vh_i9_noise_short_5_ny
+wfr vh_i14_flip_ldn_5_ny
+wfr vh_i15_flip_long_5_ny
+wfr vh_i15_flip_wk_5_ny
+wfr vh_i15_touch_ext_5_ny
+wfr vh_i15_touch_long_5_ny
+wfr vh_i4_emax_5_ny
+wfr vh_i10_adx_emax_5_ny
+wfr vh_i10_adx_flip_5_ny
+wfr vh_i10_adx_touch_5_ny
+wfr vh_i10_adx_tp_5_ny
+wfr vh_i8_band_5_ny
+wfr vh_i8_z_5_ny
+wfr vh_i16_emax_5_ny
+wfr vh_i16_emax_15_ny
+wfr vh_i16_emax_5_night
+wfr vh_i16_emavwma_5_ny
+wfr vh_i16_emavwma_15_ny
+wfr vh_i16_emavwap_rv_5_ny
+wfr vh_i16_emax_side_5_ny
+wfr vh_i17_rvbrk_5_ny
+wfr vh_i17_rvbrk_15_ny
+wfr vh_i17_rvbrk_5_night
+wfr vh_i17_rvbrk_n_5_ny
+wfr vh_i18_es_noise_long_30_ny
+wfr vh_i18_es_noise_short_30_ny
+wfr vh_i18_es_st_adx_15_ny
+wfr vh_i18_es_avwap_onh_5_ny
+wfr vh_i19_gc_0300_5_ldn
+wfr vh_i19_gc_us_short_15_ny
+wfr vh_i19_gc_eve_long_30_eve
+wfr vh_i19_gc_asia_brk_15_ldn
+wfr vh_i20_holy_grail_5_ny
+wfr vh_i20_volspike_pm_15_ny
+wfr vh_i3_flip_15_ny
+wfr vh_i13_reclaim_15_ny
+wfr vh_i9_bbrk_15_ny
+wfr vh_i14_flip_ldn_15_ny
+wfr vh_i15_flip_long_15_ny
+wfr vh_i15_flip_wk_15_ny
+wfr vh_i15_touch_long_15_ny
+wfr vh_i4_emax_15_ny
+wfr vh_i8_band_15_ny
+wfr vh_i8_z_15_ny
+wfr vh_i3_flip_1_ny
+wfr vh_i13_reclaim_1_ny
+wfr vh_i9_bbrk_1_ny
+wfr vh_i4_emax_1_ny
+wfr vh_i8_band_1_ny
+wfr vh_i8_z_1_ny
+wfr vh_i3_flip_5_night
+wfr vh_i9_bbrk_5_night
+wfr vh_i15_touch_long_5_ldnasia
+wfr vh_i4_emax_5_night
+wfr vh_i8_band_5_night
+wfr vh_i8_z_5_night

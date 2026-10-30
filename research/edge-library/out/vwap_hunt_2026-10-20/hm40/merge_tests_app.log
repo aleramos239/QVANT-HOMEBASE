@@ -1,0 +1,275 @@
+........................................................................ [  1%]
+........................................................................ [  2%]
+........................................................................ [  3%]
+........................................................................ [  4%]
+........................................................................ [  6%]
+........................................................................ [  7%]
+........................................................................ [  8%]
+........................................................................ [  9%]
+........................................................................ [ 11%]
+........................................................................ [ 12%]
+........................................................................ [ 13%]
+........................................................................ [ 14%]
+........................................................................ [ 16%]
+........................................................................ [ 17%]
+..............F......................................................... [ 18%]
+........................................................................ [ 19%]
+........................................................................ [ 21%]
+........................................................................ [ 22%]
+........................................................................ [ 23%]
+........................................................................ [ 24%]
+........................................................................ [ 26%]
+........................................................................ [ 27%]
+........................................................................ [ 28%]
+........................................................................ [ 29%]
+........................................................................ [ 31%]
+........................................................................ [ 32%]
+....................................ssssssssssssssssssssssss............ [ 33%]
+........................................................................ [ 34%]
+........................................................................ [ 36%]
+........................................................................ [ 37%]
+........................................................................ [ 38%]
+........................................................................ [ 39%]
+........................................................................ [ 40%]
+.....................sssss.sssss........................................ [ 42%]
+........................................................................ [ 43%]
+........................................................................ [ 44%]
+........................................................................ [ 45%]
+........................................................................ [ 47%]
+........................................................................ [ 48%]
+........................................................................ [ 49%]
+........................................................................ [ 50%]
+........................................................................ [ 52%]
+........................................................................ [ 53%]
+........................................................................ [ 54%]
+........................................................................ [ 55%]
+........................................................................ [ 57%]
+........................................................................ [ 58%]
+........................................................................ [ 59%]
+........................................................................ [ 60%]
+........................................................................ [ 62%]
+........................................................................ [ 63%]
+........................................................................ [ 64%]
+........................................................................ [ 65%]
+........................................................................ [ 67%]
+........................................................................ [ 68%]
+........................................................................ [ 69%]
+........................................................................ [ 70%]
+........................................................................ [ 72%]
+........................................................................ [ 73%]
+........................................................................ [ 74%]
+........................................................................ [ 75%]
+......................ssssss............................................ [ 76%]
+........................................................................ [ 78%]
+........................................................................ [ 79%]
+........................................................................ [ 80%]
+........................................................................ [ 81%]
+........................................................................ [ 83%]
+........................................................................ [ 84%]
+........................................................................ [ 85%]
+........................................................................ [ 86%]
+........................................................................ [ 88%]
+........................................................................ [ 89%]
+........................................................................ [ 90%]
+........................................................................ [ 91%]
+........................................................................ [ 93%]
+........................................................................ [ 94%]
+........................................................................ [ 95%]
+........................................................................ [ 96%]
+........................................................................ [ 98%]
+........................................................................ [ 99%]
+......................................                                   [100%]
+=================================== FAILURES ===================================
+__________________________ test_chart_page_javascript __________________________
+
+    @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+    def test_chart_page_javascript():
+        files = sorted(str(p) for p in JS_TESTS.glob("*.test.mjs"))
+        assert files, "no JS tests found"
+        r = subprocess.run(["node", "--test", *files], capture_output=True, text=True, timeout=120)
+>       assert r.returncode == 0, (r.stdout + r.stderr)[-6000:]
+E       AssertionError: e grows must not shift the sticky top bar -- a Kill hold cancels when the\n     pointer leaves the button (second review) */\n  .app-main{ flex:1; min-width:0; display:flex; flex-direction:column; overflow-x:hidden; overflow-y:auto;\n    scrollbar-gutter:stable; }\n  .inset-topbar{ display:flex; align-items:center; gap:10px; height:52px; padding:0 20px;\n    border-bottom:1px solid var(--border); flex-shrink:0;\n    /* z 48: above a lifted card (45) -- nothing on the page ever covers Arm / Disarm / Kill --\n       and below every dialog's scrim (50+) */\n    position:sticky; top:0; z-index:48; background:var(--glass-bg);\n    backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));\n    -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));\n    border-top:1px solid var(--glass-edge); --muted-foreground:var(--glass-text-2); }\n  .scroll{ flex:1 0 auto; padding:22px 24px 48px; }\n  /* frosted cards (strategies, accounts, the activity log) */\n  .card{ background:var(--glass-bg);\n    backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));\n    -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));\n    border-top-color:var(--glass-edge); box-shadow:var(--glass-shadow); --muted-foreground:var(--glass-text-2); }\n  /* a card is its own stacking context now (backdrop-filter): one holding an open + Assign menu is\n     lifted, or the next card would paint over the part of the menu that hangs below it */\n  .card:has(.amenu:not([hidden])){ position:relative; z-index:45; }\n  .view-wrap{ max-width:980px; margin:0 auto; }\n  .spacer{ flex:1; }\n\n  .pill{ display:inline-flex; align-items:center; gap:4px; white-space:nowrap;\n    border:1px solid transparent; border-radius:var(--radius-sm); padding:2px 8px;\n    font-size:0.75rem; font-weight:500; line-height:1.2;\n    background:var(--secondary); color:var(--secondary-foreground); }\n  /* Four meanings, four looks (2026-09-28, S4 -- one solid pill used to mean all of them):\n     ARMED  the desk places real orders: solid red with a light, the page's only solid red token\n     LIVE   a real-money account: a red outline tag, never filled\n     in position  a strategy holds a position today: solid black/white\n     ON     a strategy is switched on: an outline with a dot */\n  .pill.armed{ background:color-mix(in oklch, var(--destructive) 75%, black);\n    color:var(--destructive-foreground); font-weight:700; letter-spacing:.04em; }\n  .pill.armed::before{ content:""; width:7px; height:7px; border-radius:9999px; background:currentColor; }\n  .tag-live{ display:inline-flex; align-items:center; white-space:nowrap; line-height:1.2;\n    border:1px solid color-mix(in oklch, var(--destructive) 60%, transparent); border-radius:3px;\n    background:var(--card); color:var(--destructive); padding:1px 5px;   /* solid on the glass card */\n    font-size:10px; font-weight:700; letter-spacing:.06em; }\n  .tag-paper{ display:inline-flex; align-items:center; white-space:nowrap; line-height:1.2;\n    border:1px solid var(--border); border-radius:3px; background:var(--card); color:var(--muted-foreground);\n    padding:1px 5px; font-size:10px; font-weight:700; letter-spacing:.06em; }\n  .pill.inpos{ background:var(--primary); color:var(--primary-foreground); font-weight:600; }\n  .pill.on{ background:transparent; border-color:var(--foreground); color:var(--foreground); }\n  .pill.on::before{ content:""; width:6px; height:6px; border-radius:9999px; background:currentColor; }\n  .pill.idle{ background:transparent; border-color:var(--border); color:var(--muted-foreground); }\n  .pill.won{ background:color-mix(in oklch, var(--pos) 15%, transparent); color:var(--pos); border-color:color-mix(in oklch, var(--pos) 30%, transparent); }\n  .pill.lost{ background:color-mix(in oklch, var(--neg) 15%, transparent); color:var(--neg); border-color:color-mix(in oklch, var(--neg) 30%, transparent); }\n\n  .dot{ display:inline-block; width:9px; height:9px; border-radius:9999px; background:var(--muted-foreground); flex:0 0 auto; }\n  .dot.on{ background:var(--foreground); box-shadow:0 0 0 3px var(--secondary); }\n  .dot.off{ background:transparent; border:1.5px solid var(--muted-foreground); }\n\n  /* hero — big status + the two controls */\n  .hero{ display:flex; align-items:center; gap:16px; margin:14px 0 26px; }\n  .hero .dot{ width:13px; height:13px; }\n  .hero h1{ font-size:1.5rem; font-weight:600; letter-spacing:-.02em; margin:0; }\n  .hero p{ margin:2px 0 0; color:var(--muted-foreground); font-size:13px; max-width:420px; }\n  .hero .actions{ margin-left:auto; display:flex; gap:10px; }\n\n  /* master controls (top bar): the armed state + Arm/Disarm + a press-and-hold Kill */\n  .master{ display:inline-flex; align-items:center; gap:8px; }\n  /* Nothing in the top bar may change width when its text changes, at any width: a Kill hold\n     cancels when the pointer leaves the button, so the button must never move under it. The pill\n     sits in a fixed slot (it hugs Arm; the slot fits its longest text, "desk unreachable"), Arm has\n     a fixed width and is hidden by visibility (its space kept), and the clock has a fixed width. */\n  .pill-slot{ display:inline-flex; justify-content:flex-end; width:7.75rem; flex:none; }\n  #armBtn{ width:4.75rem; flex:none; }\n  #armBtn.gone{ visibility:hidden; }\n  .inset-topbar > *{ flex-shrink:0; }\n  /* page switcher (Desk · Charts · Backtest): plain links, one segmented group; the current page is aria-current */\n  .pgsw{ display:inline-flex; align-items:center; gap:2px; height:32px; padding:3px;\n    border:1px solid var(--border); border-radius:var(--radius-md); box-sizing:border-box; }\n  .pgsw a{ display:inline-flex; align-items:center; height:24px; padding:0 9px; border-radius:calc(var(--radius-md) - 3px);\n    font`... 271179 more characters,
+E             expected: /<script src="\/static\/desklab\.js\?v=24"><\/script>/,
+E             operator: 'match',
+E             diff: 'simple'
+E           }
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['node', '--test', '/Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/tests/js/algo...src="\\/static\\/desklab\\.js\\?v=24"><\\/script>/,\n    operator: \'match\',\n    diff: \'simple\'\n  }\n', stderr='').returncode
+
+tests/test_charts_js.py:19: AssertionError
+=============================== warnings summary ===============================
+../../.venv/lib/python3.14/site-packages/fastapi/testclient.py:1
+  /Users/ramoscapital/ramos-quant-homebase/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../.venv/lib/python3.14/site-packages/starlette/testclient.py:53
+  /Users/ramoscapital/ramos-quant-homebase/.venv/lib/python3.14/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/test_account_gone.py: 27 warnings
+tests/test_broker_reconnect_cooldown.py: 4 warnings
+tests/test_engine.py: 112 warnings
+tests/test_engine_lab.py: 1843 warnings
+tests/test_engine_levels.py: 91 warnings
+tests/test_engine_rotation.py: 28 warnings
+tests/test_gc_nfp.py: 41 warnings
+tests/test_labdesk.py: 710 warnings
+tests/test_labdesk_b7.py: 643 warnings
+tests/test_labdesk_b7_api.py: 1 warning
+tests/test_labdesk_round1.py: 548 warnings
+tests/test_labdesk_wave_a.py: 115 warnings
+tests/test_labrun_evening.py: 4 warnings
+tests/test_login_budget.py: 8 warnings
+tests/test_micro_exec.py: 29 warnings
+tests/test_shared_token.py: 18 warnings
+tests/test_timing.py: 16 warnings
+tests/test_token_renewal.py: 1 warning
+tests/test_trading_lab.py: 40 warnings
+  /Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/tests/test_engine.py:21: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    return asyncio.get_event_loop_policy().new_event_loop().run_until_complete(coro)
+
+tests/test_adapter_caches.py: 31 warnings
+tests/test_exit_reads.py: 24 warnings
+tests/test_status_from_caches.py: 30 warnings
+tests/test_timing.py: 2 warnings
+tests/test_tradovate.py: 30 warnings
+  /Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/tests/test_tradovate.py:20: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    return asyncio.get_event_loop_policy().new_event_loop().run_until_complete(coro)
+
+tests/test_backtest_runner.py::test_a_failed_prepare_leaves_no_orphan_run_folder
+  /Users/ramoscapital/ramos-quant-homebase/.venv/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread tester-grid-0
+  
+  Traceback (most recent call last):
+    File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/homebase/backtest/grid.py", line 527, in _work
+      code, timed_out = runner.wait_proc(proc)
+                        ~~~~~~~~~~~~~~~~^^^^^^
+    File "/Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/homebase/backtest/runner.py", line 647, in wait_proc
+      return proc.wait(), None
+             ~~~~~~~~~^^
+    File "/Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/tests/test_backtest_grid.py", line 274, in wait
+      raise subprocess.TimeoutExpired("fake", timeout)
+  subprocess.TimeoutExpired: Command 'fake' timed out after None seconds
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_backtest_runner.py::test_the_default_run_reads_the_build_days_and_an_older_request_keeps_its_own
+  /Users/ramoscapital/ramos-quant-homebase/.venv/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread tester-grid-1
+  
+  Traceback (most recent call last):
+    File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/homebase/backtest/grid.py", line 527, in _work
+      code, timed_out = runner.wait_proc(proc)
+                        ~~~~~~~~~~~~~~~~^^^^^^
+    File "/Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/homebase/backtest/runner.py", line 647, in wait_proc
+      return proc.wait(), None
+             ~~~~~~~~~^^
+    File "/Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/tests/test_backtest_grid.py", line 274, in wait
+      raise subprocess.TimeoutExpired("fake", timeout)
+  subprocess.TimeoutExpired: Command 'fake' timed out after None seconds
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_bot_kill.py: 56 warnings
+tests/test_desk_api.py: 9 warnings
+tests/test_timing.py: 7 warnings
+tests/test_trading_exits.py: 44 warnings
+tests/test_trading_guards.py: 115 warnings
+tests/test_trading_stoplimit.py: 28 warnings
+tests/test_trading_views.py: 12 warnings
+  /Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/tests/trading_util.py:20: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    return asyncio.get_event_loop_policy().new_event_loop().run_until_complete(coro)
+
+tests/test_charts_desk.py: 20 warnings
+  /Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/tests/test_charts_desk.py:20: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    return asyncio.get_event_loop_policy().new_event_loop().run_until_complete(coro)
+
+tests/test_charts_desk.py::test_the_link_feeds_the_fanout_without_waiting_on_pages
+  /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py:744: RuntimeWarning: coroutine method 'aclose' of 'DeskLink._lines' was never awaited
+    self._ready.clear()
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_charts_js.py::test_chart_page_javascript
+  /Users/ramoscapital/ramos-quant-homebase/.venv/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread tester-grid-1
+  
+  Traceback (most recent call last):
+    File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/homebase/backtest/grid.py", line 527, in _work
+      code, timed_out = runner.wait_proc(proc)
+                        ~~~~~~~~~~~~~~~~^^^^^^
+    File "/Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/homebase/backtest/runner.py", line 647, in wait_proc
+      return proc.wait(), None
+             ~~~~~~~~~^^
+    File "/Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/tests/test_backtest_walkforward.py", line 432, in wait
+      raise subprocess.TimeoutExpired("fake", timeout)
+  subprocess.TimeoutExpired: Command 'fake' timed out after None seconds
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_charts_js.py::test_chart_page_javascript
+  /Users/ramoscapital/ramos-quant-homebase/.venv/lib/python3.14/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread tester-grid-0
+  
+  Traceback (most recent call last):
+    File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+      self._context.run(self.run)
+      ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+    File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/homebase/backtest/grid.py", line 527, in _work
+      code, timed_out = runner.wait_proc(proc)
+                        ~~~~~~~~~~~~~~~~^^^^^^
+    File "/Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/homebase/backtest/runner.py", line 647, in wait_proc
+      return proc.wait(), None
+             ~~~~~~~~~^^
+    File "/Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/tests/test_backtest_walkforward.py", line 432, in wait
+      raise subprocess.TimeoutExpired("fake", timeout)
+  subprocess.TimeoutExpired: Command 'fake' timed out after None seconds
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_feed_rules.py: 18 warnings
+  /Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/tests/test_feed_rules.py:20: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    return asyncio.get_event_loop_policy().new_event_loop().run_until_complete(coro)
+
+tests/test_prestage.py: 113 warnings
+tests/test_timer.py: 620 warnings
+tests/test_timing.py: 12 warnings
+  /Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/tests/test_timer.py:25: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    return asyncio.get_event_loop_policy().new_event_loop().run_until_complete(coro)
+
+tests/test_tickrepair.py: 69 warnings
+tests/test_ticks.py: 28 warnings
+  /Users/ramoscapital/ramos-quant-homebase/.worktrees/merge-hm40/tests/test_ticks.py:17: DeprecationWarning: 'asyncio.get_event_loop_policy' is deprecated and slated for removal in Python 3.16
+    return asyncio.get_event_loop_policy().new_event_loop().run_until_complete(coro)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_charts_js.py::test_chart_page_javascript - AssertionError: ...
+1 failed, 5757 passed, 40 skipped, 5554 warnings in 784.79s (0:13:04)
+app exit 1

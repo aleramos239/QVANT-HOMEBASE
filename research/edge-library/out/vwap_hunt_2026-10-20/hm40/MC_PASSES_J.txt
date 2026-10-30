@@ -1,0 +1,26 @@
+
+=== VWAP touch, trending days (ADX)  (vh_i10_adx_touch_5_ny-NQ-tf5)
+  test months: 143 trades on 290 days, net $11,413, avg $80, win 41.3 %, worst drawdown $17,086
+  R1 reshuffles: money in 72.7 % of 1,000 runs | net p5 $-18,431 median $10,228 p95 $42,333
+     worst drawdown: median $15,558, p95 $30,303
+  R2 winners -15 %: net $-4,800; money in 37.1 % of runs; median $-5,738
+  by year: 2022: 44 tr $9,424 win 41% | 2023: 20 tr $2,830 win 45% | 2024: 27 tr $-6,558 win 41% | 2025: 28 tr $-4,832 win 32% | 2026: 24 tr $10,549 win 50%
+  test months positive: 8 of 14
+
+=== EMA crosses VWAP, high volume  (vh_i16_emavwap_rv_5_ny-NQ-tf5)
+  test months: 133 trades on 290 days, net $9,783, avg $74, win 48.9 %, worst drawdown $21,304
+  R1 reshuffles: money in 68.6 % of 1,000 runs | net p5 $-19,904 median $9,977 p95 $40,484
+     worst drawdown: median $16,011, p95 $33,558
+  R2 winners -15 %: net $-4,113; money in 41.6 % of runs; median $-3,924
+  by year: 2022: 25 tr $-5,925 win 40% | 2023: 23 tr $-1,927 win 48% | 2024: 28 tr $6,238 win 54% | 2025: 32 tr $-10,753 win 41% | 2026: 25 tr $22,150 win 64%
+  test months positive: 7 of 14
+
+=== Volume breakout (5m)  (vh_i17_rvbrk_5_ny-NQ-tf5)
+  test months: 303 trades on 290 days, net $13,093, avg $43, win 38.6 %, worst drawdown $43,829
+  R1 reshuffles: money in 68.9 % of 1,000 runs | net p5 $-31,030 median $12,836 p95 $59,985
+     worst drawdown: median $24,706, p95 $48,123
+  R2 winners -15 %: net $-18,843; money in 22.7 % of runs; median $-18,341
+  by year: 2022: 57 tr $33,777 win 49% | 2023: 59 tr $1,079 win 39% | 2024: 80 tr $-3,485 win 39% | 2025: 63 tr $-33,987 win 22% | 2026: 44 tr $15,709 win 48%
+  test months positive: 6 of 14
+
+=== the three together (one account each, day nets added): net $34,289; money in 79.2 % of runs; p5 $-34,835; worst drawdown actual $65,854, median $34,300, p95 $67,018

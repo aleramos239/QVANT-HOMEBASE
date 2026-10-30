@@ -1,0 +1,31 @@
+{
+ "name": "vh_i26_rv_1_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 26: NQ and ES price the same US large-cap flow; when one runs ahead of the other in minutes, index arbitrage and basket traders pull it back. Who loses: the momentum chaser who bought the leader at its stretch.",
+ "family": "rv_fade",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "1"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "k": [
+   1.5,
+   2.0,
+   2.5
+  ]
+ },
+ "fixed": {
+  "look": 60
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 4,
+  "dir": "both"
+ }
+}
