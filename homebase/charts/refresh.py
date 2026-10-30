@@ -57,6 +57,13 @@ def plan(python: str) -> list[dict]:
              "argv": [python, "-m", "homebase.ticks", "--full"]}]
 
 
+def demo_plan(python: str, cwd: Path) -> list[dict]:
+    """A Mac whose charts use the demo login only: its own feed re-asks Tradovate for every hole marked in
+    today's recording (the live seat stays the server's), then the server's finished days are copied down."""
+    return [{"key": "gaps", "label": "Fetch this Mac's marked gaps from Tradovate", "fn": "local_fill"},
+            {"key": "pull", "label": "Copy the server's tick files", "argv": [str(cwd / "deploy/linux/tickpull.sh")]}]
+
+
 def coverage_summary(path: Path) -> dict | None:
     """The coverage report's one-line facts (tickcoverage.write_report's `summary`), or None before the first report."""
     rep = read_json(path, None)
@@ -69,7 +76,8 @@ class RefreshManager:
     def __init__(self, base: Path, *, python: str | None = None, cwd: Path | None = None,
                  clock: Callable[[], dt.datetime] | None = None, popen=subprocess.Popen,
                  coverage_path: Path | None = None, lock_path: Path | None = None,
-                 md_ready: Callable[[], bool] | None = None, on_finish: Callable[[dict], None] | None = None):
+                 md_ready: Callable[[], bool] | None = None, on_finish: Callable[[dict], None] | None = None,
+                 local_fill: Callable[[], str] | None = None):
         self.dir = Path(base) / "refresh"
         self.dir.mkdir(parents=True, exist_ok=True)
         self.python, self.cwd = python or sys.executable, Path(cwd) if cwd else repo_root()
@@ -79,6 +87,7 @@ class RefreshManager:
         self.lock_path = lock_path or state_dir() / "ticks.lock"
         self.md_ready = md_ready        # () -> is the desk's md token on disk valid? None: not checked
         self.on_finish = on_finish      # (final status) -> None, from the run's thread: the charts reload
+        self.local_fill = local_fill    # () -> a one-line summary: the chart service refetches its marked gaps (demo_plan)
         self._lock = threading.Lock()
         self._proc = None
         self._cancelled = False
@@ -119,14 +128,17 @@ class RefreshManager:
             if self._status.get("status") == "running":
                 raise ValueError("a refresh is already running")
             if md_only() == "demo":
-                raise ValueError("this machine's charts use the demo login only, so a refresh here would take the live md "
-                                 "seat from the server: run Refresh data on the server")
-            if self.md_ready is not None and not self.md_ready():
-                raise ValueError(NO_LOGIN)
-            if self._archive_busy():
-                raise ValueError("the hourly tick job is already fetching (see homebase/.state/ticks.log); "
-                                 "it is the same job, so wait for it to finish, then refresh again")
-            steps = plan(self.python)
+                if self.local_fill is None:
+                    raise ValueError("this machine's charts use the demo login only, so a refresh here would take the "
+                                     "live md seat from the server: run Refresh data on the server")
+                steps = demo_plan(self.python, self.cwd)
+            else:
+                if self.md_ready is not None and not self.md_ready():
+                    raise ValueError(NO_LOGIN)
+                if self._archive_busy():
+                    raise ValueError("the hourly tick job is already fetching (see homebase/.state/ticks.log); "
+                                     "it is the same job, so wait for it to finish, then refresh again")
+                steps = plan(self.python)
             self._cancelled = False
             self._status = {"status": "running", "step": steps[0]["key"], "started": _now(),
                             "steps": [{"key": s["key"], "label": s["label"],
@@ -152,6 +164,19 @@ class RefreshManager:
                     if self._cancelled:
                         break
                 self._set_step(s["key"], "running")
+                if s.get("fn"):
+                    # shortcut: Cancel does not stop this step (it runs on the chart service's loop), only the ones after it
+                    try:
+                        note = self.local_fill()
+                    except Exception as e:  # noqa: BLE001 -- a failed refetch is the run's error, never a crash
+                        failed = f"{s['label']} failed: {type(e).__name__}: {e}"
+                        self._set_step(s["key"], "error", str(e))
+                        break
+                    log.write(f"\n=== {_now()} {s['label']}: {note}\n".encode())
+                    with self._lock:
+                        self._status["note"] = note
+                    self._set_step(s["key"], "done", note)
+                    continue
                 log.write(f"\n=== {_now()} {s['label']}: {' '.join(s['argv'])}\n".encode())
                 log.flush()
                 try:

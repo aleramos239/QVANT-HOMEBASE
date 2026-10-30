@@ -27,5 +27,6 @@ def test_refresh_refuses_on_a_demo_only_machine(monkeypatch, tmp_path):
     mgr = R.RefreshManager.__new__(R.RefreshManager)
     import threading
     mgr._lock, mgr._status = threading.Lock(), {}
+    mgr.local_fill = None       # with one, the click refetches over the demo socket instead (test_charts_refresh_demo.py)
     with pytest.raises(ValueError, match="demo login only"):
         mgr.start()

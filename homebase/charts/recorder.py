@@ -222,6 +222,20 @@ class LiveRecorder:
         gp.parent.mkdir(parents=True, exist_ok=True)
         gp.write_text(json.dumps(gaps))
 
+    def replace_gap(self, root: str, d: dt.date, contract: str, old: list, new: list) -> None:
+        """Swap the marker `old` ([start_ms, end_ms]) for `new` (the pieces a refetch still could not fill; [] when it
+        filled them all). A marker no longer there (another write moved it) is left alone."""
+        gp = gaps_path(self.path(root, d, contract))
+        try:
+            gaps = json.loads(gp.read_text())
+        except (OSError, ValueError):
+            return
+        old = [int(old[0]), int(old[1])]
+        if old not in gaps:
+            return
+        gaps.remove(old)
+        gp.write_text(json.dumps(gaps + [[int(a), int(b)] for a, b in new]))
+
     def mark_gap_span(self, root: str, contract: str, start_ms: int, end_ms: int) -> None:
         """mark_gap over [start_ms, end_ms), cut at the session boundaries it spans."""
         for d, a, b in split_by_session(root, int(start_ms), int(end_ms)):
