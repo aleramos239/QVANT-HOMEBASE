@@ -279,6 +279,7 @@ function closeConnect() {
   hideOverlay("connectOverlay");
   const p = $("#cPass"); if (p) p.value = "";
   VW.typed = null; VW.addr = null;
+  if (VSIGNIN) window.close();          // the sign-in window the app opened: Done / Esc closes it
 }
 function wizGoto(n) {
   $("#wstepP").style.display = "none";
@@ -354,6 +355,11 @@ async function doConnect() {
    until the POST returns: never a global, never storage, never logged. The Coinbase SDK (vendored, one file) is
    loaded only once Vest is chosen, and started then so the click that connects needs no download first. */
 const VW = {eth: null, addr: null, typed: null, sdk: null, found: [], busy: false};
+/* Inside the Homebase app (an Apple web view) the wallet can't sign in: Apple lets only real browsers use another site's
+   passkey, and the VPS app's page is not a secure origin. So the app opens the SERVER's desk in a Chrome window of its own
+   at ?signin=vest: the wizard opens there on Vest, and the window closes itself once the account is added. */
+const VAPP = !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.hb);
+const VSIGNIN = new URLSearchParams(location.search).get("signin") === "vest";
 function vestWarm() {
   if (!VW.sdk) VW.sdk = import("/static/vendor/coinbase-wallet-sdk-4.3.7.js").catch(() => null);
   if (VW.listening) return;
@@ -379,6 +385,11 @@ function vestPaint() {
 }
 async function vestConnect(kind) {
   if (VW.busy) return;
+  if (VAPP) {
+    window.webkit.messageHandlers.hb.postMessage({op: "vestSignin"});
+    vestSay("Opening the server's Vest sign-in in Chrome: sign there. The account shows on the server's desk once added.");
+    return;
+  }
   VW.busy = true; VW.typed = null; vestPaint();
   try {
     vestSay("Waiting for your wallet…");
@@ -530,9 +541,10 @@ async function addSelected() {
   $("#wresList").innerHTML = out.html;
   WIZ.picks = new Set();
   wizGoto(4);
+  if (VSIGNIN && r && (r.results || []).some(x => x.status === "added")) setTimeout(() => window.close(), 4000);
   $("#wDone").focus();                                          // focus follows the step; Esc / Done close it
 }
 $("#connectOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeConnect();
 });
-
+if (VSIGNIN) { openConnect(); wizBroker("vest"); wizGoto(2); }

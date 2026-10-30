@@ -82,3 +82,20 @@ def test_step_3_shows_the_kind_and_never_pre_ticks_a_funded_row():
 def test_the_vest_sign_in_says_the_session_lives_on_the_desk_server():
     step = INDEX[INDEX.index('id="wstep2v"'):INDEX.index('id="savedLoginsV"')]
     assert "on the desk server" in step and "this Mac" not in step                 # the desk runs on the VPS (M6)
+
+
+def test_inside_the_app_the_wallet_buttons_hand_the_sign_in_to_chrome():
+    code = _vest_code()
+    a = code.index("async function vestConnect(kind)")
+    body = code[a:code.index("async function vestGo()")]
+    hand = body.index('postMessage({op: "vestSignin"})')
+    assert hand < body.index("createCoinbaseWalletSDK") and hand < body.index("vestBrowserProvider()")   # before any wallet
+    assert "return;" in body[hand:hand + 250]
+    assert "const VAPP = !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.hb);" in BOOK
+
+
+def test_the_sign_in_window_opens_on_vest_and_closes_itself_only_after_an_add():
+    assert 'const VSIGNIN = new URLSearchParams(location.search).get("signin") === "vest";' in BOOK
+    assert BOOK.rstrip().endswith('if (VSIGNIN) { openConnect(); wizBroker("vest"); wizGoto(2); }')
+    assert 'if (VSIGNIN && r && (r.results || []).some(x => x.status === "added")) setTimeout(() => window.close(), 4000);' in BOOK
+    assert BOOK.count("window.close()") == 2                                 # that, and Done / Esc in the sign-in window

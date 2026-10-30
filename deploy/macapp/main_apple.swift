@@ -145,6 +145,50 @@ func origin(of url: URL) -> URL {
     return c.url ?? url
 }
 
+/// Something listens on 127.0.0.1:<port>.
+func portUp(_ port: UInt16) -> Bool {
+    let fd = socket(AF_INET, SOCK_STREAM, 0)
+    guard fd >= 0 else { return false }
+    defer { close(fd) }
+    var a = sockaddr_in()
+    a.sin_family = sa_family_t(AF_INET); a.sin_port = port.bigEndian; a.sin_addr.s_addr = inet_addr("127.0.0.1")
+    return withUnsafePointer(to: &a) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+        connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0 } }
+}
+
+/// The Vest wallet sign-in can't run in this web view (Apple lets only real browsers use another site's passkey), so both
+/// apps open the SERVER's desk in a Chrome window of its own, as deploy/linux/server-window.sh does: an SSH SOCKS proxy on
+/// 127.0.0.1:1080 and Chrome's "Homebase Server Window" profile, which sends even localhost through it. The page opens on
+/// the Vest step (?signin=vest) and closes itself once the account is added. Returns why it could not, or nil.
+let signinHost = (Bundle.main.object(forInfoDictionaryKey: "HomebaseVPSHost") as? String) ?? "root@144.202.51.163"
+let signinPort: UInt16 = 1080         // server-window.sh's: one Chrome profile, one proxy
+var signinTunnel: Process?
+
+func openVestSignin() -> String? {
+    guard let chrome = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.google.Chrome") else {
+        return "The Vest sign-in needs Google Chrome, and it is not installed."
+    }
+    if !portUp(signinPort) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+        p.arguments = ["-N", "-D", "127.0.0.1:\(signinPort)", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes",
+                       "-o", "ServerAliveInterval=30", "-o", "ConnectTimeout=8", signinHost]
+        p.standardInput = FileHandle.nullDevice
+        do { try p.run() } catch { return "Could not start ssh to the Chicago server." }
+        signinTunnel = p
+        for _ in 0..<50 where !portUp(signinPort) { usleep(200_000) }
+        if !portUp(signinPort) { return "Could not reach the Chicago server (ssh \(signinHost))." }
+    }
+    let open = Process()
+    open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+    open.arguments = ["-na", chrome.path, "--args",
+                      "--user-data-dir=\(NSHomeDirectory())/Library/Application Support/Homebase Server Window",
+                      "--proxy-server=socks5://127.0.0.1:\(signinPort)", "--proxy-bypass-list=<-loopback>",
+                      "--no-first-run", "--new-window", "http://localhost:8850/?signin=vest"]
+    do { try open.run() } catch { return "Could not open Google Chrome." }
+    return nil
+}
+
 #if VPS
 let vpsHost = (Bundle.main.object(forInfoDictionaryKey: "HomebaseVPSHost") as? String) ?? "root@144.202.51.163"
 let vpsPort: UInt16 = 1081            // not server-window.sh's 1080: this app owns its proxy
@@ -157,15 +201,7 @@ let vpsDeskOnlyJS = """
 document.documentElement.appendChild(st); })();
 """
 
-func vpsProxyUp() -> Bool {
-    let fd = socket(AF_INET, SOCK_STREAM, 0)
-    guard fd >= 0 else { return false }
-    defer { close(fd) }
-    var a = sockaddr_in()
-    a.sin_family = sa_family_t(AF_INET); a.sin_port = vpsPort.bigEndian; a.sin_addr.s_addr = inet_addr("127.0.0.1")
-    return withUnsafePointer(to: &a) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-        connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0 } }
-}
+func vpsProxyUp() -> Bool { portUp(vpsPort) }
 
 /// The SSH SOCKS proxy to the server: started when it is not already up, and waited for (up to 10 s).
 func vpsEnsureTunnel() {
@@ -590,6 +626,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             if let e = lastMouseDown, e.window === window, ProcessInfo.processInfo.systemUptime - e.timestamp < 0.6 {
                 window.performDrag(with: e)
             }
+        case "vestSignin":
+            startVestSignin()
         case "zoom":
             if debugDir != nil { return }
             switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") ?? "Maximize" {
@@ -598,6 +636,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             default: window.performZoom(nil)
             }
         default: break
+        }
+    }
+
+    @objc private func startVestSignin() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let why = openVestSignin()
+            DispatchQueue.main.async {
+                guard let why = why else { return }
+                let a = NSAlert()
+                a.messageText = why
+                a.runModal()
+            }
         }
     }
 
@@ -755,6 +805,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         let reload = NSMenuItem(title: "Reload", action: #selector(reloadPage), keyEquivalent: "r")
         reload.target = self
         appMenu.addItem(reload)
+        let vest = NSMenuItem(title: "Add a Vest Account on the Server…", action: #selector(startVestSignin), keyEquivalent: "")
+        vest.target = self
+        appMenu.addItem(vest)
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "Hide \(appName)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(withTitle: "Quit \(appName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
