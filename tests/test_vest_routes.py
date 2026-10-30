@@ -38,10 +38,18 @@ class Gateway:
         self.calls: list[httpx.Request] = []
         self.register_status = 200
         self.hold_register: tuple | None = None    # (entered, gate) threading events: the register waits for gate
+        self.cancel_register = False               # the register is cancelled mid-flight
+        self.challenge_status = 200
 
     def __call__(self, req: httpx.Request) -> httpx.Response:
         self.calls.append(req)
         p = req.url.path
+        if p == "/v3/auth/challenge" and self.challenge_status != 200:
+            return httpx.Response(self.challenge_status)
+        if p == "/v3/auth/register" and self.cancel_register:
+            async def cancelled():
+                raise asyncio.CancelledError()
+            return cancelled()
         if p == "/v3/auth/challenge":
             return httpx.Response(200, json={"challengeId": "ch1", "message": TYPED})
         if p == "/v3/auth/register" and self.hold_register:
@@ -248,3 +256,15 @@ def test_a_row_without_a_demo_flag_is_added_live(client, monkeypatch):
     assert out["added"] == 2, out
     accts = client.app.state.cfg.accounts
     assert accts["vest-odd-1"].live is True and accts["vest-demo-2"].live is False
+
+
+def test_a_cancelled_register_leaves_no_login_in_progress_mark(client, gw):
+    """A register cancelled mid-flight (the request dropped) must not keep its session pinned for ever: a later failed
+    challenge for that wallet, which never signed, forgets the session."""
+    assert client.post("/api/vest/challenge", json={"address": ADDR}).json()["ok"]
+    gw.cancel_register = True
+    with pytest.raises(BaseException):                    # the cancel comes out of the request
+        client.post("/api/connect", json={"broker": "vest", "address": ADDR, "signature": SIG})
+    gw.challenge_status = 500
+    assert client.post("/api/vest/challenge", json={"address": ADDR}).json()["ok"] is False
+    assert KEY not in brokers._VEST_SESSIONS

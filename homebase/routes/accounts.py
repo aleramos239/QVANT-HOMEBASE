@@ -80,11 +80,11 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
 
     # ------------------------------------------------------------ Vest: the wallet login
     vest_pending: dict[str, float] = {}      # wallet address -> when its challenge was handed out
-    vest_registering: set[str] = set()       # login keys whose register is in flight: their session stays
+    vest_registering: dict[str, int] = {}    # login key -> registers in flight on it (they may overlap): its session stays
 
     async def _vest_forget(key: str) -> None:
         """A wallet that never signed keeps no session (nothing saved under it, no entry on it, no register running)."""
-        if (key in vest_registering or secrets_store.get_credentials(key)
+        if (vest_registering.get(key, 0) > 0 or secrets_store.get_credentials(key)
                 or any(a.keyring_key == key for a in cfg.accounts.values())):
             return
         sess = brokers._VEST_SESSIONS.pop(key, None)
@@ -150,14 +150,19 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
             del vest_pending[addr]                   # one try per challenge
             sess = brokers.vest_session(key)
             sess.budget = budget
-            vest_registering.add(key)
+            vest_registering[key] = vest_registering.get(key, 0) + 1
+            failed = None
             try:
                 await sess.register(addr, sig)
             except Exception as e:  # noqa: BLE001 — surface to the wizard, never the signature
-                vest_registering.discard(key)
+                failed = e
+            finally:                                 # a cancelled request too: never a mark left behind
+                vest_registering[key] -= 1
+                if not vest_registering[key]:
+                    del vest_registering[key]
+            if failed is not None:
                 await _vest_forget(key)
-                return {"ok": False, "error": _vest_why(e), "key": key}
-            vest_registering.discard(key)
+                return {"ok": False, "error": _vest_why(failed), "key": key}
         probe = adapter_factory("probe", config_mod.AccountCfg(keyring_key=key))   # no vest_account_id: no orders
         try:
             await probe.connect()
