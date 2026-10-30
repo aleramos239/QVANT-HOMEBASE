@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from homebase.charts import refresh as R
+from homebase.charts import store as S
 from homebase.charts.recorder import LiveRecorder
 from homebase.charts.server import create_app
 from homebase.charts.store import read_table
@@ -126,3 +127,41 @@ def test_a_click_refetches_the_posted_gaps_lands_them_and_unmarks_them(tmp_path,
     assert json.loads(gp.read_text()) == [recent]
     header, recs = read_table(rec)
     assert {int(r[header.index("id")]) for r in recs} >= {1, 10, 11, 50}      # flushed by the reseed
+
+
+def test_ids_unbroken_across_a_gap_means_every_trade_is_held():
+    from homebase.core.tick import Tick
+    t = [Tick(1000, 1.0, 1, 1, 7), Tick(5000, 1.0, 1, 1, 8), Tick(9000, 1.0, 1, 1, 9)]
+    assert S.ids_unbroken(t, 2000, 8000)                       # 7 before, 8 inside, 9 after
+    assert not S.ids_unbroken(t[:1] + t[2:], 2000, 8000)       # 8 missing
+    assert not S.ids_unbroken(t, 500, 8000)                    # nothing before the gap to vouch from
+    assert not S.ids_unbroken(t, 2000, 9500)                   # nothing after it
+
+
+@pytest.mark.parametrize("now_ms", [0, 150 * 60_000])          # 18:30 ET: the session closed, the next began
+def test_a_click_clears_a_marker_whose_trades_are_all_held_with_tradovate_down(tmp_path, demo_only, monkeypatch, now_ms):
+    """GC 2026-10-30: the server's copied file held every trade of each marked gap, Tradovate's demo socket refused
+    (HTTP 502), and a click filled nothing. Unbroken ids across the gap clear its marker with no fetch."""
+    base = tmp_path / "ticks"
+    rec = base / "NQ" / str(D.year) / f"{D.isoformat()}_NQZ6.live.csv.gz"
+    write_gz(rec, rows(session_ms(D, 9, 59), [100.0], first_id=1) + rows(session_ms(D, 10, 2), [100.5], first_id=2)
+             + rows(session_ms(D, 10, 6), [101.0], first_id=3))
+    gp = rec.parent / f"{D.isoformat()}_NQZ6.live.gaps"
+    gp.write_text(json.dumps([[session_ms(D, 10, 0), session_ms(D, 10, 5)]]))
+
+    async def down(*a, **kw):
+        raise RuntimeError("websocket not connected")
+
+    monkeypatch.setattr("homebase.charts.server.refill", down)
+    app = create_app(roots=["NQ"], base=base, feed_factory=IdleFeed,
+                     state=tmp_path / "state", refresh_kw={"popen": lambda argv, **kw: Done()}, now_ms=lambda: session_ms(D, 16, 0) + now_ms)
+    with TestClient(app, base_url="http://127.0.0.1:8852") as c:
+        deadline = time.time() + 10
+        st = c.get("/api/refresh").json()
+        while st.get("status") != "done" and time.time() < deadline:
+            if st.get("status") in ("idle", "error"):
+                c.post("/api/refresh")
+            time.sleep(0.05)
+            st = c.get("/api/refresh").json()
+    assert st["note"] == "Gaps refetched: NQ 1 filled.", st
+    assert json.loads(gp.read_text()) == []

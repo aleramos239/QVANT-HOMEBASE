@@ -60,7 +60,7 @@ from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
 from .session import ET, always_open, et_wall_s, session_date, session_range_ms, split_by_session
 from .settings_store import CLOCK_CHOICES, MD_CHOICES, SettingsStore, md_only
-from .store import ARCHIVE, TickStore, gaps_path, splice_tail
+from .store import ARCHIVE, TickStore, gaps_path, ids_unbroken, splice_tail
 from .studies import make
 from .tapelive import TapeLive
 from .tick import SideClassifier, from_row
@@ -684,42 +684,53 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
 
     async def fill_marked(root: str) -> tuple[int, int, int]:
         """The Refresh data button on a demo-only Mac: ask Tradovate again, over this service's own md socket (its tick ids
-        are the recording's own), for every gap marked in today's recording -- a refill that failed when the socket was
+        are the recording's own), for every gap marked in today's and the previous session's recordings -- a refill that failed when the socket was
         down is never retried by the feed itself (NQ 2026-10-30 14:53-15:06). A gap Tradovate has not posted in full yet
         (tickarchive.published_ms) is left for a later click. (ticks added, gaps filled, gaps left). Charts only: the Lab
         runner's stream is not sent these old ticks (it never asked for them)."""
-        d = hub.today_date.get(root) or session_date(clock(), root)
-        f = store.pick(root, d)
-        if recorder is None or f is None or not f.live:
+        if recorder is None:
             return 0, 0, 0
-        try:
-            marks = json.loads(gaps_path(f.path).read_text())
-        except (OSError, ValueError):
-            return 0, 0, 0
+        today = hub.today_date.get(root) or session_date(clock(), root)
         posted = T.tickarchive.published_ms(clock())
         added = filled = left = 0
-        for a, b in sorted(marks, key=lambda g: g[0] - g[1]):          # the longest first: the budget may run out
-            if b > posted:
-                left += 1
+        # today and the session before it: past 18:00 ET the day just closed is "yesterday" (GC 2026-10-30)
+        for d in [x for x in store.sessions(root) if x <= today][-2:]:
+            f = store.pick(root, d)
+            if f is None or not f.live:
                 continue
-            fd = feed_other if feed_other is not None and root in feed_other.roots else feed
-            async with refill_lock:
-                pages = min(REFILL_MAX_PAGES, REFILL_BUDGET + (REFILL_RESERVE if root in REFILL_FIRST else 0)
-                            - fd.budget_used())
-                if pages <= 0:
+            try:
+                marks = json.loads(gaps_path(f.path).read_text())
+            except (OSError, ValueError):
+                continue
+            # a marker whose trades are all held already (the server's copied file, a refill that landed) needs no fetch:
+            # GC 2026-10-30, every marker held, the demo socket refused (HTTP 502) and the click filled nothing
+            held = await asyncio.to_thread(store.load, root, d) if marks else None
+            for a, b in sorted(marks, key=lambda g: g[0] - g[1]):          # the longest first: the budget may run out
+                if held is not None and ids_unbroken(held.ticks, a, b):
+                    recorder.replace_gap(root, d, f.contract, [a, b], [])
+                    filled += 1
+                    continue
+                if b > posted:
                     left += 1
                     continue
-                try:
-                    rows, reached = await refill(fd.ws, f.contract, a - 1, b + 1, max_pages=pages,
-                                                 sleep=_paced_sleep, on_request=fd.count_request)
-                except Exception as e:  # noqa: BLE001 -- the gap stays marked
-                    log(f"{root}: gap {(b - a) / 1000:.0f}s refetch failed: {e}")
-                    left += 1
-                    continue
-                added += len(recorder.append(root, f.contract, rows))
-                rest = [[a, min(b, reached)]] if reached > a else []
-                recorder.replace_gap(root, d, f.contract, [a, b], rest)
-                filled, left = filled + (not rest), left + bool(rest)
+                fd = feed_other if feed_other is not None and root in feed_other.roots else feed
+                async with refill_lock:
+                    pages = min(REFILL_MAX_PAGES, REFILL_BUDGET + (REFILL_RESERVE if root in REFILL_FIRST else 0)
+                                - fd.budget_used())
+                    if pages <= 0:
+                        left += 1
+                        continue
+                    try:
+                        rows, reached = await refill(fd.ws, f.contract, a - 1, b + 1, max_pages=pages,
+                                                     sleep=_paced_sleep, on_request=fd.count_request)
+                    except Exception as e:  # noqa: BLE001 -- the gap stays marked
+                        log(f"{root}: gap {(b - a) / 1000:.0f}s refetch failed: {type(e).__name__}: {e}")
+                        left += 1
+                        continue
+                    added += len(recorder.append(root, f.contract, rows))
+                    rest = [[a, min(b, reached)]] if reached > a else []
+                    recorder.replace_gap(root, d, f.contract, [a, b], rest)
+                    filled, left = filled + (not rest), left + bool(rest)
         if added or filled:
             log(f"{root}: Refresh data refetched {added} ticks, {filled} gap(s) filled, {left} left")
             await reseed_async(root)
