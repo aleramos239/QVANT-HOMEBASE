@@ -341,7 +341,7 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
                         stop = "the connection failed (" + str(e)[:120] + ")"
         counts = {s: sum(1 for r in rows if r["status"] == s)
                   for s in ("added", "exists", "failed")}
-        engine.journal("accounts_added_batch", login=key, live=live, **counts)
+        engine.journal("accounts_added_batch", login=key, live=None if vest else live, **counts)   # a Vest row has its own
         return {"ok": not counts["failed"], "results": rows, **counts}
 
     @app.post("/api/accounts/reconnect")

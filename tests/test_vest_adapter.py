@@ -327,6 +327,33 @@ def test_balance_and_accounts():
     assert run(ad.list_accounts()) == [{"name": "Vest primary", "id": ACC, "kind": "primary", "demo": False}]
 
 
+def test_card_numbers_come_from_the_minute_refresh_never_a_request_per_poll():
+    ad, gw = mk()
+    m = run(ad.get_metrics())
+    assert m["balance"] is None and gw.calls == []                       # nothing read yet, and a poll asks Vest nothing
+    run(ad.refresh_snapshot())
+    n = len(gw.calls)
+    ad._known, ad._known_orders = {"p1": Decimal("-40"), "p2": Decimal("0")}, {"o1": "p1"}
+    m = run(ad.get_metrics())
+    assert (m["balance"], m["account"]) == (1234.5, "Vest acc-1")
+    assert m["open_positions"] == [{"symbol": "NQ", "net": -2}] and m["open_position_count"] == 1
+    assert m["working_orders"] == 1
+    assert len(gw.calls) == n                                             # the card read the cache only
+
+
+def test_minute_refresh_fills_siblings_from_one_read_and_never_raises():
+    ad, gw = mk()
+    sib = VestAdapter("vest2", keyring_key=KEY, vest_account_id="acc-2", session=ad.session)
+    gw.h[("GET", "/v3/accounts")] = lambda req: httpx.Response(200, json=[
+        {"account_id": ACC, "account_type": 1, "amount": "1234.5"}, {"account_id": "acc-2", "equity": "50000"}])
+    run(ad.refresh_snapshot([sib]))
+    assert [c.url.path for c in gw.calls].count("/v3/accounts") == 1
+    assert (ad._cash, sib._cash) == (1234.5, 50000.0)
+    gw.h[("GET", "/v3/accounts")] = lambda req: httpx.Response(500, json={})
+    run(ad.refresh_snapshot([sib]))                                       # a failed read keeps the last numbers
+    assert (ad._cash, sib._cash) == (1234.5, 50000.0)
+
+
 def test_capital_accounts_kind_never_guessed():
     ad, gw = mk()
     gw.h[("GET", "/v3/capital/accounts")] = lambda req: httpx.Response(200, json={"accounts": [

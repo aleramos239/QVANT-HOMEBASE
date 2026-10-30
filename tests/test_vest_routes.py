@@ -172,6 +172,16 @@ def test_add_many_vest_live_flag(client):
         False, True, True]
 
 
+def test_add_many_vest_batch_line_has_no_wizard_env(client, tmp_path):
+    # each Vest row carries its own live flag (account_added); the batch line must not claim the wizard's demo switch
+    r = signed_in(client)
+    names = {a["kind"]: a["name"] for a in r["accounts"]}
+    client.post("/api/accounts/add-many", json={"key": KEY, "accounts": [names["funded"]]})
+    ev = [json.loads(line) for line in (tmp_path / "journal.jsonl").read_text().splitlines()]
+    assert [e["live"] for e in ev if e["event"] == "account_added"] == [True]
+    assert [e["live"] for e in ev if e["event"] == "accounts_added_batch"] == [None]
+
+
 def test_single_add_refuses_vest(client):
     saved_login()
     r = client.post("/api/accounts/add", json={"key": KEY, "account_name": "Vest primary"})

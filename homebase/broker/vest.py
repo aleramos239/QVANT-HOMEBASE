@@ -244,6 +244,7 @@ class VestAdapter(BrokerAdapter):
         self._pass_lock = asyncio.Lock()                # one read-and-diff pass at a time
         self._fails: dict[str, int] = {}                # position id -> /details failures in a row
         self._warned: dict[str, bool] = {}
+        self._cash: Optional[float] = None              # equity at the last /v3/accounts read: the card's balance
 
     # --- plumbing ---------------------------------------------------------------------------------
     async def _api(self, method: str, path: str, *, account: bool = True, **kw):
@@ -323,7 +324,14 @@ class VestAdapter(BrokerAdapter):
         return LOGIN_ENDING if left is None or left < 0.5 else None
 
     async def get_metrics(self) -> dict:
-        m = await super().get_metrics()
+        m = await super().get_metrics()        # from what the desk already holds: a page poll asks Vest nothing
+        m["account"] = f"Vest {self.vest_account_id[:8]}" if self.vest_account_id else None
+        m["balance"] = self._cash
+        if self._known is not None:
+            net = _contracts(sum(self._known.values(), Decimal(0)), self.root)
+            m["open_positions"] = [{"symbol": self.root, "net": net}] if net else []
+            m["open_position_count"] = len(m["open_positions"])
+        m["working_orders"] = len(self._known_orders) + len(self._book.entries)    # resting at Vest + held here
         left = self.login_days_left()
         if left is not None and 0 < left < 0.5:
             m["notice"] = "login ends within 12 h: sign again (new trades stopped)"
@@ -659,11 +667,26 @@ class VestAdapter(BrokerAdapter):
 
     async def _account_row(self) -> dict:
         rows = _rows(await self._api("GET", "/v3/accounts", account=False), "accounts")
-        row = next((r for r in rows if _same_acct(r.get("account_id"), self.vest_account_id)), {})
+        return self._note_row(next((r for r in rows if _same_acct(r.get("account_id"), self.vest_account_id)), {}))
+
+    def _note_row(self, row: dict) -> dict:
         equity = row.get("equity") or row.get("amount")
-        if equity is not None and row.get(DAY_START_KEY) is None:      # the first read after 20:00 ET, any caller (R35)
-            self._day_start(float(equity))
+        if equity is not None:
+            self._cash = float(equity)
+            if row.get(DAY_START_KEY) is None:      # the first read after 20:00 ET, any caller (R35)
+                self._day_start(float(equity))
         return row
+
+    async def refresh_snapshot(self, siblings=()) -> None:
+        """The desk's once-a-minute read for the card: ONE /v3/accounts for this account and its siblings on the
+        same wallet. A failed read keeps the last numbers and never raises (the desk would book a login cool-down)."""
+        try:
+            rows = _rows(await self._api("GET", "/v3/accounts", account=False), "accounts")
+        except Exception as e:  # noqa: BLE001
+            log.info("vest %s: balance read failed (%s)", self.account_id, type(e).__name__)
+            return
+        for t in (self, *siblings):
+            t._note_row(next((r for r in rows if _same_acct(r.get("account_id"), t.vest_account_id)), {}))
 
     async def get_balance(self) -> dict:
         row = await self._account_row()
