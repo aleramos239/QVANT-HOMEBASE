@@ -347,7 +347,12 @@ html.hb-apple .hb-insp .figs.three .f .k { flex: 1 1 auto; min-width: 0; white-s
 html.hb-apple .hb-insp .figs.three .f .v { flex: none; width: 52px; text-align: right; white-space: nowrap; font-size: 12px; }
 html.hb-apple .hb-insp .figs.three .f.fh .v { font-size: 11px; line-height: 12px; white-space: normal; }
 /* a group's combined figures: dollar amounts such as +$86,412 need a wider column than the prop sim's percentages */
-html.hb-apple .hb-insp .figs.grp-figs .f .v { width: 72px; }
+/* ... three of them do not fit beside a label in the narrow inspector (the label shrank to one letter a line), so the label
+   takes its own line and the three values share the row below it in equal columns */
+html.hb-apple .hb-insp .figs.grp-figs .f { flex-wrap: wrap; row-gap: 0; padding-top: 6px; padding-bottom: 6px; }
+html.hb-apple .hb-insp .figs.grp-figs .f .k { flex: 1 1 100%; }
+html.hb-apple .hb-insp .figs.grp-figs .f.fh .k { display: none; }
+html.hb-apple .hb-insp .figs.grp-figs .f .v { flex: 1 1 0; width: auto; min-width: 0; }
 html.hb-apple .hb-insp .qlinks { display: block; margin: 0; }
 html.hb-apple .hb-insp .qlinks .btn { display: flex; align-items: center; justify-content: flex-start; width: 100%; height: auto; min-height: 37px; padding: 0 10px; border-radius: 0; background: transparent; position: relative;
   font-size: 13px; line-height: 16px; color: var(--a-label); }
