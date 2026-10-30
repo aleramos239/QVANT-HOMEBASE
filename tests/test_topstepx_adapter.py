@@ -30,6 +30,8 @@ class Api:
         self.calls: list[httpx.Request] = []
         self.handlers: dict = {}
         self.orders: list[dict] = []          # what GET /Order/account/22 lists
+        self.trades: list[dict] = []          # what GET /Trade/id/22 lists
+        self.positions: list[dict] = []       # what GET /Position/all/account/22 lists
 
     def __call__(self, req: httpx.Request) -> httpx.Response:
         self.calls.append(req)
@@ -38,6 +40,10 @@ class Api:
             return h(req)
         if req.url.path == "/TradingAccount":
             return httpx.Response(200, json=ACCOUNTS)
+        if req.method == "GET" and req.url.path == "/Trade/id/22":
+            return httpx.Response(200, json=self.trades)
+        if req.method == "GET" and req.url.path == "/Position/all/account/22":
+            return httpx.Response(200, json=self.positions)
         if req.method == "POST" and req.url.path == "/Order":
             return httpx.Response(200, json={"success": True, "orderId": 9001})
         if req.method == "GET" and req.url.path.startswith("/Order/account/"):
@@ -55,9 +61,10 @@ class Api:
 
 class StubHub:
     made: list = []
+    up = False
 
-    def __init__(self, session, on_event, *, on_up=None, **kw):
-        self.session, self.on_event, self.on_up = session, on_event, on_up
+    def __init__(self, session, on_event, *, on_up=None, on_auth_lost=None, **kw):
+        self.session, self.on_event, self.on_up, self.on_auth_lost = session, on_event, on_up, on_auth_lost
         self.started = self.stopped = 0
         StubHub.made.append(self)
 
@@ -411,3 +418,240 @@ def test_get_balance_and_metrics(api):
     m = run(a.get_metrics())
     assert m["connected"] is True and m["account"] == "Combine-50K"
     assert set(m) >= {"balance", "realized_pnl", "open_positions", "open_position_count", "working_orders", "protective"}
+
+
+# ---- fills, positions, a taken session ----------------------------------------------------------------------------
+ENQ = "CON.F.US.ENQ.Z26"
+
+
+def trade(tid, *, side=0, size=1, price=20000.0, account=22, contract=ENQ, ts="2026-10-30T14:00:00Z", **kw):
+    return {"id": tid, "accountId": account, "contractId": contract, "price": price, "size": size, "side": side,
+            "creationTimestamp": ts, **kw}
+
+
+def pos(net, *, account=22, contract=ENQ):
+    return {"accountId": account, "contractId": contract, "type": 1 if net > 0 else 2, "size": abs(net)}
+
+
+def live(api, session=None):
+    """A connected adapter whose socket is 'up', with a fill sink and a journal."""
+    a = adapter(api, session=session)
+    a.got, a.notes, a.log = [], [], []
+
+    async def sink(ev):
+        a.got.append(ev)
+
+    a.journal = lambda event, **kw: a.log.append((event, kw))
+    a.add_listener(lambda kind, ent: a.notes.append(kind))
+    run(a.connect())
+    StubHub.made[-1].up = True
+    return a, sink
+
+
+def test_a_trade_push_becomes_one_FillEvent_and_a_repeat_is_ignored(api):
+    a, sink = live(api)
+
+    async def go():
+        await a.observe_fills(sink)
+        await a._on_up()                                          # seeds (nothing yet)
+        a._on_event("RealTimePosition", pos(2))
+        a._on_event("RealTimeTrade", trade(501, side=0, size=2, price=20001.25))
+        a._on_event("RealTimeTrade", trade(501, side=0, size=2, price=20001.25))     # the same trade again
+        a._on_event("RealTimeTrade", trade(502, side=1, size=2, price=20010.0))
+        a._on_event("RealTimePosition", pos(0))
+        await a._pump
+    run(go())
+    assert [(e.symbol, e.side, e.qty, e.price, e.position_after) for e in a.got] == [
+        ("NQ", "Buy", 2, 20001.25, 2), ("NQ", "Sell", 2, 20010.0, 2)]     # position_after = the cache when the trade came
+    assert a.got[0].account_id == "acct-1" and a.got[0].raw["id"] == 501 and a.got[0].ts > 0
+    assert a.notes.count("fill") == 2 and a.notes.count("position") == 2
+
+
+def test_another_accounts_trade_a_voided_one_and_an_unreadable_one_are_not_delivered(api):
+    a, sink = live(api)
+
+    async def go():
+        await a.observe_fills(sink)
+        await a._on_up()
+        a._on_event("RealTimeTrade", trade(1, account=11))
+        a._on_event("RealTimeTrade", trade(2, account=None))                 # not provably ours
+        a._on_event("RealTimeTrade", trade(3, voided=True))
+        a._on_event("RealTimeTrade", trade(4, side=7))                       # unreadable side
+        a._on_event("RealTimeTrade", trade(5, size=0))
+        a._on_event("RealTimeOrder", {"id": 9, "accountId": 11})
+        a._on_event("RealTimePosition", pos(3, account=11))
+        await asyncio.sleep(0)
+    run(go())
+    assert a.got == [] and a._pump is None and a.notes == []
+    assert sum(1 for e, _ in a.log if e == "tsx_trade_unreadable") == 2       # the bad side and the zero size
+    assert a._pos == {}                                                   # the other account's position never entered
+
+
+def test_trade_and_position_shapes():
+    f, n = topstepx._trade_fields, topstepx._net_of
+    assert f(trade(1, side=1, size=3))["side"] == "Sell" and f(trade(1, voided=True)) is None
+    for bad in (trade(None), trade(1, size=1.5), trade(1, side=2), trade(1, contract=""), "x"):
+        with pytest.raises(ValueError):
+            f(bad)
+    assert n({"type": 1, "size": 3}) == 3 and n({"type": 2, "size": 3}) == -3 and n({"type": 2, "size": 0}) == 0
+    assert n({"positionSize": -2}) == -2 and n({"size": -2}) == -2 and n({"type": 0, "size": 0}) == 0
+    assert n({"type": 2, "positionSize": -2}) == -2
+    for bad in ({}, {"type": 1, "size": -1}, {"type": 0, "size": 2}, {"size": "2"}, {"positionSize": 1.5}, None):
+        with pytest.raises(ValueError):
+            n(bad)
+
+
+def test_position_push_updates_get_net_position_without_a_rest_call(api):
+    api.positions = [pos(1)]
+    a, sink = live(api)
+    n_reads = lambda: sum(1 for p in api.paths() if p == ("GET", "/Position/all/account/22"))
+    assert run(a.get_net_position("NQ")) == 1 and n_reads() == 1       # never seeded: one REST read
+    assert run(a.get_net_position("NQ")) == 1 and n_reads() == 1       # now served from the cache
+
+    async def go():
+        a._on_event("RealTimePosition", pos(-3))                       # long 1 -> short 3
+        a._on_event("RealTimePosition", {"accountId": 22, "contractId": "CON.F.US.EP.Z26", "positionSize": 2})
+        return await a.get_net_position("NQ"), await a.get_net_position("ES"), await a.get_net_position("GC")
+    assert run(go()) == (-3, 2, 0) and n_reads() == 1
+    m = run(a.get_metrics())
+    assert m["open_positions"] == [{"symbol": "NQ", "net": -3}, {"symbol": "ES", "net": 2}]
+    assert m["open_position_count"] == 2 and m["positions_known"] is True and m["balance"] == 50000.0
+    assert a.notes == ["position", "position"]
+    # an unreadable push: the cache can no longer be trusted, the next read goes to the broker
+    a._on_event("RealTimePosition", {"accountId": 22, "contractId": ENQ, "size": "?"})
+    api.positions = [pos(-1)]
+    assert run(a.get_net_position("NQ")) == -1 and n_reads() == 2
+    # the socket is down: the cache may have missed pushes, so the broker is asked
+    StubHub.made[-1].up = False
+    assert run(a.get_net_position("NQ")) == -1 and n_reads() == 3
+    # flatten always asks the broker what is held now
+    StubHub.made[-1].up = True
+    api.positions = [pos(4)]
+    assert run(a.flatten_symbol("NQ")).ok and n_reads() == 4
+    assert ("POST", f"/Position/close/22/contract/{ENQ}") in api.paths()
+
+
+def test_a_position_read_that_cannot_be_read_raises_and_is_never_flat(api):
+    api.positions = [{"contractId": ENQ}]                              # no size at all
+    a, sink = live(api)
+    with pytest.raises(ValueError):
+        run(a.get_net_position("NQ"))
+
+
+def test_a_position_pushed_while_the_book_is_being_read_wins_over_the_read(api):
+    a, sink = live(api)
+
+    def slow_read(req):
+        a._on_event("RealTimePosition", pos(5))                        # lands while the read is in flight
+        return httpx.Response(200, json=[pos(1)])
+
+    api.handlers[("GET", "/Position/all/account/22")] = slow_read
+    assert run(a.get_net_position("NQ")) == 5
+
+
+def _kick_setup(api, tmp_path, monkeypatch, budget=None):
+    from homebase.store import secrets_store
+    monkeypatch.setattr(secrets_store, "_store_path", lambda: tmp_path / "credentials.json")
+    secrets_store.set_credentials("tsx:owner", username="Owner", password="pw-SECRET-9")
+    api.handlers[("POST", "/Login")] = lambda req: httpx.Response(200, json={"token": "TOK-NEW", "userId": 5})
+    s = make_session(api)
+    s.budget = budget
+    s.journal = lambda event, **kw: s.rec.append((event, kw))
+    s.rec = []
+    return s
+
+
+def test_session_taken_journals_relogs_in_once_and_replays_missed_trades(api, tmp_path, monkeypatch):
+    s = _kick_setup(api, tmp_path, monkeypatch)
+    api.trades = [trade(601, ts="2026-10-30T14:00:00Z")]               # the day's history at connect
+    a, sink = live(api, session=s)
+    b = adapter(api, "PRAC-V2-1", session=s)
+    run(b.connect())                                                   # a second desk account on the same login
+    hub = StubHub.made[-1]
+    assert hub.on_auth_lost is not None and len(StubHub.made) == 1
+    real_relogin = s.relogin
+
+    async def slow_relogin(why):                                       # a login takes time: the second call arrives meanwhile
+        await asyncio.sleep(0.01)
+        await real_relogin(why)
+    s.relogin = slow_relogin
+
+    async def go():
+        await a.observe_fills(sink)
+        await hub.on_up()                                              # the first open: seeds, delivers nothing
+        assert a.got == []
+        # the owner opens TopstepX: our socket is refused with a 401 at reopen; two paths call the handler at once
+        await asyncio.gather(hub.on_auth_lost(), hub.on_auth_lost())
+        api.trades = [trade(601), trade(603, side=1, ts="2026-10-30T14:07:00Z"), trade(602, ts="2026-10-30T14:05:00Z")]
+        await hub.on_up()                                              # the socket is back: the gap is read
+        await hub.on_up()                                              # and a second open finds nothing new
+    run(go())
+    assert api.paths().count(("POST", "/Login")) == 1 and s.taken == 1
+    assert [x for x in s.rec if x[0] == "tsx_session_taken"] == [
+        ("tsx_session_taken", {"accounts": ["Combine-50K", "PRAC-V2-1"], "count": 1})]
+    assert [e.raw["id"] for e in a.got] == [602, 603] and [e.side for e in a.got] == ["Buy", "Sell"]    # oldest first, once
+    assert all(e.position_after is None for e in a.got)
+    assert run(a.get_metrics())["session_taken"] == 1
+    assert "TOK-NEW" not in repr(s.rec) and TOKEN not in repr(s.rec) and "pw-SECRET-9" not in repr(s.rec)
+
+
+def test_session_taken_with_the_budget_spent_does_not_log_in_and_says_why(api, tmp_path, monkeypatch):
+    from homebase.broker.login_budget import LoginBudget
+    budget = LoginBudget()
+    s = _kick_setup(api, tmp_path, monkeypatch, budget=budget)
+    for _ in range(4):
+        budget.record_login("tsx:owner")                               # the hourly cap is reached
+    a, sink = live(api, session=s)
+    hub = StubHub.made[-1]
+    run(hub.on_auth_lost())                                            # returns: no raise, no spin
+    run(hub.on_auth_lost())
+    assert ("POST", "/Login") not in api.paths() and s._token == TOKEN
+    lines = [kw for e, kw in s.rec if e == "tsx_session_taken"]
+    assert [k.get("deferred") for k in lines] == [None, lines[1]["deferred"], None, lines[3]["deferred"]]
+    assert "logins on this user in the last hour" in lines[1]["deferred"] and lines[1]["count"] == 1
+    assert s.taken == 2 and run(a.get_metrics())["session_taken"] == 2
+
+
+def test_a_failed_relogin_is_journaled_by_class_only_and_reaches_the_hub(api, tmp_path, monkeypatch):
+    s = _kick_setup(api, tmp_path, monkeypatch)
+    api.handlers[("POST", "/Login")] = lambda req: httpx.Response(200, json={"errorMessage": "bad pw-SECRET-9"})
+    a, sink = live(api, session=s)
+    with pytest.raises(Exception):
+        run(StubHub.made[-1].on_auth_lost())
+    (kw,) = [kw for e, kw in s.rec if e == "tsx_session_taken" and "failed" in kw]
+    assert kw["failed"] == "TsxLoginFailed" and "pw-SECRET-9" not in repr(s.rec)
+
+
+def test_a_late_joiner_on_an_open_socket_seeds_itself_and_a_failing_read_never_raises(api):
+    s = make_session(api)
+    a, sink = live(api, session=s)
+    StubHub.made[-1].up = True
+    api.trades = [trade(1)]
+    b = adapter(api, "PRAC-V2-1", session=s)
+    api.handlers[("GET", "/Trade/id/11")] = lambda req: httpx.Response(200, json=[trade(7, account=11)])
+    run(b.connect())                                                   # hub up: b's on_up ran in connect
+    assert b._trades_seeded and 7 in b._seen
+    api.handlers[("GET", "/Trade/id/22")] = lambda req: httpx.Response(500, text="x")
+    run(a._on_up())                                                    # logged, not raised
+    assert not a._trades_seeded
+
+
+def test_session_pushes_do_not_log_in_and_violations_are_journaled_and_shown(api):
+    s = make_session(api)
+    s.rec = []
+    s.journal = lambda event, **kw: s.rec.append((event, kw))
+    a, sink = live(api, session=s)
+    b = adapter(api, "PRAC-V2-1", session=s)
+    run(b.connect())
+    for x in (a, b):
+        x._on_event("RealTimeSession", {"userId": 5, "token": TOKEN, "status": "ended"})
+    assert s.rec == [("tsx_session_event", {"keys": ["status", "token", "userId"]})]      # keys only, once per login
+    assert ("POST", "/Login") not in api.paths() and s.taken == 0
+    a._on_event("RealTimeTradingAccountViolation", {"accountId": 11, "reason": "x"})       # another account's
+    assert a.log == [] and run(a.get_metrics())["tsx_violation"] is None
+    a._on_event("RealTimeRiskSettingsLockout", {"accountId": 22, "reason": "daily loss", "until": "t"})
+    assert a.log == [("tsx_violation", {"account": "acct-1", "kind": "RealTimeRiskSettingsLockout",
+                                        "keys": ["accountId", "reason", "until"]})]
+    assert run(a.get_metrics())["tsx_violation"] == "RealTimeRiskSettingsLockout"
+    a._on_event("RealTimeAccount", {"id": 22, "balance": 49000.5})
+    assert run(a.get_metrics())["balance"] == 49000.5

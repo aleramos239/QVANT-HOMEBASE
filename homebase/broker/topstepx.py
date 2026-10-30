@@ -12,17 +12,21 @@ found, or as outcome unknown.
 """
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import logging
 import math
+import time
 import uuid
+from collections import deque
 from typing import Optional
 
 import httpx
 
 from .. import symbols
 from ..contracts import root_of
-from .base import AccountNotOnLogin, BrokerAdapter, FillCallback, OrderRequest, OrderResult
+from .base import AccountNotOnLogin, BrokerAdapter, FillCallback, FillEvent, OrderRequest, OrderResult
+from .login_budget import LoginDeferred
 from .topstepx_auth import TsxSession
 from .topstepx_ws import TsxHub
 
@@ -42,7 +46,12 @@ CLOSE_ALL = "/Position/close/{account_id}"
 CLOSE_ONE = "/Position/close/{account_id}/contract/{contract_id}"
 ACTION_METHOD = "POST"                                  # unconfirmed verb of the cancel / close calls
 BALANCE_FIELD = "balance"                               # unconfirmed
-POSITION_FIELD = "positionSize"                         # unconfirmed: signed, + long / - short
+TRADES_PATH = "/Trade/id/{account_id}"                  # unconfirmed: the account's trades (today's)
+ROOTS = {code: root for root, code in CODES.items()}    # contract id code -> root
+TRADE_SIDE = {0: "Buy", 1: "Sell"}                      # unconfirmed (ProjectX): a trade row's `side`
+POSITION_TYPE = {1: 1, 2: -1}                           # unconfirmed (ProjectX): a position row's `type`: long / short
+VIOLATIONS = ("RealTimeTradingAccountViolation", "RealTimeRiskSettingsLockout")
+_SEEN_FILL_CAP = 20000
 
 
 class _Refused(Exception):
@@ -91,6 +100,60 @@ def _snap(root: str, px: float) -> float:
     return round(round(px / t) * t, 6)
 
 
+def _whole(v) -> int:
+    """A whole number from a row field; anything else raises (a size we cannot read is never 0)."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v != int(v):
+        raise ValueError("not a whole number")
+    return int(v)
+
+
+def _net_of(row) -> int:
+    """Signed net of a position row (a push or a REST row; the ONE place that reads its shape). A row it cannot read RAISES:
+    unreadable is never flat."""
+    if not isinstance(row, dict):
+        raise ValueError("position row unreadable")
+    kind = row.get("type")
+    if kind in POSITION_TYPE and row.get("size") is not None:     # a direction plus an unsigned size
+        n = _whole(row["size"])
+        if n < 0:
+            raise ValueError("position size contradicts its type")
+        return POSITION_TYPE[kind] * n
+    signed = row.get("positionSize") if row.get("positionSize") is not None else row.get("size")
+    if signed is None:
+        raise ValueError("position row has no size")
+    n = _whole(signed)
+    if kind is not None and row.get("positionSize") is None and n:    # a type that is not long / short: `size` is not signed
+        raise ValueError("position direction unreadable")
+    return n
+
+
+def _trade_fields(arg) -> Optional[dict]:
+    """The fields of a trade row (a push or a REST row; the ONE place that reads its shape). None = a voided trade.
+    A row it cannot read RAISES."""
+    if not isinstance(arg, dict):
+        raise ValueError("trade row unreadable")
+    if arg.get("voided"):
+        return None
+    tid, cid, side = arg.get("id"), arg.get("contractId"), TRADE_SIDE.get(arg.get("side"))
+    size, price = _whole(arg.get("size")), arg.get("price")
+    if not isinstance(tid, (int, str)) or isinstance(tid, bool) or not cid or side is None or size < 1:
+        raise ValueError("trade row unreadable")
+    if price is not None:
+        price = float(price)
+    return {"id": tid, "accountId": arg.get("accountId"), "contractId": str(cid), "price": price, "size": size,
+            "side": side, "creationTimestamp": arg.get("creationTimestamp")}
+
+
+def _code_of(contract_id: str) -> str:
+    """The market code of CON.F.US.<code>.<mY> ("" when the id is not of that shape)."""
+    p = str(contract_id).split(".")
+    return p[3] if len(p) >= 5 and p[:3] == ["CON", "F", "US"] else ""
+
+
+def _same(a, b) -> bool:
+    return a is not None and b is not None and str(a) == str(b)
+
+
 class TopstepXAdapter(BrokerAdapter):
     platform = "topstepx"
 
@@ -104,6 +167,16 @@ class TopstepXAdapter(BrokerAdapter):
         self._acct_id = None
         self._acct_row: dict = {}
         self._on_fill: Optional[FillCallback] = None
+        self._pos: dict[str, int] = {}                  # contract id -> net, THIS account only
+        self._pos_ok = False                            # the book was read whole from the broker and pushes kept it since
+        self._pos_pushed: set = set()                   # contracts pushed while a seed read was in flight
+        self._seen: set = set()                         # trade ids already delivered (or in the seeded history)
+        self._seen_order: deque = deque(maxlen=_SEEN_FILL_CAP)
+        self._trades_seeded = False                     # the first on_up seeds the seen-set and delivers nothing
+        self._out: deque = deque(maxlen=1000)           # FillEvents waiting for the callback, oldest first
+        self._pump: Optional[asyncio.Task] = None
+        self._balance = None
+        self._violation: Optional[str] = None
 
     @property
     def broker_key(self):
@@ -128,11 +201,14 @@ class TopstepXAdapter(BrokerAdapter):
             raise err
         self._acct_id, self._acct_row, self.pinned_ok, self._connected = row.get("id"), row, True, True
         s = self.session
-        if self not in s.listeners:
+        joined = self not in s.listeners
+        if joined:
             s.listeners.append(self)
         if s.hub is None:
-            s.hub = TsxHub(s, _fan_events(s), on_up=_fan_up(s))
+            s.hub = TsxHub(s, _fan_events(s), on_up=_fan_up(s), on_auth_lost=_session_taken(s))
             await s.hub.start()
+        elif joined and getattr(s.hub, "up", False):
+            await self._on_up()         # the socket is already open: its on_up will not run for this late joiner
 
     async def close(self) -> None:
         """Leaves the login: the socket stops with its last listener, the session is never closed here."""
@@ -145,13 +221,169 @@ class TopstepXAdapter(BrokerAdapter):
             await hub.stop()
 
     async def observe_fills(self, on_fill: FillCallback) -> None:
-        self._on_fill = on_fill                         # the socket's fills feed it (a later task)
+        self._on_fill = on_fill
+        self._kick()                                    # fills that came before the callback was set
 
+    # ------------------------------------------------------------ the socket's pushes
     def _on_event(self, target: str, arg: dict) -> None:
-        """One pushed event from the shared socket (a later task)."""
+        """One pushed event from the shared socket (sync, from the hub's reader)."""
+        if self._acct_id is None or not isinstance(arg, dict):
+            return
+        s = self.session
+        if target == "RealTimeSession":
+            # NOT acted on (it may arrive on every connect, and acting would loop logins): keys only, once per login.
+            if s.listeners[:1] == [self]:
+                log.info("topstepx %s: session event", s.key)
+                s.journal("tsx_session_event", keys=sorted(arg))
+        elif target in VIOLATIONS:
+            if arg.get("accountId") is None or _same(arg["accountId"], self._acct_id):    # unsure whose: it is ours
+                self._violation = target
+                log.warning("topstepx %s: %s", self.account_id, target)
+                self._journal("tsx_violation", kind=target, keys=sorted(arg))
+        elif target == "RealTimeAccount":
+            if _same(arg.get("id"), self._acct_id) and BALANCE_FIELD in arg:
+                self._balance = arg[BALANCE_FIELD]
+        elif target == "RealTimePosition":
+            self._on_position(arg)
+        elif target == "RealTimeTrade":
+            self._on_trade(arg)
+        elif target == "RealTimeOrder":
+            if _same(arg.get("accountId"), self._acct_id):
+                self._notify("order", arg)
+
+    def _on_position(self, arg: dict) -> None:
+        if arg.get("accountId") is not None and not _same(arg["accountId"], self._acct_id):
+            return
+        try:
+            if arg.get("accountId") is None:
+                raise ValueError("no account")
+            cid, net = str(arg["contractId"]), _net_of(arg)
+        except Exception as e:  # noqa: BLE001 -- we cannot tell what changed: the next read goes to the broker
+            self._pos_ok = False
+            log.warning("topstepx %s: position push unreadable (%s)", self.account_id, type(e).__name__)
+            self._journal("tsx_position_unreadable", keys=sorted(arg))
+            return
+        self._pos[cid] = net
+        self._pos_pushed.add(cid)
+        self._notify("position", arg)
+
+    def _on_trade(self, arg: dict) -> None:
+        try:
+            t = _trade_fields(arg)
+            if t is None or not _same(t["accountId"], self._acct_id):    # voided, another account's, or not provably ours
+                return
+            if not self._take(t, arg, after=self._net_root(_code_of(t["contractId"]))):
+                return
+        except Exception as e:  # noqa: BLE001 -- the next on_up reads the account's trades and finds it
+            log.warning("topstepx %s: trade push unreadable (%s)", self.account_id, type(e).__name__)
+            self._journal("tsx_trade_unreadable", keys=sorted(arg))
+            return
+        self._notify("fill", arg)
+        self._kick()
+
+    def _net_root(self, code: str) -> Optional[int]:
+        """Net position of a market from the cache; None when the cache is not trustworthy."""
+        if not self._pos_ok or not code:
+            return None
+        return sum(n for cid, n in self._pos.items() if _code_of(cid) == code)
+
+    def _mark_seen(self, tid) -> bool:
+        """Record a trade id; True if it was not seen before."""
+        if tid in self._seen:
+            return False
+        if len(self._seen_order) == self._seen_order.maxlen:
+            self._seen.discard(self._seen_order[0])
+        self._seen_order.append(tid)
+        self._seen.add(tid)
+        return True
+
+    def _take(self, t: dict, row: dict, *, after: Optional[int]) -> bool:
+        """Queue a trade for the fill callback unless it was already seen (True = queued)."""
+        code = _code_of(t["contractId"])
+        ev = FillEvent(account_id=self.account_id, symbol=ROOTS.get(code) or code or t["contractId"], side=t["side"],
+                       qty=t["size"], price=t["price"], position_after=after, ts=time.time(), raw=dict(row),
+                       seen=time.perf_counter())
+        if not self._mark_seen(t["id"]):
+            return False
+        self._out.append(ev)
+        return True
+
+    def _kick(self) -> Optional[asyncio.Task]:
+        """Start delivering queued fills, oldest first, one at a time."""
+        if self._on_fill is None or not self._out:
+            return None
+        if self._pump is None or self._pump.done():
+            try:
+                self._pump = asyncio.get_running_loop().create_task(self._drain())
+            except RuntimeError:
+                return None
+        return self._pump
+
+    async def _drain(self) -> None:
+        while self._out and self._on_fill is not None:
+            ev = self._out.popleft()
+            try:
+                await self._on_fill(ev)
+            except Exception as e:  # noqa: BLE001 -- one failing callback must not stop the fills behind it
+                log.warning("topstepx %s: fill callback failed (%s)", self.account_id, type(e).__name__)
 
     async def _on_up(self) -> None:
-        """The shared socket (re)opened (a later task)."""
+        """The shared socket opened (first time or again). Never raises into the hub."""
+        if self._acct_id is None:
+            return
+        try:
+            await self._seed_positions()                # a fresh book after every open: pushes may have been missed
+        except Exception as e:  # noqa: BLE001
+            self._pos_ok = False
+            log.warning("topstepx %s: positions not read on open (%s)", self.account_id, self._words(e))
+        try:
+            rows = await self._read(TRADES_PATH.format(account_id=self._acct_id), "trades")
+        except Exception as e:  # noqa: BLE001
+            log.warning("topstepx %s: trades not read on open (%s)", self.account_id, self._words(e))
+            return
+        found, bad = [], 0
+        for row in rows:
+            try:
+                t = _trade_fields(row)
+            except Exception:  # noqa: BLE001
+                bad += 1
+                continue
+            if t is not None and (t["accountId"] is None or _same(t["accountId"], self._acct_id)):
+                found.append((t, row))
+        if bad:
+            log.warning("topstepx %s: %d trade rows unreadable", self.account_id, bad)
+            self._journal("tsx_trade_unreadable", rows=bad)
+        if not self._trades_seeded:         # the day's history is not "outside fills": remember it, deliver nothing
+            for t, _ in found:
+                self._mark_seen(t["id"])
+            self._trades_seeded = True
+            return
+        found.sort(key=lambda p: (str(p[0]["creationTimestamp"] or ""), str(p[0]["id"]).zfill(20)))
+        for t, row in found:
+            # position_after stays unknown for a replay: the cache holds the net AFTER all of them
+            if self._take(t, row, after=None):
+                self._notify("fill", row)
+        pump = self._kick()
+        if pump is not None:
+            await pump
+
+    async def _seed_positions(self) -> dict:
+        """Read the whole book from the broker into the cache (a push that lands during the read wins over the read)."""
+        self._pos_pushed = set()
+        book: dict[str, int] = {}
+        for p in await self._read(POSITIONS_PATH.format(account_id=self._acct_id), "positions"):
+            cid = str(p.get("contractId", "")) if isinstance(p, dict) else ""
+            if not cid:
+                raise ValueError("position row has no contract")
+            book[cid] = book.get(cid, 0) + _net_of(p)
+        for cid in self._pos_pushed:
+            book[cid] = self._pos[cid]
+        self._pos, self._pos_ok = book, True
+        return book
+
+    def _hub_up(self) -> bool:
+        h = self.session.hub
+        return h is not None and getattr(h, "up", True)
 
     # ------------------------------------------------------------ accounts and contracts
     def list_accounts(self) -> list[dict]:
@@ -315,7 +547,7 @@ class TopstepXAdapter(BrokerAdapter):
         if self._acct_id is None:
             return OrderResult(ok=False, error="adapter not connected")
         try:
-            held = [cid for cid, n in await self._held(symbol) if n]
+            held = [cid for cid, n in await self._held(symbol, fresh=True) if n]    # what the broker holds NOW
         except Exception as e:  # noqa: BLE001
             return OrderResult(ok=False, error=f"topstepx: positions unreadable: {self._words(e)}")
         errors, n = [], 0
@@ -328,22 +560,17 @@ class TopstepXAdapter(BrokerAdapter):
         return OrderResult(ok=not errors, error="; ".join(errors) or None, raw={"flattened": n})
 
     # ------------------------------------------------------------ reads
-    async def _held(self, symbol: str) -> list[tuple[str, int]]:
-        """[(contract id, signed size)] of this account's positions in the symbol's market (a root = every month)."""
+    async def _held(self, symbol: str, *, fresh: bool = False) -> list[tuple[str, int]]:
+        """[(contract id, signed size)] of this account's positions in the symbol's market (a root = every month).
+        From the socket-kept cache once it was read whole and the socket is up; else (or `fresh`) from the broker."""
         s = str(symbol or "").strip().upper()
         root = root_of(s)
         if root not in CODES:
             raise ValueError(f"topstepx: unknown market {symbol!r}")
         prefix = f"CON.F.US.{CODES[root]}."
         exact = None if s == root else self.contract_id(s)
-        out = []
-        for p in await self._read(POSITIONS_PATH.format(account_id=self._acct_id), "positions"):
-            cid = str(p.get("contractId", ""))
-            if (cid == exact) if exact else cid.startswith(prefix):
-                if p.get(POSITION_FIELD) is None:
-                    raise RuntimeError(f"topstepx: position row has no {POSITION_FIELD}")
-                out.append((cid, int(p[POSITION_FIELD])))
-        return out
+        book = self._pos if (self._pos_ok and not fresh and self._hub_up()) else await self._seed_positions()
+        return [(cid, n) for cid, n in book.items() if ((cid == exact) if exact else cid.startswith(prefix))]
 
     async def get_net_position(self, symbol: str) -> int:
         """Net position in the symbol's market. RAISES when it cannot be read: unreadable is not flat."""
@@ -357,15 +584,29 @@ class TopstepXAdapter(BrokerAdapter):
         try:
             for a in await self._read(ACCOUNTS_PATH, "accounts"):
                 if a.get("id") == self._acct_id:
-                    return {"amount": a.get(BALANCE_FIELD)}
+                    self._balance = a.get(BALANCE_FIELD)
+                    return {"amount": self._balance}
         except Exception:  # noqa: BLE001
             pass
         return {}
 
     async def get_metrics(self) -> dict:
-        """No broker request here (the dashboard polls it): the numbers come from the socket's pushes (a later task)."""
+        """No broker request here (the dashboard polls it): the numbers come from what the socket and reads already left."""
         m = await super().get_metrics()
         m["account"] = self._acct_row.get("name") or None
+        m["balance"] = self._balance if self._balance is not None else self._acct_row.get(BALANCE_FIELD)
+        m["positions_known"] = self._pos_ok
+        if self._pos_ok:
+            by_root: dict[str, int] = {}
+            for cid, n in self._pos.items():
+                if n:
+                    code = _code_of(cid)
+                    root = ROOTS.get(code) or code or cid
+                    by_root[root] = by_root.get(root, 0) + n
+            m["open_positions"] = [{"symbol": r, "net": n} for r, n in by_root.items() if n]
+            m["open_position_count"] = len(m["open_positions"])
+        m["session_taken"] = self.session.taken
+        m["tsx_violation"] = self._violation
         return m
 
     # ------------------------------------------------------------ helpers
@@ -391,6 +632,31 @@ def _fan_events(session: TsxSession):
             except Exception as e:  # noqa: BLE001 -- one account's failure must not starve the others
                 log.warning("topstepx %s: event %s failed (%s)", a.account_id, target, type(e).__name__)
     return on_event
+
+
+def _session_taken(session: TsxSession):
+    """The login's ONE handler for 'TopstepX ended this session' (the hub calls it on a socket 401 at open): one kick = one
+    count, one journal line, one login through the budget. It runs inside the hub's own task, so it never stops the hub: a
+    refused login returns and the hub's backoff paces the next try."""
+    lock = asyncio.Lock()
+
+    async def taken() -> None:
+        called_with = session._token
+        async with lock:
+            if session._token != called_with:       # a call that ran before us already logged in again
+                return
+            session.taken += 1
+            names = [a.account_name for a in list(session.listeners)]
+            session.journal("tsx_session_taken", accounts=names, count=session.taken)
+            try:
+                await session.relogin("taken")
+            except LoginDeferred as e:
+                log.warning("topstepx %s: session taken, login deferred", session.key)
+                session.journal("tsx_session_taken", accounts=names, count=session.taken, deferred=str(e))
+            except Exception as e:  # noqa: BLE001 -- the hub logs it; the journal gets the class only (no text)
+                session.journal("tsx_session_taken", accounts=names, count=session.taken, failed=type(e).__name__)
+                raise
+    return taken
 
 
 def _fan_up(session: TsxSession):
