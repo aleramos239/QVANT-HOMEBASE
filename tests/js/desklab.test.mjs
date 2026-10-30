@@ -1056,6 +1056,26 @@ test('3.4 switchOnAsk: the ON confirm\'s words, asked while the strategy is stil
   assert.equal(D.switchOnAsk(off, undefined), '');
 });
 
+test('per-account settings: the ON confirm and the switch title name each account\'s own size when a row is set (final review I-2)', () => {
+  const accounts = { live047: { env: 'live', label: 'APEX047' }, sim041: { env: 'demo' } };
+  const set = { account: 'live047', qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win', most: 4 };
+  const own = deskStrat({ own_size: true, params: { risk: 650 } }, { enabled: false });
+  assert.equal(D.switchOnAsk(own, [set, { account: 'sim041', qty: 3 }], accounts),
+    'It will run from the next signal. Its orders go to 1 LIVE account and 1 demo account: APEX047 LIVE $500 risk, stops after a win · sim041 demo $650 at risk a trade.',
+    'never "1 contract" or the strategy\'s $650 for the risk row; a plain row on a self-sizing strategy keeps its own size');
+  const off = deskStrat({}, { enabled: false });
+  assert.equal(D.switchOnAsk(off, [{ account: 'sim041', qty: 3, size: 'contracts' }, { account: 'live047', qty: 2 }], accounts),
+    'It will run from the next signal. Its orders go to 1 LIVE account and 1 demo account: sim041 demo ×3 · APEX047 LIVE ×2.');
+  assert.equal(D.switchOnAsk(off, [{ account: 'sim041', qty: 2, stop_after: 'profit' }], accounts),
+    'It will run from the next signal. Its orders go to 1 demo account: sim041 demo ×2, stops in profit.');
+  assert.equal(D.deskSwitchTitle(deskStrat(), [set], accounts), 'ON: its orders go to 1 LIVE account: APEX047 LIVE $500 risk, stops after a win');
+  // the page's own short name when the page has one
+  const ctx = vm.createContext({ acctShort: (id) => 'SHORT-' + id });
+  ctx.self = ctx;
+  vm.runInContext(readFileSync(new URL('../../homebase/static/desklab.js', import.meta.url), 'utf8'), ctx);
+  assert.match(ctx.DeskLab.switchOnAsk(off, [set], accounts), /SHORT-live047 LIVE \$500 risk/);
+});
+
 test('3.4 when the switch asks is unchanged: switchNeedsConfirm decides, and the page still asks before turning a booked Lab strategy ON', () => {
   const AV = require('../../homebase/static/algo-visibility.js');
   assert.equal(AV.switchNeedsConfirm('strategy', true, { shadow: false }), true);

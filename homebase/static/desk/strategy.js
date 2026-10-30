@@ -330,12 +330,14 @@ function setupHtml(name, s) {
   const cyc = Object.values(ST.groups || {}).find(g => (g.members || []).includes(name));
   const dg = cyc ? null : DESKGROUPS.groups.find(g => g.members.includes(name));
   const qs = [...new Set(book.map(a => +a.qty || 1))], whole = (v) => usd(v).replace(/\.00$/, "");
-  const n = (e) => book.filter(a => kind(a.account) === e).length;
+  const n = (e) => book.filter(a => kind(a.account) === e).length, set = book.some(a => a.size);   // a row with its own size wins
+  const own = (a) => a.size || a.stop_after ? AcctSet.words(a) : `×${+a.qty || 1}`;
   const rows = [
-    ["Accounts", book.map(a => `${acctShort(a.account)} ${word(a.account)} ×${+a.qty || 1}`.replace("  ", " ")).join(" · ") || "none yet"],
+    ["Accounts", book.map(a => `${acctShort(a.account)} ${word(a.account)} ${own(a)}`.replace("  ", " ")).join(" · ") || "none yet"],
     ["LIVE / paper", book.length ? [["LIVE", n("live")], ["demo", n("demo")], ["paper", n("paper")]].filter(x => x[1]).map(x => `${x[0]} on ${x[1]}`).join(" · ") || "—"
       : lab ? "no account: it runs in shadow" : "no account"],
     ["Size", lab && cyc && cyc.on && cyc.risk_usd > 0 ? `${whole(cyc.risk_usd)} at risk a trade (the ${cyc.name} group sizes it)`
+      : lab && set ? "set on each account (see Accounts)"
       : lab && lab.own_size === true ? (Number((lab.params || {}).risk) > 0 ? `${whole(Number(lab.params.risk))} at risk a trade` : "it sizes each trade itself")   // as DeskLab.ordersGo
       : qs.length === 1 ? `${qs[0]} contract${qs[0] === 1 ? "" : "s"} an account` : qs.length ? `${Math.min(...qs)}-${Math.max(...qs)} contracts an account` : "—"],
     ...(lab && lab.limits ? [["Limits", DeskLab.limitsRows(lab.limits).map(x => `${x.k} ${x.v}`).join(" · ")]] : []),

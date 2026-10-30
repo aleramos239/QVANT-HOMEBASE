@@ -253,3 +253,36 @@ test('the sheet is static markup with every field the code reads, closes with Es
   const render = HTML.slice(HTML.indexOf('function render() {'), HTML.indexOf('async function refresh() {'));
   assert.doesNotMatch(render, /acctSetOverlay|asSave|openAcctSet/);
 });
+
+// ---- final fixes (final-review.md) -----------------------------------------------------------------------
+test('words: label, then Most when asked, then the stop-after tag', () => {
+  assert.equal(A.words({ qty: 3 }), '×3');
+  assert.equal(A.words({ qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win', most: 4 }), '$500 risk, stops after a win');
+  assert.equal(A.words({ qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win', most: 4 }, true), '$500 risk, most 4, stops after a win');
+  assert.equal(A.words({ qty: 2, stop_after: 'profit' }, true), '×2, stops in profit');
+});
+
+test('the loss lock is capped at 100000 like the profit lock (minor 1)', async () => {
+  const t = load({ book: { lab_x: [{ account: 'paper1', qty: 2 }] } });
+  t.api.openAcctSet('lab_x', 'paper1');
+  fill(t, { asLoss: '100001' });
+  await t.api.saveAcctSet();
+  assert.deepEqual(t.posts, []);
+  assert.equal(t.$('#asNote').textContent, 'The loss lock is a dollar amount from 0 (off) to 100000.');
+  fill(t, { asLoss: '100000' });
+  await t.api.saveAcctSet();
+  assert.deepEqual(t.posts, [{ url: '/api/account-day-lock', body: { account: 'paper1', day_loss: 100000 } }]);
+});
+
+test('a status with no most_default gives the backend\'s own fallback, 2, never 20 (minor 15)', () => {
+  const t = load({ strategies: { lab_x: { cfg: { kind: 'lab' }, lab: {} } }, book: { lab_x: [{ account: 'paper1', qty: 1 }] } });
+  t.api.openAcctSet('lab_x', 'paper1');
+  fill(t, { asSize: 'contracts' });
+  t.api.acctSetSize();
+  assert.equal(t.$('#asMost').value, '2');
+});
+
+test('Most contracts has an accessible name (minor 12)', async () => {
+  const { HTML } = await import('./deskpage.mjs');
+  assert.ok(HTML.includes('<label for="asMost">Most contracts</label>'));
+});

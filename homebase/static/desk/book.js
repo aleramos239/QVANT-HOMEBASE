@@ -10,10 +10,11 @@ const DEMO_TAG = '<span class="tag" title="A demo account — the broker\'s prac
    A Lab row with a size opens the account's settings sheet on click; any other row keeps the inline size box. */
 function acctQtyHtml(id, extra) {
   const row = extra.row, words = row ? AcctSet.label(row) : "×" + extra.qty, tag = row ? AcctSet.tag(row) : "";
-  const note = tag ? `<span class="mcap">${esc(tag)}</span>` : "";
-  if (!extra.strategy || extra.locked) return `<span class="strats">${esc(words)}</span>${note}`;
+  const nw = ' style="white-space:nowrap"';                   // "$500 risk" and its tag never break inside themselves
+  const note = tag ? `<span class="mcap"${nw}>${esc(tag)}</span>` : "";
+  if (!extra.strategy || extra.locked) return `<span class="strats"${row && row.size ? nw : ""}>${esc(words)}</span>${note}`;
   return (row && row.size
-    ? `<span class="strats qty-edit" title="Click for this account's settings"
+    ? `<span class="strats qty-edit"${nw} title="Click for this account's settings"
            onclick="openAcctSet(${jsArg(extra.strategy)},${jsArg(id)})">${esc(words)}</span>`
     : `<span class="strats qty-edit" title="Click to change size"
            onclick="editQty(event,'${extra.strategy}',${jsArg(id)},${extra.qty})">${esc(words)}</span>`) + note;
@@ -169,15 +170,15 @@ function liveBookingNote(strategy, account) {
     (idle.length ? ` Right now ${idle.join(" and ")}, so nothing is placed until that changes.` : "") + acct;
 }
 const bookMachine = () => machineWords() ? ` It runs ${machineWords()}.` : "";     // the one machine reader (core.js)
-async function pickAsg(strategy, account, qty) {
+async function pickAsg(strategy, account, qty, row) {
   FREEZE = false;
   closeAsgMenus(false);
   const was = ((ST.book[strategy] || []).find(a => a.account === account) || {}).qty;
   if (isRealAcct(account) && !await confirmDlg(
-      `Book ${stratLabel(strategy)} on ${acctShort(account)} LIVE, qty ${was ? was + " → " : ""}${qty}?`,
+      `Book ${stratLabel(strategy)} on ${acctShort(account)} LIVE, ${row && row.size ? AcctSet.label(row) : `qty ${was ? was + " → " : ""}${qty}`}?`,
       liveBookingNote(strategy, account) + bookMachine(), "Book live", false)) { refresh(); return; }
   const cur = (ST.book[strategy] || []).filter(a => a.account !== account);
-  cur.push({...(ST.book[strategy] || []).find(a => a.account === account), account, qty});   // a booked row keeps its other fields
+  cur.push({...(ST.book[strategy] || []).find(a => a.account === account), ...row, account, qty});   // a booked row keeps its other fields; `row`: a whole row put back
   setBook(strategy, cur);
 }
 function editQty(ev, strategy, account, qty) {

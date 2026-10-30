@@ -40,13 +40,12 @@ def register(app, *, _kill_lock, adapters, cfg, desk, engine) -> None:
         if "day_lock" not in body and "day_loss" not in body:
             raise HTTPException(400, "Send a day take (day_lock) or a loss lock (day_loss).")
         new: dict = {}
-        for key, top, what in (("day_lock", 100000, "The day take"), ("day_loss", None, "The loss lock")):
+        for key, what in (("day_lock", "The day take"), ("day_loss", "The loss lock")):
             if key not in body:
                 continue
             v = body[key]
-            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 \
-                    or (top is not None and v > top):
-                raise HTTPException(400, f"{what} is a dollar amount from 0 (off)" + (f" to {top}." if top else " up."))
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 or v > 100000:
+                raise HTTPException(400, f"{what} is a dollar amount from 0 (off) to 100000.")
             new[key] = float(v)
         acct = cfg.accounts[aid]
         prev = {k: getattr(acct, k) for k in new}

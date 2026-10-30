@@ -297,7 +297,7 @@ async function bookCycle(id) {
       `${live ? ` (${live} LIVE)` : ""}. Each trade still goes to ONE account, in turn, sized by the cycle.`, "Book", false)) return;
   const bad = [];
   for (const [m, add] of todo) {
-    const rows = ((ST.book || {})[m] || []).map(r => ({account: r.account, qty: r.qty})).concat(add.map(a => ({account: a, qty: 1})));
+    const rows = ((ST.book || {})[m] || []).concat(add.map(a => ({account: a, qty: 1})));     // a booked row keeps its settings
     let r = null;
     try { r = await post("/api/book", {strategy: m, assignments: rows}); } catch (_) { r = null; }
     if (!r || r.ok !== true) bad.push(`${stratLabel(m)}: ${labSafe(() => DeskLab.refusalText(r), "refused")}`);

@@ -88,7 +88,7 @@ const ACTIVITY = {
   account_removed: (r) => [`Removed account ${acctShort(r.account)}`],
   book_updated: (r) => {
     const a = Array.isArray(r.assignments) ? r.assignments : [];
-    return [a.length ? `${actStrat(r)} booked on ` + a.map(x => `${acctShort(x.account)} ×${x.qty}`).join(", ")
+    return [a.length ? `${actStrat(r)} booked on ` + a.map(x => `${acctShort(x.account)} ${AcctSet.words(x)}`).join(" · ")
                      : `${actStrat(r)} unbooked from every account`];
   },
   strategy_toggled: (r) => [`${actStrat(r)} switched ${r.enabled ? "ON" : "OFF"}${r.cause === "manual_flatten" ? " (Flatten & turn off)" : ""}`],
@@ -437,7 +437,9 @@ async function loadDeskChanges(who, force) {
   finally { c.at = Date.now(); c.busy = false; }
 }
 const chgSay = (v) => v === true ? "on" : v === false ? "off" : v == null || v === "" ? "none" : String(v);
-const chgSameBook = (a, b) => JSON.stringify((a || []).map(x => [x.account, +x.qty]).sort()) === JSON.stringify((b || []).map(x => [x.account, +x.qty]).sort());
+// a row is its account, qty and settings (size, risk, stop after, Most): a settings-only change is a change
+const chgRowKey = (x) => [x.account, +x.qty, x.size || null, x.risk_usd == null ? null : +x.risk_usd, x.stop_after || null, x.most == null ? null : +x.most];
+const chgSameBook = (a, b) => JSON.stringify((a || []).map(chgRowKey).sort()) === JSON.stringify((b || []).map(chgRowKey).sort());
 const chgTell = (why) => { if (why && why !== "Not changed.") toast(why, 8000); };
 /* The book as it was -> what was booked back: one account at a time, through the same control as by hand (pickAsg adds an account,
    editQty's ask and body change a qty in place -- the list order is the take-turns order; lowering and taking off never ask). */
@@ -447,11 +449,12 @@ async function putBackBook(name, old) {
   if (off.length + back.length !== 1) return;
   if (off.length) return removeAsg(name, off[0].account);
   const b = back[0], a = cur.find(x => x.account === b.account);
-  if (!a) return pickAsg(name, b.account, b.qty);
-  if (b.qty > a.qty && isRealAcct(b.account) && !await confirmDlg(
-      `Book ${stratLabel(name)} on ${acctShort(b.account)} LIVE, qty ${a.qty} → ${b.qty}?`,
+  if (!a) return pickAsg(name, b.account, b.qty, b);                                  // the old row, whole
+  const set = a.size || b.size || a.stop_after || b.stop_after;                         // the sheet's ask and words, else editQty's
+  if (AcctSet.needsAsk(a, b, isRealAcct(b.account)) && !await confirmDlg(
+      `Book ${stratLabel(name)} on ${acctShort(b.account)} LIVE, ${set ? `${AcctSet.label(a)} → ${AcctSet.label(b)}` : `qty ${a.qty} → ${b.qty}`}?`,
       liveBookingNote(name, b.account) + bookMachine(), "Book live", false)) { refresh(); return; }
-  return setBook(name, cur.map(x => x.account === b.account ? {account: b.account, qty: b.qty} : x));
+  return setBook(name, cur.map(x => x.account === b.account ? {...b} : x));
 }
 /* One journal line -> {text, back} (back: what Put back does, or null), or null when the line changed nothing. `prior`: the line
    before it of the same kind (the old value of a book or a group, which their lines do not carry). */
@@ -486,10 +489,13 @@ const CHG_WORDS = {
     const now = r.assignments || [], A = (a) => acctShort(a.account);
     // locked as the Assign control is: another Desk owns it, or a Lab strategy with no limits yet
     const locked = (s.lab && s.lab.read_only === true) || ((s.cfg || {}).kind === "lab" && DeskLab.accountsLock(s).locked);
-    if (!prior) return {text: "Accounts: " + (now.map(a => `${A(a)} ×${a.qty}`).join(" · ") || "none")};
-    const old = prior.assignments || [], q = (l, a) => (l.find(b => b.account === a.account) || {}).qty;
-    const parts = [...now.filter(a => q(old, a) == null).map(a => `${A(a)} added ×${a.qty}`), ...old.filter(b => q(now, b) == null).map(b => `${A(b)} taken off`),
-      ...now.filter(a => q(old, a) != null && q(old, a) !== a.qty).map(a => `${A(a)} qty ${q(old, a)} → ${a.qty}`)];
+    const W = (a) => AcctSet.words(a, true);
+    if (!prior) return {text: "Accounts: " + (now.map(a => `${A(a)} ${W(a)}`).join(" · ") || "none")};
+    const old = prior.assignments || [], q = (l, a) => l.find(b => b.account === a.account);
+    const plainQty = (a, b) => !(a.size || b.size || a.stop_after || b.stop_after);      // two plain rows: "qty 1 → 3", as before
+    const parts = [...now.filter(a => !q(old, a)).map(a => `${A(a)} added ${W(a)}`), ...old.filter(b => !q(now, b)).map(b => `${A(b)} taken off`),
+      ...now.filter(a => q(old, a) && !chgSameBook([q(old, a)], [a])).map(a => { const b = q(old, a);
+        return plainQty(a, b) ? `${A(a)} qty ${b.qty} → ${a.qty}` : `${A(a)} ${W(b)} → ${W(a)}`; })];
     return parts.length ? {text: parts.join(" · "), back: parts.length === 1 && !locked && chgSameBook((ST.book || {})[r.strategy], now) ? () => putBackBook(r.strategy, old) : null} : null;
   },
   group_set: (r, prior) => {

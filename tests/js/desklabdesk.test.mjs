@@ -243,6 +243,52 @@ test('WP1.15 putting back a LIVE qty raise keeps the account in its place (the t
   assert.deepEqual(no.posts, [], 'Cancel books nothing');
 });
 
+// final review I-1 / minor 19: a row's settings (size, risk, stop after, Most) are part of the row: shown, changed, put back
+const RISK = { account: 'a2', qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win', most: 4 };
+test('per-account settings: a settings-only change is a Changes line, and Put back restores the old row whole', async () => {
+  const now = { account: 'a2', qty: 1, size: 'risk', risk_usd: 300 };
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }, now] } });
+  changes(t, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, now] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, RISK] })]);
+  const [x, first] = t.api.deskChangeList('s:lab_nq_orb');
+  assert.equal(x.text, 'APEX…048 $500 risk, most 4, stops after a win → $300 risk');
+  assert.equal(first.text, 'Accounts: Lucid Eval #1 ×1 · APEX…048 $500 risk, most 4, stops after a win');
+  assert.ok(x.back, 'still in force: Put back');
+  await t.api.putBackChange('s:lab_nq_orb', x.key);
+  assert.deepEqual(t.posts, [{ url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, RISK] } }]);
+  assert.deepEqual(t.confirms.map((c) => c.title), ['Book NQ ORB on APEX…048 LIVE, $300 risk → $500 risk?'], 'more risk on a LIVE account asks');
+});
+
+test('per-account settings: Put back of a qty change keeps the row\'s settings; Put back of a removed row books it whole', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a2', qty: 2, size: 'contracts', stop_after: 'win', most: 4 }] } });
+  const was = { account: 'a2', qty: 3, size: 'contracts', stop_after: 'win', most: 4 };
+  changes(t, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 2, size: 'contracts', stop_after: 'win', most: 4 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [was] })]);
+  const [x] = t.api.deskChangeList('s:lab_nq_orb');
+  assert.equal(x.text, 'APEX…048 ×3, most 4, stops after a win → ×2, most 4, stops after a win');
+  await t.api.putBackChange('s:lab_nq_orb', x.key);
+  assert.deepEqual(t.posts[0], { url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [was] } });
+  const off = load({ accounts: PAPER_A1, book: { lab_nq_orb: [{ account: 'a2', qty: 1 }] } });
+  const gone = { account: 'a1', qty: 1, size: 'risk', risk_usd: 250, stop_after: 'profit' };
+  changes(off, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }, gone] })]);
+  const [y] = off.api.deskChangeList('s:lab_nq_orb');
+  assert.equal(y.text, 'Lucid Eval #1 taken off');
+  await off.api.putBackChange('s:lab_nq_orb', y.key);
+  assert.deepEqual(off.posts, [{ url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }, gone] } }]);
+});
+
+test('per-account settings: Setup names each account\'s own size and stop-after (final review I-2)', () => {
+  const t = load({ strategies: { nq930: nq930(), lab_nq_orb: deskStrat({ own_size: true, params: { risk: 1000 } }) },
+    book: { lab_nq_orb: [{ account: 'a1', qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win' }, { account: 'a2', qty: 3, size: 'contracts' }] } });
+  const html = t.view();
+  assert.equal(setupRow(html, 'Accounts'), 'Lucid Eval #1 demo $500 risk, stops after a win · APEX…048 LIVE ×3');
+  assert.equal(setupRow(html, 'Size'), 'set on each account (see Accounts)', 'never the strategy\'s own $1,000');
+  const plainBook = load({ strategies: { nq930: nq930(), lab_nq_orb: deskStrat({ own_size: true, params: { risk: 1000 } }) },
+    book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } }).view();
+  assert.equal(setupRow(plainBook, 'Size'), '$1,000 at risk a trade', 'a plain row: as before');
+});
+
 test('H: no Put back on an account change while the Assign control is locked (another Desk owns it, or no limits yet)', () => {
   const BOOK = [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] }),
     chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }] })];
@@ -981,7 +1027,7 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=44"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=45"><\/script>/);
   assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=5"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));

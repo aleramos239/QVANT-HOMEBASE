@@ -8,6 +8,8 @@ const AcctSet = (() => {
   /* "×N" or "$X risk" */
   const label = (r) => risk(r) ? "$" + r.risk_usd + " risk" : "×" + r.qty;
   const tag = (r) => r && r.stop_after === "win" ? "stops after a win" : r && r.stop_after === "profit" ? "stops in profit" : "";
+  /* "$500 risk, stops after a win": label, Most when asked (the Changes lines), then the tag */
+  const words = (r, most) => [label(r), most && r.most != null ? "most " + r.most : "", tag(r)].filter(Boolean).join(", ");
   /* The sheet's fields for a row. A row written before the settings (no `size`) opens as "own" ("The strategy's own"): it
      stays a plain {account, qty} row until the owner picks Contracts or Risk. */
   const formOf = (row) => ({
@@ -37,7 +39,7 @@ const AcctSet = (() => {
   /* The book with this account's row replaced (added when new); every other row stays exactly as it is. */
   const withRow = (book, row) => book.some(r => r.account === row.account)
     ? book.map(r => r.account === row.account ? row : r) : [...book, row];
-  return {label, tag, formOf, rowFrom, needsAsk, withRow};
+  return {label, tag, words, formOf, rowFrom, needsAsk, withRow};
 })();
 
 let ACCT_SET = {strategy: "", account: "", tok: 0};
@@ -70,7 +72,7 @@ function toggleAcctMost() {
 function openAcctSet(strategy, account) {
   const row = acctSetRow(strategy, account), s = ((ST && ST.strategies) || {})[strategy];
   if (!row || !s || !s.lab) return;
-  const def = Number(s.lab.most_default) || 20, form = AcctSet.formOf(row);
+  const def = Number(s.lab.most_default) || 2, form = AcctSet.formOf(row);
   const day = (((ST && ST.accounts) || {})[account] || {}).day || {};
   ACCT_SET = {strategy, account, form, mostDefault: def, most: form.most, sized: !!row.size, take: Number(day.day_lock) || 0, loss: Number(day.day_loss) || 0, tok: ACCT_SET.tok + 1};
   $("#asTitle").textContent = `${stratLabel(strategy)} on ${acctShort(account)}`;
@@ -118,10 +120,10 @@ function readAcctSet() {
     if (!whole(form.most, 1, 1000)) return {error: "Most contracts is a whole number from 1 to 1000."};
   }
   const lock = (id, top) => { const t = String($(id).value).trim(), v = t === "" ? 0 : num(t);
-    return Number.isFinite(v) && v >= 0 && (top == null || v <= top) ? v : null; };
-  const take = lock("#asTake", 100000), loss = lock("#asLoss", null);
+    return Number.isFinite(v) && v >= 0 && v <= top ? v : null; };
+  const take = lock("#asTake", 100000), loss = lock("#asLoss", 100000);
   if (take == null) return {error: "The profit lock is a dollar amount from 0 (off) to 100000."};
-  if (loss == null) return {error: "The loss lock is a dollar amount from 0 (off) up."};
+  if (loss == null) return {error: "The loss lock is a dollar amount from 0 (off) to 100000."};
   return {form, take, loss};
 }
 async function saveAcctSet() {

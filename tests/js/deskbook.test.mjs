@@ -306,12 +306,14 @@ test('per-account settings: a Lab row with a size shows it and opens the sheet; 
   assert.doesNotMatch(sized, /editQty/);
   assert.match(sized, /\$500 risk/);
   assert.match(sized, /stops after a win/);
+  // one line each: the size and its tag never wrap inside themselves (final review minor 14)
+  assert.match(sized, /<span class="strats qty-edit" style="white-space:nowrap"[^>]*>\$500 risk<\/span><span class="mcap" style="white-space:nowrap">stops after a win<\/span>/);
   assert.match(sized, /<button class="btn btn-outline btn-sm" onclick="openAcctSet\(&quot;lab_orb&quot;,&quot;paper-1&quot;\)">Settings<\/button>/);
   const legacy = c.acctRow('paper-1', { qty: 2, strategy: 'lab_orb', row: { account: 'paper-1', qty: 2 } });
   assert.match(legacy, /onclick="editQty\(event,'lab_orb',&quot;paper-1&quot;,2\)"/);
   assert.match(legacy, />Settings<\/button>/, 'every Lab row gets the Settings button');
   const locked = c.acctRow('paper-1', { qty: 1, strategy: 'lab_orb', row: SET_ROW, locked: true });
-  assert.match(locked, /<span class="strats">\$500 risk<\/span>/);
+  assert.match(locked, /<span class="strats" style="white-space:nowrap">\$500 risk<\/span>/);
   assert.doesNotMatch(locked, /qty-edit/);
   assert.match(locked, /<button class="btn btn-outline btn-sm" disabled[^>]*>Settings<\/button>/);
 });

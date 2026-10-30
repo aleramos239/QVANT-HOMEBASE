@@ -18,7 +18,8 @@ const BLOCK = between('/* ---- readiness, as the page shows it (W4) ----', '/* -
 const HELPERS = between('const fmt = (v, d = 2)', '/* ---- theme ---- */') +
   between('function acctShort(', 'function liveBookingNote(') +
   between('const esc = (v) =>', 'async function chartPost(') +
-  between('const killText = ', 'async function doKill(');
+  between('const killText = ', 'async function doKill(') +
+  readFileSync(new URL('../../homebase/static/desk/acctset.js', import.meta.url), 'utf8');     // AcctSet: a booked row's words
 
 function fakeEl() {
   const listeners = {};
@@ -103,6 +104,8 @@ test('the desk\'s own events read plainly: arm, book, toggle, timer, refusals', 
   assert.equal(line({ event: 'book_updated', strategy: 'nq930_1030', assignments: [{ account: '1234567049', qty: 3 }] }).text,
     'NQ930_1030 booked on …049 ×3');
   assert.equal(line({ event: 'book_updated', strategy: 'nq930', assignments: [] }).text, 'NQ930 unbooked from every account');
+  assert.equal(line({ event: 'book_updated', strategy: 'lab_x', assignments: [{ account: '1234567049', qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win' },
+    { account: 'lucid-eval-1', qty: 2, size: 'contracts' }] }).text, 'LAB_X booked on …049 $500 risk, stops after a win · Lucid Eval #1 ×2', 'each account\'s own setting (minor 19)');
   assert.equal(line({ event: 'strategy_toggled', strategy: 'nq930', enabled: false, cause: 'manual_flatten' }).text,
     'NQ930 switched OFF (Flatten & turn off)');
   assert.equal(line({ event: 'timer_fired', strategy: 'nq930', anchor: 30716.25, result: true, note: 'disarmed — journaled only' }).text,
