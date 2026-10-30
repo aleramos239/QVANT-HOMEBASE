@@ -173,3 +173,14 @@ def test_an_accounts_day_take_is_written_only_when_set_and_survives_a_reload(cfg
     assert saved["main"]["day_lock"] == 1000.0 and "day_lock" not in saved["eval1"]
     back = desk_config.load()
     assert back.accounts["main"].day_lock == 1000.0 and back.accounts["eval1"].day_lock == 0.0
+
+
+def test_an_accounts_day_loss_is_written_only_when_set_and_survives_a_reload(cfg_path):
+    c = golden_cfg()
+    desk_config.save(c)
+    assert all("day_loss" not in a for a in json.loads(cfg_path.read_text())["accounts"].values())
+    c.accounts["main"].day_loss = 250.0
+    desk_config.save(c)
+    saved = json.loads(cfg_path.read_text())["accounts"]
+    assert saved["main"]["day_loss"] == 250.0 and "day_loss" not in saved["eval1"]
+    assert desk_config.load().accounts["main"].day_loss == 250.0

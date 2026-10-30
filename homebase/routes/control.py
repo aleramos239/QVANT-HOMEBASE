@@ -26,27 +26,39 @@ def register(app, *, _kill_lock, adapters, cfg, desk, engine) -> None:
 
     @app.post("/api/account-day-lock")
     async def account_day_lock(request: Request):
-        """An account's own day take, the group's: {account, day_lock} in dollars of CLOSED net P&L, 0 = off. Once a
-        trade of any strategy booked on the account closes with the day at or above it, no new entry is taken on the
-        account for the rest of the day (resting entries are cancelled, open trades run to their stop / target). Set
-        at or below the day's closed P&L it locks now; a lock already taken stays for the day."""
+        """An account's own day take (day_lock) and loss lock (day_loss), the group's: {account, day_lock?, day_loss?} in
+        dollars of CLOSED net P&L, 0 = off; at least one. Once a Desk trade closes with the day at or above the take, or at
+        or below minus the loss lock, no new entry is taken on the account for the rest of the day (resting entries are
+        cancelled, open trades run to their stop / target). Set at or past the day's closed P&L it locks now; a lock
+        already taken stays for the day."""
         body = await request.json()
         if not isinstance(body, dict):
-            raise HTTPException(400, "{account, day_lock}")
+            raise HTTPException(400, "{account, day_lock, day_loss}")
         aid = str(body.get("account") or "")
         if aid not in cfg.accounts:
             raise HTTPException(404, f"unknown account {aid!r}")
-        v = body.get("day_lock")
-        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0 <= v <= 100000:
-            raise HTTPException(400, "The day take is a dollar amount from 0 (off) to 100000.")
-        prev = cfg.accounts[aid].day_lock
-        cfg.accounts[aid].day_lock = float(v)
+        if "day_lock" not in body and "day_loss" not in body:
+            raise HTTPException(400, "Send a day take (day_lock) or a loss lock (day_loss).")
+        new: dict = {}
+        for key, what in (("day_lock", "The day take"), ("day_loss", "The loss lock")):
+            if key not in body:
+                continue
+            v = body[key]
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 or v > 100000:
+                raise HTTPException(400, f"{what} is a dollar amount from 0 (off) to 100000.")
+            new[key] = float(v)
+        acct = cfg.accounts[aid]
+        prev = {k: getattr(acct, k) for k in new}
+        for k, v in new.items():
+            setattr(acct, k, v)
         try:
             config_mod.save(cfg)
         except Exception as e:  # noqa: BLE001 -- nothing changed: the memory goes back with the file
-            cfg.accounts[aid].day_lock = prev
+            for k, v in prev.items():
+                setattr(acct, k, v)
             raise HTTPException(500, f"Could not save it: {e}") from None
-        engine.journal("account_day_lock_set", account=aid, day_lock=float(v), previous=prev)
+        for k, v in new.items():
+            engine.journal("account_day_lock_set", account=aid, **{k: v, "previous": prev[k]})
         await engine.apply_day_lock(aid)
         return {"ok": True, "account": aid, **engine.day_view(aid)}
 

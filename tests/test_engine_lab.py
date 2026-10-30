@@ -3964,6 +3964,17 @@ def test_a_day_take_of_zero_is_off_and_the_strategys_own_day_lock_still_counts(t
     assert eng.rules_for("a1").day_lock == 500.0
 
 
+def test_an_accounts_day_loss_locks_after_a_losing_trade_and_alone_does_not_refuse_a_lab_entry(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    eng.cfg.accounts["a1"].day_loss = 100.0
+    assert eng.rules_for("a1").day_loss == 100.0
+    settle(eng, ads["a1"], exit_px=95.0, by="sl")            # a day_loss alone is no take rule: the entry went in; -$104
+    assert eng.books["a1"].closed_net == -104.0 and eng.account_locked("a1") == "day_loss"
+    assert eng.day_view("a1")["day_loss"] == 100.0
+    out = go(eng, leg(iid=2))
+    assert out["accounts"]["a1"]["reason"] == "This account is stopped for the day."
+
+
 def test_a_day_take_stops_a_built_in_strategy_on_the_account_too(tmp_path):
     """The take is the ACCOUNT's: the straddle booked beside the Lab strategy sits the day out after the lock."""
     eng, ads, _ = mk(tmp_path, extra={"nq930": straddle_cfg("ES")}, book={"nq930": [{"account": "a1", "qty": 1}]})
@@ -3977,7 +3988,7 @@ def test_a_day_take_stops_a_built_in_strategy_on_the_account_too(tmp_path):
 def test_a_day_take_set_at_or_below_the_days_closed_pnl_locks_now_and_a_lock_stays(tmp_path):
     eng, ads, _ = mk(tmp_path)
     settle(eng, ads["a1"])                                   # +$196, no take yet
-    assert eng.day_view("a1") == {"day_lock": 0.0, "closed_net": 196.0, "closes": 1, "locked": None}
+    assert eng.day_view("a1") == {"day_lock": 0.0, "day_loss": 0.0, "closed_net": 196.0, "closes": 1, "locked": None}
     eng.cfg.accounts["a1"].day_lock = 500.0
     assert run(eng.apply_day_lock("a1")) is None             # above the day's closed P&L: not yet
     eng.cfg.accounts["a1"].day_lock = 196.0
@@ -4001,3 +4012,81 @@ def test_the_day_take_never_stops_a_trade_that_is_open_and_other_accounts_keep_t
     assert go(eng, leg(iid=2), {"a1": 1, "a2": 1})["accounts"] == {
         "a1": {"ok": False, "round": None, "reason": "This account is stopped for the day."},
         "a2": {"ok": False, "round": None, "reason": "One position at a time."}}
+
+
+# ------------------------------------------------------------------------------------------------ stop after (per account)
+def stop_rule(eng, account, rule):
+    for r in eng.cfg.book[LAB]:
+        if r["account"] == account:
+            r["stop_after"] = rule
+
+
+def sits_out(eng, account="a1"):
+    return eng._lab_sits_out(LAB, eng.cfg.strategies[LAB], account, 1, 10)
+
+
+def test_stop_after_win_sits_out_after_a_winner(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    stop_rule(eng, "a1", "win")
+    trade(eng, ads["a1"], exit_px=95.0, by="sl", max_rounds=10)               # a loser: still trading
+    assert sits_out(eng) is None
+    trade(eng, ads["a1"], exit_px=110.0, by="tp", max_rounds=10)
+    assert sits_out(eng) == engine_lab.LAB_DONE_WIN == "Done for today on this account: a trade won."
+    out = go(eng, leg(), max_rounds=10)
+    assert out["accounts"]["a1"] == {"ok": False, "round": None, "reason": engine_lab.LAB_DONE_WIN}
+    assert len(ads["a1"].brackets) == 2
+
+
+def test_stop_after_win_ignores_a_winner_that_does_not_cover_its_fee(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    stop_rule(eng, "a1", "win")
+    trade(eng, ads["a1"], exit_px=100.1, by="tp", max_rounds=10)              # gross +$2, net below $0 after the fee
+    assert rnd(eng).pnl > 0 and sits_out(eng) is None
+
+
+def test_stop_after_profit_sums_closed_nets(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    trade(eng, ads["a1"], exit_px=110.0, by="tp", max_rounds=10)              # +200 gross
+    trade(eng, ads["a1"], exit_px=87.5, by="sl", max_rounds=10)               # -250 gross
+    stop_rule(eng, "a1", "profit")
+    assert sits_out(eng) is None
+    stop_rule(eng, "a1", "win")
+    assert sits_out(eng) == engine_lab.LAB_DONE_WIN                           # one winner is enough for "win"
+    (tmp_path / "two").mkdir()
+    eng2, ads2, _ = mk(tmp_path / "two")
+    trade(eng2, ads2["a1"], exit_px=110.0, by="tp", max_rounds=10)
+    trade(eng2, ads2["a1"], exit_px=95.0, by="sl", max_rounds=10)             # -100 gross: still in profit
+    stop_rule(eng2, "a1", "profit")
+    assert sits_out(eng2) == engine_lab.LAB_DONE_PROFIT == "Done for today on this account: it is in profit."
+
+
+def test_an_open_round_is_not_counted(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    stop_rule(eng, "a1", "profit")
+    go(eng, leg())
+    fill_entry(eng, ads["a1"], rnd(eng), 100.0)
+    assert rnd(eng).status == "live" and rnd(eng).pnl is None
+    assert eng._lab_sits_out(LAB, eng.cfg.strategies[LAB], "a1", 1, 10) == engine_lab.LAB_ONE_AT_A_TIME   # open, not "done"
+    rnd(eng).pnl = 500.0                                                      # even a booked gross on an open round
+    assert sits_out(eng) == engine_lab.LAB_ONE_AT_A_TIME
+
+
+def test_stop_after_is_per_account(tmp_path):
+    eng, ads, _ = mk(tmp_path, accounts=("a1", "a2"))
+    stop_rule(eng, "a1", "win")
+    go(eng, leg(), {"a1": 1, "a2": 1})
+    for a in ("a1", "a2"):
+        fill_entry(eng, ads[a], rnd(eng, a), 100.0)
+        fill_exit(eng, ads[a], rnd(eng, a), 110.0, "tp")
+    tick(eng)
+    assert sits_out(eng, "a1") == engine_lab.LAB_DONE_WIN and sits_out(eng, "a2") is None   # a2 has no rule
+    out = go(eng, leg(iid=2), max_rounds=10)
+    assert out["accounts"]["a1"]["reason"] == engine_lab.LAB_DONE_WIN and out["accounts"]["a2"]["ok"] is True
+
+
+def test_another_strategys_win_on_the_account_does_not_stop_this_one(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    stop_rule(eng, "a1", "win")
+    other = eng._state("other", "a1")                                         # a win of another strategy, same account
+    other.status, other.pnl = "done", 500.0
+    assert sits_out(eng) is None

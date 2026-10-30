@@ -263,3 +263,65 @@ test('the live booking dialog names the size change and the machine the orders g
   await none.api.pickAsg('nq930_1030', '1234567885', 3);
   assert.doesNotMatch(none.confirms[0].body, /It runs/, 'no machine known: no sentence');
 });
+
+// ---- per-account settings (task 5): other rows keep their new fields; a row with settings opens the sheet ---------
+const SET_ROW = { account: 'paper-1', qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win', most: 10 };
+
+test('per-account settings: pickAsg, editQty and removeAsg never drop another row\'s new fields', async () => {
+  const book = { nq930_1030: [{ account: '1234567885', qty: 3 }, SET_ROW] };
+  const p = load({ book });
+  await p.api.pickAsg('nq930_1030', 'lucid-eval-1', 2);
+  assert.deepEqual(plain(p.posts[0].body.assignments), [{ account: '1234567885', qty: 3 }, SET_ROW, { account: 'lucid-eval-1', qty: 2 }]);
+  const e = load({ book });
+  editSize(e, 'nq930_1030', '1234567885', 3, 2);
+  await tick();
+  assert.deepEqual(plain(e.posts[0].body.assignments), [{ account: '1234567885', qty: 2 }, SET_ROW]);
+  const r = load({ book });
+  r.api.removeAsg('nq930_1030', '1234567885');
+  assert.deepEqual(plain(r.posts[0].body.assignments), [SET_ROW]);
+});
+
+test('per-account settings: editing the size inline keeps the same row\'s other fields', async () => {
+  const row = { account: 'paper-1', qty: 4, stop_after: 'profit', most: 8 };
+  const e = load({ book: { nq930_1030: [row] } });
+  editSize(e, 'nq930_1030', 'paper-1', 4, 2);
+  await tick();
+  assert.deepEqual(plain(e.posts[0].body.assignments), [{ ...row, qty: 2 }]);
+});
+
+// acctRow itself (the block above the book): a Lab row with a size opens the sheet instead of the inline box
+const ROW_BLOCK = HTML.slice(HTML.indexOf('const DAY_PNL_WORDS'), HTML.indexOf('/* ---- the book (assignments) ---- */'));
+const ACCT_JS = readFileSync(new URL('../../homebase/static/desk/acctset.js', import.meta.url), 'utf8');
+function rowPage() {
+  const ctx = vm.createContext({ ST: { accounts: plain(ACCOUNTS) }, usd: (v) => '$' + v });
+  const escDefs = HTML.slice(HTML.indexOf('const esc = (v) =>'), HTML.indexOf('async function chartPost('));
+  vm.runInContext(escDefs + ACCT_JS + ROW_BLOCK + '\nglobalThis.acctRow = acctRow;', ctx);
+  return ctx;
+}
+
+test('per-account settings: a Lab row with a size shows it and opens the sheet; one without keeps the inline box', () => {
+  const c = rowPage();
+  const sized = c.acctRow('paper-1', { qty: 1, strategy: 'lab_orb', row: SET_ROW });
+  assert.match(sized, /onclick="openAcctSet\(&quot;lab_orb&quot;,&quot;paper-1&quot;\)"/);
+  assert.doesNotMatch(sized, /editQty/);
+  assert.match(sized, /\$500 risk/);
+  assert.match(sized, /stops after a win/);
+  // one line each: the size and its tag never wrap inside themselves (final review minor 14)
+  assert.match(sized, /<span class="strats qty-edit" style="white-space:nowrap"[^>]*>\$500 risk<\/span><span class="mcap" style="white-space:nowrap">stops after a win<\/span>/);
+  assert.match(sized, /<button class="btn btn-outline btn-sm" onclick="openAcctSet\(&quot;lab_orb&quot;,&quot;paper-1&quot;\)">Settings<\/button>/);
+  const legacy = c.acctRow('paper-1', { qty: 2, strategy: 'lab_orb', row: { account: 'paper-1', qty: 2 } });
+  assert.match(legacy, /onclick="editQty\(event,'lab_orb',&quot;paper-1&quot;,2\)"/);
+  assert.match(legacy, />Settings<\/button>/, 'every Lab row gets the Settings button');
+  const locked = c.acctRow('paper-1', { qty: 1, strategy: 'lab_orb', row: SET_ROW, locked: true });
+  assert.match(locked, /<span class="strats" style="white-space:nowrap">\$500 risk<\/span>/);
+  assert.doesNotMatch(locked, /qty-edit/);
+  assert.match(locked, /<button class="btn btn-outline btn-sm" disabled[^>]*>Settings<\/button>/);
+});
+
+test('per-account settings: a built-in strategy\'s row is exactly as before -- no Settings button', () => {
+  const c = rowPage();
+  const html = c.acctRow('paper-1', { qty: 3, strategy: 'nq930_1030' });
+  assert.match(html, /onclick="editQty\(event,'nq930_1030',&quot;paper-1&quot;,3\)">×3<\/span>/);
+  assert.doesNotMatch(html, /Settings|openAcctSet/);
+  assert.doesNotMatch(c.acctRow('paper-1', {}), /Settings/, 'the accounts popup row has none either');
+});

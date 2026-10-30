@@ -1069,12 +1069,13 @@ def test_status_and_calendar_stop_costing_a_file_parse_per_call(client, tmp_path
 
 def test_an_accounts_day_take_is_set_saved_journaled_and_shown(client, tmp_path):
     r = client.post("/api/account-day-lock", json={"account": "main", "day_lock": 1000}).json()
-    assert r == {"ok": True, "account": "main", "day_lock": 1000.0, "closed_net": 0.0, "closes": 0, "locked": None}
+    assert r == {"ok": True, "account": "main", "day_lock": 1000.0, "day_loss": 0.0, "closed_net": 0.0, "closes": 0,
+                 "locked": None}
     assert client.app.state.cfg.accounts["main"].day_lock == 1000.0
     saved = json.loads((tmp_path / "config.json").read_text())
     assert saved["accounts"]["main"]["day_lock"] == 1000.0
     row = client.get("/api/status").json()["accounts"]["main"]
-    assert row["day"] == {"day_lock": 1000.0, "closed_net": 0.0, "closes": 0, "locked": None}
+    assert row["day"] == {"day_lock": 1000.0, "day_loss": 0.0, "closed_net": 0.0, "closes": 0, "locked": None}
     events = [json.loads(x) for x in (tmp_path / "journal.jsonl").read_text().splitlines()]
     assert [e for e in events if e["event"] == "account_day_lock_set"][-1]["day_lock"] == 1000.0
     assert client.post("/api/account-day-lock", json={"account": "main", "day_lock": 0}).json()["day_lock"] == 0.0
@@ -1098,6 +1099,73 @@ def test_a_day_take_below_the_days_closed_pnl_locks_the_account_at_once(client):
     assert r["locked"] == "day_lock" and r["closed_net"] == 400.0
     assert eng.account_locked("main") == "day_lock"
 
+
+def test_an_accounts_day_loss_is_set_saved_journaled_and_shown(client, tmp_path):
+    r = client.post("/api/account-day-lock", json={"account": "main", "day_loss": 250}).json()
+    assert r["day_loss"] == 250.0 and r["day_lock"] == 0.0 and r["locked"] is None
+    assert client.app.state.cfg.accounts["main"].day_loss == 250.0
+    assert json.loads((tmp_path / "config.json").read_text())["accounts"]["main"]["day_loss"] == 250.0
+    assert client.get("/api/status").json()["accounts"]["main"]["day"]["day_loss"] == 250.0
+    events = [json.loads(x) for x in (tmp_path / "journal.jsonl").read_text().splitlines()]
+    e = [e for e in events if e["event"] == "account_day_lock_set"][-1]
+    assert e["day_loss"] == 250.0 and e["previous"] == 0.0
+    assert client.post("/api/account-day-lock", json={"account": "main", "day_loss": 0}).json()["day_loss"] == 0.0
+
+
+def test_a_bad_day_loss_or_an_empty_body_is_refused(client):
+    cfg = client.app.state.cfg
+    assert client.post("/api/account-day-lock", json={"account": "main"}).status_code == 400
+    for bad in (-1, "100", True, None, [1]):
+        r = client.post("/api/account-day-lock", json={"account": "main", "day_loss": bad})
+        assert r.status_code == 400, bad
+    r = client.post("/api/account-day-lock", content='{"account": "main", "day_loss": NaN}',
+                    headers={"content-type": "application/json"})
+    assert r.status_code == 400
+    assert cfg.accounts["main"].day_loss == 0.0
+
+
+def test_a_day_loss_at_or_under_the_days_closed_loss_locks_the_account_at_once(client):
+    eng = client.app.state.engine
+    book = eng.book("main")
+    book.closed_net, book.closes = -300.0, 2
+    r = client.post("/api/account-day-lock", json={"account": "main", "day_loss": 250}).json()
+    assert r["locked"] == "day_loss" and eng.account_locked("main") == "day_loss"
+
+
+def test_a_day_loss_is_capped_at_100000_like_the_day_take(client):
+    r = client.post("/api/account-day-lock", json={"account": "main", "day_loss": 100001})
+    assert r.status_code == 400 and r.json()["detail"] == "The loss lock is a dollar amount from 0 (off) to 100000."
+    assert client.app.state.cfg.accounts["main"].day_loss == 0.0
+    assert client.post("/api/account-day-lock", json={"account": "main", "day_loss": 100000}).json()["day_loss"] == 100000.0
+
+
+def test_both_locks_in_one_body_are_set_together(client, tmp_path):
+    r = client.post("/api/account-day-lock", json={"account": "main", "day_lock": 800, "day_loss": 400}).json()
+    assert r["day_lock"] == 800.0 and r["day_loss"] == 400.0
+    acct = client.app.state.cfg.accounts["main"]
+    assert (acct.day_lock, acct.day_loss) == (800.0, 400.0)
+    saved = json.loads((tmp_path / "config.json").read_text())["accounts"]["main"]
+    assert (saved["day_lock"], saved["day_loss"]) == (800.0, 400.0)
+
+
+def test_a_valid_day_take_with_a_bad_day_loss_writes_nothing(client, tmp_path):
+    r = client.post("/api/account-day-lock", json={"account": "main", "day_lock": 500, "day_loss": -1})
+    assert r.status_code == 400
+    acct = client.app.state.cfg.accounts["main"]
+    assert (acct.day_lock, acct.day_loss) == (0.0, 0.0)
+    events = [json.loads(x) for x in (tmp_path / "journal.jsonl").read_text().splitlines()] \
+        if (tmp_path / "journal.jsonl").exists() else []
+    assert not [e for e in events if e["event"] == "account_day_lock_set"]
+
+
+def test_a_loss_lock_set_back_to_0_keeps_the_days_lock(client):
+    eng = client.app.state.engine
+    book = eng.book("main")
+    book.closed_net, book.closes = -300.0, 2
+    assert client.post("/api/account-day-lock", json={"account": "main", "day_loss": 250}).json()["locked"] == "day_loss"
+    r = client.post("/api/account-day-lock", json={"account": "main", "day_loss": 0}).json()
+    assert r["day_loss"] == 0.0 and r["locked"] == "day_loss"            # never lifted the same day
+    assert eng.account_locked("main") == "day_loss"
 
 def test_rotation_switch_is_set_journaled_and_shown(client, tmp_path):
     assert client.get("/api/status").json()["strategies"]["nq930"]["rotation"] == {"on": False, "next": None}

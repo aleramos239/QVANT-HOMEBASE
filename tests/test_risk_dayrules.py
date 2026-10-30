@@ -158,3 +158,16 @@ def test_the_book_round_trips_through_json():
     b = DayBook("a", "2026-10-02", closed_net=12.5, locked="day_lock", prepared=True, target_level=900.0)
     assert DayBook.from_dict(b.to_dict()) == b
     assert DayBook.from_dict({**b.to_dict(), "future_field": 1}) == b       # a newer file never breaks an older desk
+
+
+def test_day_loss_locks_on_a_closed_loss_and_a_later_win_does_not_unlock():
+    rules, b = DayRules(day_loss=250), DayBook("a", "2026-10-02")
+    assert b.record_close(-200, rules) is None and not b.locked
+    assert b.record_close(-50, rules) == "day_loss" and b.locked == "day_loss"
+    assert b.record_close(500, rules) is None and b.locked == "day_loss"
+    assert DayBook("a", "d").record_close(-300, DayRules(day_loss=250)) == "day_loss"
+
+
+def test_merge_keeps_the_lowest_positive_day_loss():
+    m = merge_rules([DayRules(day_loss=500), DayRules(), DayRules(day_loss=250)])
+    assert m.day_loss == 250 and merge_rules([DayRules()]).day_loss == 0

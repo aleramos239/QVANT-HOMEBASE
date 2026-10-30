@@ -55,6 +55,8 @@ LAB_KILLED = "Killed today."
 LAB_DISARMED = "The desk is disarmed: written down only."
 LAB_NOT_CONNECTED = "The account is not connected."
 LAB_ACCOUNT_STOPPED = "This account is stopped for the day."
+LAB_DONE_WIN = "Done for today on this account: a trade won."
+LAB_DONE_PROFIT = "Done for today on this account: it is in profit."
 LAB_TAKE_RULE = "This account has a daily take rule. A Lab strategy cannot share it."
 LAB_ONE_AT_A_TIME = "One position at a time."
 LAB_SLOT_BUSY = "Another strategy's trade on this account is open or not checked yet."
@@ -1008,6 +1010,14 @@ class LabMixin:
                    or (s.status == "error" and not self._lab_x(s).get("clean")))   # a clean refusal sent nothing
         if used >= max_rounds or len(rounds) >= LAB_PLACED_CAP:
             return f"Daily limit reached ({max_rounds} trade{'' if max_rounds == 1 else 's'})."
+        row = next(a for a in assignments(self.cfg, name) if a.get("account") == account)
+        if row.get("stop_after"):                   # per account: done for the day after a win / once in profit
+            nets = [self._net_pnl(s, cfg, s.pnl) for s in rounds
+                    if s.status not in ("placing", "placed", "live") and s.pnl is not None]
+            if row["stop_after"] == "win" and any(n > 0 for n in nets):
+                return LAB_DONE_WIN
+            if row["stop_after"] == "profit" and sum(nets) > 0:
+                return LAB_DONE_PROFIT
         return None
 
     async def _lab_position(self, name: str, cfg: StrategyCfg, account: str, said: bool = True) -> Optional[str]:

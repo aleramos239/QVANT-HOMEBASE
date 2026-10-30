@@ -38,7 +38,7 @@ function runApart(sources) {                                   // [[name, code],
 }
 
 test('the desk files run apart, in page order, with no load-time throw and no name from a later file', () => {
-  assert.equal(FILES.length, 12, FILES.join(' '));
+  assert.equal(FILES.length, 13, FILES.join(' '));
   const r = runApart(FILES.map((f) => [f, readFileSync(new URL(f, STATIC), 'utf8')]));
   assert.deepEqual(r.errors, []);
   assert.deepEqual(r.later, []);

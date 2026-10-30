@@ -859,9 +859,20 @@
     var who = ["LIVE", "demo", "paper"].filter(function (k) { return n[k]; })
       .map(function (k) { return plur(n[k], k + " account", k + " accounts"); }).join(" and ");
     var lab = blockOf(s) || {}, risk = isObj(lab.params) ? Number(lab.params.risk) : NaN;
+    var ownWords = risk > 0 ? money(risk) + " at risk a trade" : "it sizes each trade itself";
+    // a row with its own size or stop after (per-account settings): each account's own words, as the page's AcctSet.label + tag
+    if (book.some(function (b) { return isObj(b) && (b.size || b.stop_after); })) {
+      return who + ": " + book.filter(isObj).map(function (b) {
+        var a = accts[b.account], env = isObj(a) && (a.env === "demo" || a.env === "paper") ? a.env : "LIVE";
+        var name = typeof acctShort === "function" ? acctShort(b.account) : (isObj(a) && a.label) || b.account;
+        var size = b.size === "risk" ? "$" + b.risk_usd + " risk" : !b.size && lab.own_size === true ? ownWords : "×" + b.qty;
+        var tag = b.stop_after === "win" ? ", stops after a win" : b.stop_after === "profit" ? ", stops in profit" : "";
+        return name + " " + env + " " + size + tag;
+      }).join(" · ");
+    }
     var lo = Math.min.apply(null, q), hi = Math.max.apply(null, q);
     // a size only when every booked row says it: a wrong size is worse than none
-    var size = lab.own_size === true ? (risk > 0 ? money(risk) + " at risk a trade" : "it sizes each trade itself")
+    var size = lab.own_size === true ? ownWords
       : q.length !== book.length ? "" : lo === hi ? plur(lo, "contract", "contracts") + (book.length > 1 ? " each" : "") : lo + " to " + hi + " contracts";
     return who + (size ? ", " + size : "");
   }

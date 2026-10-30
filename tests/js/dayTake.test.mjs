@@ -113,3 +113,10 @@ test('J: setting the take to 0 always says it is off, even when the desk says th
   assert.deepEqual(JSON.parse(JSON.stringify(sent)), [['/api/account-day-lock', { account: 'a1', day_lock: 0 }]], 'the body is as before');
   assert.deepEqual(toasts, ['Day take off.']);
 });
+
+test('the loss lock: shown while set, and a loss-locked day says it was the loss lock', () => {
+  const { c } = ctx();
+  assert.match(c.dayTakeBox('a1', { day: { day_lock: 0, day_loss: 300, closed_net: -100, locked: null } }), /loss lock \$300/);
+  assert.match(c.dayTakeBox('a1', { day: { day_lock: 0, day_loss: 300, closed_net: -320, locked: 'day_loss' } }), /stopped for the day by the loss lock \(-?\$-?320\)/);
+  assert.doesNotMatch(c.dayTakeBox('a1', { day: { day_lock: 1000, closed_net: 0, locked: null } }), /loss lock/);
+});

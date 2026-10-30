@@ -23,6 +23,7 @@ from typing import Optional
 
 LOCK_TAKE = "day_take"
 LOCK_LOCK = "day_lock"
+LOCK_LOSS = "day_loss"
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class DayRules:
     day_take: float = 0.0        # $ net, 0 = off
     day_lock: float = 0.0        # $ closed, 0 = off
     target_take: bool = False    # eval: take = the account's remaining distance to pass
+    day_loss: float = 0.0        # $ closed loss, 0 = off: the day's closed net <= -it -> no new entry today
 
     @property
     def any(self) -> bool:
@@ -41,8 +43,9 @@ def merge_rules(rules) -> DayRules:
     lock, and target_take if any of them asks for it."""
     takes = [r.day_take for r in rules if r.day_take > 0]
     locks = [r.day_lock for r in rules if r.day_lock > 0]
+    losses = [r.day_loss for r in rules if r.day_loss > 0]
     return DayRules(min(takes) if takes else 0.0, min(locks) if locks else 0.0,
-                    any(r.target_take for r in rules))
+                    any(r.target_take for r in rules), min(losses) if losses else 0.0)
 
 
 def ceil_to_tick(x: float, tick: float) -> float:
@@ -120,7 +123,7 @@ class DayBook:
     date: str
     closed_net: float = 0.0
     closes: int = 0
-    locked: Optional[str] = None            # None | "day_take" | "day_lock": no new entries today
+    locked: Optional[str] = None            # None | "day_take" | "day_lock" | "day_loss": no new entries today
     prepared: bool = False                  # the morning standing below was read
     morning_profit: Optional[float] = None  # EOD profit before today (balance - start balance)
     largest_day: float = 0.0
@@ -139,6 +142,8 @@ class DayBook:
             self.locked = LOCK_TAKE
         elif rules.day_lock and self.closed_net >= rules.day_lock - 1e-9:
             self.locked = LOCK_LOCK
+        elif rules.day_loss and self.closed_net <= -rules.day_loss + 1e-9:
+            self.locked = LOCK_LOSS
         return self.locked
 
     def take_net(self, rules: DayRules) -> Optional[float]:

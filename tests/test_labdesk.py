@@ -1319,3 +1319,129 @@ def test_a_stopped_day_the_runner_no_longer_hosts_is_read_from_its_day_file(tmp_
     assert ld.runner_said(LAB) == {"state": "stopped", "why": "The sandbox is not working."}
     ld._alive(LAB)["info"] = {"state": "waiting", "why": None, "mode": "desk"}
     assert ld.runner_said(LAB)["state"] == "waiting"                         # a beat is newer than the file
+
+
+# ---------------------------------------------------------------- book rows with per-account settings
+def test_check_book_most_contracts_and_the_backtested_cap(tmp_path):
+    d = mkdesk(tmp_path, qty=0)                                                    # LIMITS max_qty 2
+    with pytest.raises(Refused) as e:
+        d.ld.check_book(LAB, [{"account": "a1", "qty": 25, "size": "contracts", "most": 20}])
+    assert str(e.value) == labdesk.ROW_OVER_MOST
+    d.ld.check_book(LAB, [{"account": "a1", "qty": 5, "size": "contracts"}])       # a set row is not held to the cap
+    with pytest.raises(Refused) as e:
+        d.ld.check_book(LAB, [{"account": "a1", "qty": 5}])                        # a legacy row still is
+    assert str(e.value) == "Size is capped at 2 here."
+
+
+def test_set_book_keeps_the_new_fields_in_the_sidecar_and_memory(tmp_path):
+    d = mkdesk(tmp_path, qty=0)
+    row = {"account": "a1", "qty": 1, "size": "risk", "risk_usd": 250, "stop_after": "profit", "most": 3}
+    run(d.ld.set_book(LAB, [row]))
+    assert d.cfg.book[LAB] == [row]
+    assert store.get_desk(rec()["name"])["book"] == [row]
+
+
+# ---------------------------------------------------------------- per-account sizing (per-account settings 2)
+RISK_A = {"account": "a1", "qty": 1, "size": "risk", "risk_usd": 500}
+
+
+def sized_desk(tmp_path, rows, cap=100_000, **kw):
+    """A micro (MNQ, $2 a point) strategy with no dollar cap, booked with `rows`; lab_enter's sizes are recorded."""
+    d = mkdesk(tmp_path, accounts=("a1", "a2"), qty=0, limits={**LIMITS, "max_risk_usd": cap},
+               rec_kw={"exec_root": "MNQ", **kw})
+    run(d.ld.set_book(LAB, rows))
+    d.sizes, real = [], d.eng.lab_enter
+
+    async def spy(name, legs, sizes, **k):
+        d.sizes.append(dict(sizes))
+        return await real(name, legs, sizes, **k)
+    d.eng.lab_enter = spy
+    return d
+
+
+def test_each_account_sends_its_own_size(tmp_path):
+    d = sized_desk(tmp_path, [RISK_A, {"account": "a2", "qty": 2}])
+    out = send(d, entry(sl=85.0))                                    # 25 pts x $2 = $50 a micro: $500 = 10
+    assert out["results"][0]["status"] == "working" and d.sizes == [{"a1": 10, "a2": 2}]
+
+
+def test_a_risk_row_no_contract_fits_sits_out_alone(tmp_path):
+    d = sized_desk(tmp_path, [{**RISK_A, "risk_usd": 40}, {"account": "a2", "qty": 2}])   # $40 < one $50 micro
+    out = send(d, entry(sl=85.0))
+    assert d.sizes == [{"a2": 2}]
+    assert out["results"][0]["accounts"]["a1"] == {"ok": False, "round": None, "reason": labdesk.ROW_NO_SIZE}
+
+
+def test_a_set_row_is_not_held_to_the_backtested_cap_at_order_time(tmp_path):
+    d = sized_desk(tmp_path, [{"account": "a1", "qty": 5, "size": "contracts"}, {"account": "a2", "qty": 2}])
+    send(d, entry(sl=85.0))                                           # max_qty 2: the set row sends 5 all the same
+    assert d.sizes == [{"a1": 5, "a2": 2}]
+
+
+def test_a_set_row_wins_over_the_strategys_own_size(tmp_path):
+    d = sized_desk(tmp_path, [{"account": "a1", "qty": 4, "size": "contracts"}, {"account": "a2", "qty": 2}], own_size=True)
+    send(d, entry(sl=85.0, qty=1, own_qty=True))
+    assert d.sizes == [{"a1": 4, "a2": 1}]                            # the legacy row: the order's own, at most its 2
+
+
+def test_a_pair_is_sized_on_its_wider_stop_and_stays_a_pair(tmp_path):
+    d = sized_desk(tmp_path, [RISK_A, {"account": "a2", "qty": 2}])
+    ps = pair(dist=10.0)
+    ps[1]["sl"] = 90.0 + 25.0                                         # the short's stop is 25 pts away
+    out = send(d, ps)
+    assert out["results"][2]["refused"] is None and d.sizes == [{"a1": 10, "a2": 2}]
+
+
+def test_an_on_cycle_group_with_risk_keeps_its_own_size(tmp_path):
+    d = sized_desk(tmp_path, [RISK_A, {"account": "a2", "qty": 2}])
+    d.eng.groups["g1"] = {"name": "x", "members": [LAB], "accounts": [], "risk_usd": 300.0, "max_minis": 17, "on": True}
+    send(d, entry(sl=85.0))
+    assert d.sizes == [{"a1": 6, "a2": 6}]                            # $300 / $50 for every account, the row ignored
+
+
+def test_status_says_the_default_most_contracts(tmp_path):
+    assert mkdesk(tmp_path / "a").ld.status_view(LAB)["most_default"] == 2
+    assert mkdesk(tmp_path / "b", rec_kw={"exec_root": "MNQ"}).ld.status_view(LAB)["most_default"] == 20
+
+
+def test_a_refused_oco_leg_is_sent_at_the_size_the_door_judged(tmp_path):
+    d = sized_desk(tmp_path, [RISK_A, {"account": "a2", "qty": 2}])
+    legs = [entry(3, price=110.0, sl=100.0), entry(4, price=112.0, sl=87.0), {"op": "oco", "ids": [3, 4]}]   # both long
+    out = send(d, legs)
+    assert out["results"][2]["refused"] == door.NOT_A_PAIR
+    assert d.sizes == [{"a1": 10, "a2": 2}]          # judged on the wider (25-pt) stop: sent at that size, not 25
+
+
+def test_a_contracts_row_is_still_held_to_the_strategys_dollars_at_risk(tmp_path):
+    d = sized_desk(tmp_path, [{"account": "a1", "qty": 5, "size": "contracts"}, {"account": "a2", "qty": 2}], cap=200)
+    out = send(d, entry(sl=85.0))                     # 5 micros x 25 pts x $2 = $250 > $200; 2 = $100
+    assert d.sizes == [{"a2": 2}]
+    assert out["results"][0]["accounts"]["a1"]["reason"] == "Stop too far: $250 at risk, limit $200."
+
+
+def test_takers_refuses_a_set_row_with_no_judged_size():
+    rows = [{"account": "a1", "qty": 3, "size": "contracts"}, {"account": "a2", "qty": 2}]
+    accounts, sizes = LabDesk._takers([0], {0: {"a1": None, "a2": None}}, rows, None, {0: {}})
+    assert accounts == {"a1": labdesk.ROW_NO_SIZE, "a2": None} and sizes == {"a2": 2}
+
+
+def test_most_default_never_raises_on_an_unknown_point_value(tmp_path, monkeypatch):
+    d = mkdesk(tmp_path)
+    monkeypatch.setattr(labdesk, "point_value", lambda s: None)
+    assert d.ld._most_default(LAB) == 2
+
+
+def test_an_account_done_for_the_day_is_not_an_untaken_entry(tmp_path):
+    """Both entries are refused on their only account for its stop-after rule: that is the account's own rule, so
+    two of them do not stop the strategy for the day."""
+    d = mkdesk(tmp_path)
+    run(d.ld.set_book(LAB, [{"account": "a1", "qty": 1, "stop_after": "win"}]))
+    working(d)
+    fill_entry(d.eng, d.ads["a1"], st(d), 110.25)
+    fill_exit(d.eng, d.ads["a1"], st(d), 125.0, "tp")
+    tick(d)
+    for seq in (2, 3):
+        out = send(d, entry(seq), seq=seq)
+        assert refusal(out) == engine_lab.LAB_DONE_WIN and out["results"][0]["status"] == "cancelled"
+    assert (d.ld._rec(LAB)["untaken"], d.ld._rec(LAB)["stopped"]) == (0, None)
+    assert len(d.ads["a1"].brackets) == 1
