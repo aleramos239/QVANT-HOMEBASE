@@ -85,7 +85,7 @@ function stratCal(deskId, lab) {
   const v = calView(SCAL, "scalDay");
   const seg = deskId ? `<div class="seg" role="group" aria-label="Which trades">` + [[true, "Shadow"], [false, "Live"]].map(([sh, word]) =>
     `<button class="${SCAL.shadow === sh ? "sel" : ""}" aria-pressed="${SCAL.shadow === sh}" onclick="scalMode(${sh})">${word}</button>`).join("") + `</div>` : "";
-  return `${shadowStatsHtml(SCAL.stats)}<div class="sec"><h2>Calendar</h2>${seg}
+  return `${shadowStatsHtml(SCAL.stats, typeof DESKRES === "object" && DESKRES[lab] ? DESKRES[lab].both : null)}<div class="sec"><h2>Calendar</h2>${seg}
     <div class="cal-head"><button class="cal-nav" onclick="scalStep(-1)" aria-label="Previous month">&lsaquo;</button>
       <span class="m" style="flex:1">${esc(v.month)}</span>
       <button class="cal-nav" onclick="scalStep(1)" aria-label="Next month">&rsaquo;</button></div>
@@ -102,7 +102,7 @@ async function loadScal() {
                                  : "/api/strategy-live?strategy=" + encodeURIComponent(s.deskId));
     const j = r.ok ? await r.json() : null;
     data = j ? (shadow ? shadowData(j.days) : j) : null;
-    if (shadow && j) stats = shadowStats(j.days);
+    if (shadow && j) stats = j.stats && typeof j.stats === "object" ? j.stats : false;      // worked out by the chart service
   } catch (_) { data = null; }
   if (SCAL !== s || s.tok !== tok) return;                             // another strategy, or the other switch, since
   if (shadow) s.stats = stats || s.stats || false;                     // the Live switch keeps the last shadow record on screen
@@ -128,36 +128,29 @@ function shadowData(days) {
   }
   return out;
 }
-/* The shadow's forward record (the owner, 2026-10-30): every shadow trade of this promotion, per contract, after costs.
-   Realized RR = average win : average loss (as the Lab reads it). Sharpe = the daily net of the days that HAD a trade only,
-   mean / sd x sqrt(252) (house rule, 2026-10-23). Trades a week = trades over the calendar days since its first shadow day. */
+/* The shadow's forward record (the owner, 2026-10-30), from GET /api/tester/desklab/shadow's `stats` (per contract, after costs;
+   RR and Sharpe are the tester report's, Sharpe on the days that had a trade only), beside the strategy's full 3:1 sample, the
+   same run the results block shows. A backtest's trades a week = its trades over its months x 52 / 12. */
 const SHADOW_MIN_TRADES = 20;          // as the shadow scorecard: fewer trades say nothing yet
-function shadowStats(days) {
-  const ds = (Array.isArray(days) ? days : []).filter(d => d && /^\d{4}-\d\d-\d\d$/.test(String(d.date)));
-  const per = (d) => (Array.isArray(d.trades) ? d.trades : []).filter(t => t && +t.qty > 0).map(t => (+t.net || 0) / +t.qty);
-  const add = (a) => a.reduce((x, y) => x + y, 0), mean = (a) => add(a) / a.length;
-  const byDay = ds.map(per), nets = byDay.flat(), daily = byDay.filter(a => a.length).map(add);
-  const wins = nets.filter(x => x > 0), losses = nets.filter(x => x < 0), n = nets.length;
-  let sharpe = null;
-  if (daily.length > 1) {
-    const m = mean(daily), sd = Math.sqrt(add(daily.map(x => (x - m) ** 2)) / (daily.length - 1));
-    if (sd > 0) sharpe = m / sd * Math.sqrt(252);
-  }
-  const dates = ds.map(d => String(d.date)).sort();
-  const span = dates.length ? (Date.parse(dates[dates.length - 1]) - Date.parse(dates[0])) / 864e5 + 1 : 0;
-  return {n, since: dates[0] || "", net: add(nets), winRate: n ? 100 * wins.length / n : null,
-    rr: wins.length && losses.length ? mean(wins) / -mean(losses) : null, sharpe, perWeek: span ? n / (span / 7) : null};
-}
-function shadowStatsHtml(st) {
-  const fig = (k, v, title) => `<div class="feed-row" title="${esc(title)}"><span class="h">${esc(k)}</span><span class="t net">${esc(v)}</span></div>`;
+function shadowStatsHtml(st, bt) {
+  const num = (v) => typeof v === "number" && isFinite(v) ? v : null;
+  const pct = (v) => num(v) == null ? "—" : Math.round(v) + "%", dec = (v, d) => num(v) == null ? "—" : v.toFixed(d);
+  const rr = (x) => typeof x.rr_label === "string" && x.rr_label ? x.rr_label : num(x.rr) == null ? "—" : "1:" + x.rr.toFixed(2);
+  const b = bt && typeof bt === "object" ? bt : null, bn = b ? num(b.trades) : null;
+  const cell = (v, dim) => `<span class="t${dim ? " dim" : " net"}" style="min-width:84px;text-align:right">${esc(v)}</span>`;
+  const row = (k, live, back, title) => `<div class="feed-row"${title ? ` title="${esc(title)}"` : ""}><span class="h">${esc(k)}</span>${cell(live)}${cell(back, true)}</div>`;
   const body = st == null ? `<div class="eq-empty">Reading its shadow days…</div>`
     : st === false ? `<div class="eq-empty">Its shadow days could not be read.</div>`
-    : !st.n ? `<div class="eq-empty">No shadow trades yet${st.since ? ` since ${esc(shortDay(st.since))}` : ""}.</div>`
-    : `<div class="agroup feed static">${fig("Trades", String(st.n), "Every shadow trade of this promotion")}${fig("Win rate", Math.round(st.winRate) + "%", "Trades that made money")}`
-      + `${fig("Realized RR", st.rr == null ? "—" : "1:" + st.rr.toFixed(2), "Average win : average loss")}`
-      + `${fig("Sharpe", st.sharpe == null ? "—" : st.sharpe.toFixed(2), "Daily net of the days that had a trade, mean / sd × √252")}`
-      + `${fig("Trades / week", st.perWeek.toFixed(1), "Trades over the weeks since its first shadow day")}${fig("Net", usdS(st.net), "Per contract, after costs")}</div>`
-      + `<div class="mcap">Since ${esc(shortDay(st.since))} · per contract, after costs${st.n < SHADOW_MIN_TRADES ? ` · too early to judge (${st.n} of ${SHADOW_MIN_TRADES} trades)` : ""}</div>`;
+    : !num(st.trades) ? `<div class="eq-empty">No shadow trades yet${st.since ? ` since ${esc(shortDay(st.since))}` : ""}.</div>`
+    : `<div class="agroup feed static">${row("", "Live", "Backtest", "Live = the shadow since its promotion; Backtest = its full 3:1 sample")}`
+      + row("Trades", String(st.trades), bn == null ? "—" : String(bn))
+      + row("Win rate", pct(st.win_rate), b ? pct(b.win_rate) : "—", "Trades that made money")
+      + row("Realized RR", rr(st), b ? rr(b) : "—", "Average win : average loss")
+      + row("Sharpe", dec(st.sharpe, 2), b ? dec(b.sharpe, 2) : "—", "Daily net of the days that had a trade, mean / sd × √252")
+      + row("Trades / week", dec(st.per_week, 1), b && bn != null && num(b.months) ? (bn / (b.months * 52 / 12)).toFixed(1) : "—")
+      + row("Avg / trade", usdS(st.net / st.trades), b && bn && num(b.net) != null ? usdS(b.net / bn) : "—", "Per contract, after costs")
+      + `</div><div class="mcap">Since ${esc(shortDay(st.since))} · net ${esc(usdS(st.net))} · per contract, after costs`
+      + `${st.trades < SHADOW_MIN_TRADES ? ` · too early to judge (${st.trades} of ${SHADOW_MIN_TRADES} trades)` : ""}</div>`;
   return `<div class="sec"><h2>Shadow, forward</h2>${body}</div>`;
 }
 function labDeskView(name, s) {

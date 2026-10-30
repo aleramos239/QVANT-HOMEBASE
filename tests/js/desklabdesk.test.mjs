@@ -70,7 +70,7 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
     `\nDESKLAB = { strategies: ${JSON.stringify(rows)}, runner: { alive: true } }; DESKLAB_OK = ${readOk};` +
     `\nVIEW = ${JSON.stringify(view)};` +
     '\nglobalThis.api = { renderSide, renderMain, labDeskView, stratView, stratState, stratDotCls, todayRow, specOf, setBook, pickAsg, liveBookingNote, toggleStrat,' +
-    ' setLabSetting, setStratRr, pickAsg, removeAsg, deskChangesHtml, deskChangeList, putBackChange, flattenStrat, dayHeadline, dayTimeline, journalShown, todayFoot, openLabLimits, closeLabLimits, saveLabLimits, removeLabStrat, clearLabBlock, labRowsHtml, calView, shadowData, shadowStats, shadowStatsHtml, deleteLabStrat, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
+    ' setLabSetting, setStratRr, pickAsg, removeAsg, deskChangesHtml, deskChangeList, putBackChange, flattenStrat, dayHeadline, dayTimeline, journalShown, todayFoot, openLabLimits, closeLabLimits, saveLabLimits, removeLabStrat, clearLabBlock, labRowsHtml, calView, shadowData, shadowStatsHtml, deleteLabStrat, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
   vm.runInContext(code, ctx);
   return { ctx, api: ctx.api, els, el, posts, toasts, confirms, alerts, shown, hidden, refreshes,
     side: () => { ctx.api.renderSide(['nq930', 'lab_nq_orb'].filter((n) => ctx.ST.strategies[n]), 0, 0); return els.side.innerHTML; },
@@ -105,26 +105,26 @@ test('a shadow month: each day its net, a picked day its trades, every word from
   assert.equal(none.note, 'no trades this month');
 });
 
-test('the shadow forward record: win rate, realized RR, Sharpe on trade days only, trades a week, per contract', () => {
+test('the shadow forward record: live beside the full 3:1 backtest, row by row, every word escaped', () => {
   const k = load();
-  const st = k.api.shadowStats([
-    { date: '2026-10-01', trades: [{ qty: 2, net: 400 }, { qty: 1, net: -100 }] },     // per contract: +200, -100
-    { date: '2026-10-02', trades: [] },                                                // no trade: never a $0 day in the Sharpe
-    { date: '2026-10-07', trades: [{ qty: 1, net: 300 }, { qty: 0, net: 999 }] }]);    // a qty-0 row is no trade
-  assert.equal(st.n, 3);
-  assert.equal(st.since, '2026-10-01');
-  assert.equal(st.net, 400);
-  assert.equal(Math.round(st.winRate), 67);
-  assert.equal(st.rr.toFixed(2), '2.50');                                              // avg win 250 : avg loss 100
-  assert.ok(Math.abs(st.sharpe - 200 / Math.sqrt(20000) * Math.sqrt(252)) < 1e-9);         // day nets 100, 300: mean 200, sd 141.4
-  assert.equal(st.perWeek, 3);                                                         // 3 trades over 7 days
-  const html = k.api.shadowStatsHtml(st);
+  const st = { trades: 6, since: '2026-10-26', net: 1326, win_rate: 50, rr: 1.19, rr_label: '1:1.19', sharpe: 1.35, per_week: 8.4 };
+  const bt = { trades: 2799, months: 60, net: 168944, win_rate: 58.49, rr: 0.767, rr_label: '1:0.77', sharpe: 0.7613 };
+  const html = k.api.shadowStatsHtml(st, bt);
+  const r = (key, a, b) => new RegExp(`>${key}</span><span class="t net"[^>]*>${a}</span><span class="t dim"[^>]*>${b}</span>`);
   assert.match(html, /<h2>Shadow, forward<\/h2>/);
-  assert.match(html, />Realized RR<\/span><span class="t net">1:2\.50</);
-  assert.match(html, />Trades \/ week<\/span><span class="t net">3\.0</);
-  assert.match(html, /too early to judge \(3 of 20 trades\)/);
-  assert.match(k.api.shadowStatsHtml(k.api.shadowStats([{ date: '2026-10-01', trades: [] }])), /No shadow trades yet since/);
-  assert.match(k.api.shadowStatsHtml(undefined), /Reading its shadow days/);
+  assert.match(html, r('', 'Live', 'Backtest'));
+  assert.match(html, r('Trades', '6', '2799'));
+  assert.match(html, r('Win rate', '50%', '58%'));
+  assert.match(html, r('Realized RR', '1:1\\.19', '1:0\\.77'));
+  assert.match(html, r('Sharpe', '1\\.35', '0\\.76'));
+  assert.match(html, r('Trades / week', '8\\.4', '10\\.8'));                                  // 2799 over 60 x 52/12 weeks
+  assert.match(html, r('Avg / trade', '\\+\\$221', '\\+\\$60'));
+  assert.match(html, /net \+\$1,326 · per contract, after costs · too early to judge \(6 of 20 trades\)/);
+  assert.match(k.api.shadowStatsHtml(st, null), r('Win rate', '50%', '—'), 'no backtest yet: dashes');
+  assert.doesNotMatch(k.api.shadowStatsHtml({ ...st, rr_label: '<img src=x>' }, bt), /<img/);
+  assert.match(k.api.shadowStatsHtml({ trades: 0, since: '2026-10-26' }, bt), /No shadow trades yet since/);
+  assert.match(k.api.shadowStatsHtml(undefined, bt), /Reading its shadow days/);
+  assert.match(k.api.shadowStatsHtml(false, bt), /could not be read/);
   assert.match(k.view(), /<h2>Shadow, forward<\/h2>[\s\S]*<h2>Calendar<\/h2>/, 'above the calendar on the strategy page');
 });
 

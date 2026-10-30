@@ -21,7 +21,8 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
 from ...store import draftstore
-from ...backtest import propsim, sandbox, slots, walkforward
+from ...backtest import propsim, report, sandbox, slots, walkforward
+from ...backtest.stats.stats import _sharpe
 from ...backtest.runner import _settled, read_json
 from ...backtest.tape import TapeStore
 from ...labrun import door, store
@@ -44,6 +45,23 @@ DESKLAB_SHADOW_DAYS = 800    # the shadow calendar: about three years of session
 DESKLAB_DAYS = 10        # day summaries shown under each promoted strategy ...
 DESKLAB_DAY_KEYS = ("date", "state", "why", "net", "match")      # ... each cut to these and `rebuilt` (no order or trade rows)
 DESKLAB_BLOCKS = 256     # card blocks kept per service (one per Desk strategy and month: ~20 KB each, curves included)
+
+
+def shadow_stats(days: list[dict]) -> dict:
+    """The shadow's forward record (the owner, 2026-10-30): every trade of the days given, per contract, after costs.
+    RR and Sharpe are the tester report's: avg win / |avg loss|, and the daily net of the days that HAD a trade x sqrt(252).
+    Trades a week = trades over the calendar days from the first shadow day to the last."""
+    trades = [{"date": d["date"], "net": (t.get("net") or 0.0) / t["qty"]}
+              for d in days for t in (d.get("trades") or []) if (t.get("qty") or 0) > 0]
+    nets = [t["net"] for t in trades]
+    wins, losses = [x for x in nets if x > 0], [x for x in nets if x < 0]
+    rr = (sum(wins) / len(wins)) / (-sum(losses) / len(losses)) if wins and losses else None
+    daily = report.daily_pnl(trades)
+    dates = sorted(str(d["date"]) for d in days if d.get("date"))
+    span = (dt.date.fromisoformat(dates[-1]) - dt.date.fromisoformat(dates[0])).days + 1 if dates else 0
+    return {"trades": len(nets), "since": dates[0] if dates else "", "net": round(sum(nets), 2),
+            "win_rate": 100.0 * len(wins) / len(nets) if nets else None, "rr": rr, "rr_label": report.rr_label(rr),
+            "sharpe": _sharpe(daily) if len(daily) > 1 else None, "per_week": len(nets) / (span / 7) if span else None}
 
 
 def send_to_vps(name: str) -> list[str]:
@@ -117,7 +135,7 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
                 if not store.same_promotion(d, rec):
                     continue                 # booked before the copy existed: nothing would-be to show
             days.append({k: d.get(k) for k in DESKLAB_DAY_KEYS + ("trades",)})
-        return watch_answer(request, {"name": name, "days": days[::-1]})
+        return watch_answer(request, {"name": name, "days": days[::-1], "stats": shadow_stats(days)})
 
     def runner_alive(seen) -> bool:
         try:
