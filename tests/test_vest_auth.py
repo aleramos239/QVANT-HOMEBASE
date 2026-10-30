@@ -478,3 +478,12 @@ def test_urgent_skips_the_refresh_backoff_but_never_a_rejected_login(monkeypatch
     v.handlers["/v3/auth/refresh"] = lambda req: httpx.Response(401)
     with pytest.raises(NeedsSignature):
         run(go())
+
+
+def test_a_vest_login_block_never_says_tradovate():
+    from homebase.broker.login_budget import LoginBudget
+    b = LoginBudget(clock=lambda: 1_000_000.0, journal=lambda ev, **kw: None)
+    for key in ("vest:0xabc", "tv:demo:u"):
+        assert b.note_error(key, RuntimeError("429 Too Many Requests"))
+    assert "Vest rate-limited" in b.blocked("vest:0xabc") and "Tradovate" not in b.blocked("vest:0xabc")
+    assert "Tradovate rate-limited" in b.blocked("tv:demo:u")
