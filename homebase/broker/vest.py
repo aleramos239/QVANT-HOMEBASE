@@ -53,6 +53,8 @@ DETAILS_TRIES = 3                             # a closed position whose /details
 DEFAULTS = {"tick": Decimal("0.25"), "price_dec": 2, "lev": "50"}
 HELD = "held:"                                # order ids of the stop entries Homebase holds
 GAP_S = 10.0                                  # a push this long after the previous one (or the first) never fires (R1)
+SLOW_S = 2.0                                  # a fire whose /open would go out later than this after its push: skipped (R40)
+PAIR_S = 1.0                                  # two opposite held legs added this close together are one signal (OCO)
 DAY_START_KEY = "dayStartEquity"              # the account row's day-start equity: name unconfirmed (T7 Step 0)
 
 
@@ -201,12 +203,15 @@ class VestAdapter(BrokerAdapter):
         self.journal = journal or (lambda event, **kw: None)
         self.feed_ok: Callable[[], bool] = lambda: False    # the CME feed is up (wired by the desk); default: never fire
         self._now = lambda: dt.datetime.now(ET)
+        self._mono = time.monotonic
         self._book = HeldBook(state_dir() / f"vest_held_{account_id}.json")
         self._restored = False                          # the saved book is pruned at the first CME push
         self._pushed: dict[str, float] = {}             # feed root -> monotonic time of its last push (feed up)
         self._firing: Optional[str] = None              # the held id whose market open is in flight
         self._fires: set[asyncio.Task] = set()
-        self._fired: dict[str, str] = {}                # held id -> Vest order id of its open
+        self._parked: list[FillEvent] = []              # fills seen while a fire waits for its POST answer (R30)
+        self._added: dict[str, float] = {}              # held id -> monotonic time it was added (OCO pairing)
+        self._entry_lock = asyncio.Lock()               # floor guard + POST of one entry at a time (R39)
         self._held_of: dict[str, str] = {}              # Vest order id -> held id (its fills carry the held id, R30)
         self._risk: dict[str, Decimal] = {}             # resting limit entry id -> $ at risk to its stop
         self._sp: Optional[dict] = None
@@ -316,9 +321,9 @@ class VestAdapter(BrokerAdapter):
 
     # --- orders -------------------------------------------------------------------------------------
     async def _order(self, req: OrderRequest, *, bracket: bool, held_id: Optional[str] = None,
-                     perp: Optional[float] = None) -> OrderResult:
+                     fire_t: Optional[float] = None) -> OrderResult:
         """An entry opens a position; an order against this account's open position is an EXIT (close / reduce), never /open.
-        `held_id`/`perp`: a held stop entry firing (its id for the fills, the NQ-PERP price it was checked at)."""
+        `held_id`/`fire_t`: a held stop entry firing (its id for the fills, the monotonic time of its crossing push)."""
         if req.order_type not in ("Market", "Limit"):
             return OrderResult(ok=False, error=f"vest: {req.order_type} entries are not placed here")
         limit = req.order_type == "Limit"
@@ -329,44 +334,47 @@ class VestAdapter(BrokerAdapter):
             return OrderResult(ok=False, error="vest: a bracket needs the strategy's reference price in `price`")
         units, root, sp = units_of(req.symbol, req.qty), root_of(req.symbol), await self._spec()
         long = req.side == "Buy"
-        rows = await self._opened()
-        held = [p for p in rows if p.get("symbol") == SYMBOL]
-        if not held and (req.text or "").startswith(EXIT_TAGS):            # an exit never opens (an SL/TP may have won the race)
-            return OrderResult(ok=True, raw={"note": "nothing to close"})
-        if held:
-            if legs or (str(held[0].get("side")).lower() == "long") == long:
-                return OrderResult(ok=False, error="vest: position already open")
-            return await self._exit(req, held[0], units, root, sp)
-        # an entry: its full stop risk (none attached = unbounded) must fit above the loss floors
-        risk = _dec(units) * abs(_dec(req.price) - _dec(req.stop_price)) if legs and req.stop_price is not None else None
-        err = await self._floor_err(risk, rows)
-        if err:
-            return OrderResult(ok=False, error=err)
-        body = {"symbol": SYMBOL, "side": "long" if long else "short", "orderType": "limit" if limit else "market",
-                "quantity": units, "leverage": sp["lev"], "timeInForce": "GTC" if limit else "IOC"}
-        if limit:
-            body["price"] = self._px(req.price, sp)
-        # SL/TP keep the strategy's point distances (from the limit price, or for a market entry from NQ-PERP's own price),
-        # rounded toward the entry so the protection is never looser than asked
-        body["takeProfits"], body["stopLosses"] = [], []
-        if legs:
-            base = _dec(req.price) if limit else _dec(await self.perp_price() if perp is None else perp)
-            for key, px, up in (("takeProfits", req.tp_price, not long), ("stopLosses", req.stop_price, long)):
-                if px is not None:
-                    body[key] = [{"executionType": "market", "triggerPrice": self._px(
-                        base + _dec(px) - _dec(req.price), sp, ROUND_CEILING if up else ROUND_FLOOR)}]
-        want, bs = body["side"], "buy" if long else "sell"
-        r = await self._submit(
-            "/v3/positions/open", body, root, market=not limit, held_id=held_id,
-            rest_hit=lambda o, ids: str(o.get("order_id")) in ids if ids else
-            (o.get("side") == bs and _dec(o.get("quantity") or 0) == _dec(units)
-             and limit and _dec(o.get("price") or 0) == _dec(body["price"])),
-            state_ok=lambda rows: any(str(r.get("side")).lower() == want and 0 < abs(_signed(r)) <= _dec(units)
-                                      for r in rows if r.get("symbol") == SYMBOL))
-        if limit and r.order_id:                        # a resting entry's risk counts against the next one
-            self._risk[r.order_id] = risk
-            _cap(self._risk)
-        return r
+        async with self._entry_lock:                    # guard + POST as one step: two entries never share room
+            rows = await self._opened()
+            held = [p for p in rows if p.get("symbol") == SYMBOL]
+            if not held and (req.text or "").startswith(EXIT_TAGS):            # an exit never opens (an SL/TP may have won the race)
+                return OrderResult(ok=True, raw={"note": "nothing to close"})
+            if held:
+                if legs or (str(held[0].get("side")).lower() == "long") == long:
+                    return OrderResult(ok=False, error="vest: position already open")
+                return await self._exit(req, held[0], units, root, sp)
+            # an entry: its full stop risk (none attached = unbounded) must fit above the loss floors
+            risk = _dec(units) * abs(_dec(req.price) - _dec(req.stop_price)) if legs and req.stop_price is not None else None
+            err = await self._floor_err(risk, rows)
+            if err:
+                return OrderResult(ok=False, error=err)
+            body = {"symbol": SYMBOL, "side": "long" if long else "short", "orderType": "limit" if limit else "market",
+                    "quantity": units, "leverage": sp["lev"], "timeInForce": "GTC" if limit else "IOC"}
+            if limit:
+                body["price"] = self._px(req.price, sp)
+            # SL/TP keep the strategy's point distances (from the limit price, or for a market entry from NQ-PERP's own price),
+            # rounded toward the entry so the protection is never looser than asked
+            body["takeProfits"], body["stopLosses"] = [], []
+            if legs:
+                base = _dec(req.price) if limit else _dec(await self.perp_price())
+                for key, px, up in (("takeProfits", req.tp_price, not long), ("stopLosses", req.stop_price, long)):
+                    if px is not None:
+                        body[key] = [{"executionType": "market", "triggerPrice": self._px(
+                            base + _dec(px) - _dec(req.price), sp, ROUND_CEILING if up else ROUND_FLOOR)}]
+            want, bs = body["side"], "buy" if long else "sell"
+            if fire_t is not None and self._mono() - fire_t > SLOW_S:
+                return OrderResult(ok=False, error=f"slow: {self._mono() - fire_t:.1f} s after the crossing push")
+            r = await self._submit(
+                "/v3/positions/open", body, root, market=not limit, held_id=held_id,
+                rest_hit=lambda o, ids: str(o.get("order_id")) in ids if ids else
+                (o.get("side") == bs and _dec(o.get("quantity") or 0) == _dec(units)
+                 and limit and _dec(o.get("price") or 0) == _dec(body["price"])),
+                state_ok=lambda rows: any(str(r.get("side")).lower() == want and 0 < abs(_signed(r)) <= _dec(units)
+                                          for r in rows if r.get("symbol") == SYMBOL))
+            if limit and r.order_id:                        # a resting entry's risk counts against the next one
+                self._risk[r.order_id] = risk
+                _cap(self._risk)
+            return r
 
     async def _exit(self, req: OrderRequest, p: dict, units: str, root: str, sp: dict) -> OrderResult:
         pid, before, limit = p["positionId"], abs(_signed(p)), req.order_type == "Limit"
@@ -419,6 +427,10 @@ class VestAdapter(BrokerAdapter):
         if oid and held_id:                             # mapped before the wait: a fill on the socket already finds it
             self._held_of[oid] = held_id
         _cap(self._roots), _cap(self._pos_of), _cap(self._held_of)
+        early = [ev for ev in self._parked if oid and str(ev.raw.get("orderId")) == oid]
+        if early:                                       # filled before the POST answered: now with the held id
+            self._parked = [ev for ev in self._parked if ev not in early]
+            await self._deliver(early)
         hits = await self._wait(ids, market)
         bad = next((h for h in hits if h[0] not in ("Working", "Filled")), None)
         if bad:
@@ -465,7 +477,7 @@ class VestAdapter(BrokerAdapter):
             return OrderResult(ok=False, error=NO_ACCT)
         if str(order_id).startswith(HELD):              # held by Homebase: no broker call
             oid = str(order_id)
-            if self._book.drop(oid) is None and (oid == self._firing or oid in self._fired):
+            if self._book.drop(oid) is None and (oid == self._firing or oid in self._book.fired):
                 return OrderResult(ok=False, error="vest: that held entry already fired")
             return OrderResult(ok=True)
         err = await self._post("/v3/positions/cancel-order", {"orderId": str(order_id)}, ORDER_GONE)
@@ -514,6 +526,8 @@ class VestAdapter(BrokerAdapter):
         for e in list(self._book.entries):              # held stop entries first: none may fire after a sweep
             self._book.drop(e.id)
             cancelled += 1
+        # an entry already firing is never cut mid-POST: wait for it, so the close below sees what it opened (R36)
+        await asyncio.gather(*list(self._fires), return_exceptions=True)
         try:
             resting = await self._resting()
         except Exception as e:  # noqa: BLE001
@@ -561,12 +575,13 @@ class VestAdapter(BrokerAdapter):
     async def get_order_status(self, order_id: str) -> Optional[str]:
         """"Working" if it rests; else its outcome off the socket; else Vest's own order row; else None (unknown)."""
         oid = str(order_id)
-        if oid.startswith(HELD):                        # held: working until it fires; then its Vest order's status
+        if oid.startswith(HELD):                        # held: working until it fires, then Filled (a market IOC)
             if self._book.get(oid) or oid == self._firing:
                 return "Working"
-            if oid not in self._fired:
-                return "Canceled"                       # dropped or skipped, never sent
-            return await self.get_order_status(self._fired[oid]) if self._fired[oid] else None
+            f = self._book.fired.get(oid)
+            if f:                                       # unconfirmed: its Vest order's status, if we have its id
+                return "Filled" if f.get("ok") else await self.get_order_status(f["vest"]) if f.get("vest") else None
+            return "Canceled" if oid in self._book.dropped else None       # no record: unknown
         if any(str(o.get("order_id")) == oid for o in await self._resting()):
             return "Working"
         seen = self._events.get(oid)
@@ -581,7 +596,11 @@ class VestAdapter(BrokerAdapter):
 
     async def _account_row(self) -> dict:
         rows = _rows(await self._api("GET", "/v3/accounts", account=False), "accounts")
-        return next((r for r in rows if r.get("account_id") == self.vest_account_id), {})
+        row = next((r for r in rows if r.get("account_id") == self.vest_account_id), {})
+        equity = row.get("equity") or row.get("amount")
+        if equity is not None and row.get(DAY_START_KEY) is None:      # the first read after 20:00 ET, any caller (R35)
+            self._day_start(float(equity))
+        return row
 
     async def get_balance(self) -> dict:
         row = await self._account_row()
@@ -673,14 +692,23 @@ class VestAdapter(BrokerAdapter):
         day = self._desk_day()
         e = HeldEntry(HELD + uuid.uuid4().hex[:12], req.symbol, req.side, req.qty, level, sl,
                       None if req.tp_price is None else abs(float(req.tp_price) - level), day, None)
-        # the engine's two legs of one signal arrive together: the new leg pairs with an unpaired opposite one
+        # the engine's two legs of one signal arrive together: the new leg pairs with an unpaired opposite one added
+        # within PAIR_S, same symbol and qty, the buy above the sell (shortcut: inferred, until the engine passes a group)
+        now = self._mono()
         mate = next((x for x in self._book.entries if x.oco_group is None and x.side != req.side and x.day == day
-                     and x.symbol == req.symbol and x.qty == req.qty), None)
+                     and x.symbol == req.symbol and x.qty == req.qty and now - self._added.get(x.id, -1e9) <= PAIR_S
+                     and (level > x.level if req.side == "Buy" else level < x.level)), None)
         if mate is not None:
             mate.oco_group = e.oco_group = mate.id
+        self._added[e.id] = now
+        _cap(self._added)
         self._book.add(e)
         log.info("vest %s: held %s %s %s @ %s", self.account_id, e.id, e.side, e.qty, e.level)
         return OrderResult(ok=True, order_id=e.id, raw={"held": True, "level": level})
+
+    def feed_reset(self) -> None:
+        """The CME feed (re)connected: the next push of every root is a first push (never fires, R1)."""
+        self._pushed.clear()
 
     def on_bar(self, root: str, bar) -> None:
         """The CME feed hook (sync, never awaits): fires at most one held entry a push. A crossed entry leaves the book
@@ -691,17 +719,17 @@ class VestAdapter(BrokerAdapter):
             log.warning("vest %s: on_bar failed (%s)", self.account_id, type(e).__name__)
 
     def _on_bar(self, root: str, bar) -> None:
-        now, feed = time.monotonic(), self.feed_ok()
+        now, feed = self._mono(), self.feed_ok()
         prev = self._pushed.pop(root, None)
         if feed:                                        # a push while the feed is down: the next one counts as a gap
             self._pushed[root] = now
         if not self._restored and _proot(root) == _proot(self.root):       # after a restart: only levels not reached
             self._restored = True
-            before = list(self._book.entries)
-            kept = {x.id for x in self._book.restore(self._desk_day(), bar.c)}
+            before, today = list(self._book.entries), self._desk_day()
+            kept = {x.id for x in self._book.restore(today, bar.h, bar.l)}       # this push's extreme (R38)
             for x in before:
                 if x.id not in kept:
-                    self._skip(x, "restart: the level traded or the day is over")
+                    self._skip(x, "restart: the day is over" if x.day != today else "restart: traded while down")
         hits = self._book.crossed(root, bar)
         if not hits:
             return
@@ -709,6 +737,10 @@ class VestAdapter(BrokerAdapter):
                else "late cross (first push after a gap)" if prev is None or now - prev > GAP_S
                else "another held entry is firing" if self._firing else None)
         fire = None if why else hits[0]
+        if fire is not None and not slip_ok(fire.level, bar.c, fire.side, fire.sl_pts, self.slip_frac):
+            why = (f"late: CME {bar.c:g} is more than {self.slip_frac:g} of the {fire.sl_pts:g}-point stop past the "
+                   f"level")                            # measured on the CME push, not NQ-PERP (R33)
+            fire = None
         for e in hits:
             self._book.drop(e.id)
             if e is not fire:
@@ -722,38 +754,37 @@ class VestAdapter(BrokerAdapter):
                 self._skip(fire, "no running loop")
                 return
             self._firing = fire.id
-            t = loop.create_task(self._fire(fire))
+            t = loop.create_task(self._fire(fire, now, bar.c))
             self._fires.add(t)
             t.add_done_callback(self._fires.discard)
 
-    async def _fire(self, e: HeldEntry) -> None:
-        """A crossed held entry: the slippage cap, then the market bracket path (floors, position check, outcome wait).
-        SL/TP keep their point distances, measured from NQ-PERP's price."""
-        perp = None
+    async def _fire(self, e: HeldEntry, t: float, cme: float) -> None:
+        """A crossed held entry (slippage already checked on the CME push): the market bracket path (floors, position
+        check, outcome wait), skipped if its POST would go out more than SLOW_S after the push. SL/TP keep their point
+        distances, measured from NQ-PERP's price."""
+        r = None
+        s = 1 if e.side == "Buy" else -1
         try:
-            try:
-                perp = await self.perp_price()
-                s = 1 if e.side == "Buy" else -1
-                if not slip_ok(e.level, perp, e.side, e.sl_pts, self.slip_frac):
-                    r = OrderResult(ok=False, error=f"slippage: NQ-PERP {perp} is more than {self.slip_frac:g} of the "
-                                                    f"{e.sl_pts:g}-point stop past the level")
-                else:
-                    req = OrderRequest(e.symbol, e.side, e.qty, "Market", price=e.level, stop_price=e.level - s * e.sl_pts,
-                                       tp_price=None if e.tp_pts is None else e.level + s * e.tp_pts,
-                                       text="homebase:entry")
-                    r = await self._guard(lambda: self._order(req, bracket=True, held_id=e.id, perp=perp))
-            except Exception as ex:  # noqa: BLE001 -- a fire never raises: it is skipped
-                r = OrderResult(ok=False, error=_err(ex)[1])
+            req = OrderRequest(e.symbol, e.side, e.qty, "Market", price=e.level, stop_price=e.level - s * e.sl_pts,
+                               tp_price=None if e.tp_pts is None else e.level + s * e.tp_pts, text="homebase:entry")
+            r = await self._guard(lambda: self._order(req, bracket=True, held_id=e.id, fire_t=t))
             if r.ok or r.error == UNCONFIRMED:          # it may be open: its status follows the Vest order
-                self._fired[e.id] = str(r.order_id or "")
-                _cap(self._fired)
+                self._book.fired[e.id] = {"vest": str(r.order_id or ""), "day": e.day, "ok": r.ok}
+                _cap(self._book.fired)
+                self._book.save()
             if r.ok:
-                self._j("vest_held_fired", id=e.id, side=e.side, level=e.level, perp=perp, order_id=r.order_id,
-                        slippage=None if perp is None else round((perp - e.level) * (1 if e.side == "Buy" else -1), 2))
+                self._j("vest_held_fired", id=e.id, side=e.side, level=e.level, cme=cme, order_id=r.order_id,
+                        slippage=round((cme - e.level) * s, 2))
             else:
-                self._skip(e, r.error or "refused", perp=perp)
+                self._skip(e, r.error or "refused", cme=cme)
         finally:
             self._firing = None
+            left, self._parked = self._parked, []
+            for ev in left:                             # ok with no order id: its opening fills are this entry's
+                if r is not None and r.ok and not r.order_id and ev.side == e.side and "vestOrderId" not in ev.raw:
+                    ev.raw["vestOrderId"], ev.raw["orderId"] = ev.raw.get("orderId"), e.id
+            if left:
+                await self._deliver(left)
 
     # --- fills --------------------------------------------------------------------------------------
     async def observe_fills(self, on_fill: FillCallback) -> None:
@@ -783,7 +814,11 @@ class VestAdapter(BrokerAdapter):
 
     async def _deliver(self, events: list[FillEvent]) -> None:
         for ev in events:
-            hid = self._held_of.get(str(ev.raw.get("orderId")))
+            oid = str(ev.raw.get("orderId"))
+            if self._firing and oid not in self._held_of and oid not in self._roots:
+                self._parked.append(ev)                 # maybe the firing entry's, before its POST answered
+                continue
+            hid = self._held_of.get(oid)
             if hid:                                     # a fired held entry's fill: the engine knows the held id
                 ev.raw["vestOrderId"], ev.raw["orderId"] = ev.raw["orderId"], hid
             if self._on_fill is not None:

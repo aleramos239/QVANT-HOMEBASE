@@ -161,8 +161,9 @@ def test_sl_tp_round_toward_the_entry():
     assert b["stopLosses"][0]["triggerPrice"] == "21010.25" and b["takeProfits"][0]["triggerPrice"] == "21070"   # long SL up, TP down
 
 
-def test_plain_market_and_stop_entry_refused():
+def test_plain_market_body_and_bad_stop_entry_refused():
     ad, gw = mk()
+    # the body of a market entry with no legs; in production the guard refuses it (no stop, R34), stubbed here
     assert run(ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market"))).ok
     assert body(gw.api()[0])["stopLosses"] == []
     n = len(gw.calls)

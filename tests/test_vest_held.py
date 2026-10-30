@@ -17,7 +17,7 @@ from homebase.broker.vest_held import HeldBook, HeldEntry, floor_room, slip_ok
 from homebase.core.clock import ET
 from homebase.data.feed import Bar
 from homebase.store import secrets_store
-from tests.test_vest_adapter import ACC, FAR, KEY, OPEN, SYM, Gateway, body, pos, run
+from tests.test_vest_adapter import ACC, CLOSE, FAR, KEY, OPEN, SYM, Gateway, body, pos, run
 
 T0 = dt.datetime(2026, 10, 29, 14, 0, tzinfo=dt.timezone.utc)
 NOW = dt.datetime(2026, 10, 29, 10, 0, tzinfo=ET)            # desk day 2026-10-29
@@ -153,15 +153,167 @@ def test_slippage_cap():
     assert not slip_ok(21000, 21011, "Buy", 20, 0.5) and slip_ok(21000, 21009, "Buy", 20, 0.5)
     assert not slip_ok(21000, 20989, "Sell", 20, 0.5) and slip_ok(21000, 20991, "Sell", 20, 0.5)
     assert slip_ok(21000, 20990, "Buy", 20, 0.5)                              # better than the level: fine
-    for mark, fired in (("21011", False), ("21009", True)):
+    # measured on the CME push (R33): NQ-PERP's own price (basis) makes no difference
+    for close, mark, fired in ((21011, "21000", False), (21009, "21100", True), (21011, "20950", False)):
         ad, gw, j = mk(mark=mark)
         run(hold(ad, sl=20))
 
         async def go():
+            await push(ad, bar(), bar(h=close + 1, c=close))
+        run(go())
+        assert bool(opens(gw)) is fired, (close, mark)
+        assert bool(skipped(j)) is not fired and all("late" in k["reason"] for k in skipped(j))
+
+
+def test_flatten_waits_for_a_firing_entry():
+    ad, gw, j = mk()
+    run(hold(ad))
+
+    async def go():
+        gate = asyncio.Event()
+
+        async def slow_open(req):
+            await gate.wait()
+            gw.positions.append(pos("long", "20"))
+            return httpx.Response(200, json={"orderId": "o1", "positionId": "p1", "commandId": "c1"})
+        gw.h[("POST", OPEN)] = slow_open
+        await push(ad, bar())
+        ad.on_bar("NQ", bar(h=21001))
+        for _ in range(100):
+            await asyncio.sleep(0.01)
+            if opens(gw):
+                break
+        assert opens(gw) and ad._firing                                       # the open is on its way
+        sweep = asyncio.ensure_future(ad.flatten_all())
+        await asyncio.sleep(0.05)
+        assert not sweep.done()                                               # the kill waits for it
+        gate.set()
+        return await sweep
+    r = run(go())
+    assert r.ok and r.raw["closed"] == 1 and not gw.positions
+    assert [c.url.path for c in gw.api("POST")].count(CLOSE) == 1
+
+
+def fill_frame(oid="o1", side="buy"):
+    return json.dumps({"channel": "account_state", "data": {"account_id": ACC, "account_seq": 1, "positions": [], "orders": [
+        {"order_id": oid, "symbol": SYM, "side": side, "status": "filled", "executed_quantity": "20",
+         "execution_price": "21003"}]}})
+
+
+def test_fill_before_the_post_answers_keeps_the_held_id():
+    for answer in ({"orderId": "o1", "positionId": "p1", "commandId": "c1"}, {}):
+        ad, gw, j = mk()
+        r = run(hold(ad))
+        got = []
+
+        async def early_fill(req, answer=answer):
+            await ad._on_message(fill_frame())                                # the socket beats the POST answer
+            gw.positions.append(pos("long", "20"))
+            return httpx.Response(200, json=answer)
+        gw.h[("POST", OPEN)] = early_fill
+
+        async def go():
+            async def on_fill(ev):
+                got.append(ev)
+            ad._on_fill = on_fill
             await push(ad, bar(), bar(h=21001))
         run(go())
-        assert bool(opens(gw)) is fired, mark
-        assert bool(skipped(j)) is not fired and all("slippage" in k["reason"] for k in skipped(j))
+        assert len(opens(gw)) == 1, answer
+        assert [(f.raw["orderId"], f.raw["vestOrderId"]) for f in got] == [(r.order_id, "o1")], answer
+
+
+def test_fired_status_survives_a_restart():
+    ad, gw, j = mk()
+    r = run(hold(ad))
+
+    async def go():
+        await push(ad, bar(), bar(h=21001))
+    run(go())
+    assert opens(gw)
+    ad2, gw2, _ = mk()
+    assert run(ad2.get_order_status(r.order_id)) == "Filled"
+    assert not run(ad2.cancel_order_by_id(r.order_id)).ok
+    assert run(ad2.get_order_status("held:unknown")) is None                  # no record: unknown, never Canceled
+
+
+def test_restore_drops_a_level_the_first_push_already_reached():
+    ad, gw, j = mk()
+    run(hold(ad))
+    ad2, gw2, j2 = mk()
+
+    async def go():
+        await push(ad2, bar(c=20990, h=21003))                                  # back under, but its high traded it
+        await push(ad2, bar(h=21005, m=1))
+    run(go())
+    assert not opens(gw2) and not ad2._book.entries
+    assert ["traded while down" in k["reason"] for k in skipped(j2)] == [True]
+
+
+def test_feed_reset_makes_the_next_push_a_first_push():
+    ad, gw, j = mk()
+    run(hold(ad))
+
+    async def go():
+        await push(ad, bar())
+        ad.feed_reset()
+        await push(ad, bar(h=21001))
+    run(go())
+    assert not opens(gw) and "late" in skipped(j)[0]["reason"]
+
+
+def test_floor_guard_is_serialised():
+    ad, gw, _ = mk(floors={"max_drawdown_equity": 49000})
+    accounts(gw, equity="50000")                                                  # room 1000: one 600 entry
+
+    async def go():
+        return await asyncio.gather(*(ad.place_bracket(OrderRequest("NQZ6", "Buy", 1, "Limit", price=21000,
+                                                                    stop_price=20970)) for _ in range(2)))
+    rs = run(go())
+    assert [x.ok for x in rs].count(True) == 1 and len(opens(gw)) == 1
+
+
+def test_slow_fire_is_skipped():
+    ad, gw, j = mk()
+    t = [1000.0]
+    ad._mono = lambda: t[0]
+    run(hold(ad))
+
+    def slow_ticker(req):
+        t[0] += 3                                                                 # the perp read took 3 s
+    gw.h[("GET", "/v3/ticker/latest")] = slow_ticker
+
+    async def go():
+        await push(ad, bar())
+        t[0] += 1
+        await push(ad, bar(h=21001))
+    run(go())
+    assert not opens(gw) and "slow" in skipped(j)[0]["reason"]
+
+
+def test_oco_pairing_needs_a_close_add_time_and_a_straddle():
+    ad, gw, _ = mk()
+    t = [1000.0]
+    ad._mono = lambda: t[0]
+    run(hold(ad, "Buy", 21000))
+    t[0] += 3
+    run(hold(ad, "Sell", 20950))
+    assert [e.oco_group for e in ad._book.entries] == [None, None]                # 3 s apart: not one signal
+    ad, gw, _ = mk()
+    ad._mono, ad._book.entries = (lambda: t[0]), []                              # same state file: start empty
+    run(hold(ad, "Buy", 20900))
+    run(hold(ad, "Sell", 20950))
+    assert [e.oco_group for e in ad._book.entries] == [None, None]                # buy under the sell: no straddle
+    ad, gw, _ = mk()
+    ad._mono, ad._book.entries = (lambda: t[0]), []                              # same state file: start empty
+    a, b = run(hold(ad, "Buy", 21000)), run(hold(ad, "Sell", 20950))
+    assert [e.oco_group for e in ad._book.entries] == [a.order_id, a.order_id]
+
+
+def test_exits_are_never_blocked_by_the_floor_guard():
+    ad, gw, _ = mk(floors=None)
+    gw.positions = [pos("long", "20")]
+    assert run(ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Market"))).ok
+    assert [c.url.path for c in gw.api("POST")] == [CLOSE]
 
 
 # ---- loss floors -------------------------------------------------------------------------------------------
@@ -285,3 +437,14 @@ def test_held_entry_refused_when_the_level_already_traded_or_stop_limit():
     assert not run(ad.place_bracket(OrderRequest("NQZ6", "Buy", 1, "StopLimit", price=21110, trigger_price=21100,
                                                  stop_price=21080))).ok
     assert not ad._book.entries and not gw.writes()
+
+
+def test_day_start_recorded_by_any_equity_read():
+    ad, gw, _ = mk(floors={"daily_loss": 1100})
+    ad._now = lambda: dt.datetime(2026, 10, 29, 20, 1, tzinfo=ET)
+    accounts(gw, equity="50000")
+    assert run(ad.get_balance())["balance"] == 50000                             # the first read after 20:00 ET
+    ad._now = lambda: dt.datetime(2026, 10, 29, 20, 30, tzinfo=ET)
+    accounts(gw, equity="49500")                                                  # floor 48900: room 600
+    r = run(ad.place_bracket(OrderRequest("NQZ6", "Buy", 1, "Market", price=21000, stop_price=20969)))
+    assert not r.ok and "room $600" in r.error

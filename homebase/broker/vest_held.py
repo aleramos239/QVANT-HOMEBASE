@@ -51,10 +51,13 @@ class HeldBook:
             except TypeError:        # an unreadable row is never fired
                 continue
         self.day_start: dict = d.get("day_start") or {}
+        self.fired: dict = d.get("fired") if isinstance(d.get("fired"), dict) else {}   # held id -> {vest, day, ok}
+        self.dropped: set[str] = set()               # ids dropped this session (cancelled / skipped): "Canceled"
         self._last: dict[str, tuple] = {}            # price root -> (bar start, high, low, close) of the last push
 
     def save(self) -> None:
-        write_json(self.path, {"entries": [asdict(e) for e in self.entries], "day_start": self.day_start})
+        write_json(self.path, {"entries": [asdict(e) for e in self.entries], "day_start": self.day_start,
+                               "fired": self.fired})
 
     def get(self, id: str) -> Optional[HeldEntry]:
         return next((e for e in self.entries if e.id == id), None)
@@ -67,6 +70,7 @@ class HeldBook:
         e = self.get(id)
         if e is not None:
             self.entries.remove(e)
+            self.dropped.add(id)
             self.save()
         return e
 
@@ -74,6 +78,7 @@ class HeldBook:
         out = [e for e in self.entries if group is not None and e.oco_group == group]
         if out:
             self.entries = [e for e in self.entries if e not in out]
+            self.dropped.update(e.id for e in out)
             self.save()
         return out
 
@@ -100,11 +105,15 @@ class HeldBook:
                 groups.add(e.oco_group)
         return out
 
-    def restore(self, today: str, last_price: float) -> list[HeldEntry]:
-        """After a restart: keep only today's entries whose level the price has not reached."""
-        keep = [e for e in self.entries if e.day == today and not reached(e.side, e.level, last_price)]
-        if len(keep) != len(self.entries):
-            self.entries = keep
+    def restore(self, today: str, high: float, low: Optional[float] = None) -> list[HeldEntry]:
+        """After a restart: keep only today's entries whose level the first push (its high for a Buy, its low for a
+        Sell) has not reached; fired records of other days are dropped."""
+        low = high if low is None else low
+        keep = [e for e in self.entries if e.day == today and not reached(e.side, e.level, high if e.side == "Buy" else low)]
+        fired = {k: v for k, v in self.fired.items() if isinstance(v, dict) and v.get("day") == today}
+        if len(keep) != len(self.entries) or fired != self.fired:
+            self.dropped.update(e.id for e in self.entries if e not in keep)
+            self.entries, self.fired = keep, fired
             self.save()
         return list(keep)
 
@@ -122,7 +131,8 @@ def floor_room(equity: float, floors: dict, open_risk: float) -> Optional[float]
     return equity - open_risk - max(lines) if lines else None
 
 
-def slip_ok(level: float, perp_price: float, side: str, sl_pts: float, slip_frac: float) -> bool:
-    """False when NQ-PERP is already more than `slip_frac` of the stop distance past the level."""
-    past = perp_price - level if side == "Buy" else level - perp_price
+def slip_ok(level: float, cme_price: float, side: str, sl_pts: float, slip_frac: float) -> bool:
+    """False when the CME price at the crossing push is already more than `slip_frac` of the stop distance past the
+    level (R33)."""
+    past = cme_price - level if side == "Buy" else level - cme_price
     return past <= sl_pts * slip_frac
