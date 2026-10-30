@@ -13,6 +13,7 @@ import asyncio
 import datetime as dt
 import json
 import sys
+import time
 from typing import Awaitable, Callable
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
@@ -24,7 +25,12 @@ from .topstepx_auth import HEADERS, HUB_URL, TsxSession
 
 RS = "\x1e"
 RECONNECT_S = (0.2, 1.5, 3.0, 5.0)      # the site's own schedule; the last step repeats
+STABLE_S = 10.0                          # a socket must stay up this long before the backoff starts over
 MAX_FRAME = 16 * 1024 * 1024
+
+
+async def _pause(seconds: float) -> None:       # tests record / shorten the waits here
+    await asyncio.sleep(seconds)
 
 
 def log(msg: str) -> None:
@@ -43,6 +49,8 @@ class TsxHub:
         self.on_auth_lost = on_auth_lost
         self.up = False
         self._task: asyncio.Task | None = None
+        self._token = ""
+        self._up_at: float | None = None        # when the current socket finished opening (monotonic)
 
     async def start(self) -> None:
         if self._task is None:
@@ -58,11 +66,11 @@ class TsxHub:
     async def _run(self) -> None:
         step = 0
         while True:
-            token = ""
+            token = self._token = ""
+            self._up_at = None
             try:
-                token = await self.session.token()
+                token = self._token = await self.session.token()
                 await self._connected(token)
-                step = 0                # it opened: the backoff restarts
             except asyncio.CancelledError:
                 raise
             except websockets.InvalidStatus as e:
@@ -73,7 +81,10 @@ class TsxHub:
             except Exception as e:  # noqa: BLE001 -- the loop must outlive any one failure
                 log(f"socket error: {type(e).__name__}: {str(e).replace(token, '***') if token else e}")
             self.up = False
-            await asyncio.sleep(RECONNECT_S[min(step, len(RECONNECT_S) - 1)])
+            # a socket the server closes right after the upgrade must not reset it: that would loop at the first step
+            if self._up_at is not None and time.monotonic() - self._up_at >= STABLE_S:
+                step = 0
+            await _pause(RECONNECT_S[min(step, len(RECONNECT_S) - 1)])
             step += 1
 
     async def _auth_lost(self) -> None:
@@ -102,6 +113,7 @@ class TsxHub:
                     await self.on_up()
                 except Exception as e:  # noqa: BLE001
                     log(f"on_up failed: {type(e).__name__}: {e}")
+            self._up_at = time.monotonic()
             try:
                 async for raw in ws:
                     if not await self._frames(ws, raw):
@@ -126,6 +138,8 @@ class TsxHub:
                 log(f"bad frame: {rec[:80]!r}")
                 continue
             kind = msg.get("type") if isinstance(msg, dict) else None
+            if isinstance(msg, dict) and msg.get("error"):        # a refused handshake has no type, only this
+                log(f"server error: {str(msg['error'])[:200].replace(self._token or chr(0), '***')}")
             if kind == 1:
                 for arg in msg.get("arguments") or []:
                     try:

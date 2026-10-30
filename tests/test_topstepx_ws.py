@@ -217,3 +217,74 @@ def test_stop_ends_the_loop_cleanly():
         await asyncio.sleep(0.05)
         assert not [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
     asyncio.run(go())
+
+
+def _record_pauses(monkeypatch, schedule=(0.01, 0.02, 0.03, 0.04)):
+    monkeypatch.setattr(topstepx_ws, "RECONNECT_S", schedule)
+    pauses: list[float] = []
+
+    async def pause(s):
+        pauses.append(s)
+        await asyncio.sleep(0.001)
+    monkeypatch.setattr(topstepx_ws, "_pause", pause)
+    return pauses
+
+
+def test_a_socket_closed_right_after_open_does_not_reset_the_backoff(monkeypatch):
+    pauses = _record_pauses(monkeypatch)
+    ups = []
+
+    async def script(ws, n):
+        await ws.close()
+
+    async def on_up():
+        ups.append(1)
+
+    async def go():
+        server = Server(script)
+        async with server.serving() as srv:
+            hub = TsxHub(FakeSession(), lambda t, a: None, url=url_of(srv), on_up=on_up)
+            await hub.start()
+            await until(lambda: len(pauses) >= 6)
+            await hub.stop()
+    asyncio.run(go())
+    assert pauses[:6] == [0.01, 0.02, 0.03, 0.04, 0.04, 0.04]      # escalates, then holds the last step
+    assert len(ups) >= 6
+
+
+def test_a_socket_that_lived_past_the_threshold_starts_the_backoff_over(monkeypatch):
+    pauses = _record_pauses(monkeypatch)
+    monkeypatch.setattr(topstepx_ws, "STABLE_S", 0.15)
+
+    async def script(ws, n):
+        if n in (3, 5):                     # the third and fifth sockets live long enough, the others die at once
+            await asyncio.sleep(0.3)
+        await ws.close()
+
+    async def go():
+        server = Server(script)
+        async with server.serving() as srv:
+            hub = TsxHub(FakeSession(), lambda t, a: None, url=url_of(srv))
+            await hub.start()
+            await until(lambda: len(pauses) >= 6)
+            await hub.stop()
+    asyncio.run(go())
+    assert pauses[:6] == [0.01, 0.02, 0.01, 0.02, 0.01, 0.02]
+
+
+def test_a_handshake_error_reply_is_logged_without_the_token(capsys):
+    async def script(ws, n):
+        await ws.send(json.dumps({"error": f"Requested protocol 'x' is not available {TOKEN}"}) + RS)
+        await asyncio.sleep(0.2)
+
+    async def go():
+        server = Server(script)
+        async with server.serving() as srv:
+            hub = TsxHub(FakeSession(), lambda t, a: None, url=url_of(srv))
+            await hub.start()
+            await asyncio.sleep(0.2)
+            await hub.stop()
+    asyncio.run(go())
+    err = capsys.readouterr().err
+    assert "server error: Requested protocol 'x' is not available ***" in err
+    assert TOKEN not in err
