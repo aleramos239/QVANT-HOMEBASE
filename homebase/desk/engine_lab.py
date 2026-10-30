@@ -62,6 +62,7 @@ LAB_TAKE_RULE = "This account has a daily take rule. A Lab strategy cannot share
 LAB_ONE_AT_A_TIME = "One position at a time."
 LAB_SLOT_BUSY = "Another strategy's trade on this account is open or not checked yet."
 LAB_CANNOT_CHECK = "The Desk cannot check the last trade's orders."
+LAB_HELD = "Held overnight: its stop and target stay at the broker. It trades here again once that trade closes."
 LAB_CLOSE_UNCONFIRMED = "Check it: the close order was not confirmed. Its stop is still working."
 LAB_EXIT_TWICE = "Check it: this trade's exit may have filled twice."
 LAB_NO_POSITION_READ = "The Desk cannot read this account's position."
@@ -201,9 +202,9 @@ class LabMixin:
         for k in ("placed_ms", "entry_ms", "exit_ms"):
             if x.get(k) is not None and not num(x[k]):
                 x[k], bad = None, True
-        for k in ("clean", "check", "unconfirmed", "close_ok", "blind", "move", "lost", "lost_said"):
+        for k in ("clean", "check", "unconfirmed", "close_ok", "blind", "move", "lost", "lost_said", "held"):
             if k in x and not isinstance(x[k], bool):
-                x[k], bad = k not in ("clean", "move", "lost_said"), True
+                x[k], bad = k not in ("clean", "move", "lost_said", "held"), True
         if "net_bad" in x and not (whole(x["net_bad"]) and x["net_bad"] >= 0):
             x["net_bad"], bad = 0, True
         if x.get("net_bad_ms") is not None and not num(x["net_bad_ms"]):
@@ -568,7 +569,8 @@ class LabMixin:
                 c = found.setdefault(pair, {
                     "date": (was or {}).get("date") or date, "status": (was or {}).get("status") or rec["status"],
                     "round": (x or {}).get("round"), "iid": (x or {}).get("iid"), "placed_ms": (x or {}).get("placed_ms"),
-                    "orders": [], "sides": {}, "filled": (was or {}).get("filled"), "was": dict((was or {}).get("was") or {})})
+                    "orders": [], "sides": {}, "filled": (was or {}).get("filled"), "was": dict((was or {}).get("was") or {}),
+                    "held": (was or {}).get("held") is True or (x or {}).get("held") is True})
                 if was is not None:
                     c["orders"] += [i for i in was.get("orders") or [] if i not in c["orders"]]
                     c["sides"].update(was.get("sides") or {})
@@ -666,7 +668,7 @@ class LabMixin:
         key = f"{name}@{account}#c{c['date']}"
         while key in self.states:
             key += "+"
-        why = LAB_BAD_RECORD if c.get("unread") else LAB_CANNOT_CHECK
+        why = LAB_BAD_RECORD if c.get("unread") else LAB_HELD if c.get("held") is True else LAB_CANNOT_CHECK
         was = c.get("was") if isinstance(c.get("was"), dict) else {}
         qty = was.get("qty")
         st = DayState(strategy=name, account=account, date=today,
@@ -681,13 +683,14 @@ class LabMixin:
                         "orders": [i for i in c.get("orders") or [] if isinstance(i, str)],
                         "sides": dict(c.get("sides") or {}), "was": dict(was),
                         "filled": c["filled"] if isinstance(c.get("filled"), list) else None,
-                        "unread": bool(c.get("unread"))})
+                        "unread": bool(c.get("unread")), "held": c.get("held") is True})
         self._lab_coerce(x, carried_key=True)
         x["why"] = why
         self.states[key] = st
         self._lab_mem()[key] = x
         self.journal("lab_carry", strategy=name, account=account, round=n, date=c["date"], status=c.get("status"),
-                     orders=x["carry"]["orders"], **({"unread": True} if c.get("unread") else {}))
+                     orders=x["carry"]["orders"], **({"unread": True} if c.get("unread") else {}),
+                     **({"held": True} if c.get("held") is True else {}))
         return True
 
     def _lab_carried(self, st: DayState) -> bool:
@@ -1804,6 +1807,8 @@ class LabMixin:
 
             async def account(a: str) -> dict:
                 st = rounds[a]
+                if reason == "eod" and self._lab_hold_now(st):       # the window's end: a held trade stays open
+                    return {"ok": True, "sold": 0, "actions": ["held overnight: its stop and target stay at the broker"]}
                 ad = self.adapters.get(a)
                 if ad is None:
                     return {"ok": st.status not in ("placing", "placed", "live"), "sold": 0,
@@ -1898,6 +1903,23 @@ class LabMixin:
         return results
 
     # --- hook 7: the clock, for the open round only -----------------------------------------------
+    def _lab_hold_now(self, st: DayState) -> bool:
+        """A filled round, no close sent, on an account row with Hold overnight (owner 2026-10-30: "if i want to hold a
+        live account overnight ... i want to be able to"): the Desk's flat time and the window's "eod" leave it open
+        on its broker stop and target (GTC). Its unfilled entries are Day orders and end at the close; the strategy's
+        own exits still go. The first time, it is marked `held` (the 18:00 roll carries it as a held block)."""
+        x = self._lab_x(st)
+        if st.status != "live" or x.get("close_sent_ms") or x.get("gone_ms") or x.get("lost"):
+            return False
+        row = next((a for a in assignments(self.cfg, st.strategy) if a.get("account") == st.account), None)
+        if not (isinstance(row, dict) and row.get("hold") is True):
+            return False
+        if x.get("held") is not True:
+            x["held"] = True
+            self._lab_save()
+            self.journal("lab_held", strategy=st.strategy, account=st.account, round=x.get("round"))
+        return True
+
     async def _lab_tick_flat(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter, x: dict, key: str) -> None:
         """The clock's capped flatten: every LAB_FLAT_RETRY_S (a "check it" close: LAB_CHECK_RETRY_S), and only
         when the strategy's kill lock is free -- a Kill or a flatten in progress is never waited for here, so
@@ -1961,11 +1983,12 @@ class LabMixin:
             self._journal_needs_check(st, cfg, now)
         late = lab_past_flat(cfg, now)
         closing = bool(x.get("close_sent_ms") or x.get("gone_ms"))
+        held = late and self._lab_hold_now(st)       # past the flat time, filled, Hold overnight on: not closed
         if st.status == "placed" and not late and not closing:
             if ad.connected:       # a dead socket's cache is stale; reconnect reconciles
                 await self._guard_placed(st, cfg, ad, check_position=False, event="entry_found_by_check",
                                          note="fill push missed — entry found by the order-status check")
-        elif st.status in ("placed", "live") and (closing or (late and not check_it)):
+        elif st.status in ("placed", "live") and (closing or (late and not check_it)) and not held:
             await self._lab_tick_flat(st, cfg, ad, x, key)
         elif st.status == "placed" and late:
             # a killed "check it" run: its entries are still cancelled at the flat time (once); it is never

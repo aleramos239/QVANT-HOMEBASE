@@ -865,12 +865,13 @@
     var lab = blockOf(s) || {}, risk = isObj(lab.params) ? Number(lab.params.risk) : NaN;
     var ownWords = risk > 0 ? money(risk) + " at risk a trade" : "it sizes each trade itself";
     // a row with its own size or stop after (per-account settings): each account's own words, as the page's AcctSet.label + tag
-    if (book.some(function (b) { return isObj(b) && (b.size || b.stop_after); })) {
+    if (book.some(function (b) { return isObj(b) && (b.size || b.stop_after || b.hold === true); })) {
       return who + ": " + book.filter(isObj).map(function (b) {
         var a = accts[b.account], env = isObj(a) && (a.env === "demo" || a.env === "paper") ? a.env : "LIVE";
         var name = typeof acctShort === "function" ? acctShort(b.account) : (isObj(a) && a.label) || b.account;
         var size = b.size === "risk" ? "$" + b.risk_usd + " risk" : !b.size && lab.own_size === true ? ownWords : "×" + b.qty;
-        var tag = b.stop_after === "win" ? ", stops after a win" : b.stop_after === "profit" ? ", stops in profit" : "";
+        var tag = (b.stop_after === "win" ? ", stops after a win" : b.stop_after === "profit" ? ", stops in profit" : "")
+          + (b.hold === true ? ", holds overnight" : "");
         return name + " " + env + " " + size + tag;
       }).join(" · ");
     }
@@ -1051,7 +1052,10 @@
     },
     lab_settled: function (r, who, on) { return [who + ": every order of the last trade has ended" + on]; },
     lab_check: function (r, who, on) { return [who + " needs a check" + on + " — " + clip(plainWords(r.reason)), "neg"]; },
-    lab_carry: function (r, who, on) { return [who + ": an old trade from " + (shortDate(r.date) || text(r.date)) + " needs a check" + on + ".", "warn"]; },
+    lab_carry: function (r, who, on) { return r.held === true
+      ? [who + ": the trade from " + (shortDate(r.date) || text(r.date)) + " is held overnight on its stop and target" + on + "."]
+      : [who + ": an old trade from " + (shortDate(r.date) || text(r.date)) + " needs a check" + on + ".", "warn"]; },
+    lab_held: function (r, who, on) { return [who + ": its trade stays open past the flat time (Hold overnight)" + on + "."]; },
     lab_carry_cleared: function (r, who, on) { return [who + ": the old trade from " + (shortDate(r.date) || text(r.date)) + " was cleared" + on]; },
     lab_carry_fill: function (r, who, on) { return [who + ": an old order filled" + on, "warn"]; },
     lab_sidecar_replaced: function (r, who) { return [who + ": its limits were saved again"]; },

@@ -95,7 +95,7 @@ const ACTIVITY = {
   lab_refused: labAct("lab_refused"), lab_runner_down: labAct("lab_runner_down"), lab_runner_back: labAct("lab_runner_back"),
   lab_stopped: labAct("lab_stopped"), lab_flatten: labAct("lab_flatten"), lab_cancelled: labAct("lab_cancelled"),
   lab_limits_set: labAct("lab_limits_set"), lab_settings_set: labAct("lab_settings_set"), lab_identity_set: labAct("lab_identity_set"), lab_duplicated: labAct("lab_duplicated"), lab_round: labAct("lab_round"), lab_settled: labAct("lab_settled"),
-  lab_check: labAct("lab_check"), lab_carry: labAct("lab_carry"), lab_carry_cleared: labAct("lab_carry_cleared"),
+  lab_check: labAct("lab_check"), lab_carry: labAct("lab_carry"), lab_carry_cleared: labAct("lab_carry_cleared"), lab_held: labAct("lab_held"),
   lab_exit_unconfirmed: labAct("lab_exit_unconfirmed"), lab_cancel_raced_fill: labAct("lab_cancel_raced_fill"), lab_open_without_cfg: labAct("lab_open_without_cfg"),
   lab_removed: labAct("lab_removed"), lab_event_error: labAct("lab_event_error"), lab_intake_error: labAct("lab_intake_error"),
   lab_save_error: labAct("lab_save_error"), lab_carry_fill: labAct("lab_carry_fill"), lab_sidecar_replaced: labAct("lab_sidecar_replaced"),
@@ -438,7 +438,7 @@ async function loadDeskChanges(who, force) {
 }
 const chgSay = (v) => v === true ? "on" : v === false ? "off" : v == null || v === "" ? "none" : String(v);
 // a row is its account, qty and settings (size, risk, stop after, Most): a settings-only change is a change
-const chgRowKey = (x) => [x.account, +x.qty, x.size || null, x.risk_usd == null ? null : +x.risk_usd, x.stop_after || null, x.most == null ? null : +x.most];
+const chgRowKey = (x) => [x.account, +x.qty, x.size || null, x.risk_usd == null ? null : +x.risk_usd, x.stop_after || null, x.most == null ? null : +x.most, x.hold === true];
 const chgSameBook = (a, b) => JSON.stringify((a || []).map(chgRowKey).sort()) === JSON.stringify((b || []).map(chgRowKey).sort());
 const chgTell = (why) => { if (why && why !== "Not changed.") toast(why, 8000); };
 /* The book as it was -> what was booked back: one account at a time, through the same control as by hand (pickAsg adds an account,
@@ -450,7 +450,7 @@ async function putBackBook(name, old) {
   if (off.length) return removeAsg(name, off[0].account);
   const b = back[0], a = cur.find(x => x.account === b.account);
   if (!a) return pickAsg(name, b.account, b.qty, b);                                  // the old row, whole
-  const set = a.size || b.size || a.stop_after || b.stop_after;                         // the sheet's ask and words, else editQty's
+  const set = a.size || b.size || a.stop_after || b.stop_after || a.hold || b.hold;                         // the sheet's ask and words, else editQty's
   if (AcctSet.needsAsk(a, b, isRealAcct(b.account)) && !await confirmDlg(
       `Book ${stratLabel(name)} on ${acctShort(b.account)} LIVE, ${set ? `${AcctSet.label(a)} → ${AcctSet.label(b)}` : `qty ${a.qty} → ${b.qty}`}?`,
       liveBookingNote(name, b.account) + bookMachine(), "Book live", false)) { refresh(); return; }
@@ -492,7 +492,7 @@ const CHG_WORDS = {
     const W = (a) => AcctSet.words(a, true);
     if (!prior) return {text: "Accounts: " + (now.map(a => `${A(a)} ${W(a)}`).join(" · ") || "none")};
     const old = prior.assignments || [], q = (l, a) => l.find(b => b.account === a.account);
-    const plainQty = (a, b) => !(a.size || b.size || a.stop_after || b.stop_after);      // two plain rows: "qty 1 → 3", as before
+    const plainQty = (a, b) => !(a.size || b.size || a.stop_after || b.stop_after || a.hold || b.hold);      // two plain rows: "qty 1 → 3", as before
     const parts = [...now.filter(a => !q(old, a)).map(a => `${A(a)} added ${W(a)}`), ...old.filter(b => !q(now, b)).map(b => `${A(b)} taken off`),
       ...now.filter(a => q(old, a) && !chgSameBook([q(old, a)], [a])).map(a => { const b = q(old, a);
         return plainQty(a, b) ? `${A(a)} qty ${b.qty} → ${a.qty}` : `${A(a)} ${W(b)} → ${W(a)}`; })];

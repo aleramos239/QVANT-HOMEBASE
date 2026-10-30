@@ -129,6 +129,7 @@ BOTH_FILLED = "Both entries filled."     # why the desk stops a strategy whose p
 NOT_PLACED = "The entry was not placed. Check it."     # the page's words for a row whose `why` is a raw engine note:
 RAW_NOTES = ("entry: ", "upper leg: ", "lower leg: ", "placement did not finish: ", "not written: ")
 TAKE_RULE = "This account has a daily take rule. A Lab strategy cannot share it."
+HOLD_TRADOVATE = "Hold overnight works on Tradovate accounts only (their stop and target stay at the broker)."
 NOT_WRITTEN = "The Desk could not write this trade down. Nothing was sent."
 BROKER_REFUSED = "The broker refused it: "
 OPEN_WITHOUT_CFG = "A Lab trade is open but its strategy is not on this Desk. Check it."
@@ -725,6 +726,10 @@ class LabDesk:
                     raise Refused(f"Size is capped at {limits.max_qty} here.")
                 if r.get("size") == "contracts" and r.get("most") is not None and int(r["qty"]) > r["most"]:
                     raise Refused(ROW_OVER_MOST)
+            for r in rows:                   # Hold overnight leans on the broker's GTC stop and target: Tradovate only
+                acct = getattr(self.cfg, "accounts", {}).get(r["account"])
+                if r.get("hold") is True and (acct is None or acct.paper or str(acct.keyring_key).startswith("vest:")):
+                    raise Refused(HOLD_TRADOVATE)
             seen: dict = {}
             for r in rows:                   # one broker account once (two desk entries can be pinned to one)
                 key = getattr(self.adapters.get(r["account"]), "broker_key", r["account"])

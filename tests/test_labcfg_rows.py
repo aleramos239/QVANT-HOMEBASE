@@ -52,3 +52,10 @@ def test_a_set_row_above_the_cap_survives_the_sync_and_a_legacy_row_does_not():
     assert cfg.book["lab_pp_orb"] == [set_row]                  # the legacy row above the cap of 3 is dropped, the set row stays
     assert labcfg.overlay(cfg) == {"added": [], "removed": [], "changed": []}      # the 2 s refresh
     assert cfg.book["lab_pp_orb"] == [set_row]
+
+
+def test_hold_is_yes_or_no_and_no_is_dropped():
+    assert labcfg.book_row({"account": "A", "qty": 1, "hold": True}) == {"account": "A", "qty": 1, "hold": True}
+    assert labcfg.book_row({"account": "A", "qty": 1, "hold": False}) == {"account": "A", "qty": 1}
+    with pytest.raises(ValueError, match="Hold overnight is yes or no"):
+        labcfg.book_row({"account": "A", "qty": 1, "hold": "yes"})

@@ -331,7 +331,7 @@ function setupHtml(name, s) {
   const dg = cyc ? null : DESKGROUPS.groups.find(g => g.members.includes(name));
   const qs = [...new Set(book.map(a => +a.qty || 1))], whole = (v) => usd(v).replace(/\.00$/, "");
   const n = (e) => book.filter(a => kind(a.account) === e).length, set = book.some(a => a.size);   // a row with its own size wins
-  const own = (a) => a.size || a.stop_after ? AcctSet.words(a) : `×${+a.qty || 1}`;
+  const own = (a) => a.size || a.stop_after || a.hold ? AcctSet.words(a) : `×${+a.qty || 1}`;
   const rows = [
     ["Accounts", book.map(a => `${acctShort(a.account)} ${word(a.account)} ${own(a)}`.replace("  ", " ")).join(" · ") || "none yet"],
     ["LIVE / paper", book.length ? [["LIVE", n("live")], ["demo", n("demo")], ["paper", n("paper")]].filter(x => x[1]).map(x => `${x[0]} on ${x[1]}`).join(" · ") || "—"

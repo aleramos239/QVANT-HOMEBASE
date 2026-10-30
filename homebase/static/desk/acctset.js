@@ -7,14 +7,15 @@ const AcctSet = (() => {
   const risk = (r) => !!r && r.size === "risk";
   /* "×N" or "$X risk" */
   const label = (r) => risk(r) ? "$" + r.risk_usd + " risk" : "×" + r.qty;
-  const tag = (r) => r && r.stop_after === "win" ? "stops after a win" : r && r.stop_after === "profit" ? "stops in profit" : "";
+  const tag = (r) => [r && r.stop_after === "win" ? "stops after a win" : r && r.stop_after === "profit" ? "stops in profit" : "",
+    r && r.hold === true ? "holds overnight" : ""].filter(Boolean).join(", ");
   /* "$500 risk, stops after a win": label, Most when asked (the Changes lines), then the tag */
   const words = (r, most) => [label(r), most && r.most != null ? "most " + r.most : "", tag(r)].filter(Boolean).join(", ");
   /* The sheet's fields for a row. A row written before the settings (no `size`) opens as "own" ("The strategy's own"): it
      stays a plain {account, qty} row until the owner picks Contracts or Risk. */
   const formOf = (row) => ({
     size: row.size ? row.size : "own", qty: row.qty || 1, risk_usd: risk(row) ? row.risk_usd : "",
-    stop_after: row.stop_after || "none", most: row.size && row.most != null ? row.most : null});
+    stop_after: row.stop_after || "none", most: row.size && row.most != null ? row.most : null, hold: row.hold === true});
   /* The book row for a filled sheet: "own" stays {account, qty} (never size or most); Most gone when removed, stop_after gone
      when "none", a risk row keeps the row's qty. */
   const rowFrom = (form, prev) => {
@@ -23,6 +24,7 @@ const AcctSet = (() => {
     if (form.size === "risk") out.risk_usd = form.risk_usd;
     if (form.stop_after && form.stop_after !== "none") out.stop_after = form.stop_after;
     if (form.size !== "own" && form.most != null) out.most = form.most;
+    if (form.hold === true) out.hold = true;
     return out;
   };
   /* A LIVE account asks before anything that can send more: more contracts, more risk, a switch to risk, a plain row given a
@@ -85,6 +87,7 @@ function openAcctSet(strategy, account) {
   $("#asRisk").value = form.risk_usd === "" ? "" : String(form.risk_usd);
   $("#asMost").value = form.most != null ? String(form.most) : "";
   $("#asStop").value = form.stop_after;
+  $("#asHold").value = form.hold ? "yes" : "no";
   $("#asTake").value = ACCT_SET.take || "";
   $("#asLoss").value = ACCT_SET.loss || "";
   const cyc = Object.values((ST && ST.groups) || {}).find(g => g && g.on && Number(g.risk_usd) > 0 && (g.members || []).includes(strategy)
@@ -107,7 +110,7 @@ function readAcctSet() {
   const num = (v) => { const t = String(v == null ? "" : v).trim().replace(/^\$/, ""); return t === "" ? NaN : Number(t); };
   const whole = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
   const prev = acctSetRow(ACCT_SET.strategy, ACCT_SET.account) || {}, size = $("#asSize").value, risky = size === "risk";
-  const form = {size: risky ? "risk" : size === "own" ? "own" : "contracts", qty: prev.qty || 1, risk_usd: "", stop_after: $("#asStop").value || "none", most: null};
+  const form = {size: risky ? "risk" : size === "own" ? "own" : "contracts", qty: prev.qty || 1, risk_usd: "", stop_after: $("#asStop").value || "none", most: null, hold: $("#asHold").value === "yes"};
   if (risky) {
     form.risk_usd = num($("#asRisk").value);
     if (!(Number.isFinite(form.risk_usd) && form.risk_usd > 0 && form.risk_usd <= 100000)) return {error: "Risk is a dollar amount above 0, up to 100000."};
@@ -146,6 +149,10 @@ async function saveAcctSet() {
     if (rowChanged && AcctSet.needsAsk(prev, next, isRealAcct(account)) && !await confirmDlg(
         `Book ${N} on ${who} LIVE, ${AcctSet.label(prev)} → ${AcctSet.label(next)}?`,
         liveBookingNote(strategy, account) + bookMachine(), "Book live", false)) return;
+    if (rowChanged && next.hold === true && prev.hold !== true && !await confirmDlg(`Hold ${N} on ${who} overnight?`,
+        "At its flat time the Desk leaves a filled trade open on its broker stop and target, through the 5 pm close and the night. " +
+        "Until it closes, this strategy takes no new trade on this account, and other strategies on the same market here wait too. " +
+        "A prop firm may close it or break a rule at its own cutoff.", "Hold overnight", false)) return;
     const off = [lockBody.day_lock === 0 ? "profit lock" : "", lockBody.day_loss === 0 ? "loss lock" : ""].filter(Boolean);
     if (off.length && !await confirmDlg(`Turn the ${off.join(" and ")} OFF for ${who}?`,
         "Nothing stops the account for the day by that amount: every strategy booked on it keeps taking new trades.", "Turn it off", false)) return;

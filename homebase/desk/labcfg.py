@@ -527,7 +527,8 @@ def _files(snap) -> set:
 
 def book_row(r) -> dict:
     """One book row as a sidecar holds it: account, qty (whole, above 0), then size ("contracts" | "risk"), risk_usd
-    (with "risk" only), stop_after ("win" | "profit"; "none" is not stored) and most (whole, 1..1000) when set. A row
+    (with "risk" only), stop_after ("win" | "profit"; "none" is not stored), most (whole, 1..1000) and hold (True: Hold
+    overnight; false is not stored) when set. A row
     with none of the new fields is {account, qty}, as always. ValueError with the sentence on a bad row."""
     if not isinstance(r, dict):
         raise ValueError("That is not an account row.")
@@ -556,6 +557,10 @@ def book_row(r) -> dict:
         if not _whole(r["most"], 1, 1000):
             raise ValueError("Most contracts must be a whole number from 1 to 1000.")
         out["most"] = r["most"]
+    if r.get("hold") not in (None, False, True):
+        raise ValueError("Hold overnight is yes or no.")
+    if r.get("hold") is True:
+        out["hold"] = True
     return out
 
 

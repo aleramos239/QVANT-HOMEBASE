@@ -1445,3 +1445,17 @@ def test_an_account_done_for_the_day_is_not_an_untaken_entry(tmp_path):
         assert refusal(out) == engine_lab.LAB_DONE_WIN and out["results"][0]["status"] == "cancelled"
     assert (d.ld._rec(LAB)["untaken"], d.ld._rec(LAB)["stopped"]) == (0, None)
     assert len(d.ads["a1"].brackets) == 1
+
+
+def test_check_book_hold_overnight_only_on_a_tradovate_account(tmp_path):
+    d = mkdesk(tmp_path, qty=0)
+    row = {"account": "a1", "qty": 1, "size": "contracts", "hold": True}
+    acct = d.cfg.accounts["a1"]
+    acct.paper, acct.keyring_key = False, "k"
+    d.ld.check_book(LAB, [row])                                                    # a Tradovate account: fine
+    for paper, key in ((True, "k"), (False, "vest:0xabc")):
+        acct.paper, acct.keyring_key = paper, key
+        with pytest.raises(Refused) as e:
+            d.ld.check_book(LAB, [row])
+        assert str(e.value) == labdesk.HOLD_TRADOVATE
+        d.ld.check_book(LAB, [{k: v for k, v in row.items() if k != "hold"}])     # without hold: fine

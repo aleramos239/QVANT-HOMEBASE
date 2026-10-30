@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=4">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=47"></script>
+<script src="/static/desklab.js?v=48"></script>
 <script src="/static/desklabset.js?v=5"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
@@ -837,6 +837,8 @@
       <button class="btn btn-outline btn-sm" id="asMostBtn" type="button" onclick="toggleAcctMost()">Remove</button></div>
     <div class="field"><label for="asStop">Stop after</label>
       <select id="asStop" class="hb-field"><option value="none">Never</option><option value="win">A win</option><option value="profit">In profit</option></select></div>
+    <div class="field"><label for="asHold">Hold overnight</label>
+      <select id="asHold" class="hb-field"><option value="no">No: close at the flat time</option><option value="yes">Yes: keep it open on its stop and target</option></select></div>
     <div class="mcap" style="font-weight:600;margin:14px 0 8px">Whole account — every strategy on it</div>
     <div class="field"><label for="asTake">Profit lock ($)</label>
       <input id="asTake" onkeydown="acctSetKey(event)" type="text" inputmode="decimal" autocomplete="off" placeholder="OFF"></div>
@@ -976,14 +978,14 @@
 
 <script src="/static/desk/core.js?v=5"></script>
 <script src="/static/desk/topbar.js?v=5"></script>
-<script src="/static/desk/activity.js?v=9"></script>
+<script src="/static/desk/activity.js?v=10"></script>
 <script src="/static/desk/views.js?v=2"></script>
 <script src="/static/desk/groups.js?v=8"></script>
-<script src="/static/desk/strategy.js?v=11"></script>
+<script src="/static/desk/strategy.js?v=12"></script>
 <script src="/static/desk/labdesk.js?v=12"></script>
 <script src="/static/desk/demo.js?v=2"></script>
 <script src="/static/desk/book.js?v=11"></script>
-<script src="/static/desk/acctset.js?v=3"></script>
+<script src="/static/desk/acctset.js?v=4"></script>
 <script src="/static/desk/settings.js?v=8"></script>
 <script src="/static/desk/popups.js?v=7"></script>
 <script src="/static/desk/start.js?v=2"></script>

@@ -74,9 +74,9 @@ test('withRow replaces one account\'s row and keeps every other row as it is', (
 });
 
 test('formOf: a legacy row opens as "own" with no Most box; a set row opens as it is', () => {
-  assert.deepEqual(plain(A.formOf({ account: 'a', qty: 3 })), { size: 'own', qty: 3, risk_usd: '', stop_after: 'none', most: null });
+  assert.deepEqual(plain(A.formOf({ account: 'a', qty: 3 })), { size: 'own', qty: 3, risk_usd: '', stop_after: 'none', most: null, hold: false });
   assert.deepEqual(plain(A.formOf({ account: 'a', qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win' })),
-    { size: 'risk', qty: 1, risk_usd: 500, stop_after: 'win', most: null });
+    { size: 'risk', qty: 1, risk_usd: 500, stop_after: 'win', most: null, hold: false });
 });
 
 test('rowFrom "own": {account, qty, stop_after?} only, never size or most', () => {

@@ -4090,3 +4090,56 @@ def test_another_strategys_win_on_the_account_does_not_stop_this_one(tmp_path):
     other = eng._state("other", "a1")                                         # a win of another strategy, same account
     other.status, other.pnl = "done", 500.0
     assert sits_out(eng) is None
+
+
+# ------------------------------------------------------------------------------------------------ Hold overnight (2026-10-30)
+def held(tmp_path):
+    return mk(tmp_path, book={LAB: [{"account": "a1", "qty": 1, "hold": True}]})
+
+
+def test_hold_a_filled_round_on_a_hold_row_is_not_closed_at_the_flat_time(tmp_path):
+    eng, ads, clock = held(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    clock.set_et(15, 56)
+    tick(eng)
+    tick(eng)
+    assert ad.orders == [] and st.status == "live" and not events(tmp_path, "clock_flat")
+    assert len(events(tmp_path, "lab_held")) == 1                   # said once
+    assert run(eng.lab_flatten(LAB, reason="eod"))["a1"]["sold"] == 0 and ad.orders == []   # the runner's day end too
+    assert run(eng.lab_flatten(LAB, reason="time"))["a1"]["ok"] is True                     # its own exit still closes
+    assert [(o.side, o.qty) for o in ad.orders] == [("Sell", 1)]
+
+
+def test_hold_an_unfilled_round_on_a_hold_row_is_still_cancelled(tmp_path):
+    eng, ads, clock = held(tmp_path)
+    go(eng, pair())
+    clock.set_et(15, 55)
+    tick(eng)
+    assert (rnd(eng).status, rnd(eng).exit_reason) == ("done", "cancelled") and ads["a1"].orders == []
+
+
+def test_hold_the_held_trade_is_carried_as_held_and_clears_when_its_stop_fills(tmp_path):
+    eng, ads, clock = held(tmp_path)
+    ad = ads["a1"]
+    live_round(eng, ad)
+    clock.set_et(15, 56)
+    tick(eng)
+    next_day(clock)
+    (r,) = eng.lab_rounds(LAB)
+    assert r["carried"] is True and r["why"] == engine_lab.LAB_HELD
+    assert go(eng, leg(iid=7))["accounts"]["a1"]["ok"] is False and len(ad.orders) == 0   # no new trade on top
+    (c,) = events(tmp_path, "lab_carry")
+    assert c["held"] is True
+    ad.order_status.update({"a1-101-sl": "Filled", "a1-101-tp": "Canceled"})
+    ad.net = 0
+    tick(eng)
+    assert eng.lab_open(LAB) == []
+
+
+def test_hold_a_plain_row_still_closes_at_the_flat_time(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    st = live_round(eng, ads["a1"])
+    clock.set_et(15, 55)
+    tick(eng)
+    assert [o.text for o in ads["a1"].orders] == ["homebase:lab-flat"] and not events(tmp_path, "lab_held")
