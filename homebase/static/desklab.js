@@ -206,6 +206,7 @@
   // the 3:1 blocks): the 3:1's "In-sample" and "Test months"; a record from before the 3:1 (a Desk straddle's twin) is the
   // "Old record", its build and test days ("in-sample" is only ever the 3:1). The numbers are the same either way.
   var WF_TITLE = "3:1 in-sample / 3:1 test months";
+  var FULL_SAMPLE = "Full sample";
   var OLD_RECORD = "Old record (before 3:1)";
   function heads(wf, both) {
     return (wf ? ["In-sample", "Test months"] : ["Build days", "Test days"]).concat(both ? ["Both"] : []);
@@ -334,11 +335,6 @@
     ];
   }
   var PROP_ROWS = ["Passes the eval", "Busts the eval", "Days to pass", "Gets a payout", "Expected payout"];
-  // "+$118,301" -> "+$118k", "−$5,865" -> "−$5.9k": three columns of dollars fit the inspector (Both, owner 2026-10-24)
-  function shortUsd(s) {
-    var m = /^([+\u2212-]?)\$([\d,]+)$/.exec(text(s)), n = m ? +m[2].replace(/,/g, "") : 0;
-    return !m || n < 1000 ? s : m[1] + "$" + (n >= 100000 ? Math.round(n / 1000) : (n / 1000).toFixed(1)) + "k";
-  }
   function results(res) {
     var wait = !res || typeof res !== "object";
     var u = !wait && res.unseen && typeof res.unseen === "object" ? res.unseen : null;
@@ -346,7 +342,7 @@
     var b = prop.build && typeof prop.build === "object" ? prop.build : null;
     var pu = prop.unseen && typeof prop.unseen === "object" ? prop.unseen : null;
     var po = prop.both && typeof prop.both === "object" ? prop.both : null;     // Build + Unseen as one run (owner 2026-10-24)
-    var account = text((b || pu || {}).account), cb = propCells(b), cu = propCells(pu), co = propCells(po);
+    var account = text((b || pu || po || {}).account), cb = propCells(b), cu = propCells(pu), co = propCells(po);
     // a Desk straddle also sends its build-days run at the Desk's setting: the block then reads Build days | Test days
     var bu = !wait && res.build && typeof res.build === "object" ? res.build : null;
     var wf = !wait && res.walkforward === true;
@@ -366,34 +362,26 @@
       return rows;
     };
     var rows = u ? runRows(u) : [];
-    if (bu) {
-      var br = runRows(bu), or = bo ? runRows(bo) : null;
-      rows = br.map(function (r, i) {
-        var row = { k: r.k, b: r.v, v: u ? rows[i].v : DASH };
-        if (or) {            // three columns: short dollars, the exact figure kept for the cell's title
-          row.o = or[i].v;
-          row.full = [row.b, row.v, row.o];
-          row.b = shortUsd(row.b); row.v = shortUsd(row.v); row.o = shortUsd(row.o);
-        }
-        return row;
-      });
+    var full = !!(bu && bo);      // the owner, 2026-10-30: a 3:1 card shows its full sample (Both) only, in one column
+    if (full) rows = runRows(bo).map(function (r) { return { k: r.k, v: r.v }; });
+    else if (bu) {
+      var br = runRows(bu);
+      rows = br.map(function (r, i) { return { k: r.k, b: r.v, v: u ? rows[i].v : DASH }; });
     }
     return {
       unseen: {
-        title: w31 ? WF_TITLE : OLD_RECORD,
-        head: bu ? heads(wf, !!bo) : null,
+        title: full ? FULL_SAMPLE : w31 ? WF_TITLE : OLD_RECORD,
+        head: bu && !full ? heads(wf, false) : null,
+        full: full,
         rows: rows,
         note: wait ? RES_WAIT : wf ? (u ? throughNote(res) : WF_NOTES[res.unseen_state] || WF_NOTES.none)
           : u ? "" : res.unseen_state === "pending" ? RUNNING_UNSEEN : res.unseen_state === "failed" ? FAILED_UNSEEN : res.manual === true ? NO_UNSEEN_MANUAL : NO_UNSEEN,
       },
       prop: {
-        title: "Prop sim" + (account ? " · " + account : ""),
-        head: heads(w31, !!po),
-        rows: b || pu ? PROP_ROWS.map(function (k, i) {
-          var row = { k: k, build: cb[i], unseen: cu[i] };
-          if (po) row.both = co[i];
-          return row;
-        }) : [],
+        title: "Prop sim" + (account ? " · " + account : "") + (po ? " · " + FULL_SAMPLE.toLowerCase() : ""),
+        head: po ? null : heads(w31, false),
+        rows: po ? PROP_ROWS.map(function (k, i) { return { k: k, v: co[i] }; })
+          : b || pu ? PROP_ROWS.map(function (k, i) { return { k: k, build: cb[i], unseen: cu[i] }; }) : [],
         note: wait ? RES_WAIT : b || pu ? "" : NO_PROP,
       },
     };

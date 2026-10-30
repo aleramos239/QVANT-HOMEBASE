@@ -195,18 +195,17 @@ function labResHtml(lab, view) {
   const cell = (x) => `<div class="v mono">${esc(x)}</div>`;
   const f = (k, vals, head) => `<div class="${head ? "f fh" : "f"}"><div class="k">${esc(k)}</div>${vals.map(cell).join("")}</div>`;
   const note = (t) => `<div class="labres-note">${esc(t)}</div>`;
-  // a Desk straddle's block has two columns (Build | Unseen) and keeps its note when the unseen run is missing
-  // Both (owner 2026-10-24): a third column, Build + Unseen as one run; its dollars are short, the exact figure in the cell's title
-  const cellT = (x, t) => `<div class="v mono"${t && t !== x ? ` title="${esc(t)}"` : ""}>${esc(x)}</div>`;
-  const f3 = (k, vals, full) => `<div class="f"><div class="k">${esc(k)}</div>${vals.map((x, i) => cellT(x, full && full[i])).join("")}</div>`;
+  // a Desk straddle's block has two columns (Build | Unseen) and keeps its note when the unseen run is missing; a 3:1 card with its
+  // full sample (Both) has one column and no head (owner 2026-10-30)
   const unseen = v.unseen.head
-    ? f("", v.unseen.head, true) + v.unseen.rows.map(r => "o" in r ? f3(r.k, [r.b, r.v, r.o], r.full) : f(r.k, [r.b, r.v])).join("") + (v.unseen.note ? note(v.unseen.note) : "")
+    ? f("", v.unseen.head, true) + v.unseen.rows.map(r => f(r.k, [r.b, r.v])).join("") + (v.unseen.note ? note(v.unseen.note) : "")
     : v.unseen.rows.length ? v.unseen.rows.map(r => f(r.k, [r.v])).join("") + (v.unseen.note ? note(v.unseen.note) : "") : note(v.unseen.note);
-  const prop = v.prop.rows.length ? f("", v.prop.head, true) + v.prop.rows.map(r => f(r.k, "both" in r ? [r.build, r.unseen, r.both] : [r.build, r.unseen])).join("") : note(v.prop.note);
-  const three = (b) => b.head && b.head.length === 3 ? " three" : "";
+  const prop = !v.prop.rows.length ? note(v.prop.note)
+    : v.prop.head ? f("", v.prop.head, true) + v.prop.rows.map(r => f(r.k, [r.build, r.unseen])).join("")
+    : v.prop.rows.map(r => f(r.k, [r.v])).join("");
   return `<div class="labres" data-for="${esc(view)}">
-    <div class="sec"><h2>${esc(v.unseen.title)}</h2><div class="figs labres-unseen${three(v.unseen)}" data-h="${esc(v.unseen.title)}">${unseen}</div></div>
-    <div class="sec"><h2>${esc(v.prop.title)}</h2><div class="figs labres-prop${three(v.prop)}" data-h="${esc(v.prop.title)}">${prop}</div></div></div>`;
+    <div class="sec"><h2>${esc(v.unseen.title)}</h2><div class="figs labres-unseen${v.unseen.full ? " full" : ""}" data-h="${esc(v.unseen.title)}">${unseen}</div></div>
+    <div class="sec"><h2>${esc(v.prop.title)}</h2><div class="figs labres-prop" data-h="${esc(v.prop.title)}">${prop}</div></div></div>`;
 }
 /* The unseen run's running total as a curve in the page's own content (the Desk's eqPlot), under its Matched-the-backtest block:
    nothing while there is no run (the inspector's block says why). */
