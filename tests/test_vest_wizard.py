@@ -77,3 +77,8 @@ def test_step_3_shows_the_kind_and_never_pre_ticks_a_funded_row():
     assert "WIZ.picks = new Set();" in acc                                    # every row starts unticked
     assert "checked" not in acc
     assert 'Add a funded Vest account?' in BOOK                               # and adding one asks first
+
+
+def test_the_vest_sign_in_says_the_session_lives_on_the_desk_server():
+    step = INDEX[INDEX.index('id="wstep2v"'):INDEX.index('id="savedLoginsV"')]
+    assert "on the desk server" in step and "this Mac" not in step                 # the desk runs on the VPS (M6)
