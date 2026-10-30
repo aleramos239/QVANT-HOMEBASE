@@ -970,6 +970,7 @@ def test_the_shadow_calendar_gives_every_day_of_this_promotion_oldest_first_with
     days = got.json()["days"]
     assert [d["date"] for d in days] == [(dt.date(2026, 9, 17) + dt.timedelta(days=i)).isoformat() for i in range(12)]
     assert days[-2]["trades"] == [t] and days[-1]["trades"] == [] and set(days[0]) == {"date", "state", "why", "net", "match", "trades"}
+    assert got.json()["stats"]["trades"] == 6 and got.json()["stats"]["since"] == "2026-09-17"      # this promotion's days only
     assert c.get("/api/tester/desklab/shadow", params={"name": "../x"}).status_code == 404
 
 
@@ -987,6 +988,22 @@ def test_the_shadow_calendar_shows_a_booked_days_shadow_copy_never_its_real_trad
     store.put_shadow_day("nq_bars", a_day("2026-09-28", sha256="other", promoted_utc="old", trades=[real]), at / "elsewhere")
     days = c.get("/api/tester/desklab/shadow", params={"name": "nq_bars"}, headers=DESK).json()["days"]
     assert [(d["date"], d["trades"], d["net"]) for d in days] == [("2026-09-28", [paper], -12.0)]
+
+
+def test_the_shadow_forward_record_is_per_contract_with_the_reports_sharpe_on_traded_days_only():
+    from homebase.backtest import report
+    from homebase.backtest.stats.stats import _sharpe
+    from homebase.charts.tester_routes.desklab import shadow_stats
+    days = [{"date": "2026-10-01", "trades": [{"qty": 2, "net": 400.0}, {"qty": 1, "net": -100.0}]},     # per contract +200, -100
+            {"date": "2026-10-02", "trades": []},                                                    # no trade: no $0 day
+            {"date": "2026-10-07", "trades": [{"qty": 1, "net": 300.0}, {"qty": 0, "net": 999.0}]}]  # a qty-0 row is no trade
+    s = shadow_stats(days)
+    assert (s["trades"], s["since"], s["net"], round(s["win_rate"])) == (3, "2026-10-01", 400.0, 67)
+    assert s["rr_label"] == "1:2.50" and s["per_week"] == 3.0                                       # 3 trades over 7 days
+    assert s["sharpe"] == _sharpe(report.daily_pnl([{"date": "a", "net": 100.0}, {"date": "b", "net": 300.0}]))
+    one = shadow_stats([{"date": "2026-10-01", "trades": [{"qty": 1, "net": 50.0}]}])
+    assert one["sharpe"] is None and one["rr"] is None and one["rr_label"] == "—"                     # one day, no loss yet
+    assert shadow_stats([])["trades"] == 0 and shadow_stats([])["per_week"] is None
 
 
 def test_a_promote_needs_no_words(c, drafts_dir, make_run):
