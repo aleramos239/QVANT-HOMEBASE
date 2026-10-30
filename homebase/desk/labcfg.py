@@ -65,13 +65,13 @@ from dataclasses import asdict, dataclass
 
 from ..config import AppCfg, StrategyCfg
 from ..contracts import commission_rt, exec_ok
-from ..core.clock import HHMM, hhmm_minutes as _minutes, is_hhmm as _hhmm
+from ..core.clock import HHMM, desk_minutes as _dm, hhmm_minutes as _minutes, is_hhmm as _hhmm, window_minutes
 from ..labrun import store
 
 LAB = "lab"                              # StrategyCfg.kind
 PREFIX = "lab_"                          # desk id = PREFIX + the store name
-FLAT_LATEST = "15:55"                    # version 1: flat no later than this, for every market
-FLAT_EVENING = "23:55"                   # ... and for a same-night evening session (same_night): flat before midnight
+FLAT_LATEST = "16:55"                    # flat no later than this, in the Desk day (18:00 -> the 17:00 close; owner 2026-10-30)
+FLAT_CASH = "15:55"                      # a window that ends at the 16:00 cash close is flat here with no limits typed
 RISK_MOST = 1e9                          # a sanity bound: "at risk per trade" above it is not a dollar amount
 NOTES_KEPT = 200                         # what apply() has to say, until the desk journals it
 
@@ -79,9 +79,9 @@ SAY_TRADES = "Trades a day: a whole number from 1 to 20."
 SAY_QTY = "Contracts: a whole number from 1 to 10."
 SAY_RISK = "At risk per trade: a dollar amount above 0, like 300 or 300.50."
 SAY_LAST = "No new trade after: a time like 11:00, before the flat time."
-SAY_FLAT = "Flat by: a time like 15:55, no later than 15:55."
-SAY_EVENING = "It runs past midnight. The Desk runs it in shadow only for now: it cannot be booked on an account."
-SAY_FLAT_EVENING = "Flat by: a time like 23:55, no later than 23:55."
+SAY_FLAT = "Flat by: a time like 15:55, no later than 16:55."
+SAY_EVENING = ("Its window does not fit one trading day (18:00 to 17:00 ET). The Desk runs it in shadow only: "
+               "it cannot be booked on an account.")
 
 
 def desk_id(name: str) -> str:
@@ -101,8 +101,8 @@ class LabLimits:
     max_trades_day: int      # 1..20
     max_qty: int             # contracts per account: 1..10 when typed (the old form), up to store.OWN_SIZE_MOST when derived
     max_risk_usd: float      # > 0, per trade per account
-    last_entry_et: str       # "HH:MM", >= the record's session_window[0]
-    flat_et: str             # "HH:MM", > last_entry_et, <= "15:55"
+    last_entry_et: str       # "HH:MM", at/after the record's session start in the Desk day (core.clock.desk_minutes)
+    flat_et: str             # "HH:MM", after last_entry_et in the Desk day, by 16:55
 
 
 def _whole(v, lo: int, hi: int) -> bool:
@@ -121,38 +121,35 @@ def _number(v, lo: float, hi: float) -> bool:
 
 def evening(rec) -> bool:
     """The record's session opens the evening before its date (a window start with a leading "-", e.g. "-20:00": the
-    tester reads such windows, labrun hosts them in SHADOW). The Desk's own time-of-day logic (accept from / until,
-    flat, the engine's clock checks) cannot order a session across midnight, so such a record is never booked on an
-    account: no limits, no book, no settings change while its session runs (2026-10-11)."""
+    tester reads such windows). Booked like any other when its window fits one Desk day (span)."""
     w = rec.get("session_window") if isinstance(rec, dict) else None
     return (isinstance(w, (list, tuple)) and len(w) == 2 and isinstance(w[0], str) and w[0].startswith("-")
             and _hhmm(w[0][1:]) and _hhmm(w[1]))
 
 
-def same_night(rec) -> bool:
-    """An evening session that ends at midnight (["-18:00", "00:00"]): it opens, trades and is flat on ONE calendar
-    evening, so the Desk's same-day clock strings order it (from <= now <= until <= flat, all 18:00-23:55), and the
-    Desk day (engine._day_of_et: rolls at 18:00 ET) is the runner's session date. It may be booked, flat by 23:55
-    (owner, 2026-10-30). An evening window that ends on the date itself (["-20:00", "16:00"]) crosses midnight: still
-    shadow only."""
-    w = rec["session_window"] if evening(rec) else None    # (from 18:00: the Desk day opens then, engine_lab.lab_past_flat)
-    return w is not None and w[0][1:] >= "18:00" and w[1] == "00:00"
-
-
-def flat_latest(rec) -> str:
-    """The latest flat time the Desk takes for this record."""
-    return FLAT_EVENING if same_night(rec) else FLAT_LATEST
+def span(rec) -> tuple[int, int] | None:
+    """The record's window as (start, end) minutes into the Desk day (18:00 ET -> 17:00 ET; core.clock.window_minutes):
+    any window inside that day can be booked -- morning, afternoon, evening, overnight across midnight (owner,
+    2026-10-30: "trade at any time"). A window that does not read is the Strategy's default one, as before. None: it
+    reads but does not fit one Desk day: shadow only (no limits, no book)."""
+    w = rec.get("session_window") if isinstance(rec, dict) else None
+    if evening(rec) or (isinstance(w, (list, tuple)) and len(w) == 2 and _hhmm(w[0]) and _hhmm(w[1])):
+        return window_minutes(w)
+    return window_minutes(store.DEFAULT_WINDOW)
 
 
 def default_flat(rec) -> str:
-    """The flat time with no limits typed: the window's end, cut at the latest the Desk takes (a same-night window's
-    "00:00" end is midnight: always past 23:55)."""
-    return FLAT_EVENING if same_night(rec) else min(window(rec)[1], FLAT_LATEST)
+    """The flat time with no limits typed: the window's end -- except an end at the 16:00 cash close (15:56-16:00),
+    which keeps the Desk's 15:55 cut, and an end after 16:55, cut to 16:55."""
+    end = window(rec)[1]
+    if _dm(end) <= _dm(FLAT_CASH):
+        return end
+    return FLAT_CASH if _dm(end) <= _dm("16:00") else min(end, FLAT_LATEST)
 
 
 def window(rec: dict) -> tuple[str, str]:
     """The record's session window as two "HH:MM" strings; the Strategy's default one when it does not read. An
-    evening-before window reads as its clock times (no sign): shown as is, and never usable for limits (see evening)."""
+    evening-before window reads as its clock times (no sign); order them with span / core.clock.desk_minutes."""
     w = rec.get("session_window")
     if evening(rec):
         return w[0][1:], w[1]
@@ -167,19 +164,18 @@ def window_note(rec: dict, limits: LabLimits | None) -> str | None:
     (09:25-16:00) is the tape's, not the trading window, and only a trade still open at the flat time differs from the
     backtest. None when the window ends at or before the flat time."""
     end = window(rec)[1]
-    if same_night(rec):                     # (its "00:00" end is midnight: the runner's own end, after any flat)
-        return None
     flat = limits.flat_et if limits else default_flat(rec)
-    if end <= flat:                                                       # "HH:MM" strings compare as times
+    n = _dm(end) - _dm(flat)                                              # in the Desk day: across midnight too
+    if n <= 0:
         return None
-    n = _minutes(end) - _minutes(flat)
     return (f"Its window runs to {end} but it closes its trades at {flat}. A trade still open then closes "
             f"{n} minute{'' if n == 1 else 's'} before the backtest's, so that day will not match.")
 
 
 def parse_limits(body, rec: dict) -> LabLimits:
     """The limits the owner typed, checked. A ValueError carries the one sentence the dialog shows."""
-    if evening(rec) and not same_night(rec):
+    sp = span(rec)
+    if sp is None:
         raise ValueError(SAY_EVENING)
     if not isinstance(body, dict):
         raise ValueError(SAY_TRADES)
@@ -193,9 +189,9 @@ def parse_limits(body, rec: dict) -> LabLimits:
         raise ValueError(SAY_RISK)
     if not _hhmm(last):
         raise ValueError(SAY_LAST)
-    if not _hhmm(flat) or flat > flat_latest(rec):
-        raise ValueError(SAY_FLAT_EVENING if same_night(rec) else SAY_FLAT)
-    if not window(rec)[0] <= last < flat:                # "HH:MM" strings compare as times
+    if not _hhmm(flat) or _dm(flat) > _dm(FLAT_LATEST):
+        raise ValueError(SAY_FLAT)
+    if not sp[0] <= _dm(last) < _dm(flat):               # in the Desk day's order (18:00 first): across midnight too
         raise ValueError(SAY_LAST)
     return LabLimits(trades, qty, float(risk), last, flat)
 
@@ -210,7 +206,7 @@ def _limits_from(saved, rec: dict) -> LabLimits | None:
 
 def _before(hhmm: str) -> str:
     """One minute earlier ("HH:MM")."""
-    m = max(0, _minutes(hhmm) - 1)
+    m = (_minutes(hhmm) - 1) % 1440                     # (00:00 -> 23:59)
     return f"{m // 60:02d}:{m % 60:02d}"
 
 
@@ -218,20 +214,20 @@ def derive_limits(rec: dict) -> LabLimits | None:
     """The limits a strategy carries itself (2026-10-10, owner: "the strategy should be copy paste ... i dont want limits
     per strategy"). Nothing is typed: the size is the one it was backtested at, the trades a day are the most it took in
     one day of that backtest (`auto_limits`, written when it was promoted), it may enter any time inside its own window
-    and is flat when the window ends (never later than 15:55). The dollars at risk are not capped (0 = not set): its
+    and is flat when the window ends (default_flat: by 16:55). The dollars at risk are not capped (0 = not set): its
     stop is in its code. None for a record without `auto_limits` (an older promotion): the owner sets limits as before."""
     a = rec.get("auto_limits") if isinstance(rec, dict) else None
-    if not isinstance(a, dict) or (evening(rec) and not same_night(rec)):    # (one that crosses midnight: shadow only)
+    sp = span(rec)
+    if not isinstance(a, dict) or sp is None:    # (a window that does not fit one Desk day: shadow only)
         return None
     n, qty = a.get("max_trades_day"), rec.get("qty")
     if rec.get("own_size") is True:              # it sizes each trade itself: the size set on the account is its most
         qty = store.OWN_SIZE_MOST
     if not _whole(n, 1, 20) or not _whole(qty, 1, 10 ** 6):
         return None
-    start = window(rec)[0]
     flat = default_flat(rec)
     last = _before(flat)
-    if not start <= last < flat:
+    if not sp[0] <= _dm(last) < _dm(flat):
         return None
     return LabLimits(n, min(qty, store.OWN_SIZE_MOST), 0.0, last, flat)
 

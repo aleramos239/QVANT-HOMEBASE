@@ -149,7 +149,7 @@ def test_the_runner_books_a_strategy_with_its_own_limits_and_lets_typed_ones_win
     assert deskside.booked(s, rec()) is None                               # no auto_limits on the record: no limits, no book
     typed = {**s, "limits": LIMITS}
     assert deskside.limits_of(typed, r) == LIMITS
-    assert deskside.booked({**s, "limits": {**LIMITS, "flat_et": "16:30"}}, r) is None     # typed and unreadable: not the own ones
+    assert deskside.booked({**s, "limits": {**LIMITS, "flat_et": "16:56"}}, r) is None     # typed and unreadable: not the own ones
 
 
 def test_a_strategy_may_say_its_own_most_trades_a_day():

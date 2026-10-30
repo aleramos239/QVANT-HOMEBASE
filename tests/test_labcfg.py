@@ -58,7 +58,7 @@ BAD = {"max_trades_day": ([0, 21, 1.5, "2", None, True], "Trades a day: a whole 
        "max_risk_usd": ([0, -5, "300", None, True, float("nan"), float("inf")], "At risk per trade: a dollar amount above 0, like 300 or 300.50."),
        "last_entry_et": (["", "11", "25:00", "11:60", None, 1100, "15:55", "16:10", "09:24"],
                          "No new trade after: a time like 11:00, before the flat time."),
-       "flat_et": (["", "4pm", "24:00", None, "15:56", "16:00"], "Flat by: a time like 15:55, no later than 15:55.")}
+       "flat_et": (["", "4pm", "24:00", None, "16:56", "17:00"], "Flat by: a time like 15:55, no later than 16:55.")}
 
 
 @pytest.mark.parametrize("key", list(BAD))
@@ -447,10 +447,10 @@ def test_a_sidecar_with_book_rows_and_no_limits_has_no_book():
 
 
 def test_limits_on_disk_that_do_not_parse_mean_no_book_and_the_sidecar_is_left_as_it_is():
-    """The reviewer's probe 1: the same promotion, flat_et 16:30 (no longer allowed), a row of 5."""
+    """The reviewer's probe 1: the same promotion, flat_et 16:56 (no longer allowed), a row of 5."""
     cfg = desk_cfg()
     store.put(rec())
-    disk = side(book=[{"account": "eval1", "qty": 5}], limits={**L3, "flat_et": "16:30"})
+    disk = side(book=[{"account": "eval1", "qty": 5}], limits={**L3, "flat_et": "16:56"})
     store.put_desk("pp_orb", disk)
     labcfg.overlay(cfg)
     assert "lab_pp_orb" not in cfg.book and labcfg.limits_of(cfg, "lab_pp_orb") is None

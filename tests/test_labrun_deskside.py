@@ -368,7 +368,7 @@ def test_a_sidecar_gives_a_book_only_when_it_reads_is_this_promotions_has_limits
     assert booked({**side_, "book": []}, REC) is None                        # no account: shadow
     assert booked({**side_, "book": None}, REC) is None
     assert booked({**side_, "limits": None}, REC) is None                    # no limits: no book
-    assert booked({**side_, "limits": {**LIMITS, "flat_et": "16:30"}}, REC) is None      # limits that do not read
+    assert booked({**side_, "limits": {**LIMITS, "flat_et": "16:56"}}, REC) is None      # limits that do not read
     rows = [{"account": "a1", "qty": 0}, {"account": "", "qty": 1}, {"account": 5, "qty": 1}, "row", {"account": "a3", "qty": True},
             {"account": "a4", "qty": 1}, {"account": "a4", "qty": 2}]
     assert booked({**side_, "book": rows}, REC) == ["a4"]                    # only a row that is a booking, once

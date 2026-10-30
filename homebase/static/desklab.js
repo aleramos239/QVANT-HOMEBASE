@@ -163,7 +163,7 @@
   function sessionText(row) {
     var w = row && row.session_window;
     if (Array.isArray(w) && w.length === 2 && typeof w[0] === "string" && w[0].charAt(0) === "-" && TIME_RE.test(w[0].slice(1)) && TIME_RE.test(w[1])) {
-      return clock(w[0].slice(1)) + " the evening before-" + clock(w[1]) + " ET";      // opens the evening before (shadow only)
+      return clock(w[0].slice(1)) + " the evening before-" + clock(w[1]) + " ET";      // opens the evening before
     }
     return Array.isArray(w) && w.length === 2 && TIME_RE.test(w[0]) && TIME_RE.test(w[1]) ? clock(w[0]) + "-" + clock(w[1]) + " ET" : "";
   }
@@ -590,10 +590,10 @@
   var SAY_QTY = "Contracts: a whole number from 1 to 10.";
   var SAY_RISK = "At risk per trade: a dollar amount above 0, like 300 or 300.50.";
   var SAY_LAST = "No new trade after: a time like 11:00, before the flat time.";
-  var SAY_FLAT = "Flat by: a time like 15:55, no later than 15:55.";
-  var FLAT_LATEST = "15:55";
-  var SAY_FLAT_EVENING = "Flat by: a time like 23:55, no later than 23:55.";
-  var FLAT_EVENING = "23:55";        // an evening session ("-18:00" to "00:00") is flat by 23:55 (labcfg.FLAT_EVENING)
+  var SAY_FLAT = "Flat by: a time like 15:55, no later than 16:55.";
+  var FLAT_LATEST = "16:55";
+  // minutes into the Desk day: 18:00 ET = 0, midnight = 360, 16:55 = 1375 (core.clock.desk_minutes): times order across midnight
+  function deskMin(hhmm) { return ((parseInt(hhmm.slice(0, 2), 10) * 60 + parseInt(hhmm.slice(3), 10)) - 1080 + 1440) % 1440; }
   var HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
   function deskId(name) {
@@ -742,7 +742,8 @@
     return n >= lo && n <= hi ? n : null;
   }
   // The same checks the Desk makes (labcfg.parse_limits), with its sentences, one per field. `start` = the strategy's
-  // session start ("HH:MM", or "-HH:MM" for one that opens the evening before: flat by 23:55); the Desk is the judge when it differs. -> {errors: {trades?, qty?, risk?, last?, flat?}, body | null}.
+  // session start ("HH:MM", or "-HH:MM" for one that opens the evening before); times compare in the Desk day's order
+  // (18:00 -> 17:00 ET). The Desk is the judge when it differs. -> {errors: {trades?, qty?, risk?, last?, flat?}, body | null}.
   // The body is exactly what the fields say: nothing is rounded, padded or filled in.
   function checkLimits(fields, start) {
     var f = isObj(fields) ? fields : {}, errors = {}, body = {};
@@ -757,11 +758,11 @@
     if (risk === null) errors.risk = SAY_RISK; else body.max_risk_usd = risk;
     var last = text(f.last).trim(), flat = text(f.flat).trim();
     if (!HHMM.test(last)) errors.last = SAY_LAST; else body.last_entry_et = last;
-    var eve = text(start).charAt(0) === "-", st = eve ? text(start).slice(1) : text(start);
-    if (!HHMM.test(flat) || flat > (eve ? FLAT_EVENING : FLAT_LATEST)) errors.flat = eve ? SAY_FLAT_EVENING : SAY_FLAT; else body.flat_et = flat;
+    var st = text(start).charAt(0) === "-" ? text(start).slice(1) : text(start);
+    if (!HHMM.test(flat) || deskMin(flat) > deskMin(FLAT_LATEST)) errors.flat = SAY_FLAT; else body.flat_et = flat;
     if (!errors.last && !errors.flat) {
       var from = HHMM.test(st) ? st : "";      // not known when the chart service is down: the Desk judges that part
-      if (!((from === "" || from <= last) && last < flat)) errors.last = SAY_LAST;
+      if (!((from === "" || deskMin(from) <= deskMin(last)) && deskMin(last) < deskMin(flat))) errors.last = SAY_LAST;
     }
     return { errors: errors, body: Object.keys(errors).length ? null : body };
   }

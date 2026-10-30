@@ -265,13 +265,13 @@ def test_limits_are_set_shown_and_kept_in_the_sidecar(client):
     assert store.get_desk("pp_orb")["limits"]["max_qty"] == 3
 
 
-def test_a_flat_time_after_1555_is_refused_by_the_route_also_for_a_window_to_1600(client):
-    """Wave review N8: the window note never lifts the cap -- the route refuses a flat time later than 15:55."""
+def test_a_flat_time_after_1655_is_refused_by_the_route_also_for_a_window_to_1600(client):
+    """Wave review N8: the window note never lifts the cap -- the route refuses a flat time later than 16:55."""
     store.put(rec(session_window=["09:25", "16:00"]))
     asyncio.run(client.labdesk.refresh())
-    for flat in ("15:56", "16:00"):
+    for flat in ("16:56", "17:00"):
         r = set_limits(client, flat_et=flat)
-        assert (r.status_code, r.json()["detail"]) == (400, "Flat by: a time like 15:55, no later than 15:55.")
+        assert (r.status_code, r.json()["detail"]) == (400, "Flat by: a time like 15:55, no later than 16:55.")
     assert status(client)["lab"]["limits"] is None and store.get_desk("pp_orb") is None
     assert set_limits(client).json()["limits"]["flat_et"] == "15:55"
 
@@ -305,7 +305,7 @@ def test_a_window_to_1555_answers_with_no_note(client):
     ({"max_qty": 11}, "Contracts: a whole number from 1 to 10."),
     ({"max_risk_usd": 0}, "At risk per trade: a dollar amount above 0, like 300 or 300.50."),
     ({"last_entry_et": "15:55"}, "No new trade after: a time like 11:00, before the flat time."),
-    ({"flat_et": "16:00"}, "Flat by: a time like 15:55, no later than 15:55.")])
+    ({"flat_et": "17:00"}, "Flat by: a time like 15:55, no later than 16:55.")])
 def test_bad_limits_are_refused_with_their_sentence_and_nothing_is_kept(client, change, sentence):
     r = set_limits(client, **change)
     assert r.status_code == 400 and r.json()["detail"] == sentence
@@ -896,7 +896,7 @@ def test_lowering_most_contracts_below_a_booked_size_is_refused_and_nothing_chan
 # ---- item 2 (the reviewer's probe 1)
 def test_a_sidecar_whose_limits_no_longer_read_shows_check_has_no_book_and_is_left_on_disk(paths):
     store.put(rec(enabled=True))
-    disk = {"mark": MARK, "limits": {**L3, "flat_et": "16:30"}, "book": [{"account": "eval1", "qty": 5}], "written_utc": "x"}
+    disk = {"mark": MARK, "limits": {**L3, "flat_et": "16:56"}, "book": [{"account": "eval1", "qty": 5}], "written_utc": "x"}
     store.put_desk("pp_orb", disk)
     app = make_client()
     with TestClient(app, base_url="http://127.0.0.1:8850") as c:

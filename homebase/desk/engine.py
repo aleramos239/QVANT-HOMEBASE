@@ -46,6 +46,7 @@ from ..config import AppCfg, StrategyCfg, assignments
 from ..contracts import point_value, tick_size
 from .levels import AccountLeg, Geometry, account_leg
 from ..core import atomic
+from ..core.clock import desk_minutes
 from ..paths import state_dir
 from .dayrules import LOCK_LOCK, LOCK_TAKE, DayBook, DayRules, merge_rules, standing, take_level
 from .daystate import (KILL_POLL_N, KILL_POLL_S, MARKET_OUT_FAILED, PLACING_UNKNOWN, TERMINAL, WORKING, DayState,
@@ -1284,7 +1285,7 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
         flat_et (15:55), for each such run."""
         for at in (cfg.cancel_et, cfg.flat_et):
             key = (st.date, st.strategy, st.account, at)
-            if now >= _hhmm(at) and key not in self._needs_check_said:
+            if desk_minutes(now.strftime("%H:%M")) >= desk_minutes(at) and key not in self._needs_check_said:   # Desk-day order
                 self._needs_check_said.add(key)
                 self.journal("killed_run_needs_check", strategy=st.strategy, account=st.account,
                              status=st.status, at=at)

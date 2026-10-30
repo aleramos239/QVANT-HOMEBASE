@@ -665,21 +665,22 @@ test('checkLimits: "No new trade after: a time like 11:00, before the flat time.
   assert.equal(D.checkLimits(F({ last: '15:54' })).errors.last, undefined);
 });
 
-test('checkLimits: "Flat by: a time like 15:55, no later than 15:55."', () => {
-  const say = 'Flat by: a time like 15:55, no later than 15:55.';
-  for (const bad of ['', '3:55', '15:56', '16:00', '25:00', 'close', '15:55 ET']) assert.equal(D.checkLimits(F({ flat: bad })).errors.flat, say, JSON.stringify(bad));
+test('checkLimits: "Flat by: a time like 15:55, no later than 16:55."', () => {
+  const say = 'Flat by: a time like 15:55, no later than 16:55.';
+  for (const bad of ['', '3:55', '16:56', '17:00', '25:00', 'close', '15:55 ET']) assert.equal(D.checkLimits(F({ flat: bad })).errors.flat, say, JSON.stringify(bad));
   assert.equal(D.checkLimits(F({ flat: '15:55' })).errors.flat, undefined);
   assert.equal(D.checkLimits(F({ flat: '12:00', last: '11:00' })).errors.flat, undefined);
 });
 
-test('checkLimits: an evening session ("-18:00") is flat by 23:55 at the latest, its last entry from 18:00', () => {
-  const say = 'Flat by: a time like 23:55, no later than 23:55.';
-  for (const bad of ['23:56', '24:00', ''])  assert.equal(D.checkLimits(F({ flat: bad, last: '23:00' }), '-18:00').errors.flat, say, bad);
-  const ok = D.checkLimits(F({ flat: '23:55', last: '23:00' }), '-18:00');
-  assert.deepEqual([ok.errors, ok.body.flat_et], [{}, '23:55']);
-  assert.equal(D.checkLimits(F({ flat: '00:00', last: '23:00' }), '-18:00').body, null);      // midnight is not after 23:00
-  assert.equal(D.checkLimits(F({ flat: '23:55', last: '17:00' }), '-18:00').errors.last, 'No new trade after: a time like 11:00, before the flat time.');
-  assert.equal(D.checkLimits(F({ flat: '23:55', last: '23:00' }), '09:25').errors.flat, 'Flat by: a time like 15:55, no later than 15:55.');
+test('checkLimits: times order in the Desk day (18:00 -> 17:00), across midnight; flat by 16:55', () => {
+  const sayF = 'Flat by: a time like 15:55, no later than 16:55.', sayL = 'No new trade after: a time like 11:00, before the flat time.';
+  for (const [last, flat, start] of [['23:00', '03:00', '-20:00'], ['23:59', '00:00', '-18:00'], ['16:30', '16:55', '16:00'], ['02:00', '09:30', '-18:00']]) {
+    const ok = D.checkLimits(F({ last, flat }), start);
+    assert.deepEqual([ok.errors, ok.body.flat_et], [{}, flat], last + ' ' + flat);
+  }
+  for (const flat of ['16:56', '17:30']) assert.equal(D.checkLimits(F({ flat, last: '11:00' })).errors.flat, sayF, flat);
+  assert.equal(D.checkLimits(F({ flat: '03:00', last: '19:00' }), '-20:00').errors.last, sayL);      // before its start
+  assert.equal(D.checkLimits(F({ flat: '23:00', last: '03:00' }), '-20:00').errors.last, sayL);      // after its flat
 });
 
 test('checkLimits: every wrong field is said at once, one sentence each, and nothing is posted', () => {

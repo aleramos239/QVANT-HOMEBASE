@@ -810,14 +810,14 @@ const fill = (t, f) => { for (const [id, v] of Object.entries(f)) t.el(id).value
 test('Save with a wrong field sends nothing and says, under that field, the table\'s sentence', async () => {
   const t = load();
   t.api.openLabLimits('lab_nq_orb');
-  fill(t, { llTrades: '0', llQty: '11', llRisk: '0', llLast: '9:30', llFlat: '16:00' });
+  fill(t, { llTrades: '0', llQty: '11', llRisk: '0', llLast: '9:30', llFlat: '17:00' });
   await t.api.saveLabLimits();
   assert.deepEqual(t.posts, []);
   assert.equal(t.els.llTradesErr.textContent, 'Trades a day: a whole number from 1 to 20.');
   assert.equal(t.els.llQtyErr.textContent, 'Contracts: a whole number from 1 to 10.');
   assert.equal(t.els.llRiskErr.textContent, 'At risk per trade: a dollar amount above 0, like 300 or 300.50.');
   assert.equal(t.els.llLastErr.textContent, 'No new trade after: a time like 11:00, before the flat time.');
-  assert.equal(t.els.llFlatErr.textContent, 'Flat by: a time like 15:55, no later than 15:55.');
+  assert.equal(t.els.llFlatErr.textContent, 'Flat by: a time like 15:55, no later than 16:55.');
   for (const id of ['llTradesErr', 'llQtyErr', 'llRiskErr', 'llLastErr', 'llFlatErr']) assert.equal(t.els[id].hidden, false, id);
   assert.equal(t.els.llTrades.attrs['aria-invalid'], 'true');
   // fixing them clears the sentences
@@ -1027,7 +1027,7 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=46"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=47"><\/script>/);
   assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=5"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));

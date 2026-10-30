@@ -35,6 +35,7 @@ from ..broker.base import BrokerAdapter, OrderRequest, OrderResult
 from ..config import StrategyCfg, assignments
 from ..contracts import tick_size
 from ..core import atomic
+from ..core.clock import desk_minutes
 from .daystate import (KILL_POLL_N, KILL_POLL_S, MARKET_OUT_FAILED, PLACING_UNKNOWN, TERMINAL, WORKING, DayState,
                        _hhmm, _to_tick)
 
@@ -67,17 +68,24 @@ LAB_NO_POSITION_READ = "The Desk cannot read this account's position."
 LAB_NO_STOP_ID = "Check it: the Desk does not know this trade's stop order."
 LAB_BAD_RECORD = "The Desk cannot read yesterday's record for this account."
 LAB_OLD_ORDER_WORKING = "An old order of this trade is still working. Cancel it first."
-EVENING_FROM = dt.time(18, 0)                  # the Desk day opens here (engine._day_of_et): a window from here is an evening one
+LAB_LOST_ACT = "check it — this trade's record was lost: nothing is sent or cancelled for it"
+
+
+def _desk_min(t: dt.time) -> int:
+    """A clock time as minutes into the Desk day (18:00 ET = 0 ... 17:00 = 1380; core.clock.desk_minutes)."""
+    return (t.hour * 60 + t.minute - 18 * 60) % 1440
 
 
 def lab_past_flat(cfg: StrategyCfg, now: dt.time) -> bool:
-    """At or after the strategy's flat time, in the order of the Desk day (18:00 ET -> 18:00). A same-night evening
-    session (accept from 18:00 or later, flat by 23:55) is past its flat time after midnight too: a position its 23:55
-    flatten did not close is flattened again until the day ends, never left alone at 00:00 (owner, 2026-10-30)."""
-    if _hhmm(cfg.accept_from_et) >= EVENING_FROM and now < EVENING_FROM:
-        return True
-    return now >= _hhmm(cfg.flat_et)
-LAB_LOST_ACT = "check it — this trade's record was lost: nothing is sent or cancelled for it"
+    """At or after the strategy's flat time, in the order of the Desk day (18:00 ET -> 17:00 the next day; owner
+    2026-10-30: any window in it can trade). A flat before midnight is past after midnight too, so an open position is
+    flattened again until the day ends; the 17:00-18:00 halt is past every flat."""
+    return _desk_min(now) >= desk_minutes(cfg.flat_et)
+
+
+def lab_in_window(cfg: StrategyCfg, hhmm: str) -> bool:
+    """`hhmm` (the minute) is inside the entry window accept_from_et .. accept_until_et, in the Desk day's order."""
+    return desk_minutes(cfg.accept_from_et) <= desk_minutes(hhmm) <= desk_minutes(cfg.accept_until_et)
 LAB_PLACED_CAP = 50                            # shortcut: placements a day per account, filled or not, before the
                                                # daily limit stops it (a runaway re-placer); raise if a strategy needs more
 LAB_NET_AGAIN_MS = 2000                        # a position read that disagrees counts again after this long (M2)
@@ -1061,7 +1069,7 @@ class LabMixin:
             return cfg, LAB_KILLED
         now = self.now_et()
         hhmm = now.strftime("%H:%M")                 # the door's own rule, by the minute (labrun/door.py)
-        if lab_past_flat(cfg, now.time()) or hhmm > cfg.accept_until_et or hhmm < cfg.accept_from_et:
+        if lab_past_flat(cfg, now.time()) or not lab_in_window(cfg, hhmm):
             return cfg, LAB_TOO_LATE
         if not self.cfg.armed or cfg.shadow:
             return cfg, LAB_DISARMED

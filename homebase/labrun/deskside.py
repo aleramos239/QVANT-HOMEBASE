@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import time
 
-from ..core.clock import HHMM as _HHMM, is_hhmm as _hhmm
+from ..core.clock import HHMM as _HHMM, desk_minutes as _dm, is_hhmm as _hhmm, window_minutes
 from ..core.num import finite_no_overflow as _num, is_int as _whole
 from . import store
 
@@ -45,8 +45,8 @@ SILENT_S = 15.0                  # nothing on the Desk's stream for this long: i
 FIELDS = ("status", "fill_px", "fill_sl", "fill_tp", "fill_ms")      # what an update carries (shadowfills.FIELDS)
 WORKING, CANCELLED = ("working", None, None, None, None), ("cancelled", None, None, None, None)
 SIDE = {"Buy": "long", "Sell": "short"}
-FLAT_LATEST = "15:55"            # the Desk's own bound on the flat time (labcfg.FLAT_LATEST)
-FLAT_EVENING = "23:55"           # ... for a same-night evening session (labcfg.FLAT_EVENING)
+FLAT_LATEST = "16:55"            # the Desk's own bound on the flat time (labcfg.FLAT_LATEST)
+FLAT_CASH = "15:55"              # the no-limits flat of a window that ends at the 16:00 cash close (labcfg.FLAT_CASH)
 
 
 def desk_id(name: str) -> str:
@@ -54,25 +54,15 @@ def desk_id(name: str) -> str:
     return PREFIX + name
 
 
-def _evening(w) -> bool:
-    """A window whose start has a leading "-": the session opens the evening before its date (labcfg.evening)."""
-    return (isinstance(w, (list, tuple)) and len(w) == 2 and isinstance(w[0], str) and w[0].startswith("-")
-            and _hhmm(w[0][1:]) and _hhmm(w[1]))
-
-
-def _same_night(w) -> bool:
-    """An evening window that ends at midnight: opens, trades and is flat on one calendar evening (labcfg.same_night).
-    It may be booked; an evening window that ends on the date itself crosses midnight and stays shadow only."""
-    return _evening(w) and w[0][1:] >= "18:00" and w[1] == "00:00"
-
-
-def _start_latest(w) -> tuple[str, str] | None:
-    """(the window's start as a clock time, the latest flat the Desk takes) as labcfg.window / flat_latest read them;
-    None for a window that crosses midnight (no Desk limits: shadow only)."""
-    if _evening(w):
-        return (w[0][1:], FLAT_EVENING) if _same_night(w) else None
-    ok = isinstance(w, (list, tuple)) and len(w) == 2 and _hhmm(w[0]) and _hhmm(w[1])
-    return (w[0] if ok else store.DEFAULT_WINDOW[0]), FLAT_LATEST
+def _span_end(w) -> tuple[tuple[int, int], str] | None:
+    """((start, end) minutes into the Desk day, the window's end clock) as labcfg.span / window read them; None for a
+    window that reads but does not fit one Desk day (no Desk limits: shadow only)."""
+    eve = isinstance(w, (list, tuple)) and len(w) == 2 and isinstance(w[0], str) and w[0].startswith("-") \
+        and _hhmm(w[0][1:]) and _hhmm(w[1])
+    if not (eve or (isinstance(w, (list, tuple)) and len(w) == 2 and _hhmm(w[0]) and _hhmm(w[1]))):
+        w = store.DEFAULT_WINDOW
+    sp = window_minutes(w)
+    return (sp, w[1]) if sp else None
 
 
 def limits_read(limits, rec: dict) -> bool:
@@ -80,43 +70,41 @@ def limits_read(limits, rec: dict) -> bool:
     that do not read are no limits, and with no limits there is no book."""
     if not isinstance(limits, dict):
         return False
-    sl = _start_latest(rec.get("session_window"))
-    if sl is None:                               # crosses midnight: no Desk limits (labcfg.parse_limits), shadow only
+    se = _span_end(rec.get("session_window"))
+    if se is None:                               # does not fit one Desk day: no Desk limits (labcfg.parse_limits)
         return False
-    start, latest = sl
     trades, qty, risk = limits.get("max_trades_day"), limits.get("max_qty"), limits.get("max_risk_usd")
     last, flat = limits.get("last_entry_et"), limits.get("flat_et")
     return (_whole(trades) and 1 <= trades <= 20 and _whole(qty) and 1 <= qty <= 10
-            and _num(risk) and 0 < risk <= 1e9 and _hhmm(last) and _hhmm(flat) and flat <= latest
-            and start <= last < flat)
+            and _num(risk) and 0 < risk <= 1e9 and _hhmm(last) and _hhmm(flat) and _dm(flat) <= _dm(FLAT_LATEST)
+            and se[0][0] <= _dm(last) < _dm(flat))
 
 
 def _before(hhmm: str) -> str:
-    m = max(0, int(hhmm[:2]) * 60 + int(hhmm[3:]) - 1)
+    m = (int(hhmm[:2]) * 60 + int(hhmm[3:]) - 1) % 1440
     return f"{m // 60:02d}:{m % 60:02d}"
 
 
 def own_limits(rec: dict) -> dict | None:
     """The limits a strategy carries itself, as the Desk derives them (labcfg.derive_limits; a test runs both over the
     same cases): its tested size, the most trades it took in one day of its backtest, any entry inside its window,
-    flat when the window ends (never later than 15:55), no dollar cap (0 = not set). None for a record without
+    flat when the window ends (by 16:55; one ending at the 16:00 close: 15:55), no dollar cap (0 = not set). None for a record without
     `auto_limits` (an older promotion), or one that does not read."""
     a = rec.get("auto_limits") if isinstance(rec, dict) else None
     if not isinstance(a, dict):
         return None
     n, qty, w = a.get("max_trades_day"), rec.get("qty"), rec.get("session_window")
-    sl = _start_latest(w)
-    if sl is None:                               # crosses midnight: no Desk limits (labcfg.derive_limits), shadow only
+    se = _span_end(w)
+    if se is None:                               # does not fit one Desk day: no Desk limits (labcfg.derive_limits)
         return None
     if rec.get("own_size") is True:              # it sizes each trade itself: the size set on the account is its most
         qty = store.OWN_SIZE_MOST
     if not (_whole(n) and 1 <= n <= 20 and _whole(qty) and qty >= 1):
         return None
-    start, latest = sl
-    end = w[1] if isinstance(w, (list, tuple)) and len(w) == 2 and _hhmm(w[0]) and _hhmm(w[1]) else store.DEFAULT_WINDOW[1]
-    flat = latest if _same_night(w) else min(end, latest)    # (a same-night "00:00" end is midnight, after 23:55)
+    (start, _), end = se
+    flat = end if _dm(end) <= _dm(FLAT_CASH) else FLAT_CASH if _dm(end) <= _dm("16:00") else min(end, FLAT_LATEST)
     last = _before(flat)
-    if not start <= last < flat:
+    if not start <= _dm(last) < _dm(flat):
         return None
     return {"max_trades_day": n, "max_qty": min(qty, store.OWN_SIZE_MOST), "max_risk_usd": 0.0, "last_entry_et": last, "flat_et": flat}
 

@@ -59,6 +59,7 @@ from .. import config as config_mod
 from . import labcfg
 from ..config import AppCfg, assignments
 from ..contracts import commission_rt, micro_of, point_value, tick_size
+from ..core.clock import desk_minutes, window_minutes
 from ..core.num import is_int as _whole
 from . import engine_lab
 from .acctsize import OVER_MOST, ROW_NO_SIZE, most_default, row_size
@@ -474,18 +475,16 @@ class LabDesk:
 
     # ------------------------------------------------------------ settings
     def _in_session(self, rec: dict) -> bool:
-        """Weekdays, ET, between the strategy's window start and end: the runner is (or may be) hosting its day."""
+        """A weekday's Desk day (rolls at 18:00 ET), between the strategy's window start and end in its order: the runner
+        is (or may be) hosting its day. An evening window runs from that evening; one that crosses midnight to its end."""
         w = rec.get("session_window")
-        now = self.engine.now_et()
-        if labcfg.evening(rec):                  # opens the evening before: from that evening, and until the end on its date
-            a, b = (dt.time.fromisoformat(x) for x in labcfg.window(rec))
-            tomorrow = (now + dt.timedelta(days=1)).weekday() < 5
-            return (now.time() >= a and tomorrow) or (now.time() < b and now.weekday() < 5)
-        try:
-            a, b = (dt.time.fromisoformat(str(x)[:5]) for x in w)
-        except (TypeError, ValueError):
+        sp = window_minutes(w) if isinstance(w, (list, tuple)) and len(w) == 2 \
+            and isinstance(w[0], str) and isinstance(w[1], str) else None
+        if sp is None:
             return False
-        return now.weekday() < 5 and a <= now.time() < b
+        now = self.engine.now_et()
+        day = now.date() + dt.timedelta(days=now.hour >= 18)             # engine._day_of_et
+        return day.weekday() < 5 and sp[0] <= desk_minutes(now.strftime("%H:%M")) < sp[1]
 
     async def set_settings(self, name: str, body) -> dict:
         """The settings the strategy declared adjustable (record `settings`), written into the record's params; the
@@ -716,7 +715,7 @@ class LabDesk:
         mine = self.is_lab(name)
         if mine:
             rec = labcfg.record_of(self.cfg, name) or {}
-            if rows and labcfg.evening(rec) and not labcfg.same_night(rec):     # crosses midnight: shadow only
+            if rows and labcfg.span(rec) is None:          # does not fit one Desk day (18:00 -> 17:00): shadow only
                 raise Refused(labcfg.SAY_EVENING)
             limits = labcfg.limits_of(self.cfg, name)
             if rows and limits is None:
