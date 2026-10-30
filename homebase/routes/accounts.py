@@ -80,10 +80,12 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
 
     # ------------------------------------------------------------ Vest: the wallet login
     vest_pending: dict[str, float] = {}      # wallet address -> when its challenge was handed out
+    vest_registering: set[str] = set()       # login keys whose register is in flight: their session stays
 
     async def _vest_forget(key: str) -> None:
-        """A wallet that never signed keeps no session (nothing saved under it, no entry on it)."""
-        if secrets_store.get_credentials(key) or any(a.keyring_key == key for a in cfg.accounts.values()):
+        """A wallet that never signed keeps no session (nothing saved under it, no entry on it, no register running)."""
+        if (key in vest_registering or secrets_store.get_credentials(key)
+                or any(a.keyring_key == key for a in cfg.accounts.values())):
             return
         sess = brokers._VEST_SESSIONS.pop(key, None)
         if sess is not None:
@@ -142,17 +144,20 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
             sig = body.get("signature")
             if not isinstance(sig, str) or not _SIG.fullmatch(sig):
                 raise HTTPException(400, "signature: the wallet's signature (0x and hex) required")
-            t = vest_pending.pop(addr, None)         # one try per challenge
-            if t is None or _mono() - t > VEST_PENDING_S:
-                await _vest_forget(key)
+            t = vest_pending.get(addr)
+            if t is None or _mono() - t > VEST_PENDING_S:     # (a double-click lands here; the sweep cleans up)
                 raise HTTPException(400, "no wallet challenge waiting for this address — start the login again")
+            del vest_pending[addr]                   # one try per challenge
             sess = brokers.vest_session(key)
             sess.budget = budget
+            vest_registering.add(key)
             try:
                 await sess.register(addr, sig)
             except Exception as e:  # noqa: BLE001 — surface to the wizard, never the signature
+                vest_registering.discard(key)
                 await _vest_forget(key)
                 return {"ok": False, "error": _vest_why(e), "key": key}
+            vest_registering.discard(key)
         probe = adapter_factory("probe", config_mod.AccountCfg(keyring_key=key))   # no vest_account_id: no orders
         try:
             await probe.connect()
@@ -291,7 +296,7 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
                 if low not in listed:
                     row.update(status="failed", error="not on this login")
                     continue
-                have = _vest_on_desk(key, listed[low]["id"]) if vest else _on_desk(key, name)
+                have = _vest_on_desk(key, listed[low].get("id")) if vest else _on_desk(key, name)
                 if have is not None:
                     row.update(status="exists", id=have)
                     continue
@@ -301,9 +306,14 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
                                "uses this id")
                     continue
                 if vest:     # no floors: its entries are refused until the owner sets them (fail closed)
-                    v = listed[low]
-                    cfg.accounts[aid] = config_mod.AccountCfg(
-                        keyring_key=key, vest_account_id=str(v["id"]), live=not v["demo"], label=name)
+                    try:     # a row Vest worded oddly fails alone; no demo flag = live (the stricter rules)
+                        v = listed[low]
+                        acct = config_mod.AccountCfg(keyring_key=key, vest_account_id=str(v["id"]),
+                                                     live=not bool(v.get("demo", False)), label=name)
+                    except (KeyError, TypeError, AttributeError) as e:
+                        row.update(status="failed", error=f"Vest's row for it is unreadable ({type(e).__name__})")
+                        continue
+                    cfg.accounts[aid] = acct
                 else:
                     cfg.accounts[aid] = config_mod.AccountCfg(
                         keyring_key=key, account_name=name, live=live, label=name)

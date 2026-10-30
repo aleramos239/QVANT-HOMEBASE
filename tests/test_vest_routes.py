@@ -6,6 +6,8 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -35,12 +37,22 @@ class Gateway:
     def __init__(self):
         self.calls: list[httpx.Request] = []
         self.register_status = 200
+        self.hold_register: tuple | None = None    # (entered, gate) threading events: the register waits for gate
 
     def __call__(self, req: httpx.Request) -> httpx.Response:
         self.calls.append(req)
         p = req.url.path
         if p == "/v3/auth/challenge":
             return httpx.Response(200, json={"challengeId": "ch1", "message": TYPED})
+        if p == "/v3/auth/register" and self.hold_register:
+            entered, gate = self.hold_register
+
+            async def later():
+                entered.set()
+                while not gate.is_set():
+                    await asyncio.sleep(0.01)
+                return httpx.Response(200, json=session_json("1"))
+            return later()
         if p == "/v3/auth/register":
             if self.register_status != 200:     # a gateway that echoes what it got must not leak it
                 return httpx.Response(self.register_status, json={"msg": "bad signature " + json.loads(req.content)["signature"]})
@@ -83,6 +95,8 @@ def client(tmp_path, monkeypatch, gw):
     monkeypatch.setattr(VestAdapter, "observe_fills", lambda self, cb: asyncio.sleep(0))    # no socket, no poll
     # the login's one session, on the fake gateway: the routes and build_adapter must both find THIS one
     brokers._VEST_SESSIONS[KEY] = VestSession(KEY, http=httpx.AsyncClient(transport=httpx.MockTransport(gw)))
+    # any other session would be a second one for the key (R47) and would reach the real Vest: never in a test
+    monkeypatch.setattr(brokers, "VestSession", lambda key, **kw: pytest.fail(f"a new VestSession for {key}"))
     cfg = AppCfg(armed=False, accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")})
     app = create_app(cfg, {"main": FakeAdapter("main")}, background=False)
     app.state.engine.now_et = lambda: dt.datetime(2026, 10, 29, 11, 0, tzinfo=ET)
@@ -206,3 +220,31 @@ def test_logins_row_for_vest(client):
     saved_login()
     row = next(x for x in client.get("/api/logins").json()["logins"] if x["key"] == KEY)
     assert row["label"] == "0xBBE1…1EAB" and row["env"] == "vest" and row["in_use"] is False
+
+
+def test_a_double_connect_does_not_kill_the_login_in_flight(client, gw):
+    entered, gate = threading.Event(), threading.Event()
+    gw.hold_register = (entered, gate)
+    assert client.post("/api/vest/challenge", json={"address": ADDR}).json()["ok"]
+    body = {"broker": "vest", "address": ADDR, "signature": SIG}
+    with ThreadPoolExecutor(1) as ex:
+        first = ex.submit(client.post, "/api/connect", json=body)
+        assert entered.wait(5)
+        second = client.post("/api/connect", json=body)           # the double-click: its challenge is taken
+        assert second.status_code == 400 and SIG not in second.text
+        gate.set()
+        r = first.result(10).json()
+    assert r["ok"] and len(r["accounts"]) == 3, r
+    assert secrets_store.get_credentials(KEY)["refresh_token"] == "RT-1"
+
+
+def test_a_row_without_a_demo_flag_is_added_live(client, monkeypatch):
+    async def rows(self):
+        return [{"name": "Vest odd 1", "id": "odd-1", "kind": "funded"},                  # no demo flag
+                {"name": "Vest demo 2", "id": "demo-2", "kind": "demo", "demo": True}]
+    monkeypatch.setattr(VestAdapter, "list_accounts", rows)
+    signed_in(client)
+    out = client.post("/api/accounts/add-many", json={"key": KEY, "accounts": ["Vest odd 1", "Vest demo 2"]}).json()
+    assert out["added"] == 2, out
+    accts = client.app.state.cfg.accounts
+    assert accts["vest-odd-1"].live is True and accts["vest-demo-2"].live is False

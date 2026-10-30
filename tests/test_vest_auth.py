@@ -352,3 +352,56 @@ def test_secrets_never_logged(caplog):
     for secret in SECRETS + (pem.splitlines()[1],) + tuple(sigs):
         assert secret not in caplog.text
         assert not any(secret in e for e in errs)
+
+
+def _held(gate: asyncio.Event, entered: asyncio.Event, resp):
+    """A gateway answer that waits for `gate` (the call is in flight until the test lets it go)."""
+    async def answer():
+        entered.set()
+        await gate.wait()
+        return resp
+    return answer()
+
+
+def test_a_challenge_issued_during_a_register_survives_it():
+    v = Vest()
+    s = make(v)
+
+    async def go():
+        gate, entered = asyncio.Event(), asyncio.Event()
+        await s.challenge(ADDR)
+        v.handlers["/v3/auth/register"] = lambda req: _held(gate, entered, httpx.Response(200, json=Vest.session("1", FAR)))
+        reg = asyncio.ensure_future(s.register(ADDR, "SIG-WALLET"))
+        await entered.wait()
+        b = await s.challenge(ADDR)                       # the owner asked again while A was registering
+        gate.set()
+        await reg
+        assert s._chal is not None and s._chal["signingAddr"] == b["signingAddr"]
+        v.handlers.pop("/v3/auth/register")
+        await s.register(ADDR, "SIG-WALLET")              # B is still usable
+        return b
+    b = run(go())
+    bodies = [json.loads(c.content) for c in v.calls if c.url.path == "/v3/auth/register"]
+    assert bodies[-1]["signingAddr"] == b["signingAddr"]
+
+
+def test_a_refresh_in_flight_never_overwrites_a_fresh_register():
+    v = Vest()
+    s = registered(v)
+    expire_user_token(s)
+
+    async def go():
+        gate, entered = asyncio.Event(), asyncio.Event()
+        v.handlers["/v3/auth/refresh"] = lambda req: _held(gate, entered, httpx.Response(200, json=Vest.session("2", FAR)))
+        v.handlers["/v3/auth/register"] = lambda req: httpx.Response(200, json=Vest.session("7", FAR))
+        ref = asyncio.ensure_future(s.user_token())       # the old chain's refresh, in flight
+        await entered.wait()
+        await s.challenge(ADDR)
+        reg = asyncio.ensure_future(s.register(ADDR, "SIG-WALLET"))
+        await asyncio.sleep(0.05)                         # the register's answer is in: it waits for the refresh
+        gate.set()
+        await asyncio.gather(ref, reg)
+    run(go())
+    creds = secrets_store.get_credentials(KEY)
+    assert creds["refresh_token_id"] == "RTID-7" and creds["refresh_expires_ms"] == FAR + 7
+    assert s._user[0] == "AT-7"

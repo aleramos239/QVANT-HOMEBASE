@@ -160,9 +160,11 @@ class VestSession:
             "devicePublicKey": device.public_b64()})
         resp.raise_for_status()
         j = resp.json()
-        self._chal = None
-        self._accounts.clear()
-        self._take(j, device.pem(), c["primaryAddr"])
+        if self._chal is c:              # a challenge asked for during this register is the owner's next one: kept
+            self._chal = None
+        async with self._user_lock:      # a refresh in flight on the old chain finishes first, never writes over this
+            self._accounts.clear()
+            self._take(j, device.pem(), c["primaryAddr"])
         log.info("vest %s: registered", self.key)
         return {k: j.get(k) for k in ("userId", "primaryAddr", "signingAddr", "isFunded", "isNewRegistration",
                                       "accessExpiresAtMs", "refreshExpiresAtMs")}
