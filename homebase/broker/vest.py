@@ -236,6 +236,13 @@ class VestAdapter(BrokerAdapter):
         self._events: dict[str, tuple[str, Optional[str]]] = {}     # command / order id -> (status, error) off the socket
         self._pos_of: dict[str, str] = {}               # order id -> position id (for get_order_status)
         self._closed_pids: dict[str, bool] = {}         # positions whose exit the poll reported: later fills on them dropped
+        # the last known picture (R59): position id -> signed units and resting order id -> position id, as the last read
+        # or the socket since then left it; None until the first read. The poll and a reconnect diff against it.
+        self._known: Optional[dict[str, Decimal]] = None
+        self._known_orders: dict[str, str] = {}
+        self._pass_lock = asyncio.Lock()                # one read-and-diff pass at a time
+        self._fails: dict[str, int] = {}                # position id -> /details failures in a row
+        self._warned: dict[str, bool] = {}
 
     # --- plumbing ---------------------------------------------------------------------------------
     async def _api(self, method: str, path: str, *, account: bool = True, **kw):
@@ -914,6 +921,7 @@ class VestAdapter(BrokerAdapter):
                 return
             self._seq = seq
         self._ws_up = True                      # a frame past the seq check: the socket reports, the poll may rest (R55)
+        self._note_state(d)
         for o in d.get("orders") or []:
             st = _STATUS.get(str(o.get("status")).lower())
             if st and o.get("order_id") is not None:
@@ -926,6 +934,29 @@ class VestAdapter(BrokerAdapter):
                                                            default_root=self.root)))
         _cap(self._seen)
 
+    def _note_state(self, d: dict) -> None:
+        """Apply one socket frame to the known picture, so a later poll / reconnect diffs from what the socket said (R59)."""
+        pos, ords = d.get("positions") or [], d.get("orders") or []
+        if pos or ords:
+            self._busy = True
+        if self._known is None:                 # no first read yet: that read seeds
+            return
+        for p in pos:
+            if p.get("symbol") != SYMBOL or p.get("position_id") is None:
+                continue
+            pid = str(p["position_id"])
+            if str(p.get("event_type", "")).endswith("CLOSED"):
+                self._known.pop(pid, None)
+            else:
+                self._known[pid] = _signed(p)
+        for o in ords:
+            if o.get("order_id") is None:
+                continue
+            if _STATUS.get(str(o.get("status")).lower()) == "Working":
+                self._known_orders[str(o["order_id"])] = str(o.get("position_id"))
+            else:
+                self._known_orders.pop(str(o["order_id"]), None)
+
     async def _ws_loop(self) -> None:
         delay = WS_RETRY_S
         while True:
@@ -935,6 +966,10 @@ class VestAdapter(BrokerAdapter):
                                               additional_headers={"Origin": HEADERS["Origin"]}) as ws:
                     delay = WS_RETRY_S              # _ws_up waits for the first frame
                     self._seq = 0                   # account_seq starts over on every connection (R55)
+                    try:                            # the gap since the last report, read once before the frames (R59)
+                        await self._pass(reconcile=True)
+                    except Exception as e:  # noqa: BLE001
+                        log.warning("vest %s: reconnect read failed (%s)", self.account_id, type(e).__name__)
                     async for raw in ws:
                         await self._on_message(raw)
             except asyncio.CancelledError:
@@ -948,43 +983,52 @@ class VestAdapter(BrokerAdapter):
 
     async def _poll_loop(self) -> None:
         """Reads every POLL_S, only while the socket is down AND an order rests / a position is open (never otherwise)."""
-        prev, fails, warned = None, {}, {}     # fails: closed position id -> /details failures in a row
         while True:
             await asyncio.sleep(POLL_S)
-            if self._ws_up:
-                prev, fails = None, {}          # re-seed when the fallback is needed again
-                continue
-            if not self._busy:
+            if self._ws_up or not self._busy:
                 continue
             try:
-                held, resting = await self._opened(), await self._resting()
+                await self._pass()
             except Exception as e:  # noqa: BLE001
                 log.warning("vest %s: poll read failed (%s)", self.account_id, type(e).__name__)
-                continue
-            if self._ws_up:                     # the socket spoke while we were reading: it reports, we do not
-                prev, fails = None, {}
-                continue
+
+    async def _pass(self, *, reconcile: bool = False) -> None:
+        """Read positions and resting orders, diff them against the known picture and report each changed position's
+        /details through the socket's per-order dedup. The first read ever only seeds: what is already filled is not a fill.
+        `reconcile`: the read at a socket (re)connect, made even though the socket is up."""
+        async with self._pass_lock:
+            if not reconcile and self._ws_up:
+                return
+            held, resting = await self._opened(), await self._resting()
+            if not reconcile and self._ws_up:   # the socket spoke while we were reading: it reports, we do not
+                return
+            prev, fails, warned = self._known, self._fails, self._warned
             changed, cur = poll_changes(prev, held, vest_account_id=self.vest_account_id)
-            seeding, retry, events = prev is None, False, []
+            now_orders = {str(o["order_id"]): str(o.get("position_id")) for o in resting if o.get("order_id") is not None}
+            left = {pid for oid, pid in self._known_orders.items() if oid not in now_orders and pid not in ("None", "")}
+            seeding, retry, events, again = prev is None, False, [], set()
             net = sum((_signed(r) for r in held if r.get("symbol") == SYMBOL), Decimal(0))
 
             def hold(pid):                      # keep the old size: the next read sees the change again and retries
+                again.add(pid)
                 if pid in (prev or {}):
                     cur[pid] = prev[pid]
                 else:
                     cur.pop(pid, None)
 
             def give_up(pid, gone) -> bool:     # a closed position /details cannot settle: its exit by size, then drop
-                if not gone:
+                if not (gone or (pid not in (prev or {}) and pid not in cur)):
                     return False
                 fails[pid] = fails.get(pid, 0) + 1
                 if fails[pid] < DETAILS_TRIES:
                     return False
                 del fails[pid]
-                if pid not in self._closed_pids:            # its closing row was not reported already
+                if not gone:                    # opened and closed inside the gap: no size change to report by
+                    log.warning("vest %s: position %s unreadable after its order left, dropped", self.account_id, pid)
+                elif pid not in self._closed_pids:          # its closing row was not reported already
                     events.append(self._size_fill(pid, prev[pid], net))
                 return True
-            for pid in sorted(cur) if seeding else changed:
+            for pid in sorted(cur) if seeding else sorted(set(changed) | left):
                 gone = pid in (prev or {}) and pid not in cur
                 try:
                     frame = details_frame(pid, await self._api("GET", f"/v3/positions/{pid}/details"),
@@ -1019,6 +1063,9 @@ class VestAdapter(BrokerAdapter):
                 if evs and gone:                # its exit is reported: a replay of it is not a fill
                     self._closed(pid)
             _cap(self._seen)
-            prev = None if seeding and retry else cur
+            self._known = None if seeding and retry else cur
+            # an order that left while its position's read failed stays known, so the next read tries it again
+            self._known_orders = {**{o: p for o, p in self._known_orders.items() if p in again and o not in now_orders},
+                                  **now_orders}
             self._busy = bool(held or resting or retry)
-            await self._deliver(events)
+        await self._deliver(events)

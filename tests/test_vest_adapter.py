@@ -1167,3 +1167,67 @@ def test_the_account_card_says_when_the_login_ends(monkeypatch):
     assert run(ad.get_metrics())["notice"] == "login ends in 2 days"
     _login_left(monkeypatch, 4 * 86_400_000)
     assert "notice" not in run(ad.get_metrics())
+
+
+P1_OPENED = {"event_type": "POSITION_EVENT_TYPE_OPENED", "position_id": "p1", "account_id": ACC, "symbol": SYM,
+             "side": "long", "quantity": "20"}
+C1 = {**X0, "order_id": "c1", "position_order_type": "close", "execution_price": "21010"}
+
+
+def _gap_run(monkeypatch, *, poll_s, retry_s, replay=True):
+    """Socket 0 reports p1 opening (x0), then drops; p1 closes (c1) while it is down; socket 1 then (replay) replays c1.
+    -> (fills before socket 1 spoke, all fills)."""
+    monkeypatch.setattr(vest, "POLL_S", poll_s)
+    monkeypatch.setattr(vest, "WS_RETRY_S", retry_s)
+    ad, gw = mk()
+    socks = Socks()
+    socks.patch(monkeypatch)
+    got, gap = [], []
+
+    async def go():
+        async def on_fill(ev):
+            got.append(ev)
+        await ad.observe_fills(on_fill)
+        await asyncio.sleep(0.05)                                     # connected, baseline read: flat
+        gw.positions, gw.details["p1"] = [pos("long", "20")], [X0]
+        socks.put(0, acct_msg([order_row(order_id="x0", quantity="20", executed_quantity="20")], [P1_OPENED], seq=1))
+        await asyncio.sleep(0.05)
+        socks.put(0, None)                                            # the socket drops ...
+        gw.positions, gw.details["p1"] = [], [X0, C1]                 # ... and p1 closes in the gap
+        await asyncio.sleep(retry_s + 0.2)
+        gap.extend(got)
+        if replay:
+            socks.put(1, acct_msg([order_row(order_id="c1", side="sell", quantity="20", executed_quantity="20")],
+                                  [{**P1_OPENED, "event_type": "POSITION_EVENT_TYPE_CLOSED"}], seq=1))
+        await asyncio.sleep(0.1)
+        await ad.close()
+    run(go())
+    return gap, got
+
+
+def test_poll_takes_over_from_the_sockets_last_state_and_reports_a_gap_close_once(monkeypatch):
+    """I5 (R59): the poll's first read after a drop diffs against what the socket last said, so a close inside the gap is
+    reported (not seeded away); the socket's later replay of it is not reported again."""
+    gap, got = _gap_run(monkeypatch, poll_s=0.01, retry_s=0.5)
+    assert [(g.raw["orderId"], g.side) for g in gap] == [("x0", "Buy"), ("c1", "Sell")]     # the poll, in the gap
+    assert [g.raw["orderId"] for g in got] == ["x0", "c1"]                                  # the replay: not again
+
+
+def test_a_reconnect_reconciles_a_gap_the_poll_never_saw(monkeypatch):
+    gap, got = _gap_run(monkeypatch, poll_s=30, retry_s=0.05, replay=False)   # no poll, no replay: the reconnect reports
+    assert [(g.raw["orderId"], g.side) for g in got] == [("x0", "Buy"), ("c1", "Sell")]
+
+
+def test_a_resting_entry_that_filled_and_closed_inside_the_gap_is_reported():
+    ad, gw = mk()
+    got = []
+
+    async def on_fill(ev):
+        got.append(ev)
+    ad._on_fill = on_fill
+    gw.orders = [{"order_id": "o9", "account_id": ACC, "position_id": "p9", "symbol": SYM, "side": "buy",
+                  "quantity": "20", "price": "21000"}]
+    run(ad._pass())                                                   # seeds: flat, o9 resting
+    gw.orders, gw.details["p9"] = [], [{**X0, "order_id": "o9"}, {**C1, "order_id": "c9"}]
+    run(ad._pass())
+    assert [g.raw["orderId"] for g in got] == ["o9", "c9"] and ad._known_orders == {}
