@@ -1,6 +1,6 @@
 # TopstepX (Topstep) connection — design
 
-Date: 2026-10-30. Branch: `feat/topstepx` (worktree `.worktrees/topstepx`). Status: draft with the owner's answers, waiting for his approval.
+Date: 2026-10-30. Branch: `feat/topstepx` (worktree `.worktrees/topstepx`). Status: approved 2026-10-30 (owner: "Approve, build it").
 
 ## Intent
 
