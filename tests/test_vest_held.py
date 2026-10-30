@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from homebase.broker import vest
-from homebase.broker.base import OrderRequest
+from homebase.broker.base import FillEvent, OrderRequest
 from homebase.broker.vest import VestAdapter
 from homebase.broker.vest_auth import DeviceKey, VestSession
 from homebase.broker.vest_held import HeldBook, HeldEntry, floor_room, slip_ok
@@ -448,3 +448,134 @@ def test_day_start_recorded_by_any_equity_read():
     accounts(gw, equity="49500")                                                  # floor 48900: room 600
     r = run(ad.place_bracket(OrderRequest("NQZ6", "Buy", 1, "Market", price=21000, stop_price=20969)))
     assert not r.ok and "room $600" in r.error
+
+
+# ---- fix round 2 ------------------------------------------------------------------------------------------
+def test_early_fill_delivered_outside_the_entry_lock():
+    ad, gw, j = mk()
+    run(hold(ad))
+    exits = []
+
+    async def early_fill(req):
+        await ad._on_message(fill_frame())
+        gw.positions.append(pos("long", "20"))
+        return httpx.Response(200, json={"orderId": "o1", "positionId": "p1", "commandId": "c1"})
+    gw.h[("POST", OPEN)] = early_fill
+
+    async def go():
+        async def on_fill(ev):                                                    # the engine places an order at once
+            exits.append(await ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Market", text="homebase:flat")))
+        ad._on_fill = on_fill
+        await asyncio.wait_for(push(ad, bar(), bar(h=21001)), 2)
+    run(go())
+    assert [x.ok for x in exits] == [True] and not gw.positions
+
+
+def test_cancelled_sweep_never_cancels_a_fire():
+    ad, gw, j = mk()
+    r = run(hold(ad))
+
+    async def go():
+        gate = asyncio.Event()
+
+        async def slow_open(req):
+            await gate.wait()
+            gw.positions.append(pos("long", "20"))
+            return httpx.Response(200, json={"orderId": "o1", "positionId": "p1", "commandId": "c1"})
+        gw.h[("POST", OPEN)] = slow_open
+        await push(ad, bar())
+        ad.on_bar("NQ", bar(h=21001))
+        (fire,) = ad._fires
+        await asyncio.sleep(0.05)                                                 # the open is on its way
+        sweep = asyncio.ensure_future(ad.flatten_all())
+        await asyncio.sleep(0.05)
+        sweep.cancel()
+        await asyncio.sleep(0.01)
+        gate.set()
+        await asyncio.sleep(0.05)
+        return fire
+    fire = run(go())
+    assert fire.done() and not fire.cancelled() and r.order_id in ad._book.fired
+
+
+def test_kill_stops_a_fire_that_has_not_posted():
+    ad, gw, j = mk()
+    run(hold(ad))
+
+    async def go():
+        gate = asyncio.Event()
+
+        async def slow_ticker(req):                                               # the fire is mid perp read
+            await gate.wait()
+            return httpx.Response(200, json={"tickers": [{"symbol": SYM, "markPrice": "21003"}]})
+        gw.h[("GET", "/v3/ticker/latest")] = slow_ticker
+        await push(ad, bar())
+        ad.on_bar("NQ", bar(h=21001))
+        await asyncio.sleep(0.05)
+        sweep = asyncio.ensure_future(ad.flatten_all())
+        await asyncio.sleep(0.05)
+        gate.set()
+        return await sweep
+    r = run(go())
+    assert r.ok and not opens(gw) and not gw.positions
+    assert "kill" in skipped(j)[0]["reason"]
+
+
+def test_kill_stops_a_limit_entry_that_has_not_posted():
+    ad, gw, j = mk()
+
+    async def go():
+        gate = asyncio.Event()
+
+        async def slow_accounts(req):                                             # the entry is mid guard read
+            await gate.wait()
+            return httpx.Response(200, json=[{"account_id": ACC, "account_type": 1, "amount": "50000"}])
+        gw.h[("GET", "/v3/accounts")] = slow_accounts
+        entry = asyncio.ensure_future(ad.place_bracket(OrderRequest("NQZ6", "Buy", 1, "Limit", price=21000,
+                                                                    stop_price=20980)))
+        await asyncio.sleep(0.05)
+        sweep = asyncio.ensure_future(ad.flatten_all())
+        await asyncio.sleep(0.05)
+        gate.set()
+        return await entry, await sweep
+    e, r = run(go())
+    assert not e.ok and "flatten in progress" in e.error and r.ok and not gw.api("POST")
+
+
+def test_no_order_id_rewrite_claims_only_its_own_fill():
+    ad, gw, j = mk()
+    r = run(hold(ad))
+    got = []
+
+    async def early_fill(req):
+        await ad._on_message(fill_frame())
+        await ad._deliver([FillEvent(account_id="vest1", symbol="ES", side="Buy", qty=1, raw={"orderId": "x9"})])
+        gw.positions.append(pos("long", "20"))
+        return httpx.Response(200, json={})
+    gw.h[("POST", OPEN)] = early_fill
+
+    async def go():
+        async def on_fill(ev):
+            got.append(ev)
+        ad._on_fill = on_fill
+        await push(ad, bar(), bar(h=21001))
+    run(go())
+    assert sorted((f.symbol, f.raw["orderId"]) for f in got) == [("ES", "x9"), ("NQ", r.order_id)]
+
+
+def test_a_save_failure_never_kills_the_fire():
+    ad, gw, j = mk()
+    r = run(hold(ad))
+    real = ad._book.save
+
+    def save():
+        if ad._book.fired:
+            raise OSError("disk full")
+        real()
+    ad._book.save = save
+
+    async def go():
+        await push(ad, bar(), bar(h=21001))
+    run(go())
+    assert [k["id"] for ev, k in j if ev == "vest_held_fired"] == [r.order_id]
+    assert run(ad.get_order_status(r.order_id)) == "Filled"

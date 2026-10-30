@@ -212,6 +212,7 @@ class VestAdapter(BrokerAdapter):
         self._parked: list[FillEvent] = []              # fills seen while a fire waits for its POST answer (R30)
         self._added: dict[str, float] = {}              # held id -> monotonic time it was added (OCO pairing)
         self._entry_lock = asyncio.Lock()               # floor guard + POST of one entry at a time (R39)
+        self._sweeping = 0                              # sweeps running: entries not yet POSTed are refused (R41)
         self._held_of: dict[str, str] = {}              # Vest order id -> held id (its fills carry the held id, R30)
         self._risk: dict[str, Decimal] = {}             # resting limit entry id -> $ at risk to its stop
         self._sp: Optional[dict] = None
@@ -362,6 +363,9 @@ class VestAdapter(BrokerAdapter):
                         body[key] = [{"executionType": "market", "triggerPrice": self._px(
                             base + _dec(px) - _dec(req.price), sp, ROUND_CEILING if up else ROUND_FLOOR)}]
             want, bs = body["side"], "buy" if long else "sell"
+            if self._sweeping:                          # a kill or flatten started: nothing new goes out (R41)
+                return OrderResult(ok=False, error="kill: a flatten is in progress" if fire_t is not None
+                                   else "vest: flatten in progress")
             if fire_t is not None and self._mono() - fire_t > SLOW_S:
                 return OrderResult(ok=False, error=f"slow: {self._mono() - fire_t:.1f} s after the crossing push")
             r = await self._submit(
@@ -427,10 +431,7 @@ class VestAdapter(BrokerAdapter):
         if oid and held_id:                             # mapped before the wait: a fill on the socket already finds it
             self._held_of[oid] = held_id
         _cap(self._roots), _cap(self._pos_of), _cap(self._held_of)
-        early = [ev for ev in self._parked if oid and str(ev.raw.get("orderId")) == oid]
-        if early:                                       # filled before the POST answered: now with the held id
-            self._parked = [ev for ev in self._parked if ev not in early]
-            await self._deliver(early)
+        # fills parked before this answer are delivered by _fire once the entry lock is released (never inside it)
         hits = await self._wait(ids, market)
         bad = next((h for h in hits if h[0] not in ("Working", "Filled")), None)
         if bad:
@@ -520,14 +521,26 @@ class VestAdapter(BrokerAdapter):
         return await self.flatten_all()
 
     async def _sweep(self, *, close: bool) -> OrderResult:
+        self._sweeping += 1                             # from here no entry, fire or limit, POSTs (R41)
+        try:
+            return await self._sweep_now(close=close)
+        finally:
+            self._sweeping -= 1
+
+    async def _sweep_now(self, *, close: bool) -> OrderResult:
         """Cancel every resting order, then (close) market-close every open position and re-read: ok only if none is left
         (one more close if one is). Each step in its own try, so a failed read of one never stops the other."""
         errs, cancelled, closed = [], 0, 0
         for e in list(self._book.entries):              # held stop entries first: none may fire after a sweep
             self._book.drop(e.id)
             cancelled += 1
-        # an entry already firing is never cut mid-POST: wait for it, so the close below sees what it opened (R36)
-        await asyncio.gather(*list(self._fires), return_exceptions=True)
+        # an entry already firing is never cut mid-POST: wait for it (asyncio.wait never cancels it, even if this sweep
+        # is cancelled), then for any entry holding the lock, so the close below sees what they opened (R36, R41)
+        fires = set(self._fires) - {asyncio.current_task()}        # a sweep from a fire's own fill callback: not itself
+        if fires:
+            await asyncio.wait(fires)
+        async with self._entry_lock:
+            pass
         try:
             resting = await self._resting()
         except Exception as e:  # noqa: BLE001
@@ -771,7 +784,10 @@ class VestAdapter(BrokerAdapter):
             if r.ok or r.error == UNCONFIRMED:          # it may be open: its status follows the Vest order
                 self._book.fired[e.id] = {"vest": str(r.order_id or ""), "day": e.day, "ok": r.ok}
                 _cap(self._book.fired)
-                self._book.save()
+                try:
+                    self._book.save()
+                except Exception as ex:  # noqa: BLE001 -- the fire is done: it is still journaled and reported
+                    log.warning("vest %s: held book save failed (%s)", self.account_id, type(ex).__name__)
             if r.ok:
                 self._j("vest_held_fired", id=e.id, side=e.side, level=e.level, cme=cme, order_id=r.order_id,
                         slippage=round((cme - e.level) * s, 2))
@@ -780,8 +796,9 @@ class VestAdapter(BrokerAdapter):
         finally:
             self._firing = None
             left, self._parked = self._parked, []
-            for ev in left:                             # ok with no order id: its opening fills are this entry's
-                if r is not None and r.ok and not r.order_id and ev.side == e.side and "vestOrderId" not in ev.raw:
+            for ev in left:                             # ok with no order id: its own opening fills are this entry's
+                if r is not None and r.ok and not r.order_id and ev.side == e.side \
+                        and ev.symbol == root_of(e.symbol) and not str(ev.raw.get("orderId")).startswith("size:"):
                     ev.raw["vestOrderId"], ev.raw["orderId"] = ev.raw.get("orderId"), e.id
             if left:
                 await self._deliver(left)
