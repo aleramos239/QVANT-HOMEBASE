@@ -6,31 +6,36 @@ function renderSide(names, hiddenCount, issues) {
     return `<div class="sh${shut ? " shut" : ""}"><button class="sh-t" onclick="toggleSide('${k}')" aria-expanded="${!shut}" title="${shut ? "Show" : "Hide"} ${title}">
       <svg class="sh-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5.5l6.5 6.5L9 18.5"/></svg><span>${title}</span>${shut && n ? `<i>${n}</i>` : ""}</button>${action}</div>`;
   };
-  const sel = (k, n) => VIEW.k === k && ((k !== "strat" && k !== "lab" && k !== "group") || VIEW.name === n) ? " sel" : "";
+  const sel = (k, n) => VIEW.k === k && ((k !== "strat" && k !== "lab" && k !== "group" && k !== "family") || VIEW.name === n) ? " sel" : "";
   /* every strategy's row by its id (a Desk name, or lab_<name> for a Lab one the Desk does not hold yet), so a group can take it */
   const rowOf = {};
   for (const n of names) {
     const s = ST.strategies[n], state = stratState(n, s), sh = s.cfg.kind === "lab" ? labSafe(() => labShadowNet(n, s), null) : null, p = sh ? sh.net : todayPnl(s);
     rowOf[n] = `<button class="item one${sel("strat", n)}" onclick="setView('strat','${n}')" aria-current="${sel("strat", n) ? "page" : "false"}" title="${esc(state)}">
-      <i class="sd ${stratDotCls(s, state, (ST.book && ST.book[n]) || [])}"></i><span class="it"><b>${esc(stratLabel(n))}</b></span>
+      <i class="sd ${stratDotCls(s, state, (ST.book && ST.book[n]) || [])}"></i><span class="it"><b>${esc(famShort(n) || stratLabel(n))}</b></span>
       <span class="ir mono${p == null || sh ? " dim" : ""}">${p == null ? "" : usdS(p)}</span></button>`;
   }
   const labIds = labSafe(() => DESKLAB.strategies.filter(w => !labOnDesk(w)).map(w => {
     const id = "lab_" + w.name;
-    rowOf[id] = labSafe(() => labSideRow(w, sel), "");
+    rowOf[id] = labSafe(() => labSideRow(w, sel, famShort(id)), "");
     return id;
   }), []);
-  const inGroup = new Set(DESKGROUPS.groups.flatMap(g => g.members));
-  const freeNames = names.filter(n => !inGroup.has(n)), freeLab = labIds.filter(id => !inGroup.has(id));
-  const strat = freeNames.map(n => rowOf[n]).join(""), labRows = freeLab.map(id => rowOf[id] || "").join("");
-  /* the groups sit inside Strategies, after the strategies in no group (owner 2026-10-18): each one folds on its own */
-  const groupBlocks = DESKGROUPS.groups.map(g => {
-    const k = "g:" + g.id, rows = g.members.map(id => rowOf[id]).filter(Boolean);
-    const opened = sel("group", g.id) !== "";
-    const open = `<button class="sh-btn" title="Open ${esc(g.name)}" aria-label="Open ${esc(g.name)}"${opened ? ' aria-current="page" style="color:var(--foreground)"' : ""} onclick="setView('group',${jsArg(g.id)})">›</button>`;
-    const cyc = ((ST.groups || {})[g.id] || {}).on ? '<span class="tag" title="Its account cycle is on">cycle</span>' : "";
-    return head(k, esc(g.name), rows.length, cyc + open).replace('class="sh', 'class="sh sub') + (SIDE_FOLD[k] ? "" : rows.join("") || `<button class="side-more" onclick="openGroupMgr()">Empty · add strategies</button>`);
+  /* families fold their variants under one row, each by its short name (owner 2026-10-29); the strategies in no family follow.
+     Account cycles (the Desk groups) are their own section below: a variant can be in a family and a cycle at once. */
+  const inFam = new Set(DESKFAM.families.flatMap(f => f.members));
+  const loose = names.concat(labIds).filter(id => !inFam.has(id)).map(id => rowOf[id] || "").join("");
+  const famBlocks = DESKFAM.families.map(f => {
+    const k = "f:" + f.id, rows = f.members.map(id => rowOf[id]).filter(Boolean);
+    const opened = sel("family", f.id) !== "";
+    const open = `<button class="sh-btn" title="Open ${esc(f.name)}" aria-label="Open ${esc(f.name)}"${opened ? ' aria-current="page" style="color:var(--foreground)"' : ""} onclick="setView('family',${jsArg(f.id)})">›</button>`;
+    return head(k, esc(f.name), rows.length, open).replace('class="sh', 'class="sh sub') + (SIDE_FOLD[k] ? "" : rows.join("") || `<button class="side-more" onclick="openGroupMgr()">Empty · add strategies</button>`);
   }).join("");
+  const cycRows = DESKGROUPS.groups.map(g => {
+    const on = !!((ST.groups || {})[g.id] || {}).on, n = g.members.length;
+    return `<button class="item one${sel("group", g.id)}" onclick="setView('group',${jsArg(g.id)})" aria-current="${sel("group", g.id) ? "page" : "false"}" title="${on ? "Its account cycle is on" : "Its account cycle is off"}">
+      <i class="sd ${on ? "ok" : "off"}"></i><span class="it"><b>${esc(g.name)}${on ? '<span class="tag">cycle</span>' : ""}</b></span>
+      <span class="ir mono dim">${n}</span></button>`;
+  }).join("") || `<button class="side-more" onclick="openGroupMgr()">None yet · add one</button>`;
   // LIVE as isDemoAcct says: an account the desk does not mark demo or paper is LIVE
   const rank = ([id, a]) => !isDemoAcct(id) ? 0 : a.env === "paper" ? 2 : 1;
   const accts = Object.entries(ST.accounts || {}).sort((a, b) => rank(a) - rank(b));
@@ -49,9 +54,11 @@ function renderSide(names, hiddenCount, issues) {
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span>Today</span><span></span></button>
-    ${head("strat", "Strategies", names.length + labIds.length, `<span class="sh-acts"><button class="sh-btn grp-new" title="Groups: new, delete, add or remove strategies" aria-label="Manage groups" onclick="openGroupMgr()">+</button><button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button></span>`)}
-    ${SIDE_FOLD.strat ? "" : strat + labRows + groupBlocks + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")
+    ${head("strat", "Strategies", names.length + labIds.length, `<span class="sh-acts"><button class="sh-btn grp-new" title="Families and account cycles: new, delete, add or remove strategies" aria-label="Manage families and account cycles" onclick="openGroupMgr()">+</button><button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button></span>`)}
+    ${SIDE_FOLD.strat ? "" : famBlocks + loose + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")
       + ((DESKLAB.archived || []).length || VIEW.k === "archive" ? `<button class="side-more${sel("archive")}" onclick="setView('archive')">Archive · ${(DESKLAB.archived || []).length}</button>` : "")}
+    ${head("cyc", "Account cycles", DESKGROUPS.groups.length, `<button class="sh-btn" title="Account cycles: new, delete, add or remove strategies" aria-label="Manage account cycles" onclick="openGroupMgr()">+</button>`)}
+    ${SIDE_FOLD.cyc ? "" : cycRows}
     ${head("accts", "Accounts", accts.length, `<button class="sh-btn" title="Add account" aria-label="Add account" onclick="openConnect()">+</button>`)}
     ${SIDE_FOLD.accts ? "" : acctRows + more}
     ${head("act", "Activity", 0, "")}
@@ -173,10 +180,10 @@ function eqChart(name) {
 })();
 
 /* ---- Lab strategies: rows and page. Every value from the network goes through esc / jsArg. ---- */
-function labSideRow(w, sel) {
+function labSideRow(w, sel, short) {      // short: its name inside a family ("1.5R"), else its own label
   const net = DeskLab.todayNet(w);
   return `<button class="item one${sel("lab", w.name)}" onclick="setView('lab',${jsArg(w.name)})" aria-current="${sel("lab", w.name) ? "page" : "false"}" title="${esc(DeskLab.stateText(w, DESKLAB.runner))}">
-      <i class="sd ${esc(DeskLab.dotClass(w, DESKLAB.runner))}"></i><span class="it"><b>${esc(DeskLab.label(w))}</b></span>
+      <i class="sd ${esc(DeskLab.dotClass(w, DESKLAB.runner))}"></i><span class="it"><b>${esc(short || DeskLab.label(w))}</b></span>
       <span class="ir mono dim">${net == null ? "" : esc(usdS(net))}</span></button>`;
 }
 /* A Lab strategy's research, as two blocks of a strategy page: its saved run on the unseen days and the prop sim of its runs
@@ -323,12 +330,14 @@ function setupHtml(name, s) {
   const cyc = Object.values(ST.groups || {}).find(g => (g.members || []).includes(name));
   const dg = cyc ? null : DESKGROUPS.groups.find(g => g.members.includes(name));
   const qs = [...new Set(book.map(a => +a.qty || 1))], whole = (v) => usd(v).replace(/\.00$/, "");
-  const n = (e) => book.filter(a => kind(a.account) === e).length;
+  const n = (e) => book.filter(a => kind(a.account) === e).length, set = book.some(a => a.size);   // a row with its own size wins
+  const own = (a) => a.size || a.stop_after ? AcctSet.words(a) : `×${+a.qty || 1}`;
   const rows = [
-    ["Accounts", book.map(a => `${acctShort(a.account)} ${word(a.account)} ×${+a.qty || 1}`.replace("  ", " ")).join(" · ") || "none yet"],
+    ["Accounts", book.map(a => `${acctShort(a.account)} ${word(a.account)} ${own(a)}`.replace("  ", " ")).join(" · ") || "none yet"],
     ["LIVE / paper", book.length ? [["LIVE", n("live")], ["demo", n("demo")], ["paper", n("paper")]].filter(x => x[1]).map(x => `${x[0]} on ${x[1]}`).join(" · ") || "—"
       : lab ? "no account: it runs in shadow" : "no account"],
     ["Size", lab && cyc && cyc.on && cyc.risk_usd > 0 ? `${whole(cyc.risk_usd)} at risk a trade (the ${cyc.name} group sizes it)`
+      : lab && set ? "set on each account (see Accounts)"
       : lab && lab.own_size === true ? (Number((lab.params || {}).risk) > 0 ? `${whole(Number(lab.params.risk))} at risk a trade` : "it sizes each trade itself")   // as DeskLab.ordersGo
       : qs.length === 1 ? `${qs[0]} contract${qs[0] === 1 ? "" : "s"} an account` : qs.length ? `${Math.min(...qs)}-${Math.max(...qs)} contracts an account` : "—"],
     ...(lab && lab.limits ? [["Limits", DeskLab.limitsRows(lab.limits).map(x => `${x.k} ${x.v}`).join(" · ")]] : []),

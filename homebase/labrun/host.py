@@ -105,7 +105,7 @@ TOO_LATE = "Started too late to follow today."
 LATE_GRACE_NS = 60 * 1_000_000_000  # the first print may come this long after the window opens: a session's first
 # trade is never AT its open (6 PM evening windows were "too late" every night, owner 2026-10-27).
 # shortcut: up to 60 s of a window's first prints may be missing from a rebuild; tighten if a strategy acts in them
-EVENING_DESK = "It starts the evening before: the Desk does not trade that yet (shadow only)."
+EVENING_DESK = "It runs past midnight: the Desk does not trade that yet (shadow only)."
 NOT_CHECKED = "Not checked yet: the check failed."
 PROBLEM = "Stopped: the runner had a problem."
 NO_STREAM = "No prices: the chart service is not answering."
@@ -636,8 +636,10 @@ class StrategyDay:
             raise _Stop(TOO_LATE)
         self.rebuilt = now_ns is not None and now_ns > self._t0
         self._tick = tick_size(root)
-        self._evening = w0.startswith("-")           # the session opens the evening before its date: shadow only
-        if self._evening and self._desk is not None:     # (nothing books it: labdesk.check_book; this is the second lock)
+        self._evening = w0.startswith("-")           # the session opens the evening before its date
+        # one that crosses midnight is shadow only (nothing books it: labdesk.check_book; this is the second lock); one
+        # that ends at midnight opens, trades and is flat on one calendar evening and may be booked (labcfg.same_night)
+        if self._evening and w1[:5] != "00:00" and self._desk is not None:
             raise _Stop(EVENING_DESK)
         self._limits = {**SHADOW, "last_entry_et": _since(self._t0, self._t1) if self._evening else w1[:5],
                         "session_from_et": "00:00" if self._evening else w0[:5],
@@ -668,7 +670,7 @@ class StrategyDay:
         if self._desk is not None and self._flat_et is not None:
             # desk mode: the day ends at the Desk's flat time when that comes first -- its eod flatten goes out then,
             # with reason "eod", and no event after it is run (the Desk closes the trade at that time in any case)
-            self._t1 = min(self._t1, et_ns(self.date, self._flat_et))
+            self._t1 = min(self._t1, self._flat_ns())
 
     # ---- the prints and the clock
     def on_ticks(self, rows) -> None:
@@ -1056,6 +1058,10 @@ class StrategyDay:
         self._stop_sent = False
         self._blinded = False                        # the entries were cancelled for this spell without prices
 
+    def _flat_ns(self) -> int:
+        """The Desk's flat time on this day: an evening session's ("23:55") is on the evening before the date."""
+        return et_ns(self.date, ("-" if self._evening else "") + self._flat_et)
+
     @property
     def mode(self) -> str:
         return "desk" if self._desk is not None else "shadow"
@@ -1085,7 +1091,7 @@ class StrategyDay:
         self.partial, self.orders = True, []
         self._desk_start(late=True)
         if self._desk is not None and self._flat_et is not None:
-            self._t1 = min(self._t1, et_ns(self.date, self._flat_et))
+            self._t1 = min(self._t1, self._flat_ns())
         self._resave()                               # (the day file says desk now, whatever the rows' count was)
 
     @property

@@ -61,7 +61,8 @@ from ..config import AppCfg, assignments
 from ..contracts import commission_rt, micro_of, point_value, tick_size
 from ..core.num import is_int as _whole
 from . import engine_lab
-from .engine_lab import GROUP_HEDGE
+from .acctsize import OVER_MOST, ROW_NO_SIZE, most_default, row_size
+from .engine_lab import GROUP_HEDGE, LAB_ACCOUNT_STOPPED, LAB_DONE_PROFIT, LAB_DONE_WIN
 from .labcfg import LAB
 from ..labrun import door, fanout, intents, store
 
@@ -75,6 +76,7 @@ OPEN = ("placing", "placed", "live")     # a round the engine still acts on
 
 NOT_ON_DESK = "That strategy is not on the Desk."
 SET_LIMITS_FIRST = "Set the limits first."
+ROW_OVER_MOST = "Size is over this account's Most contracts."
 FLATTEN_FIRST = "Flatten it first."
 NOT_SAVED = "Could not save it. Try again."
 RECORD_CHANGED = "This strategy changed. Try again."
@@ -86,6 +88,9 @@ CANNOT_READ_LIMITS = "The Desk cannot read its limits."
 SWITCH_NOT_OFF = "Flattened. Could not switch it off: try the switch again."
 SWITCHED_OFF = "Lab strategies are switched off on this Desk."
 RUNNER_NOT_CONNECTED = "The runner is not connected to the Desk."
+# An account that sits an entry out for a rule of its own (or the group's turn) is not "none of them took it": it does not
+# count towards stopping the strategy for the day.
+OWN_RULE = (door.SLOT_BUSY, GROUP_HEDGE, ROW_NO_SIZE, LAB_ACCOUNT_STOPPED, LAB_DONE_WIN, LAB_DONE_PROFIT)
 
 # ---- the intake half (task B3): the runner's orders, the heartbeat rule, the stream back (see THE INTAKE HALF below)
 RATE_N, RATE_WINDOW_S = 5, 1.0           # entries: at most this many requests a second per strategy (trading.py's own)
@@ -118,7 +123,6 @@ FIRE_FIRST = "The 9:30 orders go first."
 PRICE_PAST = "The price is already past this entry."
 UNEVEN_PAIR = "A linked pair must be the same size on both sides."
 GROUP_NO_SIZE = "The stop is too wide for the group's dollars at risk."     # engine_groups: risk per trade
-OVER_MOST = 1.10                         # a group order never rounds up to more than 10 % over its dollars at risk
 LAST_TRADE = "The Desk cannot check the last trade's orders."     # the engine's own (LAB_CANNOT_CHECK)
 BOTH_FILLED = "Both entries filled."     # why the desk stops a strategy whose pair filled on both sides
 NOT_PLACED = "The entry was not placed. Check it."     # the page's words for a row whose `why` is a raw engine note:
@@ -459,7 +463,7 @@ class LabDesk:
         why = self._open_why(name)
         if why is not None:
             raise Refused(why)
-        if any(int(r.get("qty") or 0) > limits.max_qty for r in assignments(self.cfg, name)):
+        if any(r.get("size") is None and int(r.get("qty") or 0) > limits.max_qty for r in assignments(self.cfg, name)):
             raise Refused(BOOKED_FOR_MORE)   # (the rows of accounts this desk has; another pool's are not its to judge)
         rows = [dict(r) for r in self.cfg.book.get(name) or []]
         was = labcfg.limits_of(self.cfg, name)
@@ -563,10 +567,15 @@ class LabDesk:
             limits = labcfg.derive_limits(new) if labcfg.auto_of(self.cfg, name) else replace(was, max_qty=scale(was.max_qty, "Its most"))
             if limits is None or (not labcfg.auto_of(self.cfg, name) and not labcfg._whole(limits.max_qty, 1, 10)):
                 raise Refused("Its most contracts would be over 10. Lower it first.")
-        rows = [{"account": r["account"], "qty": scale(int(r["qty"]), "An account's size")} for r in self.cfg.book.get(name) or []]
+        rows = []
+        for r in self.cfg.book.get(name) or []:      # (a row keeps its settings; its size and its most move to the other contract)
+            row = {**r, "qty": scale(int(r["qty"]), "An account's size")}
+            if row.get("most") is not None:
+                row["most"] = min(1000, scale(int(row["most"]), "An account's most"))   # the box's own top
+            rows.append(row)
         if rows and limits is None:
             raise Refused(SET_LIMITS_FIRST)
-        if limits is not None and any(r["qty"] > limits.max_qty for r in rows):
+        if limits is not None and any(r.get("size") is None and r["qty"] > limits.max_qty for r in rows):
             raise Refused(BOOKED_FOR_MORE)
         return new, limits, rows
 
@@ -706,14 +715,17 @@ class LabDesk:
             return
         mine = self.is_lab(name)
         if mine:
-            if rows and labcfg.evening(labcfg.record_of(self.cfg, name) or {}):
+            rec = labcfg.record_of(self.cfg, name) or {}
+            if rows and labcfg.evening(rec) and not labcfg.same_night(rec):     # crosses midnight: shadow only
                 raise Refused(labcfg.SAY_EVENING)
             limits = labcfg.limits_of(self.cfg, name)
             if rows and limits is None:
                 raise Refused(SET_LIMITS_FIRST)
             for r in rows:
-                if int(r["qty"]) > limits.max_qty:
+                if r.get("size") is None and int(r["qty"]) > limits.max_qty:     # a row with settings is not held to the backtested cap
                     raise Refused(f"Size is capped at {limits.max_qty} here.")
+                if r.get("size") == "contracts" and r.get("most") is not None and int(r["qty"]) > r["most"]:
+                    raise Refused(ROW_OVER_MOST)
             seen: dict = {}
             for r in rows:                   # one broker account once (two desk entries can be pinned to one)
                 key = getattr(self.adapters.get(r["account"]), "broker_key", r["account"])
@@ -743,7 +755,7 @@ class LabDesk:
         # the rows of accounts that are not in this desk's pool are not its to take off: they stay as they are
         others = [dict(r) for r in self.cfg.book.get(name) or [] if r.get("account") not in self.cfg.accounts]
         await self._commit(name, labcfg.limits_of(self.cfg, name),
-                           [{"account": r["account"], "qty": int(r["qty"])} for r in rows] + others)
+                           [labcfg.book_row(r) for r in rows] + others)
 
     # ------------------------------------------------------------ the switch
     async def set_enabled(self, name: str, on: bool) -> bool:
@@ -968,6 +980,7 @@ class LabDesk:
                     "settings": self._settings(name),                # the ones of them the Setup panel may change
                     "own_size": (labcfg.record_of(self.cfg, name) or {}).get("own_size") is True,   # sizes itself: no Desk size
                     "instrument": self._instrument(name),            # "micro" / "mini": the contract its orders go to; None: not switchable
+                    "most_default": self._most_default(name),        # a new Most contracts box's first value
                     "labels": self._labels(name),                    # each setting's own label (the Setup card's words)
                     "state": took["state"], "why": took["why"],
                     "trades_today": took["trades_today"], "mode_today": took["mode_today"],
@@ -1248,7 +1261,8 @@ class LabDesk:
 
     def _verdicts(self, name: str, ev, booked: list) -> tuple:
         """Checks 7 and 8, once per booked account with that account's size: ({entry index: {account: sentence |
-        None}}, {oco index: sentence | None}, {entry index: its pair's other index}). Judged against the state as it is when asked
+        None}}, {oco index: sentence | None}, {entry index: its pair's other index}, {entry index: {account: size}} of
+        the rows with settings -- the size the door judged is the size sent, one source). Judged against the state as it is when asked
         (an entry after a cancel or flatten of the same event is asked again after them, 2026-10-26); first against the state BEFORE
         the event, as the shadow host judges (host.py), so the owner reads the sentences he read in shadow."""
         d, limits, rec = self._rec(name), labcfg.limits_of(self.cfg, name), labcfg.record_of(self.cfg, name) or {}
@@ -1279,13 +1293,24 @@ class LabDesk:
                 legs = [index[k] for k in it.get("ids") or () if k in index] if it["op"] == "oco" else []
                 if len({ev.intents[j]["qty"] for j in legs}) > 1:
                     uneven.update(legs)
+        # a set row sizes each entry from its own stop and a linked pair from its wider one: both legs carry ONE size
+        legs = {i: [i] for i in entries}
+        for it in ev.intents:
+            if it["op"] == "oco" and all(k in index for k in it.get("ids") or ()):
+                for k in it["ids"]:
+                    legs[index[k]] = [index[j] for j in it["ids"]]
+        dists = {i: [self._dist(ev.intents[j], last) for j in legs[i]] for i in entries}
+        full = point_value(root) if root else None
         per: dict = {i: {} for i in entries}
         oco: dict = {}
         pair: dict = {}
+        judged: dict = {i: {} for i in entries}
         for row in booked:
             a, q = row["account"], int(row["qty"])
-            got = door.check_event([dict(it, qty=self._sized(own, it, q)) if it["op"] == "entry" else it
-                                    for it in ev.intents], state, lim)
+            sized = {i: row_size(row, dists[i], lim["point_value"], full, None, limits.max_risk_usd)[0]
+                     for i in entries} if row.get("size") is not None else None
+            got = door.check_event([(dict(it, qty=self._sized(own, it, q)) if sized is None else dict(it, qty=sized[i] or 1))
+                                    if it["op"] == "entry" else it for i, it in enumerate(ev.intents)], state, lim)
             for i, it in enumerate(ev.intents):
                 if it["op"] == "oco":
                     oco[i] = got[i]
@@ -1296,12 +1321,16 @@ class LabDesk:
                 why = LAST_TRADE if (unread and got[i] == door.ONE_AT_A_TIME) else got[i]
                 if i in uneven:
                     why = UNEVEN_PAIR
-                if why is None and q > limits.max_qty:
+                if why is None and sized is not None and sized[i] is None:
+                    why = ROW_NO_SIZE
+                if sized is not None and sized[i] is not None:
+                    judged[i][a] = sized[i]
+                if why is None and sized is None and q > limits.max_qty:
                     why = f"Size is capped at {limits.max_qty} here."
                 if why is None and self._past(ev.intents[i], last):
                     why = PRICE_PAST
                 per[i][a] = why
-        return per, oco, pair
+        return per, oco, pair, judged
 
     @staticmethod
     def _leg(it: dict, last: float | None, tick: float | None):
@@ -1382,7 +1411,7 @@ class LabDesk:
         orders = [it for it in ev.intents if it["op"] in intents.ORDER_OPS or it["op"] == "stop"]
         digest = self._digest(ev.t_ns, orders)
         why, same, booked = None, False, []
-        per, oco, pair = ({}, {}, {})
+        per, oco, pair, sized = ({}, {}, {}, {})
         try:
             # this event counts its `seq` with the promotion the desk knows, today
             same = bool(known and ev.date == d["date"] and list(ev.mark) == labcfg.mark_of(self.cfg, name))
@@ -1421,7 +1450,7 @@ class LabDesk:
             if why is None and ev.entries and not booked:
                 why = OUT_OF_DATE                            # no account is booked: the runner's view of the book is old
             if why is None and ev.entries:
-                per, oco, pair = self._verdicts(name, ev, booked)        # 7, 8
+                per, oco, pair, sized = self._verdicts(name, ev, booked)        # 7, 8
         except Exception as e:  # noqa: BLE001 -- fail closed: what cannot be checked is not sent
             self._journal("lab_event_error", strategy=name, seq=ev.seq, error=f"{type(e).__name__}: {e}"[:200])
             why = door.CANNOT_CHECK
@@ -1454,9 +1483,9 @@ class LabDesk:
                     if no is None and exited:
                         # "cancel the old order, place a new one" in one event (owner 2026-10-26, FVG at 11:15): the entry is
                         # judged on the state AFTER the event's own cancels, as the backtest takes it -- not before
-                        per, oco, _ = self._verdicts(name, ev, booked)
+                        per, oco, _, sized = self._verdicts(name, ev, booked)
                     if no is None:
-                        accounts, sizes = self._takers(unit, per, booked, want)
+                        accounts, sizes = self._takers(unit, per, booked, want, sized)
                         if not sizes and accounts and all(s == LAST_TRADE for s in accounts.values()) \
                                 and await self._settled(name, min(
                                     SETTLE_MARKET_S if any(ev.intents[j]["kind"] == "market" for j in unit) else SETTLE_WAIT_S,
@@ -1464,8 +1493,8 @@ class LabDesk:
                             # the last trade ended a moment ago and its orders are read ended now: asked again
                             no = self._stale(ev) or self._not_now(name)
                             if no is None:
-                                per, oco, _ = self._verdicts(name, ev, booked)
-                                accounts, sizes = self._takers(unit, per, booked, want)
+                                per, oco, _, sized = self._verdicts(name, ev, booked)
+                                accounts, sizes = self._takers(unit, per, booked, want, sized)
                         if sizes:
                             waited = False
                             if go is None:
@@ -1480,8 +1509,8 @@ class LabDesk:
                                 if not booked:
                                     no = OUT_OF_DATE
                                 else:
-                                    per, oco, _ = self._verdicts(name, ev, booked)
-                                    accounts, sizes = self._takers(unit, per, booked, want)
+                                    per, oco, _, sized = self._verdicts(name, ev, booked)
+                                    accounts, sizes = self._takers(unit, per, booked, want, sized)
                         if sizes and no is None:
                             rows = await self._enter(name, ev, d, unit, ids, sizes, accounts)
                         else:
@@ -1545,13 +1574,36 @@ class LabDesk:
         return min(n, max(1, int(g["max_minis"] * full / pv))), None
 
     @staticmethod
-    def _takers(unit: list, per: dict, booked: list, want: int | None = None) -> tuple:
+    def _dist(it: dict, last) -> float | None:
+        """An entry's stop distance in points, measured as the door measures it; None when it cannot be."""
+        try:
+            return abs(door._entry_price(it, {"last_price": last}) - it["sl"])
+        except (TypeError, KeyError):
+            return None
+
+    def _most_default(self, name: str) -> int:
+        rec = labcfg.record_of(self.cfg, name) or {}
+        pv = point_value(labcfg.exec_symbol(rec)) if rec.get("root") else None
+        full = point_value(rec["root"]) if rec.get("root") else None
+        return most_default(pv, full) if pv and full else 2      # unknown market: the mini's (the smaller) default
+
+    @staticmethod
+    def _takers(unit: list, per: dict, booked: list, want: int | None = None, sized: dict | None = None) -> tuple:
         """({account: the sentence that refuses this entry there | None}, {account: size} of the ones that may take
         it). A lone leg of a pair never goes out: an account takes both legs or neither, and says the first refused
         leg's sentence. `want`: the entry's own size (a strategy that sizes its orders) -- an account sends that,
-        never more than the size set on it."""
+        never more than the size set on it. `sized`: _verdicts' {entry index: {account: size}} of the rows with
+        settings -- that size replaces the account's (the account wins over the strategy's own); a set row with no
+        size on every leg of the unit never goes out."""
+        sized = sized or {}
+        row_sizes = {r["account"]: min(sized[j][r["account"]] for j in unit) for r in booked
+                     if r.get("size") is not None and all(r["account"] in sized.get(j, {}) for j in unit)}
         accounts = {r["account"]: next((per[j][r["account"]] for j in unit if per[j][r["account"]]), None) for r in booked}
-        return accounts, {r["account"]: int(r["qty"]) if want is None else min(int(r["qty"]), want)
+        for r in booked:                             # fail closed: a set row with no size of its own sits this one out
+            if r.get("size") is not None and accounts[r["account"]] is None and r["account"] not in row_sizes:
+                accounts[r["account"]] = ROW_NO_SIZE
+        return accounts, {r["account"]: row_sizes[r["account"]] if r["account"] in row_sizes
+                          else int(r["qty"]) if want is None else min(int(r["qty"]), want)
                           for r in booked if accounts[r["account"]] is None}
 
     def _no_entry(self, name: str, ev, d, ids: list, why: str | None, accounts: dict) -> list:
@@ -1606,7 +1658,7 @@ class LabDesk:
         if not took:
             text = whole or next(iter(said.values()), door.CANNOT_CHECK)
             self._dead(d, ids)
-            if whole is None and not all(s in (door.SLOT_BUSY, GROUP_HEDGE) for s in said.values()):
+            if whole is None and not all(s in OWN_RULE for s in said.values()):
                 d["untaken"] += 1                            # it was offered to its accounts and none took it (one
                                                              # skipped for the group's turn is not counted)
         if not took and whole is not None:

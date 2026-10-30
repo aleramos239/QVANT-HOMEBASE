@@ -321,3 +321,10 @@ test('A: an account the saved cycle lists but the Desk removed is never "gone" i
   await c.saveCycle('g1');                                            // pressing Save: the same body as before
   assert.equal(JSON.stringify(sent[0][1]), OLD_BODY(1500, 17, ['a']));
 });
+
+test('book-all keeps every booked row\'s own settings: size, risk, stop after, Most (final review I-1)', async () => {
+  const set = { account: 'a', qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win', most: 4 };
+  const { c, sent } = ctx({ cyc: ON, book: { lab_x: [set] } });
+  await c.bookCycle('g1');
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)), [['/api/book', { strategy: 'lab_x', assignments: [set, { account: 'b', qty: 1 }] }]]);
+});

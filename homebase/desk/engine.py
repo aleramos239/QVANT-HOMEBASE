@@ -113,6 +113,7 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
         self._signalled: set = set()               # (date, strategy): a bar rule produced a signal
         self.books: dict[str, DayBook] = {}        # account -> today's closed P&L / lock / eval standing
         self._take_seen: dict[str, float] = {}     # account -> when a day_take touch was first seen
+        self._vest_takes_off: set[tuple[str, str]] = set()     # (account, day) a Vest account's take was journaled off
         self._mono = time.monotonic                # the take backstop's clock (tests replace it)
         # account -> {date: closing balance}: the desk's daily balance record (server.equity_by_day);
         # target_take's largest day / day count come from it

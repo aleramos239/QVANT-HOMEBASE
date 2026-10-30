@@ -71,6 +71,7 @@ from ..labrun import store
 LAB = "lab"                              # StrategyCfg.kind
 PREFIX = "lab_"                          # desk id = PREFIX + the store name
 FLAT_LATEST = "15:55"                    # version 1: flat no later than this, for every market
+FLAT_EVENING = "23:55"                   # ... and for a same-night evening session (same_night): flat before midnight
 RISK_MOST = 1e9                          # a sanity bound: "at risk per trade" above it is not a dollar amount
 NOTES_KEPT = 200                         # what apply() has to say, until the desk journals it
 
@@ -79,7 +80,8 @@ SAY_QTY = "Contracts: a whole number from 1 to 10."
 SAY_RISK = "At risk per trade: a dollar amount above 0, like 300 or 300.50."
 SAY_LAST = "No new trade after: a time like 11:00, before the flat time."
 SAY_FLAT = "Flat by: a time like 15:55, no later than 15:55."
-SAY_EVENING = "It starts the evening before. The Desk runs it in shadow only for now: it cannot be booked on an account."
+SAY_EVENING = "It runs past midnight. The Desk runs it in shadow only for now: it cannot be booked on an account."
+SAY_FLAT_EVENING = "Flat by: a time like 23:55, no later than 23:55."
 
 
 def desk_id(name: str) -> str:
@@ -127,6 +129,27 @@ def evening(rec) -> bool:
             and _hhmm(w[0][1:]) and _hhmm(w[1]))
 
 
+def same_night(rec) -> bool:
+    """An evening session that ends at midnight (["-18:00", "00:00"]): it opens, trades and is flat on ONE calendar
+    evening, so the Desk's same-day clock strings order it (from <= now <= until <= flat, all 18:00-23:55), and the
+    Desk day (engine._day_of_et: rolls at 18:00 ET) is the runner's session date. It may be booked, flat by 23:55
+    (owner, 2026-10-30). An evening window that ends on the date itself (["-20:00", "16:00"]) crosses midnight: still
+    shadow only."""
+    w = rec["session_window"] if evening(rec) else None    # (from 18:00: the Desk day opens then, engine_lab.lab_past_flat)
+    return w is not None and w[0][1:] >= "18:00" and w[1] == "00:00"
+
+
+def flat_latest(rec) -> str:
+    """The latest flat time the Desk takes for this record."""
+    return FLAT_EVENING if same_night(rec) else FLAT_LATEST
+
+
+def default_flat(rec) -> str:
+    """The flat time with no limits typed: the window's end, cut at the latest the Desk takes (a same-night window's
+    "00:00" end is midnight: always past 23:55)."""
+    return FLAT_EVENING if same_night(rec) else min(window(rec)[1], FLAT_LATEST)
+
+
 def window(rec: dict) -> tuple[str, str]:
     """The record's session window as two "HH:MM" strings; the Strategy's default one when it does not read. An
     evening-before window reads as its clock times (no sign): shown as is, and never usable for limits (see evening)."""
@@ -144,7 +167,9 @@ def window_note(rec: dict, limits: LabLimits | None) -> str | None:
     (09:25-16:00) is the tape's, not the trading window, and only a trade still open at the flat time differs from the
     backtest. None when the window ends at or before the flat time."""
     end = window(rec)[1]
-    flat = limits.flat_et if limits else min(end, FLAT_LATEST)
+    if same_night(rec):                     # (its "00:00" end is midnight: the runner's own end, after any flat)
+        return None
+    flat = limits.flat_et if limits else default_flat(rec)
     if end <= flat:                                                       # "HH:MM" strings compare as times
         return None
     n = _minutes(end) - _minutes(flat)
@@ -154,7 +179,7 @@ def window_note(rec: dict, limits: LabLimits | None) -> str | None:
 
 def parse_limits(body, rec: dict) -> LabLimits:
     """The limits the owner typed, checked. A ValueError carries the one sentence the dialog shows."""
-    if evening(rec):
+    if evening(rec) and not same_night(rec):
         raise ValueError(SAY_EVENING)
     if not isinstance(body, dict):
         raise ValueError(SAY_TRADES)
@@ -168,8 +193,8 @@ def parse_limits(body, rec: dict) -> LabLimits:
         raise ValueError(SAY_RISK)
     if not _hhmm(last):
         raise ValueError(SAY_LAST)
-    if not _hhmm(flat) or flat > FLAT_LATEST:
-        raise ValueError(SAY_FLAT)
+    if not _hhmm(flat) or flat > flat_latest(rec):
+        raise ValueError(SAY_FLAT_EVENING if same_night(rec) else SAY_FLAT)
     if not window(rec)[0] <= last < flat:                # "HH:MM" strings compare as times
         raise ValueError(SAY_LAST)
     return LabLimits(trades, qty, float(risk), last, flat)
@@ -196,15 +221,15 @@ def derive_limits(rec: dict) -> LabLimits | None:
     and is flat when the window ends (never later than 15:55). The dollars at risk are not capped (0 = not set): its
     stop is in its code. None for a record without `auto_limits` (an older promotion): the owner sets limits as before."""
     a = rec.get("auto_limits") if isinstance(rec, dict) else None
-    if not isinstance(a, dict) or evening(rec):  # (an evening-before session has no Desk limits: it is shadow only)
+    if not isinstance(a, dict) or (evening(rec) and not same_night(rec)):    # (one that crosses midnight: shadow only)
         return None
     n, qty = a.get("max_trades_day"), rec.get("qty")
     if rec.get("own_size") is True:              # it sizes each trade itself: the size set on the account is its most
         qty = store.OWN_SIZE_MOST
     if not _whole(n, 1, 20) or not _whole(qty, 1, 10 ** 6):
         return None
-    start, end = window(rec)
-    flat = min(end, FLAT_LATEST)
+    start = window(rec)[0]
+    flat = default_flat(rec)
     last = _before(flat)
     if not start <= last < flat:
         return None
@@ -235,8 +260,8 @@ def strategy_cfg(rec: dict, limits: LabLimits | None) -> StrategyCfg:
     """The desk's view of a promoted strategy. No geometry (the strategy sends its own prices); the times are the
     limits', or -- with none set, when no account can be assigned -- the record's window cut at 15:55. self_fire is True
     so inactive.static_reason adds no "nothing fires it" line; neither timer picks it up (they filter on kind)."""
-    start, end = window(rec)
-    flat = limits.flat_et if limits else min(end, FLAT_LATEST)
+    start = window(rec)[0]
+    flat = limits.flat_et if limits else default_flat(rec)
     qty = rec.get("qty")
     qty = qty if _whole(qty, 1, 10 ** 6) else 1
     fee = rec.get("commission")
@@ -504,24 +529,57 @@ def _files(snap) -> set:
     return {rec.get("name") for rec, _ in _records(snap) if isinstance(rec, dict)}
 
 
+def book_row(r) -> dict:
+    """One book row as a sidecar holds it: account, qty (whole, above 0), then size ("contracts" | "risk"), risk_usd
+    (with "risk" only), stop_after ("win" | "profit"; "none" is not stored) and most (whole, 1..1000) when set. A row
+    with none of the new fields is {account, qty}, as always. ValueError with the sentence on a bad row."""
+    if not isinstance(r, dict):
+        raise ValueError("That is not an account row.")
+    aid, qty = r.get("account"), r.get("qty")
+    if not (isinstance(aid, str) and aid):
+        raise ValueError("A row needs an account.")
+    if not _whole(qty, 1, 10 ** 6):
+        raise ValueError("Size must be a whole number above 0.")
+    out = {"account": aid, "qty": qty}
+    size = r.get("size")
+    if size is not None:
+        if size not in ("contracts", "risk"):
+            raise ValueError("Size is contracts or risk.")
+        out["size"] = size
+    if size == "risk":
+        risk = r.get("risk_usd")
+        if not (_number(risk, 0, 100000) and risk > 0):
+            raise ValueError("Risk must be above $0 and at most $100,000.")
+        out["risk_usd"] = risk
+    stop = r.get("stop_after")
+    if stop is not None and stop not in ("none", "win", "profit"):
+        raise ValueError("Stop after is none, win or profit.")
+    if stop in ("win", "profit"):
+        out["stop_after"] = stop
+    if r.get("most") is not None:
+        if not _whole(r["most"], 1, 1000):
+            raise ValueError("Most contracts must be a whole number from 1 to 1000.")
+        out["most"] = r["most"]
+    return out
+
+
 def _shaped(book) -> list:
-    """Book rows as a sidecar holds them: {account: str, qty: whole, above 0}, one row an account. Anything else in
-    the list is not a booking."""
+    """Book rows as a sidecar holds them (book_row), one row an account. Anything else in the list is not a booking."""
     out, seen = [], set()
     for r in book if isinstance(book, list) else []:
-        if not isinstance(r, dict):
+        try:
+            row = book_row(r)
+        except ValueError:
             continue
-        aid, qty = r.get("account"), r.get("qty")
-        if isinstance(aid, str) and aid and aid not in seen and _whole(qty, 1, 10 ** 6):
-            seen.add(aid)
-            out.append({"account": aid, "qty": qty})
+        if row["account"] not in seen:
+            seen.add(row["account"])
+            out.append(row)
     return out
 
 
 def _norm(mark, limits, book) -> dict:
     """A sidecar's content without its stamp: what pending() compares."""
-    return {"mark": list(mark), "limits": limits,
-            "book": [{"account": str(r.get("account")), "qty": int(r.get("qty") or 0)} for r in book]}
+    return {"mark": list(mark), "limits": limits, "book": [book_row(r) for r in book]}
 
 
 def _saved(side) -> dict | None:
@@ -662,7 +720,8 @@ def _enforce(cfg: AppCfg, did: str, m: dict) -> None:
     if lim is None:
         drop, why = mine, "limits unreadable" if m["frozen"] else "no limits"
     else:
-        drop, why = [r for r in mine if not _whole(r.get("qty"), 1, lim.max_qty)], "above the size cap"
+        # (a row with settings, one carrying `size`, is not held to the backtested cap: only a legacy row is)
+        drop, why = [r for r in mine if not _whole(r.get("qty"), 1, 10 ** 6 if r.get("size") else lim.max_qty)], "above the size cap"
     if drop:
         _unbook(cfg, did, drop, why)
         keep = [r for r in rows if r not in drop]
@@ -817,7 +876,7 @@ def commit(cfg: AppCfg, desk_id: str, limits: LabLimits | None, book: list, save
         m["saved"], m["blind"] = saved, False
     cfg.strategies[desk_id] = strategy_cfg(m["rec"], limits)
     if book or desk_id in cfg.book:          # (no rows and no key: the book stays without a key for it)
-        cfg.book[desk_id] = [{"account": r["account"], "qty": int(r["qty"])} for r in book]
+        cfg.book[desk_id] = [book_row(r) for r in book]
 
 
 def pending(cfg: AppCfg, only: str | None = None) -> list:

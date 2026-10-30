@@ -1,12 +1,13 @@
 """The account day rules: day books (closed P&L, day_take / day_lock / target_take, eval standing) and the take checks.
 
 Engine (engine.py) inherits DayRulesMixin; the methods moved here from engine.py unchanged. They read the Engine's
-cfg, adapters, states, books, balance_history, _root, _today, _take_seen, _mono, journal, _save and the kill/flatten
+cfg, adapters, states, books, balance_history, _root, _today, _take_seen, _vest_takes_off, _mono, journal, _save and the kill/flatten
 methods, and own self.books (set in Engine.__init__, kept in <state>/daybook-<date>.json)."""
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 import json
 import sys
 from typing import Optional
@@ -15,11 +16,12 @@ from ..broker.base import BrokerAdapter
 from ..config import StrategyCfg, assignments
 from ..contracts import point_value
 from ..core import atomic
-from .dayrules import LOCK_LOCK, LOCK_TAKE, DayBook, DayRules, merge_rules, standing, take_level
+from .dayrules import LOCK_LOCK, LOCK_LOSS, LOCK_TAKE, DayBook, DayRules, merge_rules, standing, take_level
 from .daystate import TERMINAL, DayState
 
 TAKE_PRINT_NOTE = "day take booked at the last print -- the fill trues it up"
 TAKE_GRACE_S = 2.0      # a day_take touch the resting limit has not filled for this long is market-flattened
+VEST_NO_TAKE = "vest: day/target take not supported (perp price differs from CME)"
 
 
 class DayRulesMixin:
@@ -61,12 +63,20 @@ class DayRulesMixin:
               if s.enabled and any(a.get("account") == account for a in assignments(self.cfg, n))]
         acct = self.cfg.accounts.get(account)
         own = float(getattr(acct, "day_lock", 0.0) or 0.0)         # the account's own (group) day take
-        if own > 0:
-            rs.append(DayRules(0.0, own, False))
-        return merge_rules(rs)
+        own_loss = float(getattr(acct, "day_loss", 0.0) or 0.0)    # the account's own loss lock
+        if own > 0 or own_loss > 0:
+            rs.append(DayRules(0.0, own, False, own_loss))
+        rules = merge_rules(rs)
+        if (rules.day_take or rules.target_take) and str(getattr(acct, "keyring_key", "")).startswith("vest:"):
+            # CME marks against perp fills make phantom P&L: a Vest account never runs a take (R61); day_lock stays
+            if (account, self._today()) not in self._vest_takes_off:
+                self._vest_takes_off.add((account, self._today()))
+                self.journal("vest_take_off", account=account, reason=VEST_NO_TAKE)
+            rules = dataclasses.replace(rules, day_take=0.0, target_take=False)
+        return rules
 
     def account_locked(self, account: str) -> Optional[str]:
-        """"day_take" / "day_lock" when the account is stopped for the day, else None."""
+        """"day_take" / "day_lock" / "day_loss" when the account is stopped for the day, else None."""
         b = self.books.get(account)
         return b.locked if b is not None and b.date == self._today() else None
 
@@ -152,7 +162,8 @@ class DayRulesMixin:
         Reads only (a day that has not started has no book: zeros)."""
         b = self.books.get(account)
         today = b is not None and b.date == self._today()
-        return {"day_lock": self.rules_for(account).day_lock, "closed_net": b.closed_net if today else 0.0,
+        r = self.rules_for(account)
+        return {"day_lock": r.day_lock, "day_loss": r.day_loss, "closed_net": b.closed_net if today else 0.0,
                 "closes": b.closes if today else 0, "locked": b.locked if today else None}
 
     async def apply_day_lock(self, account: str) -> Optional[str]:
@@ -165,6 +176,8 @@ class DayRulesMixin:
         rules = self.rules_for(account)
         if not b.locked and b.closes and rules.day_lock and b.closed_net >= rules.day_lock - 1e-9:
             await self._lock_account(account, LOCK_LOCK, why="the day take was set at or below the day's closed P&L")
+        elif not b.locked and b.closes and rules.day_loss and b.closed_net <= -rules.day_loss + 1e-9:
+            await self._lock_account(account, LOCK_LOSS, why="the loss lock was set at or below the day's closed loss")
         return b.locked
 
     async def _lock_account(self, account: str, reason: str, *, why: str = "") -> None:

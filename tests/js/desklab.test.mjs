@@ -672,6 +672,16 @@ test('checkLimits: "Flat by: a time like 15:55, no later than 15:55."', () => {
   assert.equal(D.checkLimits(F({ flat: '12:00', last: '11:00' })).errors.flat, undefined);
 });
 
+test('checkLimits: an evening session ("-18:00") is flat by 23:55 at the latest, its last entry from 18:00', () => {
+  const say = 'Flat by: a time like 23:55, no later than 23:55.';
+  for (const bad of ['23:56', '24:00', ''])  assert.equal(D.checkLimits(F({ flat: bad, last: '23:00' }), '-18:00').errors.flat, say, bad);
+  const ok = D.checkLimits(F({ flat: '23:55', last: '23:00' }), '-18:00');
+  assert.deepEqual([ok.errors, ok.body.flat_et], [{}, '23:55']);
+  assert.equal(D.checkLimits(F({ flat: '00:00', last: '23:00' }), '-18:00').body, null);      // midnight is not after 23:00
+  assert.equal(D.checkLimits(F({ flat: '23:55', last: '17:00' }), '-18:00').errors.last, 'No new trade after: a time like 11:00, before the flat time.');
+  assert.equal(D.checkLimits(F({ flat: '23:55', last: '23:00' }), '09:25').errors.flat, 'Flat by: a time like 15:55, no later than 15:55.');
+});
+
 test('checkLimits: every wrong field is said at once, one sentence each, and nothing is posted', () => {
   const got = D.checkLimits({ trades: '0', qty: '0', risk: '0', last: 'x', flat: 'y' });
   assert.deepEqual(Object.keys(got.errors).sort(), ['flat', 'last', 'qty', 'risk', 'trades']);
@@ -1056,6 +1066,26 @@ test('3.4 switchOnAsk: the ON confirm\'s words, asked while the strategy is stil
   assert.equal(D.switchOnAsk(off, undefined), '');
 });
 
+test('per-account settings: the ON confirm and the switch title name each account\'s own size when a row is set (final review I-2)', () => {
+  const accounts = { live047: { env: 'live', label: 'APEX047' }, sim041: { env: 'demo' } };
+  const set = { account: 'live047', qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win', most: 4 };
+  const own = deskStrat({ own_size: true, params: { risk: 650 } }, { enabled: false });
+  assert.equal(D.switchOnAsk(own, [set, { account: 'sim041', qty: 3 }], accounts),
+    'It will run from the next signal. Its orders go to 1 LIVE account and 1 demo account: APEX047 LIVE $500 risk, stops after a win · sim041 demo $650 at risk a trade.',
+    'never "1 contract" or the strategy\'s $650 for the risk row; a plain row on a self-sizing strategy keeps its own size');
+  const off = deskStrat({}, { enabled: false });
+  assert.equal(D.switchOnAsk(off, [{ account: 'sim041', qty: 3, size: 'contracts' }, { account: 'live047', qty: 2 }], accounts),
+    'It will run from the next signal. Its orders go to 1 LIVE account and 1 demo account: sim041 demo ×3 · APEX047 LIVE ×2.');
+  assert.equal(D.switchOnAsk(off, [{ account: 'sim041', qty: 2, stop_after: 'profit' }], accounts),
+    'It will run from the next signal. Its orders go to 1 demo account: sim041 demo ×2, stops in profit.');
+  assert.equal(D.deskSwitchTitle(deskStrat(), [set], accounts), 'ON: its orders go to 1 LIVE account: APEX047 LIVE $500 risk, stops after a win');
+  // the page's own short name when the page has one
+  const ctx = vm.createContext({ acctShort: (id) => 'SHORT-' + id });
+  ctx.self = ctx;
+  vm.runInContext(readFileSync(new URL('../../homebase/static/desklab.js', import.meta.url), 'utf8'), ctx);
+  assert.match(ctx.DeskLab.switchOnAsk(off, [set], accounts), /SHORT-live047 LIVE \$500 risk/);
+});
+
 test('3.4 when the switch asks is unchanged: switchNeedsConfirm decides, and the page still asks before turning a booked Lab strategy ON', () => {
   const AV = require('../../homebase/static/algo-visibility.js');
   assert.equal(AV.switchNeedsConfirm('strategy', true, { shadow: false }), true);
@@ -1349,8 +1379,8 @@ test('a group page before its first answer says so, and a hostile name or senten
 test('the group writes go to the chart service by name (the account cycle to the desk), and a group id is only a JS string literal in a handler', () => {
   const urls = [...new Set([...GROUP_PAGE.matchAll(/["'`](\/api\/[^"'`$?]*)/g)].map((m) => m[1]))].sort();
   // the Desk is reached only by the group's account cycle (owner 2026-10-25): its settings and booking its strategies
-  assert.deepEqual(urls, ['/api/book', '/api/groups', '/api/groups/delete', '/api/tester/deskgroups', '/api/tester/deskgroups/',
-                          '/api/tester/deskgroups/results']);
+  assert.deepEqual(urls, ['/api/book', '/api/groups', '/api/groups/delete', '/api/tester/deskfamilies', '/api/tester/deskfamilies/',
+                          '/api/tester/deskgroups', '/api/tester/deskgroups/', '/api/tester/deskgroups/results']);
   assert.doesNotMatch(GROUP_PAGE.replace(/\/\*[\s\S]*?\*\//g, ''), /\/api\/(strategy|status|arm|kill|rotation)/, 'nothing else of the desk');
   assert.equal((GROUP_PAGE.match(/\/api\/book/g) || []).length, 1, 'booking only from bookCycle (the cycle on)');
   const handlers = [...GROUP_PAGE.matchAll(/on(?:click|keydown)="([^"]*)"/g)].map((m) => m[1]);

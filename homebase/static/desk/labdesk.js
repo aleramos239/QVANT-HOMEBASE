@@ -156,7 +156,7 @@ function labDeskView(name, s) {
   const isDay = (d) => /^\d{4}-\d\d-\d\d$/.test(String(d));
   const days = (row && Array.isArray(row.days) ? row.days : []).map(DeskLab.matchLine).map(m =>
     `<div class="feed-row"><span class="t">${esc(isDay(m.date) ? shortDay(m.date) : m.date)}</span><span class="h${m.ok === false ? " warn" : ""}">${esc(m.text)}</span>${m.rebuilt ? '<span class="t dim">rebuilt</span>' : ""}<span class="t net">${esc(usdS(m.net))}</span></div>`);
-  const rows = book.map(a => acctRow(a.account, {qty: a.qty, strategy: name, locked: ro})).join("");
+  const rows = book.map(a => acctRow(a.account, {qty: a.qty, strategy: name, locked: ro, row: a})).join("");
   const free = Object.keys(accts).filter(id => !book.some(a => a.account === id));
   const addForm = !Object.keys(accts).length ? `<div class="mcap">Add an account to run this strategy.</div>`
     : lock.locked ? `<div class="mcap">${esc(lock.caption)}</div>`                // one line says how it gets accounts, no dead button
@@ -485,7 +485,7 @@ async function clearLabBlock(name, account) {
 
 function renderMain(names, issues) {
   $("#viewToday").hidden = VIEW.k !== "today";
-  $("#viewStrat").hidden = VIEW.k !== "strat" && VIEW.k !== "lab" && VIEW.k !== "group" && VIEW.k !== "archive";
+  $("#viewStrat").hidden = VIEW.k !== "strat" && VIEW.k !== "lab" && VIEW.k !== "group" && VIEW.k !== "family" && VIEW.k !== "archive";
   $("#viewActivity").hidden = VIEW.k !== "activity";
   if (VIEW.k === "today") {
     const [l1, l2] = dayHeadline(names);
@@ -498,6 +498,7 @@ function renderMain(names, issues) {
   } else if (VIEW.k === "strat") $("#viewStrat").innerHTML = stratView(VIEW.name);
   else if (VIEW.k === "lab") $("#viewStrat").innerHTML = labSafe(() => labView(VIEW.name), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${LAB_FAULT}</div>`);
   else if (VIEW.k === "group") $("#viewStrat").innerHTML = labSafe(() => groupView(VIEW.name), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${GROUP_FAULT}</div>`);
+  else if (VIEW.k === "family") $("#viewStrat").innerHTML = labSafe(() => familyView(VIEW.name), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${FAMILY_FAULT}</div>`);
   else if (VIEW.k === "archive") $("#viewStrat").innerHTML = labSafe(() => archiveView(), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${LAB_FAULT}</div>`);
 }
 
@@ -543,6 +544,7 @@ function render() {
   if (VIEW.k === "lab" && labSafe(() => DeskLab.onDesk(s.strategies, {name: VIEW.name}), false)) VIEW = {k: "strat", name: "lab_" + VIEW.name};   // the Desk knows it now: its own page
   if (VIEW.k === "strat" && !names.includes(VIEW.name)) VIEW = {k: "today"};
   if (VIEW.k === "group" && DESKGROUPS.ok === true && !groupOf(VIEW.name)) VIEW = {k: "today"};      // a group removed (here or elsewhere)
+  if (VIEW.k === "family" && DESKFAM.ok === true && !famOf(VIEW.name)) VIEW = {k: "today"};          // a family removed
   ISSUE_LVL = probs.some(c => c.level === "bad") ? "bad" : "warn";
   renderSide(names, algoVis.filter(a => !a.visible && !shelved.includes(a.name)).length, probs.length);
   renderMain(names, probs.length);

@@ -450,3 +450,21 @@ def test_accounts_without_rules_are_not_watched(tmp_path):
     run(eng.check_takes({"NQ": 99999.0}))
     mono.t += 10
     assert run(eng.check_takes({"NQ": 99999.0})) == [] and ads["a"].orders == []
+
+
+# ---------------------------------------------------------------------- Vest: no day / target take (R61)
+def test_a_vest_account_never_runs_a_day_or_target_take(tmp_path):
+    """CME marks against perp fills make phantom P&L: a Vest account's takes are off, journaled once a day."""
+    vest = AccountCfg(keyring_key="vest:0xabc", account_name="V", paper=True, prop={})
+    eng, ads, _ = desk(tmp_path, {"lv_atr_take": strat(target_take=True)}, {"a": vest}, {"lv_atr_take": [("a", 4)]})
+    mono = eng._mono = Mono()
+    rules = eng.rules_for("a")
+    assert (rules.day_take, rules.target_take) == (0.0, False)
+    run(eng.handle_levels("lv_atr_take", GEO))
+    st = enter_long(eng)
+    ads["a"].net = 4
+    check(eng, TAKE)
+    mono.t += TAKE_GRACE_S + 1
+    assert check(eng, TAKE + 1) == [] and ads["a"].orders == [] and st.status == "live"
+    (off,) = events(tmp_path, "vest_take_off")
+    assert off["account"] == "a" and off["reason"] == "vest: day/target take not supported (perp price differs from CME)"

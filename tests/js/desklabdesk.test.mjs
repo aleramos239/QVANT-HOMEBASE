@@ -64,6 +64,7 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
     SLICE('const labAct = ', 'let FEED_ROWS') + SLICE('/* ---- Changes (7 days) (WP1.15)', '/* ---- end of Changes') +
     SLICE('const actDay = ', '/* Activity for one strategy or one group') +
     SLICE('/* ===== Desk views', 'function render() {') +
+    readFileSync(new URL('../../homebase/static/desk/acctset.js', import.meta.url), 'utf8') +     // AcctSet: the account row reads it
     SLICE('/* ---- account row (rendered inside strategy cards) ---- */', '/* ---- connect wizard ---- */') +
     SLICE('/* ---- strategy on/off + flatten ----', '/* ---- accounts popup ---- */') +
     `\nDESKLAB = { strategies: ${JSON.stringify(rows)}, runner: { alive: true } }; DESKLAB_OK = ${readOk};` +
@@ -242,6 +243,52 @@ test('WP1.15 putting back a LIVE qty raise keeps the account in its place (the t
   assert.deepEqual(no.posts, [], 'Cancel books nothing');
 });
 
+// final review I-1 / minor 19: a row's settings (size, risk, stop after, Most) are part of the row: shown, changed, put back
+const RISK = { account: 'a2', qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win', most: 4 };
+test('per-account settings: a settings-only change is a Changes line, and Put back restores the old row whole', async () => {
+  const now = { account: 'a2', qty: 1, size: 'risk', risk_usd: 300 };
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }, now] } });
+  changes(t, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, now] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, RISK] })]);
+  const [x, first] = t.api.deskChangeList('s:lab_nq_orb');
+  assert.equal(x.text, 'APEX…048 $500 risk, most 4, stops after a win → $300 risk');
+  assert.equal(first.text, 'Accounts: Lucid Eval #1 ×1 · APEX…048 $500 risk, most 4, stops after a win');
+  assert.ok(x.back, 'still in force: Put back');
+  await t.api.putBackChange('s:lab_nq_orb', x.key);
+  assert.deepEqual(t.posts, [{ url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, RISK] } }]);
+  assert.deepEqual(t.confirms.map((c) => c.title), ['Book NQ ORB on APEX…048 LIVE, $300 risk → $500 risk?'], 'more risk on a LIVE account asks');
+});
+
+test('per-account settings: Put back of a qty change keeps the row\'s settings; Put back of a removed row books it whole', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a2', qty: 2, size: 'contracts', stop_after: 'win', most: 4 }] } });
+  const was = { account: 'a2', qty: 3, size: 'contracts', stop_after: 'win', most: 4 };
+  changes(t, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 2, size: 'contracts', stop_after: 'win', most: 4 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [was] })]);
+  const [x] = t.api.deskChangeList('s:lab_nq_orb');
+  assert.equal(x.text, 'APEX…048 ×3, most 4, stops after a win → ×2, most 4, stops after a win');
+  await t.api.putBackChange('s:lab_nq_orb', x.key);
+  assert.deepEqual(t.posts[0], { url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [was] } });
+  const off = load({ accounts: PAPER_A1, book: { lab_nq_orb: [{ account: 'a2', qty: 1 }] } });
+  const gone = { account: 'a1', qty: 1, size: 'risk', risk_usd: 250, stop_after: 'profit' };
+  changes(off, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }] }),
+    chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }, gone] })]);
+  const [y] = off.api.deskChangeList('s:lab_nq_orb');
+  assert.equal(y.text, 'Lucid Eval #1 taken off');
+  await off.api.putBackChange('s:lab_nq_orb', y.key);
+  assert.deepEqual(off.posts, [{ url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 1 }, gone] } }]);
+});
+
+test('per-account settings: Setup names each account\'s own size and stop-after (final review I-2)', () => {
+  const t = load({ strategies: { nq930: nq930(), lab_nq_orb: deskStrat({ own_size: true, params: { risk: 1000 } }) },
+    book: { lab_nq_orb: [{ account: 'a1', qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win' }, { account: 'a2', qty: 3, size: 'contracts' }] } });
+  const html = t.view();
+  assert.equal(setupRow(html, 'Accounts'), 'Lucid Eval #1 demo $500 risk, stops after a win · APEX…048 LIVE ×3');
+  assert.equal(setupRow(html, 'Size'), 'set on each account (see Accounts)', 'never the strategy\'s own $1,000');
+  const plainBook = load({ strategies: { nq930: nq930(), lab_nq_orb: deskStrat({ own_size: true, params: { risk: 1000 } }) },
+    book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } }).view();
+  assert.equal(setupRow(plainBook, 'Size'), '$1,000 at risk a trade', 'a plain row: as before');
+});
+
 test('H: no Put back on an account change while the Assign control is locked (another Desk owns it, or no limits yet)', () => {
   const BOOK = [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] }),
     chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }] })];
@@ -411,11 +458,11 @@ test('WP1.8 sidebar accounts: a LIVE / DEMO / PAPER tag on every row, what it ho
 
 test('the Strategies count in a folded sidebar does not count the same strategy twice', () => {
   const side = SLICE('function renderSide(', '/* ---- strategy detail ---- */');
-  // the count is the rows under Strategies: a Lab row the Desk holds is its own row (one row, never two); the groups sit inside
-  // Strategies (2026-10-18), so a strategy in a group is counted there once
+  // the count is the rows under Strategies: a Lab row the Desk holds is its own row (one row, never two); families fold their
+  // variants inside Strategies (2026-10-29), so a strategy in a family is counted there once; account cycles are their own section
   assert.match(side, /DESKLAB\.strategies\.filter\(w => !labOnDesk\(w\)\)\.map/);
   assert.match(side, /head\("strat", "Strategies", names\.length \+ labIds\.length/);
-  assert.match(side, /strat \+ labRows \+ groupBlocks/);
+  assert.match(side, /famBlocks \+ loose/);
 });
 
 test('the Desk\'s own page is shown for a #lab=<name> link or a Lab view once the Desk knows the strategy', () => {
@@ -980,8 +1027,8 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=44"><\/script>/);
-  assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=4"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=46"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=5"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
   assert.equal(manifest.version >= 3, true);
@@ -1678,4 +1725,23 @@ test('1.19: a piece with no data is left out: no answer, no turn, the cycle off,
   noPnl.ctx.ST.strategies.lab_nq_orb.accounts = []; noPnl.ctx.ST.strategies.nq930.accounts = [];
   assert.doesNotMatch(noPnl.page(), /The group today/, 'no trade closed today: no group total');
   assert.match(noPnl.page(), /<h2>Today<\/h2>/);
+});
+
+// ---- families (owner 2026-10-29): variants of one idea fold under one sidebar row; account cycles are their own section --------
+test('a family folds its variants by their short names, the rest follow; the cycle is its own section; the family page sets them side by side', () => {
+  const t = groupDesk({});
+  vm.runInContext(`DESKFAM = {families: [{id: "f1", name: "NQ ORB", members: ["lab_nq_orb"], short: {lab_nq_orb: "1.5R"}}], ok: true};
+    DESKRES = {nq_orb: {build: {net: 4000, trades: 210}, unseen: {net: -150, trades: 70}}};`, t.ctx);
+  const side = t.side();
+  assert.match(side, /<span>NQ ORB<\/span>/, 'the family is a folding header');
+  assert.match(side, /<b>1\.5R<\/b>/, 'its variant shows by its short name');
+  assert.ok(side.indexOf('NQ ORB') < side.indexOf('nq930') || !/nq930/.test(side), 'families first, then the strategies in no family');
+  assert.match(side, /<span>Account cycles<\/span>/);
+  assert.match(side, /setView\('group',&quot;g1&quot;\)[^>]*>\s*<i class="sd ok"><\/i><span class="it"><b>Apex<span class="tag">cycle<\/span><\/b>/, 'the cycle is one row, on');
+  assert.equal((side.match(/setView\('strat','lab_nq_orb'\)/g) || []).length, 1, 'a variant in a family and a cycle shows once');
+  const page = vm.runInContext('familyView("f1")', t.ctx);
+  assert.match(page, /<h1 class="sd-title">NQ ORB<\/h1>/);
+  assert.match(page, />1\.5R · <span class="dim">[^<]+<\/span><\/span>\s*<span class="t dim">\+\$4,000 · 210 tr<\/span><span class="t">−\$150 · 70 tr<\/span>/);
+  assert.match(page, /<span class="t dim">1<\/span><\/div>/, 'booked on one account');
+  assert.match(vm.runInContext('familyView("f9")', t.ctx), /not there any more/);
 });

@@ -60,7 +60,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from homebase.desk import bothistory, dayopen
+from homebase.desk import bothistory, dayopen, labcfg
 from homebase.contracts import point_value, round_to_tick
 from homebase.paths import state_dir
 from homebase.desk.trading import (Refused, check_prices, exit_levels, parse_cancel, parse_exits, parse_modify,
@@ -727,8 +727,9 @@ TICKS_REFUSED = frozenset({8850, 8852})      # the real desk and the real chart 
 PAGE_CHART_LINE = 'const CHART = location.protocol + "//" + location.hostname + ":8852";'
 PAGE_CHART_SWAP = 'const CHART = location.origin + "/chart";'
 CHART_GETS = ("api/tester/desklab", "api/tester/watch", "api/paper/accounts", "api/status", "api/settings",
-              "api/tester/deskgroups", "api/tester/deskgroups/results")
-CHART_POSTS = tuple(f"api/tester/deskgroups/{a}" for a in ("create", "rename", "kind", "delete", "move"))   # the Desk groups
+              "api/tester/deskgroups", "api/tester/deskgroups/results", "api/tester/deskfamilies")
+CHART_POSTS = (tuple(f"api/tester/deskgroups/{a}" for a in ("create", "rename", "kind", "delete", "move"))   # the Desk groups
+               + tuple(f"api/tester/deskfamilies/{a}" for a in ("create", "rename", "delete", "move", "short")))   # and families
 RIG_FAULTS = ("stream_drop", "silent_s", "timer_placing_s", "chart_kill", "account")
 TIMER_STATE = "fake_timer@timer"             # the made-up state of timer_placing_s (no such strategy, no such account)
 
@@ -1394,7 +1395,10 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
             if aid not in cfg.accounts:
                 raise HTTPException(400, f"unknown account {aid!r}")
             if qty > 0:
-                rows.append({"account": aid, "qty": qty})
+                try:
+                    rows.append(labcfg.book_row({**a, "account": aid, "qty": qty}))   # the row settings, as the real route
+                except ValueError as e:
+                    raise HTTPException(400, str(e)) from None
         try:
             if labdesk.is_lab(name):
                 await labdesk.set_book(name, rows)

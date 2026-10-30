@@ -14,8 +14,8 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=4">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=44"></script>
-<script src="/static/desklabset.js?v=4"></script>
+<script src="/static/desklab.js?v=46"></script>
+<script src="/static/desklabset.js?v=5"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
 <style>
@@ -253,6 +253,8 @@
   .feed-empty{ color:var(--muted-foreground); font-size:13px; padding:18px 0; }
   /* a list that only reads (a Lab strategy's orders, trades and days): nothing opens, and an amount never wraps */
   .feed.static .feed-row{ cursor:default; }
+  /* a family's page: wider number columns, right-aligned, so in-sample and test months line up under their heads */
+  .feed.fam-table .t{ flex:0 0 128px; text-align:right; } .feed.fam-table .t:last-child{ flex-basis:64px; }
   .act-pick{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
   .act-pick select{ width:auto; max-width:240px; }
   .btn.act-link{ margin:14px 0 8px; }
@@ -646,13 +648,16 @@
     <div id="wstep1">
       <h2>Where do you trade?</h2>
       <p class="sub">Log in once — we'll find every account under it.</p>
-      <div class="opt sel" id="optTv"><span class="glyph">Tv</span>
+      <div class="opt sel" id="optTv" onclick="wizBroker('tv')"><span class="glyph">Tv</span>
         <span><span class="t">Tradovate</span><br><span class="sub">Username &amp; password</span></span>
+        <span class="spacer"></span><span class="radio"></span></div>
+      <div class="opt" id="optVest" onclick="wizBroker('vest')"><span class="glyph">Ve</span>
+        <span><span class="t">Vest</span><br><span class="sub">Your wallet signs in</span></span>
         <span class="spacer"></span><span class="radio"></span></div>
       <div class="opt" id="optPaper" onclick="wizPaper()"><span class="glyph">Pa</span>
         <span><span class="t">Add paper account</span><br><span class="sub">Simulated fills on live prices — never sent to a broker</span></span>
         <span class="spacer"></span><span class="radio"></span></div>
-      <div class="seg">
+      <div class="seg" id="envSeg">
         <button class="sel" type="button" id="envDemo" aria-pressed="true" onclick="setEnv('demo')">Demo — practice money</button>
         <button type="button" id="envLive" aria-pressed="false" onclick="setEnv('live')">Live — real money</button>
       </div>
@@ -689,6 +694,30 @@
       <div class="row-btns">
         <button class="btn btn-outline" onclick="wizGoto(1)">&larr; Back</button>
         <button class="btn btn-default" id="cGo" onclick="doConnect()">Find my accounts</button>
+      </div>
+    </div>
+
+    <div id="wstep2v" style="display:none">
+      <h2>Sign in to Vest <span class="sub">with your wallet</span></h2>
+      <p class="sub">Your wallet signs Vest's login message once. Homebase never sees your wallet's key, and
+        keeps the session itself on the desk server — no API key is involved.</p>
+      <div class="slabel">SAVED LOGINS</div>
+      <div id="savedLoginsV"></div>
+      <div class="opt" id="optNewV" onclick="pickLogin(null)">
+        <span><span class="t">Use a wallet…</span><br>
+        <span class="sub">sign in again with your wallet</span></span>
+        <span class="spacer"></span><span class="radio"></span></div>
+      <div id="vWallet" style="display:none">
+        <div class="slabel">1. CONNECT</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button class="btn btn-default" type="button" id="vCb" style="flex:1" onclick="vestConnect('coinbase')">Coinbase Wallet</button>
+          <button class="btn btn-outline" type="button" id="vBr" style="flex:1" onclick="vestConnect('browser')">Browser wallet</button>
+        </div>
+        <p class="wnote" id="vStatus" role="status" style="margin:0 0 10px"></p>
+      </div>
+      <div class="row-btns">
+        <button class="btn btn-outline" onclick="wizGoto(1)">&larr; Back</button>
+        <button class="btn btn-default" id="vGo" onclick="doConnect()">Find my accounts</button>
       </div>
     </div>
 
@@ -786,6 +815,41 @@
   </div>
 </div>
 
+<div class="overlay" id="acctSetOverlay">
+  <div class="modal" style="width:420px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="asTitle">
+    <div class="cal-head">
+      <span style="font-weight:600" id="asTitle">Settings</span>
+      <span class="spacer" style="flex:1"></span>
+      <button class="cal-nav" onclick="closeAcctSet()" title="Close" aria-label="Close">&times;</button>
+    </div>
+    <div class="mcap" style="font-weight:600;margin-bottom:8px">This strategy on this account</div>
+    <div class="mcap warn" id="asCycle" hidden></div>
+    <div class="field"><label for="asSize">Size</label>
+      <select id="asSize" class="hb-field" onchange="acctSetSize()" data-autofocus>
+        <option value="own" id="asOwn">The strategy's own</option><option value="contracts">Contracts</option><option value="risk">Risk ($ a trade)</option></select></div>
+    <div class="field" id="asQtyF"><label for="asQty">Contracts</label>
+      <input id="asQty" onkeydown="acctSetKey(event)" type="text" inputmode="numeric" autocomplete="off"></div>
+    <div class="field" id="asRiskF"><label for="asRisk">Risk per trade ($)</label>
+      <input id="asRisk" onkeydown="acctSetKey(event)" type="text" inputmode="decimal" autocomplete="off" placeholder="500"></div>
+    <div class="field" id="asMostW"><label for="asMost">Most contracts</label>
+      <div id="asMostF"><input id="asMost" onkeydown="acctSetKey(event)" type="text" inputmode="numeric" autocomplete="off"></div>
+      <span class="mcap" id="asMostOff">No limit set here. One order never goes over 100 micros.</span>
+      <button class="btn btn-outline btn-sm" id="asMostBtn" type="button" onclick="toggleAcctMost()">Remove</button></div>
+    <div class="field"><label for="asStop">Stop after</label>
+      <select id="asStop" class="hb-field"><option value="none">Never</option><option value="win">A win</option><option value="profit">In profit</option></select></div>
+    <div class="mcap" style="font-weight:600;margin:14px 0 8px">Whole account — every strategy on it</div>
+    <div class="field"><label for="asTake">Profit lock ($)</label>
+      <input id="asTake" onkeydown="acctSetKey(event)" type="text" inputmode="decimal" autocomplete="off" placeholder="OFF"></div>
+    <div class="field"><label for="asLoss">Loss lock ($)</label>
+      <input id="asLoss" onkeydown="acctSetKey(event)" type="text" inputmode="decimal" autocomplete="off" placeholder="OFF"></div>
+    <div class="mcap warn" id="asNote" role="alert" hidden></div>
+    <div class="row-btns">
+      <button class="btn btn-outline" onclick="closeAcctSet()">Cancel</button>
+      <button class="btn btn-default" id="asSave" onclick="saveAcctSet()">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="settingsOverlay">
   <div class="modal" style="width:440px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="settingsTitle">
     <div class="cal-head">
@@ -833,20 +897,27 @@
 </div>
 
 <div class="overlay" id="groupOverlay">
-  <div class="modal" style="width:640px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="groupTitle">
+  <div class="modal" style="width:780px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="groupTitle">
     <div class="cal-head">
-      <span style="font-weight:600" id="groupTitle">Manage groups</span>
+      <span style="font-weight:600" id="groupTitle">Families and account cycles</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="groupCount"></span>
       <span class="spacer" style="flex:1"></span>
       <button class="cal-nav" onclick="closeGroupMgr()" title="Close" aria-label="Close">&times;</button>
     </div>
-    <p class="mcap" style="margin:0 0 10px">A group shows its strategies' results together. On its page, the Account cycle (off until you switch it on) makes
-      them take turns across the accounts you tick. A strategy is in one group. The same code tried two ways (an eval and a funded account) is two strategies, each in its own group.</p>
-    <div class="field" style="margin-bottom:6px"><label for="groupNewName">New group</label>
+    <p class="mcap" style="margin:0 0 10px">A <b>family</b> folds the variants of one idea (other targets or stops) under one row, with a page that sets
+      them side by side. It changes nothing that trades. An <b>account cycle</b> shows its strategies' results together and, once you switch it on
+      on its page, makes them take turns across the accounts you tick. A strategy can be in one family and one account cycle.</p>
+    <div class="field" style="margin-bottom:6px"><label for="familyNewName">New family</label>
       <div style="display:flex;gap:8px;align-items:center">
-        <input id="groupNewName" autocomplete="off" spellcheck="false" maxlength="40" placeholder="e.g. Eval — Lucid 50K"
+        <input id="familyNewName" autocomplete="off" spellcheck="false" maxlength="40" placeholder="e.g. NQ 15m FVG open+VWAP"
+          onkeydown="if(event.key==='Enter'&&!event.repeat){event.preventDefault();addFamily()}">
+        <button class="btn btn-default btn-sm" onclick="addFamily()">Add family</button>
+      </div></div>
+    <div class="field" style="margin-bottom:6px"><label for="groupNewName">New account cycle</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="groupNewName" autocomplete="off" spellcheck="false" maxlength="40" placeholder="e.g. Apex 300K"
           onkeydown="if(event.key==='Enter'&&!event.repeat){event.preventDefault();addGroup()}">
-        <button class="btn btn-default btn-sm" onclick="addGroup()">Add group</button>
+        <button class="btn btn-default btn-sm" onclick="addGroup()">Add account cycle</button>
       </div></div>
     <div id="groupList"></div>
   </div>
@@ -903,17 +974,18 @@
 <div id="alertBar" role="alert" hidden><span id="alertText"></span>
   <button type="button" id="alertX" title="Dismiss" aria-label="Dismiss">&times;</button></div>
 
-<script src="/static/desk/core.js?v=4"></script>
+<script src="/static/desk/core.js?v=5"></script>
 <script src="/static/desk/topbar.js?v=5"></script>
-<script src="/static/desk/activity.js?v=8"></script>
-<script src="/static/desk/views.js?v=1"></script>
-<script src="/static/desk/groups.js?v=6"></script>
-<script src="/static/desk/strategy.js?v=9"></script>
-<script src="/static/desk/labdesk.js?v=10"></script>
+<script src="/static/desk/activity.js?v=9"></script>
+<script src="/static/desk/views.js?v=2"></script>
+<script src="/static/desk/groups.js?v=8"></script>
+<script src="/static/desk/strategy.js?v=11"></script>
+<script src="/static/desk/labdesk.js?v=12"></script>
 <script src="/static/desk/demo.js?v=2"></script>
-<script src="/static/desk/book.js?v=7"></script>
+<script src="/static/desk/book.js?v=11"></script>
+<script src="/static/desk/acctset.js?v=3"></script>
 <script src="/static/desk/settings.js?v=8"></script>
-<script src="/static/desk/popups.js?v=5"></script>
+<script src="/static/desk/popups.js?v=7"></script>
 <script src="/static/desk/start.js?v=2"></script>
 <script src="/static/hb-glass.js?v=2"></script>
 </body>

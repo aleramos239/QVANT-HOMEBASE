@@ -4,3 +4,4 @@ websockets
 pytest
 httpx
 certifi
+cryptography==50.0.2

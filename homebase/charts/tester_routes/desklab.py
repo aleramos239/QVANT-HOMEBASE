@@ -27,7 +27,7 @@ from ...backtest.tape import TapeStore
 from ...labrun import door, store
 from ..desk import DESK_URL
 from ...labrun.host import session_today
-from .. import deskgroups, deskresults
+from .. import deskfamilies, deskgroups, deskresults
 from ..paperbook import DESK_ORIGINS, _cors, desk_origin_refusal
 from .jobs import WF_RESULT_FILES, wf_stamp
 
@@ -678,6 +678,45 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
             except deskgroups.GroupError as e:
                 raise HTTPException(409, str(e)) from None
             return watch_answer(request, {"ok": True, "groups": groups})
+        except HTTPException as e:
+            return watch_answer(request, {"ok": False, "detail": e.detail}, e.status_code)
+
+    # ---- Desk families (deskfamilies.py): variants of one idea folded under one sidebar row. Display only: nothing trades.
+    @r.get("/deskfamilies")
+    def deskfamilies_list(request: Request):
+        watch_guard(request)
+        return watch_answer(request, {"families": deskfamilies.load()})
+
+    @r.options("/deskfamilies/{what}")
+    def deskfamilies_preflight(what: str, request: Request):
+        o = request.headers.get("origin")
+        if what not in deskfamilies.ACTIONS or o not in DESK_ORIGINS:
+            return JSONResponse({"detail": "origin not allowed"}, status_code=403)
+        return Response(status_code=204, headers={
+            "access-control-allow-origin": o, "vary": "Origin", "access-control-allow-methods": "POST",
+            "access-control-allow-headers": "content-type", "access-control-max-age": "600"})
+
+    @r.post("/deskfamilies/{what}")
+    async def deskfamilies_write(what: str, request: Request):
+        """create {name} | rename {id, name} | delete {id} | move {strategy, family: id | null, short?} | short {strategy, short}
+        -> {ok: true, families} | {ok: false, detail} (a refusal in words)."""
+        watch_guard(request)
+        try:
+            write_ok(request)
+            json_body(request)
+            if what not in deskfamilies.ACTIONS:
+                raise HTTPException(404, f"unknown family action {what!r}")
+            try:
+                body = await request.json()
+            except ValueError:
+                raise HTTPException(400, "the body is JSON") from None
+            if not isinstance(body, dict):
+                raise HTTPException(400, "the body is a JSON object")
+            try:
+                fams = await asyncio.to_thread(deskfamilies.apply, what, body)
+                return watch_answer(request, {"ok": True, "families": fams})
+            except deskgroups.GroupError as e:
+                raise HTTPException(409, str(e)) from None
         except HTTPException as e:
             return watch_answer(request, {"ok": False, "detail": e.detail}, e.status_code)
 

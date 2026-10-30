@@ -14,12 +14,14 @@ rule ever runs inside the socket reader.
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import time
 from dataclasses import dataclass
 from typing import Optional
 
 from .marketdata import TradovateMD
 
+log = logging.getLogger(__name__)
 CLOSE_GRACE_S = 3.0        # a bar with no successor closes this long after its end
 
 
@@ -61,6 +63,7 @@ class MarketFeed(TradovateMD):
         self._early: dict[int, list[dict]] = {}              # pushes for a chart id the getChart reply has not registered yet
         self._inflight = 0                                    # subscribes awaiting their getChart reply
         self._retry_at: dict[tuple[str, int], float] = {}     # key -> monotonic time before which a failed subscribe is not repeated
+        self.bar_listeners: list = []                         # fn(root, bar) on every live push (sync, on the socket's loop)
 
     async def connect(self, allow_login: bool = False) -> None:
         # never the password login from here (Tradovate logins are scarce): no md token from a connected login = retry later
@@ -168,7 +171,15 @@ class MarketFeed(TradovateMD):
         elif bar.ts > cur.ts:
             self._close(key, cur)                    # a later bar: the old one is final
             self._cur[key] = bar
-        # an older bar than the current one: history out of order — ignore
+        else:
+            return                                   # an older bar than the current one: history out of order — ignore
+        if key in self._warming:
+            return                                   # warm-up history is not a live price: listeners never see it
+        for fn in list(self.bar_listeners):
+            try:
+                fn(key[0], bar)
+            except Exception as e:  # noqa: BLE001 -- a listener never breaks the feed
+                log.warning("bar listener failed: %s", type(e).__name__)
 
     def _close(self, key: tuple[str, int], bar: Bar) -> None:
         hist = self._hist.setdefault(key, [])

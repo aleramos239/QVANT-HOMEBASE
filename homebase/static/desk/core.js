@@ -86,7 +86,7 @@ $("#themeToggle").onclick = () => {
    matters more now that focus lands inside a dialog while the key that opened it may still be
    down. The + Assign menu gets Esc, focus in and back, and the arrow keys. Nothing here sends. */
 const OVERLAYS = [];   // the open dialogs, topmost last: {el, trigger}
-const OVERLAY_CLOSE = {confirmOverlay: () => cfDone(false), labLimitsOverlay: () => closeLabLimits(), settingsOverlay: () => closeSettings(),
+const OVERLAY_CLOSE = {confirmOverlay: () => cfDone(false), labLimitsOverlay: () => closeLabLimits(), acctSetOverlay: () => closeAcctSet(), settingsOverlay: () => closeSettings(),
   connectOverlay: () => closeConnect(), resOverlay: () => closeRes(), acctOverlay: () => closeAccts(),
   algoOverlay: () => closeAlgoMgr(), groupOverlay: () => closeGroupMgr(), liveOverlay: () => closeLive(), checksOverlay: () => closeChecks(),
   calOverlay: () => closeCal()};

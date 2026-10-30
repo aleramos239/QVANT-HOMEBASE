@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import weakref
 from types import SimpleNamespace
 
 from .. import config as config_mod
@@ -13,6 +14,9 @@ from ..broker.base import AccountNotOnLogin, BrokerAdapter
 from ..broker.login_budget import LoginDeferred, is_rate_limited
 from ..broker.paper import PaperAdapter
 from ..broker.tradovate import TradovateAdapter
+from ..broker.vest import VestAdapter
+from ..broker.vest_auth import NeedsSignature, VestSession
+from ..broker.vest_held import _proot
 from ..data.feed import MarketFeed
 
 RECONNECT_INTERVAL_S = 5   # cheap now: reconnects reuse the token
@@ -20,14 +24,28 @@ GONE_CONFIRM_S = 300       # an account missing from its login is removed only w
                            # successful sync at least this much later still misses it
 GONE_CHECK_TIMEOUT_S = 30  # a confirming re-sync runs in its own task, at most this long
 NOTICES_KEPT = 10
+NEEDS_SIGNATURE = "needs a new wallet signature"
+_VEST_SESSIONS: dict = {}     # keyring key -> its one VestSession (refresh tokens rotate: one per login)
 INPLACE_RETRY_S = (10, 60)   # a dropped socket whose token is still valid, while its user's
                              # logins are paused: retry in place 10 s, doubling to 60 s
+
+
+def is_vest_key(key: str) -> bool:
+    """A Vest login: 'vest:<wallet address>'."""
+    return key.startswith("vest:")
+
+
+def vest_session(key: str) -> VestSession:
+    """The login's one VestSession, made on first use (R47): build_adapter and the connect routes both take it here."""
+    return _VEST_SESSIONS.get(key) or _VEST_SESSIONS.setdefault(key, VestSession(key))
 
 
 def _key_env(key: str) -> str:
     """A login key is 'tv:<env>:<user>' — the env it was verified on. The
     user part may itself hold colons (Google-linked logins are
-    'Google:1012...'), so split twice at most."""
+    'Google:1012...'), so split twice at most. A Vest login is 'vest'."""
+    if is_vest_key(key):
+        return "vest"
     parts = key.split(":", 2)
     return "live" if len(parts) == 3 and parts[1] == "live" else "demo"
 
@@ -56,7 +74,8 @@ def md_source(cfg: config_mod.AppCfg, adapters: dict):
     after the early renewal (09:10-09:19:30 ET) the timer's 09:20 / 09:28:30
     md socket starts on a token that lasts past 10:10. Returns
     (keyring_key, env, token_provider)."""
-    ranked = sorted(cfg.accounts.items(), key=lambda kv: kv[1].live)
+    ranked = sorted(((aid, a) for aid, a in cfg.accounts.items() if not is_vest_key(a.keyring_key)),
+                    key=lambda kv: kv[1].live)      # a Vest login has no CME market data
     up = [(a, adapters[aid]) for aid, a in ranked
           if a.keyring_key and adapters.get(aid) is not None and _md_token_of(adapters[aid])]
     if up:
@@ -73,6 +92,11 @@ def md_source(cfg: config_mod.AppCfg, adapters: dict):
 def build_adapter(account_id: str, a: config_mod.AccountCfg) -> BrokerAdapter:
     if a.paper:                      # a chart-service paper account: no login, no broker (broker/paper.py)
         return PaperAdapter(account_id)
+    if is_vest_key(a.keyring_key):   # vest_account_id "" = a probe; no floors = every entry refused (fail closed)
+        # one session per login, never owned (closed) by an entry: its refresh token rotates (R47)
+        return VestAdapter(account_id, keyring_key=a.keyring_key, vest_account_id=a.vest_account_id,
+                           session=vest_session(a.keyring_key),
+                           floors=dict(a.floors), slip_frac=a.slip_frac)
     env = "live" if a.live else "demo"
     sel = {"account_name": a.account_name} if a.account_name else None
     # entries on one login share its token: one login / renewal per Tradovate user
@@ -82,7 +106,34 @@ def build_adapter(account_id: str, a: config_mod.AccountCfg) -> BrokerAdapter:
 
 def build_feed(cfg: config_mod.AppCfg, adapters: dict) -> MarketFeed:
     key, env, provider = md_source(cfg, adapters)
-    return MarketFeed(key, env, token_provider=provider)
+    feed = MarketFeed(key, env, token_provider=provider)
+    seen = weakref.WeakKeyDictionary()       # Vest adapter -> the socket of its last push
+    chosen: dict[str, tuple] = {}            # price root -> the (minutes, root) stream passed on (R44)
+
+    def to_vest(root: str, bar) -> None:
+        """The CME price for the Vest held entries. It reaches whatever adapter the desk holds for each account NOW
+        (a rebuilt one replaces the old: one book per account, never two), on this socket's loop -- the desk's loop,
+        where the adapters live. ONE stream per price root (NQ and MNQ are one price): HeldBook keeps one last push per
+        price root, two streams interleaved would each look like a new bar (R44)."""
+        pr = _proot(root)
+        pick = min(((m, r) for r, m in feed.watching() if _proot(r) == pr), default=(bar.minutes, root))
+        if (bar.minutes, root) != pick:
+            return
+        if chosen.setdefault(pr, pick) != pick:  # the stream changed (a smaller one was enabled): a first push for all
+            chosen[pr] = pick
+            seen.clear()
+        for ad in list(adapters.values()):
+            if not isinstance(ad, VestAdapter):
+                continue
+            if seen.get(ad) is not feed._ws:     # its first push on this socket: a (re)connect is a gap (R1)
+                seen[ad] = feed._ws
+                ad.feed_ok = lambda: feed.connected
+                ad.feed_bars = feed.bars         # the restore reads the bars since the book's save (R62)
+                ad.feed_reset()
+            ad.on_bar(root, bar)
+
+    feed.bar_listeners.append(to_vest)
+    return feed
 
 def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_client, background,
          adapter_factory, _kill_lock) -> SimpleNamespace:
@@ -158,6 +209,9 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
             ad = adapters[aid] = adapter_factory(aid, a)
         if hasattr(ad, "login_budget") and ad.login_budget is not budget:
             ad.login_budget = budget        # the token refresh's login fallback asks it too
+        if isinstance(ad, VestAdapter):
+            ad.journal = engine.journal     # its held-entry fires and skips go on the desk's journal
+            ad.session.budget = budget      # the login's one session books on the desk's budget (R48)
 
         login_id = (key, a.live)
 
@@ -178,11 +232,12 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
                                error=str(fell_back_from)[:200])
             _logged_in_once.add(aid)
             _login_first_spent.add(login_id)
-            budget.record_login(key)
+            if not isinstance(ad, VestAdapter):     # a Vest connect mints a token on the signed session: no login (R6)
+                budget.record_login(key)
             try:
                 await ad.connect()
-            except AccountNotOnLogin:
-                budget.login_result(key)    # the login itself worked
+            except (AccountNotOnLogin, NeedsSignature):
+                budget.login_result(key)    # the login itself worked / none was tried (the wallet must sign): no backoff
                 raise
             except Exception as e:  # noqa: BLE001
                 budget.login_result(key, e)
@@ -264,6 +319,13 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
         if aid not in cfg.accounts:
             return                           # removed meanwhile: nothing to record
         msg = str(e)
+        if isinstance(e, NeedsSignature):
+            # retried by the loop as soon as the login is signed again, never before (no cooldown to wait out)
+            if (acct_status.get(aid) or {}).get("error") != NEEDS_SIGNATURE:
+                engine.journal("vest_needs_signature", account=aid)
+            acct_status[aid] = {"connected": False, "error": NEEDS_SIGNATURE}
+            _login_cooldown.pop(aid, None)
+            return
         if isinstance(e, AccountNotOnLogin):
             a = cfg.accounts.get(aid)
             name = (a.account_name if a is not None else "") or aid
@@ -444,6 +506,12 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
                 if aid in _parked:
                     continue                 # only a manual Reconnect retries it
                 ad = adapters.get(aid)
+                if isinstance(ad, VestAdapter) and ad.session.needs_signature:
+                    if ad.connected:         # the login ran out while connected: the card must say so (R46)
+                        with contextlib.suppress(Exception):
+                            await ad.close()
+                        _connect_failed(aid, NeedsSignature("sign with the wallet again"))
+                    continue                 # waits for the owner's wallet signature
                 if ad is not None and ad.connected:
                     continue
                 if _t.time() < _login_cooldown.get(aid, 0):

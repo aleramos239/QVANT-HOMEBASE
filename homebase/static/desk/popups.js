@@ -266,9 +266,10 @@ async function flattenStrat(name) {
    Closed net P&L of the day, in dollars: once a trade of ANY strategy booked here closes with the day at or above it, no new
    entry is taken on the account for the rest of the day (open trades run to their stop / target). 0 turns it off. */
 function dayState(a) {
-  const d = (a && a.day) || {}, v = Number(d.day_lock) || 0;
-  return d.locked ? ` <span class="neg" title="No new entry on this account for the rest of the day">stopped for the day (${usd(d.closed_net)})</span>`
-    : (v ? ` <span class="mcap" title="The day's closed P&amp;L so far">${usd(d.closed_net || 0)} of ${usd(v)}</span>` : "");
+  const d = (a && a.day) || {}, v = Number(d.day_lock) || 0, l = Number(d.day_loss) || 0;
+  return d.locked ? ` <span class="neg" title="No new entry on this account for the rest of the day">stopped for the day${d.locked === "day_loss" ? " by the loss lock" : ""} (${usd(d.closed_net)})</span>`
+    : (v ? ` <span class="mcap" title="The day's closed P&amp;L so far">${usd(d.closed_net || 0)} of ${usd(v)}</span>` : "") +
+      (l ? ` <span class="mcap" title="The account stops for the day if its closed P&amp;L falls to minus this">loss lock ${usd(l)}</span>` : "");
 }
 function dayTakeBox(id, a) {
   const d = (a && a.day) || {}, v = Number(d.day_lock) || 0, state = `<span data-ro="day">${dayState(a)}</span>`;
@@ -418,23 +419,36 @@ function renderGroupMgr(force) {
   const a = document.activeElement;
   if (!force && a && ov.contains(a) && a.matches("#groupList input, #groupList select")) return;      // never wipe a field being used
   const groups = DESKGROUPS.groups;
-  $("#groupCount").textContent = groups.length + " group" + (groups.length === 1 ? "" : "s");
+  const fams = DESKFAM.families;
+  $("#groupCount").textContent = `${fams.length} famil${fams.length === 1 ? "y" : "ies"} · ${groups.length} account cycle${groups.length === 1 ? "" : "s"}`;
   const known = [];                    // every strategy a group may take: [id, label]
   const shelved = archivedBuiltins();       // an archived built-in is not offered (one already in a group still shows)
   for (const n of Object.keys(ST.strategies || {})) if (!shelved.includes(n)) known.push([n, stratLabel(n)]);
   for (const w of labSafe(() => DESKLAB.strategies.filter(x => !labOnDesk(x)), [])) known.push(["lab_" + w.name, labSafe(() => DeskLab.label(w), w.name)]);
   const have = new Set(known.map(k => k[0]));
-  for (const g of groups) for (const id of g.members) if (!have.has(id)) { have.add(id); known.push([id, id + " (not on the Desk any more)"]); }
+  for (const g of groups.concat(fams)) for (const id of g.members) if (!have.has(id)) { have.add(id); known.push([id, id + " (not on the Desk any more)"]); }
+  const flist = fams.map(f => `<div class="acct" style="padding:8px 0;gap:8px;align-items:center">
+      <input class="hb-field grp-sel" value="${esc(f.name)}" maxlength="40" spellcheck="false" aria-label="Name of ${esc(f.name)}" style="flex:1;min-width:0;max-width:none"
+        onchange="familyPost('rename', {id: ${jsArg(f.id)}, name: String(this.value).trim()})">
+      <span class="hint" style="font-size:11.5px;white-space:nowrap">${f.members.length} in it</span>
+      <button class="btn btn-outline btn-sm" onclick="deleteFamily(${jsArg(f.id)})">Delete</button></div>`).join("");
   const glist = groups.map(g => `<div class="acct" style="padding:8px 0;gap:8px;align-items:center">
       <input class="hb-field grp-sel" value="${esc(g.name)}" maxlength="40" spellcheck="false" aria-label="Name of ${esc(g.name)}" style="flex:1;min-width:0;max-width:none"
         onchange="renameGroup(${jsArg(g.id)}, this.value)">
       <span class="hint" style="font-size:11.5px;white-space:nowrap">${g.members.length} in it</span>
       <button class="btn btn-outline btn-sm" onclick="deleteGroup(${jsArg(g.id)})">Delete</button></div>`).join("");
   const slist = known.map(([id, label]) => {
-    const cur = groups.find(g => g.members.includes(id));
+    const cur = groups.find(g => g.members.includes(id)), fam = fams.find(f => f.members.includes(id));
     return `<div class="acct" style="padding:7px 0;gap:8px;align-items:center">
       <span class="nm" style="font-size:13px;flex:1;min-width:0">${esc(label)}</span>
-      <select class="hb-field grp-sel" aria-label="Group of ${esc(label)}" onchange="moveToGroup(${jsArg(id)}, this.value)">
+      <select class="hb-field grp-sel" aria-label="Family of ${esc(label)}" title="Family: folds it under one row with its other variants"
+        onchange="familyPost('move', {strategy: ${jsArg(id)}, family: this.value || null})">
+        <option value="">No family</option>${fams.map(f => `<option value="${esc(f.id)}"${fam && fam.id === f.id ? " selected" : ""}>${esc(f.name)}</option>`).join("")}
+      </select>
+      <input class="hb-field grp-sel" style="width:96px;max-width:96px" maxlength="24" spellcheck="false" placeholder="short name"
+        aria-label="Short name of ${esc(label)} in its family" title="Its name inside the family, e.g. 25 pts · 1.5R"
+        value="${esc((fam && fam.short[id]) || "")}"${fam ? "" : " disabled"} onchange="familyPost('short', {strategy: ${jsArg(id)}, short: String(this.value).trim()})">
+      <select class="hb-field grp-sel" aria-label="Account cycle of ${esc(label)}" title="Account cycle: takes turns across accounts" onchange="moveToGroup(${jsArg(id)}, this.value)">
         <option value="">${esc(DeskLab.NO_GROUP)}</option>${groups.map(g => `<option value="${esc(g.id)}"${cur && cur.id === g.id ? " selected" : ""}>${esc(g.name)}</option>`).join("")}
       </select></div>`;
   }).join("");
@@ -444,8 +458,9 @@ function renderGroupMgr(force) {
       <span class="nm" style="font-size:13px;flex:1;min-width:0">${esc(c.name)} · account cycle ${c.on ? "<b>ON</b>" : "off"}, no group</span>
       <button class="btn btn-outline btn-sm" onclick="removeOrphanCycle(${jsArg(id)})">Remove</button></div>`).join("");
   $("#groupList").innerHTML = (olist ? `<div class="mcap warn" style="margin:8px 0 2px">Account cycles with no group</div>${olist}` : "")
-    + (groups.length ? `<div class="mcap" style="margin:8px 0 2px">Groups</div>${glist}` : "")
-    + (known.length ? `<div class="mcap" style="margin:12px 0 2px">Strategies</div>${slist}` : `<div class="mcap" style="padding:14px 0">No strategies on the Desk yet.</div>`);
+    + (fams.length ? `<div class="mcap" style="margin:8px 0 2px">Families</div>${flist}` : "")
+    + (groups.length ? `<div class="mcap" style="margin:8px 0 2px">Account cycles</div>${glist}` : "")
+    + (known.length ? `<div class="mcap" style="margin:12px 0 2px;display:flex;gap:8px"><span style="flex:1">Strategies</span><span>Family · short name · account cycle</span></div>${slist}` : `<div class="mcap" style="padding:14px 0">No strategies on the Desk yet.</div>`);
 }
 function openGroupMgr() { renderGroupMgr(true); showOverlay("groupOverlay"); renderGroupMgr(true); }
 async function removeOrphanCycle(id) {
@@ -459,9 +474,17 @@ async function removeOrphanCycle(id) {
   toast(why ? `Account cycle NOT removed — ${why}.` : `${c.name} account cycle removed.`, why ? 8000 : 4200);
 }
 function closeGroupMgr() { hideOverlay("groupOverlay"); }
+async function addFamily() {
+  const name = $("#familyNewName").value.trim();
+  if (!name) { toast("Give the family a name."); $("#familyNewName").focus(); return; }
+  if (await familyPost("create", {name})) {
+    $("#familyNewName").value = "";
+    toast(`${name} is added. Pick its variants below.`);
+  }
+}
 async function addGroup() {
   const name = $("#groupNewName").value.trim();
-  if (!name) { toast("Give the group a name."); $("#groupNewName").focus(); return; }
+  if (!name) { toast("Give the account cycle a name."); $("#groupNewName").focus(); return; }
   if (await groupPost("create", {name})) {
     $("#groupNewName").value = "";
     toast(`${name} is added. Pick its strategies below.`);

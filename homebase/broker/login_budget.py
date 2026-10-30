@@ -1,4 +1,4 @@
-"""Login budget per Tradovate USER (the keyring login key), not per desk entry.
+"""Login budget per broker USER (the keyring login key: a Tradovate user or a Vest wallet), not per desk entry.
 
 2026-09-29: five desk entries ride one Apex user, each with its own socket and token.
 Their reconnects fell back to a full login independently -- 56 logins in a day, a dead
@@ -146,7 +146,8 @@ class LoginBudget:
             u = self._u(key)
             self._expire(key, u, now)
             if u.cool_until:
-                return (f"Tradovate rate-limited this login (429) — logins paused until "
+                broker = "Vest" if key.startswith("vest:") else "Tradovate"
+                return (f"{broker} rate-limited this login (429) — logins paused until "
                         f"{_hhmm(u.cool_until)}")
             if first:
                 return None

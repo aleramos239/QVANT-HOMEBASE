@@ -46,6 +46,7 @@ FIELDS = ("status", "fill_px", "fill_sl", "fill_tp", "fill_ms")      # what an u
 WORKING, CANCELLED = ("working", None, None, None, None), ("cancelled", None, None, None, None)
 SIDE = {"Buy": "long", "Sell": "short"}
 FLAT_LATEST = "15:55"            # the Desk's own bound on the flat time (labcfg.FLAT_LATEST)
+FLAT_EVENING = "23:55"           # ... for a same-night evening session (labcfg.FLAT_EVENING)
 
 
 def desk_id(name: str) -> str:
@@ -59,19 +60,34 @@ def _evening(w) -> bool:
             and _hhmm(w[0][1:]) and _hhmm(w[1]))
 
 
+def _same_night(w) -> bool:
+    """An evening window that ends at midnight: opens, trades and is flat on one calendar evening (labcfg.same_night).
+    It may be booked; an evening window that ends on the date itself crosses midnight and stays shadow only."""
+    return _evening(w) and w[0][1:] >= "18:00" and w[1] == "00:00"
+
+
+def _start_latest(w) -> tuple[str, str] | None:
+    """(the window's start as a clock time, the latest flat the Desk takes) as labcfg.window / flat_latest read them;
+    None for a window that crosses midnight (no Desk limits: shadow only)."""
+    if _evening(w):
+        return (w[0][1:], FLAT_EVENING) if _same_night(w) else None
+    ok = isinstance(w, (list, tuple)) and len(w) == 2 and _hhmm(w[0]) and _hhmm(w[1])
+    return (w[0] if ok else store.DEFAULT_WINDOW[0]), FLAT_LATEST
+
+
 def limits_read(limits, rec: dict) -> bool:
     """Limits as the Desk itself would take them (labcfg.parse_limits; a test runs both over the same cases). Limits
     that do not read are no limits, and with no limits there is no book."""
     if not isinstance(limits, dict):
         return False
-    w = rec.get("session_window")
-    if _evening(w):                              # opens the evening before: no Desk limits (labcfg.evening), shadow only
+    sl = _start_latest(rec.get("session_window"))
+    if sl is None:                               # crosses midnight: no Desk limits (labcfg.parse_limits), shadow only
         return False
-    start = w[0] if isinstance(w, (list, tuple)) and len(w) == 2 and _hhmm(w[0]) and _hhmm(w[1]) else store.DEFAULT_WINDOW[0]
+    start, latest = sl
     trades, qty, risk = limits.get("max_trades_day"), limits.get("max_qty"), limits.get("max_risk_usd")
     last, flat = limits.get("last_entry_et"), limits.get("flat_et")
     return (_whole(trades) and 1 <= trades <= 20 and _whole(qty) and 1 <= qty <= 10
-            and _num(risk) and 0 < risk <= 1e9 and _hhmm(last) and _hhmm(flat) and flat <= FLAT_LATEST
+            and _num(risk) and 0 < risk <= 1e9 and _hhmm(last) and _hhmm(flat) and flat <= latest
             and start <= last < flat)
 
 
@@ -89,14 +105,16 @@ def own_limits(rec: dict) -> dict | None:
     if not isinstance(a, dict):
         return None
     n, qty, w = a.get("max_trades_day"), rec.get("qty"), rec.get("session_window")
-    if _evening(w):                              # opens the evening before: no Desk limits (labcfg.evening), shadow only
+    sl = _start_latest(w)
+    if sl is None:                               # crosses midnight: no Desk limits (labcfg.derive_limits), shadow only
         return None
     if rec.get("own_size") is True:              # it sizes each trade itself: the size set on the account is its most
         qty = store.OWN_SIZE_MOST
     if not (_whole(n) and 1 <= n <= 20 and _whole(qty) and qty >= 1):
         return None
-    start, end = w if isinstance(w, (list, tuple)) and len(w) == 2 and _hhmm(w[0]) and _hhmm(w[1]) else store.DEFAULT_WINDOW
-    flat = min(end, FLAT_LATEST)
+    start, latest = sl
+    end = w[1] if isinstance(w, (list, tuple)) and len(w) == 2 and _hhmm(w[0]) and _hhmm(w[1]) else store.DEFAULT_WINDOW[1]
+    flat = latest if _same_night(w) else min(end, latest)    # (a same-night "00:00" end is midnight, after 23:55)
     last = _before(flat)
     if not start <= last < flat:
         return None

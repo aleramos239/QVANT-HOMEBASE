@@ -22,7 +22,8 @@ async function loadDeskGroups() {
     const j = await r.json(), next = takeGroups(j && j.groups);
     const changed = DESKGROUPS.ok !== true || JSON.stringify(next) !== JSON.stringify(DESKGROUPS.groups);
     DESKGROUPS = {groups: next, ok: true};
-    if (changed && ST && !FREEZE) render();
+    const famChanged = await loadDeskFamilies();
+    if ((changed || famChanged) && ST && !FREEZE) render();
     if (VIEW.k === "group") loadDeskGroupRes();
   } catch (_) { /* the chart service does not answer: keep what was shown */ }
   finally { DESKGROUPS_BUSY = false; }
@@ -56,6 +57,86 @@ async function groupPost(action, body) {
   renderGroupMgr(true);          // put the controls back as they were
   return false;
 }
+/* ---- DESK FAMILIES (owner 2026-10-29): variants of one idea (the same code at other targets or stops) folded under one sidebar
+   row, and one page that sets them side by side. Display only: each variant keeps its own switch, accounts and record, and may sit
+   in an account cycle too. Kept by the chart service (GET /api/tester/deskfamilies, read with the groups). ---- */
+let DESKFAM = {families: [], ok: null};
+const FAMILY_ID = /^f\d{1,4}$/;
+const FAMILY_FAULT = "The family could not be shown.";
+const famOf = (id) => DESKFAM.families.find(f => f.id === id) || null;
+const famOfStrat = (sid) => DESKFAM.families.find(f => f.members.includes(sid)) || null;
+const famShort = (sid) => { const f = famOfStrat(sid); return (f && f.short[sid]) || ""; };
+function takeFamilies(list) {      // only well-formed families are kept; a wrong shape is dropped, never thrown on
+  return (Array.isArray(list) ? list : []).filter(f => f && typeof f === "object" && FAMILY_ID.test(String(f.id)) && typeof f.name === "string")
+    .map(f => {
+      const members = (Array.isArray(f.members) ? f.members : []).filter(m => typeof m === "string"), short = {};
+      for (const m of members) if (f.short && typeof f.short[m] === "string" && f.short[m]) short[m] = f.short[m];
+      return {id: f.id, name: f.name, members, short};
+    });
+}
+async function loadDeskFamilies() {      // true when the families changed (the caller repaints)
+  try {
+    const r = await fetch(CHART + "/api/tester/deskfamilies");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json(), next = takeFamilies(j && j.families);
+    const changed = DESKFAM.ok !== true || JSON.stringify(next) !== JSON.stringify(DESKFAM.families);
+    DESKFAM = {families: next, ok: true};
+    return changed;
+  } catch (_) { return false; }      // an older chart service has no families: the sidebar shows none
+}
+/* One change to the families: create {name} | rename {id, name} | delete {id} | move {strategy, family|null, short?} | short {strategy, short}. */
+async function familyPost(action, body) {
+  const r = await chartPost("/api/tester/deskfamilies/" + action, body);
+  if (r && r.ok === true && Array.isArray(r.families)) {
+    DESKFAM = {families: takeFamilies(r.families), ok: true};
+    if (VIEW.k === "family" && !famOf(VIEW.name)) VIEW = {k: "today"};
+    if (ST) render();
+    renderGroupMgr(true);
+    return true;
+  }
+  if (!DEMO) toast(String((r && r.detail) || "The family could not be changed."), 6000);
+  renderGroupMgr(true);
+  return false;
+}
+/* One variant as its family's page shows it, from what the page already holds (the Desk's status, the Lab list, DESKRES). */
+function famVariant(sid) {
+  const s = ST && ST.strategies && ST.strategies[sid], name = sid.indexOf("lab_") === 0 ? sid.slice(4) : sid;
+  const res = DESKRES[name] || {}, side = (b) => b && b.net != null ? `${usdS(b.net)} · ${b.trades} tr` : "—";
+  const v = {sid, short: famShort(sid), build: side(res.build), unseen: side(res.unseen)};
+  if (s) {
+    const book = (ST.book && ST.book[sid]) || [], sh = s.cfg.kind === "lab" ? labSafe(() => labShadowNet(sid, s), null) : null;
+    v.state = stratState(sid, s);
+    return Object.assign(v, {label: stratLabel(sid), today: sh ? sh.net : todayPnl(s), accts: book.length});
+  }
+  const w = labSafe(() => DESKLAB.strategies.find(x => x.name === name), null);
+  if (!w) return null;      // not on the Desk any more
+  return Object.assign(v, {label: DeskLab.label(w), state: DeskLab.stateText(w, DESKLAB.runner), today: DeskLab.todayNet(w), accts: 0});
+}
+function familyView(id) {
+  const f = famOf(id);
+  if (!f) return `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">That family is not there any more.</div>`;
+  const vs = f.members.map(famVariant), gone = f.members.filter((_, i) => !vs[i]);
+  const rows = vs.filter(Boolean).map(v => `<div class="feed-row" role="button" tabindex="0" title="${esc(v.label)} · ${esc(v.state)}" onclick="openGroupMember(${jsArg(v.sid)})"
+      onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openGroupMember(${jsArg(v.sid)})}">
+      <span class="h">${esc(v.short || v.label)} · <span class="dim">${esc(v.state)}</span></span>
+      <span class="t dim">${esc(v.build)}</span><span class="t">${esc(v.unseen)}</span>
+      <span class="t net">${v.today == null ? "—" : esc(usdS(v.today))}</span><span class="t dim">${v.accts || "none"}</span></div>`);
+  return `<button class="back" onclick="setView('today')">‹ Today</button>
+    <div class="sd-top"><div><h1 class="sd-title">${esc(f.name)}</h1><div class="sp mono">${rows.length} variant${rows.length === 1 ? "" : "s"}</div></div></div>
+    <div class="sd-note">A family only puts these rows together. Each variant keeps its own switch, accounts and settings, and trades on its own.</div>
+    ${rows.length ? `<div class="sec"><h2>Variants</h2><div class="agroup feed static fam-table">
+      <div class="feed-row"><span class="h dim">Variant</span><span class="t dim">In-sample</span><span class="t dim">Test months</span><span class="t dim">Today</span><span class="t dim">Accounts</span></div>
+      ${rows.join("")}</div></div>` : `<div class="eq-empty">No variants yet. Add them in Manage.</div>`}
+    ${gone.length ? `<div class="sec"><h2>Not on the Desk any more</h2><div class="agroup feed static">${gone.map(g => `<div class="feed-row"><span class="h">${esc(g)}</span></div>`).join("")}</div></div>` : ""}
+    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openGroupMgr()">Manage</button>
+      <button class="btn btn-outline btn-sm" onclick="deleteFamily(${jsArg(f.id)})" title="The strategies stay on the Desk, in no family.">Delete family</button></div>`;
+}
+async function deleteFamily(id) {
+  const f = famOf(id);
+  if (f && await confirmDlg(`Delete the ${f.name} family?`, "Its strategies stay on the Desk as they are, in no family.", "Delete", false))
+    await familyPost("delete", {id});
+}
+
 /* A group's page (VIEW {k: "group", name: <id>}): its members' saved runs put together -- the unseen days first (curve), the build days
    beside them, the prop sim on LucidPro -- then the members and any left out of the sum, with why. Nothing here runs a backtest. */
 const GROUP_FAULT = "The group could not be shown.";
@@ -216,7 +297,7 @@ async function bookCycle(id) {
       `${live ? ` (${live} LIVE)` : ""}. Each trade still goes to ONE account, in turn, sized by the cycle.`, "Book", false)) return;
   const bad = [];
   for (const [m, add] of todo) {
-    const rows = ((ST.book || {})[m] || []).map(r => ({account: r.account, qty: r.qty})).concat(add.map(a => ({account: a, qty: 1})));
+    const rows = ((ST.book || {})[m] || []).concat(add.map(a => ({account: a, qty: 1})));     // a booked row keeps its settings
     let r = null;
     try { r = await post("/api/book", {strategy: m, assignments: rows}); } catch (_) { r = null; }
     if (!r || r.ok !== true) bad.push(`${stratLabel(m)}: ${labSafe(() => DeskLab.refusalText(r), "refused")}`);

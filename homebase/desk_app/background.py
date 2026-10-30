@@ -29,9 +29,8 @@ def make_lifespan(*, cfg, engine, adapters, acct_status, timer, level_timer, des
                     if ad.connected:
                         m = await ad.get_metrics()
                         if m.get("balance") is not None and m.get("account"):
-                            equity.record_equity(_equity_path(), str(m["account"]), float(m["balance"]),
-                                                 engine.now_et().date().isoformat())
-                            day = engine._today()
+                            day = engine._today()       # the Desk day (rolls at 18:00 ET): an evening trade is its own day's
+                            equity.record_equity(_equity_path(), str(m["account"]), float(m["balance"]), day)
                             dayopen.note(state_dir() / "day_open.json", aid, m["balance"], day,
                                          dayopen.prior_close(equity.equity_by_day(_equity_path(), str(m["account"])), day))
                 except Exception:  # noqa: BLE001 — snapshots must never crash

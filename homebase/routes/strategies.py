@@ -6,7 +6,7 @@ from __future__ import annotations
 from fastapi import HTTPException, Request
 
 from .. import config as config_mod
-from ..desk import labdesk as labdesk_mod
+from ..desk import labcfg, labdesk as labdesk_mod
 
 
 def register(app, *, cfg, engine, labdesk) -> None:
@@ -115,7 +115,8 @@ def register(app, *, cfg, engine, labdesk) -> None:
 
     @app.post("/api/book")
     async def set_book(request: Request):
-        """Set one strategy's assignments: [{account, qty}, ...]."""
+        """Set one strategy's assignments: [{account, qty, size?, risk_usd?, stop_after?, most?}, ...]. Only a Lab
+        strategy keeps the optional fields; a built-in strategy's book is {account, qty}."""
         body = await request.json()
         name = str(body.get("strategy") or "")
         if name not in cfg.strategies:
@@ -126,11 +127,18 @@ def register(app, *, cfg, engine, labdesk) -> None:
             if aid not in cfg.accounts:
                 raise HTTPException(400, f"unknown account {aid!r}")
             if qty > 0:
-                rows.append({"account": aid, "qty": qty})
+                try:
+                    row = {**a, "account": aid, "qty": qty}
+                    if not labdesk.is_lab(name):     # a built-in strategy has no row settings: never a 400 for what it drops
+                        row = {"account": aid, "qty": qty}
+                    rows.append(labcfg.book_row(row))
+                except ValueError as e:
+                    raise HTTPException(400, str(e)) from None
+        previous = [dict(r) for r in cfg.book.get(name) or []]
         try:
             if labdesk.is_lab(name):         # its book lives in its own file beside its record, never in config.json
                 await labdesk.set_book(name, rows)
-                engine.journal("book_updated", strategy=name, assignments=rows)
+                engine.journal("book_updated", strategy=name, assignments=rows, previous=previous)
                 note = labdesk.window_note(name) if rows else None      # its window runs past the flat time: a note, never a refusal
                 return {"ok": True, "book": labdesk.book_view(), **({"note": note} if note else {})}
             labdesk.check_book(name, rows)   # says nothing unless a promoted Lab strategy is on the desk
@@ -138,6 +146,6 @@ def register(app, *, cfg, engine, labdesk) -> None:
             raise HTTPException(e.status, str(e)) from None
         cfg.book[name] = rows
         config_mod.save(cfg)
-        engine.journal("book_updated", strategy=name, assignments=rows)
+        engine.journal("book_updated", strategy=name, assignments=rows, previous=previous)
         return {"ok": True, "book": labdesk.book_view()}     # cfg.book itself unless a Lab strategy is on the desk
 

@@ -1,6 +1,7 @@
 """A Lab strategy whose session opens the evening before its date (window start "-20:00": the tester reads it since
 b489f667). The runner hosts it in SHADOW, through midnight, like the tester's day; the Desk never books it on an
-account (its time-of-day logic cannot order a session across midnight): no limits, no book, no typed limits."""
+account when it crosses midnight (its time-of-day logic cannot order that): no limits, no book, no typed limits.
+One that ends at midnight (["-18:00", "00:00"], "same night") may be booked, flat by 23:55 (owner, 2026-10-30)."""
 from __future__ import annotations
 
 import datetime as dt
@@ -148,3 +149,61 @@ def test_the_settings_lock_covers_the_evening_before_and_the_morning_of_an_eveni
                      ((10, 0), True)):
         d.clock.dt = dt.datetime(2026, 9, 14, *at, tzinfo=ZoneInfo("America/New_York"))        # a Monday
         assert d.ld._in_session(rec) is want, at
+
+
+# ---------------------------------------------------------------- same night: opens 18:00+, ends at midnight (2026-10-30)
+NIGHT = {"session_window": ["-18:00", "00:00"], "auto_limits": {"max_trades_day": 1}, "qty": 2}
+TYPED = {"max_trades_day": 1, "max_qty": 1, "max_risk_usd": 300, "last_entry_et": "23:00", "flat_et": "23:55"}
+
+
+def test_a_same_night_record_has_desk_limits_flat_by_2355_on_both_sides():
+    r = cfg_rec(**NIGHT)
+    assert labcfg.same_night(r) is True and labcfg.window(r) == ("18:00", "00:00")
+    assert labcfg.derive_limits(r) == labcfg.LabLimits(1, 2, 0.0, "23:54", "23:55")
+    assert deskside.own_limits({**r, "name": "x"}) == {"max_trades_day": 1, "max_qty": 2, "max_risk_usd": 0.0,
+                                                       "last_entry_et": "23:54", "flat_et": "23:55"}
+    assert labcfg.parse_limits(TYPED, r).flat_et == "23:55" and deskside.limits_read(TYPED, r) is True
+    with pytest.raises(ValueError) as e:
+        labcfg.parse_limits({**TYPED, "flat_et": "23:56"}, r)
+    assert str(e.value) == labcfg.SAY_FLAT_EVENING
+    assert deskside.limits_read({**TYPED, "flat_et": "23:56"}, r) is False
+    with pytest.raises(ValueError):
+        labcfg.parse_limits({**TYPED, "last_entry_et": "17:30"}, r)              # before the session opens
+    assert labcfg.window_note(r, labcfg.derive_limits(r)) is None
+    c = labcfg.strategy_cfg(r, labcfg.derive_limits(r))
+    assert (c.accept_from_et, c.accept_until_et, c.flat_et) == ("18:00", "23:54", "23:55")
+
+
+def test_an_evening_that_opens_before_1800_or_ends_after_midnight_stays_shadow_only():
+    for w in (["-17:00", "00:00"], ["-20:00", "00:30"], ["-20:00", "16:00"]):
+        r = cfg_rec(**{**NIGHT, "session_window": w})
+        assert labcfg.same_night(r) is False and labcfg.derive_limits(r) is None, w
+        assert deskside.own_limits({**r, "name": "x"}) is None and deskside.limits_read(TYPED, r) is False, w
+        with pytest.raises(ValueError):
+            labcfg.parse_limits(TYPED, r)
+
+
+def test_a_same_night_record_is_booked_on_an_account(tmp_path):
+    d = mkdesk(tmp_path, limits=None, qty=0, window=("-18:00", "00:00"), rec_kw={"auto_limits": {"max_trades_day": 1}})
+    assert labcfg.limits_of(d.cfg, LAB) == labcfg.LabLimits(1, 1, 0.0, "23:54", "23:55")
+    run(d.ld.set_book(LAB, [{"account": "a1", "qty": 1}]))
+    assert [r["account"] for r in d.cfg.book[LAB]] == ["a1"]
+
+
+def test_a_same_night_day_is_hosted_in_desk_mode_and_flat_on_the_evening_before(days):  # noqa: F811
+    side = deskside.DeskSide("lab_lab_x", ["ab", "2026-10-09T12:00:00+00:00"], D.isoformat(), ["a1"])
+    day = days(meta_source(session_window=("-20:00", "00:00"), bar_minutes=5), desk=side,
+               send=lambda body, timeout=5.0: {}, tell=lambda row: None, flat_et="23:55")
+    assert day.summary()["why"] != host.EVENING_DESK and day._evening is True
+    assert day._flat_ns() == host.et_ns(D, "-23:55") < host.et_ns(D, "00:00")
+
+
+def test_past_the_flat_time_reads_the_desk_day_for_an_evening():
+    from homebase.desk.engine_lab import lab_past_flat
+    eve = labcfg.strategy_cfg(cfg_rec(**NIGHT), labcfg.derive_limits(cfg_rec(**NIGHT)))
+    for at, want in (((18, 0), False), ((23, 54), False), ((23, 55), True), ((0, 0), True), ((3, 0), True),
+                     ((17, 59), True)):
+        assert lab_past_flat(eve, dt.time(*at)) is want, at
+    day = labcfg.strategy_cfg(cfg_rec(session_window=["09:25", "16:00"], auto_limits={"max_trades_day": 1}), None)
+    for at, want in (((9, 30), False), ((15, 54), False), ((15, 55), True), ((20, 0), True), ((3, 0), False)):
+        assert lab_past_flat(day, dt.time(*at)) is want, at
