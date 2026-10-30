@@ -13,7 +13,7 @@ import asyncio
 import json
 import logging
 import time
-from decimal import ROUND_CEILING, ROUND_DOWN, ROUND_HALF_UP, Decimal
+from decimal import ROUND_CEILING, ROUND_DOWN, ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from typing import Optional
 
 import httpx
@@ -29,11 +29,16 @@ SYMBOL = "NDX-USD-PERP"
 UNITS = {"NQ": 20, "MNQ": 2}
 SIZE_DECIMALS = 4
 WS_URL = "wss://ws.hz.vestmarkets.com/ws/private"
+OUTCOME_S = 5.0                               # how long an order waits for its socket outcome before the REST reconcile
+KEEP = 1000                                   # per-order memory (ids, seen quantities, outcomes): oldest dropped past this
 POLL_S = 2.0                                  # fallback reads, only while the socket is down AND something rests / is open
 NO_ACCT = "vest: no Vest account selected"
 NOT_SUPPORTED = "vest: modify not supported"
 ORDER_GONE = (3017, 10010, 11004)             # cancel: already gone
 POSITION_GONE = (10009, 10029)                # close: no such position / close already requested
+UNCONFIRMED = "vest: unconfirmed — check Vest"
+_STATUS = {"pending": "Working", "accepted": "Working", "partially_filled": "Working", "filled": "Filled",
+           "cancelled": "Canceled", "rejected": "Rejected"}      # Vest order status -> the engine's words
 DEFAULTS = {"tick": Decimal("0.25"), "price_dec": 2, "lev": "50"}
 
 
@@ -49,15 +54,22 @@ def _trim(d: Decimal, places: int, rounding) -> str:
 
 def units_of(symbol: str, qty: int) -> str:
     root = root_of(symbol)
+    if qty <= 0:
+        raise ValueError("vest: quantity must be positive")
     if root not in UNITS:
         raise ValueError(f"vest: no sizing for {symbol!r} (NQ and MNQ only)")
     return _trim(Decimal(qty * UNITS[root]), SIZE_DECIMALS, ROUND_DOWN)
 
 
-def _contracts(units: Decimal, root: str) -> int:
-    """Units -> contracts of `root`; a remainder never reads as flat (rounded away from zero)."""
+def _contracts(units: Decimal, root: str, *, truncate: bool = False) -> int:
+    """Units -> contracts of `root`: a fill never reads as 0 (away from zero); a net position truncates toward zero."""
     n = units / UNITS[root]
-    return int(abs(n).to_integral_value(ROUND_CEILING)) * (1 if n >= 0 else -1)
+    return int(n) if truncate else int(abs(n).to_integral_value(ROUND_CEILING)) * (1 if n >= 0 else -1)
+
+
+def _cap(d: dict) -> None:
+    while len(d) > KEEP:
+        d.pop(next(iter(d)))
 
 
 def _signed(row: dict) -> Decimal:
@@ -86,11 +98,11 @@ def _err(e: Exception) -> tuple[Optional[int], str]:
             return None, f"vest: HTTP {e.response.status_code}"
     if isinstance(e, NeedsSignature):
         return None, "vest: sign in again"
-    return None, f"vest: {type(e).__name__} {e}"[:200]
+    return None, f"vest: {type(e).__name__}"
 
 
 def parse_account_state(msg: dict, *, account_id: str, vest_account_id: str, seen: dict,
-                        roots: Optional[dict] = None) -> list[FillEvent]:
+                        roots: Optional[dict] = None, default_root: str = "NQ") -> list[FillEvent]:
     """Fills out of one private-socket `account_state` frame. An order's executed_quantity is cumulative: `seen`
     (order id -> units already reported) turns it into per-fill deltas, so a replayed frame yields nothing."""
     d = msg.get("data") or {}
@@ -108,12 +120,12 @@ def parse_account_state(msg: dict, *, account_id: str, vest_account_id: str, see
         if delta <= 0:
             continue
         seen[oid] = done
-        root = roots.get(str(o.get("position_id"))) or roots.get(oid) or "NQ"
+        root = roots.get(str(o.get("position_id"))) or roots.get(oid) or default_root
         px = _dec(o.get("execution_price") or 0) or _dec(o.get("price") or 0)       # zero execution price: use the limit
         after = None
         if held:
             after = _contracts(sum((Decimal(0) if str(p.get("event_type", "")).endswith("CLOSED") else _signed(p)
-                                    for p in held), Decimal(0)), root)
+                                    for p in held), Decimal(0)), root, truncate=True)
         out.append(FillEvent(account_id=account_id, symbol=root, side="Buy" if o.get("side") == "buy" else "Sell",
                              qty=_contracts(delta, root), price=float(px) if px else None, position_after=after,
                              ts=time.time(), raw={"orderId": oid, "positionId": o.get("position_id"),
@@ -123,7 +135,7 @@ def parse_account_state(msg: dict, *, account_id: str, vest_account_id: str, see
 
 
 def poll_fills(prev: Optional[dict], rows: list, *, account_id: str, vest_account_id: str,
-               roots: Optional[dict] = None) -> tuple[list[FillEvent], dict]:
+               roots: Optional[dict] = None, default_root: str = "NQ") -> tuple[list[FillEvent], dict]:
     """Fallback when the socket is down: fills = changes in the open positions between two reads (first read: seed only).
     A close has no price on the opened list, so its price is None."""
     cur = {r["positionId"]: (_signed(r), r.get("openPrice")) for r in rows
@@ -137,11 +149,11 @@ def poll_fills(prev: Optional[dict], rows: list, *, account_id: str, vest_accoun
         d = cur.get(pid, (Decimal(0), None))[0] - prev.get(pid, (Decimal(0), None))[0]
         if d == 0:
             continue
-        root = roots.get(pid) or "NQ"
+        root = roots.get(pid) or default_root
         px = cur.get(pid, (None, None))[1]
         out.append(FillEvent(account_id=account_id, symbol=root, side="Buy" if d > 0 else "Sell",
                              qty=_contracts(abs(d), root), price=float(px) if px else None,
-                             position_after=_contracts(net, root), ts=time.time(),
+                             position_after=_contracts(net, root, truncate=True), ts=time.time(),
                              raw={"positionId": pid, "units": str(abs(d)), "src": "poll"}, seen=time.perf_counter()))
     return out, cur
 
@@ -151,11 +163,12 @@ class VestAdapter(BrokerAdapter):
     platform = "vest"
 
     def __init__(self, account_id: str, *, keyring_key: str, vest_account_id: str, session: VestSession | None = None,
-                 floors: dict | None = None, slip_frac: float = 0.5):
+                 floors: dict | None = None, slip_frac: float = 0.5, root: str = "NQ"):
         super().__init__(account_id, live=True)
         self.vest_account_id = vest_account_id          # "" = probe: connect + list_accounts only, no orders
         self.session = session or VestSession(keyring_key)
         self._own_session = session is None
+        self.root = root                                # this account's contract root (fills after a restart use it)
         self.floors, self.slip_frac = floors, slip_frac    # used by the held stop entries (later task)
         self._sp: Optional[dict] = None
         self._roots: dict[str, str] = {}                # order id / position id -> root we placed it with
@@ -165,6 +178,8 @@ class VestAdapter(BrokerAdapter):
         self._busy = True                               # poll fallback: something may rest / be open
         self._seq = 0                                   # last account_seq seen on the socket
         self._seen: dict[str, Decimal] = {}
+        self._events: dict[str, tuple[str, Optional[str]]] = {}     # command / order id -> (status, error) off the socket
+        self._pos_of: dict[str, str] = {}               # order id -> position id (for get_order_status)
 
     # --- plumbing ---------------------------------------------------------------------------------
     async def _api(self, method: str, path: str, *, account: bool = True, **kw):
@@ -204,8 +219,8 @@ class VestAdapter(BrokerAdapter):
                 return DEFAULTS
         return self._sp
 
-    def _px(self, price, sp: dict) -> str:
-        ticks = (_dec(price) / sp["tick"]).quantize(Decimal(1), rounding=ROUND_HALF_UP)       # nearest tick, ties up
+    def _px(self, price, sp: dict, rounding=ROUND_HALF_UP) -> str:
+        ticks = (_dec(price) / sp["tick"]).quantize(Decimal(1), rounding=rounding)           # default: nearest, ties up
         return _trim(ticks * sp["tick"], sp["price_dec"], ROUND_HALF_UP)
 
     async def _opened(self) -> list:
@@ -260,42 +275,122 @@ class VestAdapter(BrokerAdapter):
         return float(row["markPrice"])
 
     # --- orders -------------------------------------------------------------------------------------
-    async def _open(self, req: OrderRequest, *, bracket: bool) -> OrderResult:
+    async def _order(self, req: OrderRequest, *, bracket: bool) -> OrderResult:
+        """An entry opens a position; an order against this account's open position is an EXIT (close / reduce), never /open."""
         if req.order_type not in ("Market", "Limit"):
             return OrderResult(ok=False, error=f"vest: {req.order_type} entries are not placed here")
         limit = req.order_type == "Limit"
         if limit and req.price is None:
-            return OrderResult(ok=False, error="vest: a limit entry needs a price")
+            return OrderResult(ok=False, error="vest: a limit order needs a price")
         legs = bracket and (req.stop_price is not None or req.tp_price is not None)
         if legs and req.price is None:
             return OrderResult(ok=False, error="vest: a bracket needs the strategy's reference price in `price`")
-        sp = await self._spec()
-        body = {"symbol": SYMBOL, "side": "long" if req.side == "Buy" else "short",
-                "orderType": "limit" if limit else "market", "quantity": units_of(req.symbol, req.qty),
-                "leverage": sp["lev"], "timeInForce": "GTC" if limit else "IOC"}
+        units, root, sp = units_of(req.symbol, req.qty), root_of(req.symbol), await self._spec()
+        long = req.side == "Buy"
+        held = [p for p in await self._opened() if p.get("symbol") == SYMBOL]
+        if held:
+            if legs or (str(held[0].get("side")).lower() == "long") == long:
+                return OrderResult(ok=False, error="vest: position already open")
+            return await self._exit(req, held[0], units, root, sp)
+        body = {"symbol": SYMBOL, "side": "long" if long else "short", "orderType": "limit" if limit else "market",
+                "quantity": units, "leverage": sp["lev"], "timeInForce": "GTC" if limit else "IOC"}
         if limit:
             body["price"] = self._px(req.price, sp)
-        # SL/TP keep the strategy's point distances, from the limit price or (market) from NQ-PERP's own price
+        # SL/TP keep the strategy's point distances (from the limit price, or for a market entry from NQ-PERP's own price),
+        # rounded toward the entry so the protection is never looser than asked
         body["takeProfits"], body["stopLosses"] = [], []
         if legs:
             base = _dec(req.price) if limit else _dec(await self.perp_price())
-            for key, px in (("takeProfits", req.tp_price), ("stopLosses", req.stop_price)):
+            for key, px, up in (("takeProfits", req.tp_price, not long), ("stopLosses", req.stop_price, long)):
                 if px is not None:
-                    body[key] = [{"executionType": "market", "triggerPrice": self._px(base + _dec(px) - _dec(req.price), sp)}]
-        log.debug("vest %s: POST /v3/positions/open %s", self.account_id, body)
-        j = await self._api("POST", "/v3/positions/open", json=body)
+                    body[key] = [{"executionType": "market", "triggerPrice": self._px(
+                        base + _dec(px) - _dec(req.price), sp, ROUND_CEILING if up else ROUND_FLOOR)}]
+        want, bs = body["side"], "buy" if long else "sell"
+        return await self._submit(
+            "/v3/positions/open", body, root,
+            rest_hit=lambda o, ids: str(o.get("order_id")) in ids if ids else
+            (o.get("side") == bs and _dec(o.get("quantity") or 0) == _dec(units)),
+            state_ok=lambda rows: any(str(r.get("side")).lower() == want for r in rows if r.get("symbol") == SYMBOL))
+
+    async def _exit(self, req: OrderRequest, p: dict, units: str, root: str, sp: dict) -> OrderResult:
+        pid, before, limit = p["positionId"], abs(_signed(p)), req.order_type == "Limit"
+        lev, typ = str(p.get("leverage") or sp["lev"]), "limit" if limit else "market"
+        gone = lambda rows: not any(r.get("positionId") == pid for r in rows)          # noqa: E731
+        if _dec(units) >= before:
+            path, state_ok = "/v3/positions/close", gone
+            body = {"symbol": SYMBOL, "positionId": pid, "orderType": typ, "leverage": lev}
+            if limit:
+                body["limitPrice"] = self._px(req.price, sp)
+        else:
+            path = "/v3/positions/reduce"
+            body = {"positionId": pid, "symbol": SYMBOL, "orderType": typ, "leverage": lev, "quantity": units,
+                    "timeInForce": "GTC" if limit else "IOC", "reduceOnly": True}
+            if limit:
+                body["price"] = self._px(req.price, sp)
+            state_ok = lambda rows: gone(rows) or any(                                  # noqa: E731
+                r.get("positionId") == pid and abs(_signed(r)) < before for r in rows)
+        return await self._submit(path, body, root, state_ok=state_ok,
+                                  rest_hit=lambda o, ids: str(o.get("order_id")) in ids if ids else o.get("position_id") == pid)
+
+    async def _submit(self, path: str, body: dict, root: str, *, rest_hit, state_ok, gone: tuple = ()) -> OrderResult:
+        """POST an order action, then wait (OUTCOME_S) for its outcome on the socket; silence, a timeout or a 5xx is
+        reconciled against REST, never reported as a bare reject. A 4xx with a Vest code is a reject."""
+        log.debug("vest %s: POST %s %s", self.account_id, path, body)
+        j = None
+        try:
+            j = await self._api("POST", path, json=body)
+        except httpx.HTTPStatusError as e:
+            code, text = _err(e)
+            if code in gone:
+                return OrderResult(ok=True, raw={"gone": code})
+            if e.response.status_code < 500:
+                return OrderResult(ok=False, error=text)
+        except (httpx.TransportError, ValueError) as e:                      # sent, answer unknown: reconcile
+            log.warning("vest %s: %s answer unknown (%s)", self.account_id, path, type(e).__name__)
+        j = j or {}
+        self._busy = True
         oid = str(j["orderId"]) if j.get("orderId") is not None else None
+        ids = {str(j[k]) for k in ("commandId", "orderId") if j.get(k) is not None}
         for k in (oid, j.get("positionId")):
             if k:
-                self._roots[str(k)] = root_of(req.symbol)
-        self._busy = True
-        return OrderResult(ok=True, order_id=oid, raw=dict(j))
+                self._roots[str(k)] = root
+        if oid and j.get("positionId"):
+            self._pos_of[oid] = str(j["positionId"])
+        _cap(self._roots), _cap(self._pos_of)
+        hits = await self._wait(ids)
+        bad = next((h for h in hits if h[0] not in ("Working", "Filled")), None)
+        if bad:
+            return OrderResult(ok=False, order_id=oid, error=bad[1] or f"vest: order {bad[0]}", raw=j)
+        if hits or await self._reconciled(rest_hit, state_ok, ids):
+            return OrderResult(ok=True, order_id=oid, raw=j)
+        return OrderResult(ok=False, order_id=oid, error=UNCONFIRMED, raw=j)
+
+    async def _wait(self, ids: set) -> list:
+        """Outcomes of `ids` off the socket, waiting up to OUTCOME_S (not at all when no socket is running)."""
+        end = time.monotonic() + OUTCOME_S
+        while True:
+            hits = [self._events[i] for i in ids if i in self._events]
+            if hits or not self._tasks or time.monotonic() >= end:
+                return hits
+            await asyncio.sleep(0.02)
+
+    async def _reconciled(self, rest_hit, state_ok, ids: set) -> bool:
+        try:
+            if any(rest_hit(o, ids) for o in await self._resting()):
+                return True
+        except Exception as e:  # noqa: BLE001 -- each read on its own: the other may still answer
+            log.warning("vest %s: reconcile read failed (%s)", self.account_id, type(e).__name__)
+        try:
+            return bool(state_ok(await self._opened()))
+        except Exception as e:  # noqa: BLE001
+            log.warning("vest %s: reconcile read failed (%s)", self.account_id, type(e).__name__)
+            return False
 
     async def place_order(self, req: OrderRequest) -> OrderResult:
-        return await self._guard(lambda: self._open(req, bracket=False))
+        return await self._guard(lambda: self._order(req, bracket=False))
 
     async def place_bracket(self, req: OrderRequest) -> OrderResult:
-        return await self._guard(lambda: self._open(req, bracket=True))
+        return await self._guard(lambda: self._order(req, bracket=True))
 
     async def cancel_order_by_id(self, order_id: str) -> OrderResult:
         if not self.vest_account_id:
@@ -340,24 +435,56 @@ class VestAdapter(BrokerAdapter):
         return await self.flatten_all()
 
     async def _sweep(self, *, close: bool) -> OrderResult:
-        """Cancel every resting order, then (close) market-close every open position. Keeps going past a failure."""
+        """(close) market-close every open position FIRST, then cancel every resting order; each step in its own try, so a
+        failed read of one never stops the other."""
         errs, cancelled, closed = [], 0, 0
-        for o in await self._resting():
+        if close:
+            try:
+                held = await self._opened()
+            except Exception as e:  # noqa: BLE001
+                errs.append(_err(e)[1])
+                held = []
+            for p in held:
+                try:
+                    r = await self._submit(
+                        "/v3/positions/close", {"symbol": SYMBOL, "positionId": p["positionId"], "orderType": "market",
+                                                "leverage": str(p.get("leverage") or (await self._spec())["lev"])},
+                        self.root, gone=POSITION_GONE, rest_hit=lambda o, ids: False,
+                        state_ok=lambda rows, pid=p["positionId"]: not any(x.get("positionId") == pid for x in rows))
+                except Exception as e:  # noqa: BLE001
+                    r = OrderResult(ok=False, error=_err(e)[1])
+                errs += [] if r.ok else [r.error]
+                closed += r.ok
+        try:
+            resting = await self._resting()
+        except Exception as e:  # noqa: BLE001
+            errs.append(_err(e)[1])
+            resting = []
+        for o in resting:
             e = await self._post("/v3/positions/cancel-order", {"orderId": str(o["order_id"])}, ORDER_GONE)
             errs += [e] if e else []
             cancelled += e is None
-        for p in (await self._opened()) if close else []:
-            e = await self._post("/v3/positions/close", {
-                "symbol": SYMBOL, "positionId": p["positionId"], "orderType": "market",
-                "leverage": str(p.get("leverage") or (await self._spec())["lev"])}, POSITION_GONE)
-            errs += [e] if e else []
-            closed += e is None
         return OrderResult(ok=not errs, error="; ".join(errs) or None, raw={"cancelled": cancelled, "closed": closed})
 
     # --- reads --------------------------------------------------------------------------------------
     async def get_net_position(self, symbol: str) -> int:
         return _contracts(sum((_signed(p) for p in await self._opened() if p.get("symbol") == SYMBOL), Decimal(0)),
-                          root_of(symbol))
+                          root_of(symbol), truncate=True)
+
+    async def get_order_status(self, order_id: str) -> Optional[str]:
+        """"Working" if it rests; else its outcome off the socket; else Vest's own order row; else None (unknown)."""
+        oid = str(order_id)
+        if any(str(o.get("order_id")) == oid for o in await self._resting()):
+            return "Working"
+        seen = self._events.get(oid)
+        if seen and seen[0] != "Working":
+            return seen[0]
+        if oid in self._pos_of:
+            d = await self._api("GET", f"/v3/positions/{self._pos_of[oid]}/details")
+            for o in (d.get("position") or {}).get("orders") or []:
+                if str(o.get("order_id")) == oid:
+                    return _STATUS.get(str(o.get("status")).lower())
+        return None
 
     async def get_balance(self) -> dict:
         rows = _rows(await self._api("GET", "/v3/accounts", account=False), "accounts")
@@ -385,16 +512,30 @@ class VestAdapter(BrokerAdapter):
             ch, d = msg.get("channel"), msg.get("data") or {}
         except (ValueError, AttributeError):
             return
-        if ch == "command_events" and d.get("status") == "REJECTED" and d.get("account_id") == self.vest_account_id:
-            log.warning("vest %s: command rejected, code=%s order=%s", self.account_id, d.get("error_code"), d.get("order_id"))
-        elif ch == "account_state" and d.get("account_id") == self.vest_account_id:
-            seq = d.get("account_seq")
-            if isinstance(seq, int):
-                if seq <= self._seq:
-                    return
-                self._seq = seq
-            await self._deliver(parse_account_state(msg, account_id=self.account_id, vest_account_id=self.vest_account_id,
-                                                    seen=self._seen, roots=self._roots))
+        if ch not in ("command_events", "account_state") or d.get("account_id") != self.vest_account_id:
+            return
+        self._ws_up = True                      # the socket has spoken for this account: the poll fallback may rest
+        if ch == "command_events":
+            if d.get("status") == "REJECTED":
+                log.warning("vest %s: command rejected, code=%s order=%s", self.account_id, d.get("error_code"), d.get("order_id"))
+                self._events[str(d.get("command_id"))] = ("Rejected", f"vest {d.get('error_code')}")
+                _cap(self._events)
+            return
+        seq = d.get("account_seq")
+        if isinstance(seq, int):
+            if seq <= self._seq:
+                return
+            self._seq = seq
+        for o in d.get("orders") or []:
+            st = _STATUS.get(str(o.get("status")).lower())
+            if st and o.get("order_id") is not None:
+                code = o.get("error_code")
+                bad = st in ("Canceled", "Rejected")
+                self._events[str(o["order_id"])] = (st, (f"vest {code}" if code else None) if bad else None)
+        _cap(self._events)
+        await self._deliver(parse_account_state(msg, account_id=self.account_id, vest_account_id=self.vest_account_id,
+                                                seen=self._seen, roots=self._roots, default_root=self.root))
+        _cap(self._seen)
 
     async def _ws_loop(self) -> None:
         delay = 1.0
@@ -403,7 +544,7 @@ class VestAdapter(BrokerAdapter):
                 tok = await self.session.account_token(self.vest_account_id)
                 async with websockets.connect(WS_URL, subprotocols=["vest.v1", tok],
                                               additional_headers={"Origin": HEADERS["Origin"]}) as ws:
-                    self._ws_up, delay = True, 1.0
+                    delay = 1.0                     # _ws_up waits for the first frame
                     async for raw in ws:
                         await self._on_message(raw)
             except asyncio.CancelledError:
@@ -431,6 +572,6 @@ class VestAdapter(BrokerAdapter):
                 log.warning("vest %s: poll read failed (%s)", self.account_id, type(e).__name__)
                 continue
             events, prev = poll_fills(prev, held, account_id=self.account_id, vest_account_id=self.vest_account_id,
-                                      roots=self._roots)
+                                      roots=self._roots, default_root=self.root)
             self._busy = bool(held or resting)
             await self._deliver(events)

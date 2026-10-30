@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from decimal import Decimal
 
 import httpx
 import pytest
@@ -19,6 +20,7 @@ ACC = "acc-1"
 FAR = 4_000_000_000_000
 SYM = "NDX-USD-PERP"
 OPEN, CLOSE, CANCEL = "/v3/positions/open", "/v3/positions/close", "/v3/positions/cancel-order"
+REDUCE = "/v3/positions/reduce"
 
 
 def run(coro):
@@ -65,6 +67,17 @@ class Gateway:
             return httpx.Response(200, json=[{"account_id": ACC, "account_type": 1, "amount": "1234.5", "active": True}])
         if p == "/v3/capital/accounts":
             return httpx.Response(200, json={"accounts": [], "limits": {}})
+        if p in (OPEN, CLOSE, REDUCE):
+            b = json.loads(req.content)
+            if p == OPEN:
+                self.orders.append({"order_id": "o1", "account_id": ACC, "position_id": "p1", "symbol": SYM,
+                                    "side": "buy" if b["side"] == "long" else "sell", "quantity": b["quantity"]})
+            elif p == CLOSE:
+                self.positions = [x for x in self.positions if x["positionId"] != b["positionId"]]
+            else:
+                for x in self.positions:
+                    if x["positionId"] == b["positionId"]:
+                        x["quantity"] = str(Decimal(x["quantity"]) - Decimal(b["quantity"]))
         return httpx.Response(200, json={"orderId": "o1", "positionId": "p1", "commandId": "c1"})
 
     def api(self, method=None):
@@ -98,6 +111,9 @@ def test_units_of():
     assert units_of("MNQZ6", 3) == "6"
     with pytest.raises(ValueError):
         units_of("ESZ6", 1)
+    for bad in (0, -1):
+        with pytest.raises(ValueError):
+            units_of("NQZ6", bad)
 
 
 # ---- bodies ------------------------------------------------------------------------------------------------
@@ -123,7 +139,15 @@ def test_market_bracket_body_from_perp_price_rounded_to_tick():
     assert body(c) == {
         "symbol": SYM, "side": "short", "orderType": "market", "quantity": "4", "leverage": "50", "timeInForce": "IOC",
         "takeProfits": [{"executionType": "market", "triggerPrice": "21000.25"}],
-        "stopLosses": [{"executionType": "market", "triggerPrice": "21045.25"}]}
+        "stopLosses": [{"executionType": "market", "triggerPrice": "21045"}]}
+
+
+def test_sl_tp_round_toward_the_entry():
+    ad, gw = mk()
+    gw.mark = "21030.13"
+    run(ad.place_bracket(OrderRequest("NQZ6", "Buy", 1, "Market", price=21010, stop_price=20990, tp_price=21050)))
+    b = body(gw.api()[0])
+    assert b["stopLosses"][0]["triggerPrice"] == "21010.25" and b["takeProfits"][0]["triggerPrice"] == "21070"   # long SL up, TP down
 
 
 def test_plain_market_and_stop_entry_refused():
@@ -163,6 +187,33 @@ def test_modify_tp_sl_is_one_put():
     assert body(gw.writes()[0])["takeProfitId"] == "tp1"
 
 
+def test_exit_orders_close_or_reduce_never_open():
+    ad, gw = mk()
+    gw.positions = [pos("long", "20")]
+    assert run(ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Market"))).ok
+    assert [c.url.path for c in gw.api("POST")] == [CLOSE]                       # 20 units >= 20: close, zero /open
+    assert body(gw.api("POST")[0]) == {"symbol": SYM, "positionId": "p1", "orderType": "market", "leverage": "50"}
+    ad, gw = mk()
+    gw.positions = [pos("long", "20")]
+    assert run(ad.place_order(OrderRequest("MNQZ6", "Sell", 1, "Market"))).ok     # 2 units < 20: reduce
+    assert [c.url.path for c in gw.api("POST")] == [REDUCE]
+    assert body(gw.api("POST")[0]) == {"positionId": "p1", "symbol": SYM, "orderType": "market", "leverage": "50",
+                                       "quantity": "2", "timeInForce": "IOC", "reduceOnly": True}
+    ad, gw = mk()
+    gw.positions = [pos("short", "20")]
+    assert run(ad.place_order(OrderRequest("NQZ6", "Buy", 2, "Limit", price=21000.1))).ok     # bigger than the position: close
+    assert body(gw.api("POST")[0])["limitPrice"] == "21000" and body(gw.api("POST")[0])["orderType"] == "limit"
+
+
+def test_same_side_with_position_open_refused_without_a_call():
+    ad, gw = mk()
+    gw.positions = [pos("long", "20")]
+    r = run(ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market")))
+    assert not r.ok and r.error == "vest: position already open" and not gw.api()
+    r = run(ad.place_bracket(OrderRequest("NQZ6", "Sell", 1, "Market", price=21000, stop_price=21010)))   # a bracketed entry too
+    assert not r.ok and not gw.api()
+
+
 def test_modify_resting_entry_not_supported_and_never_cancels():
     ad, gw = mk()
     entry = run(ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Limit", price=21000)))
@@ -197,7 +248,14 @@ def test_timeout_order_not_resent():
         raise httpx.ReadTimeout("slow", request=req)
     gw.h[("POST", OPEN)] = boom
     r = run(ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market")))
-    assert not r.ok and "ReadTimeout" in r.error and len(gw.api("POST")) == 1
+    assert not r.ok and r.error == vest.UNCONFIRMED and len(gw.api("POST")) == 1       # never resent, never a bare reject
+
+    def boom_but_filled(req):                       # the order reached Vest: the position is there afterwards
+        gw.positions = [pos("long", "20")]
+        raise httpx.ReadTimeout("slow", request=req)
+    gw.positions, gw.h[("POST", OPEN)] = [], boom_but_filled
+    gw.calls.clear()
+    assert run(ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market"))).ok and len(gw.api("POST")) == 1
 
 
 def test_error_body_code_in_result():
@@ -350,3 +408,169 @@ def test_ws_loop_delivers_fill_and_dedupes_seq(monkeypatch):
     run(go())
     assert urls == [("wss://ws.hz.vestmarkets.com/ws/private", ["vest.v1", "ACCT-1"])]
     assert [g.raw["orderId"] for g in got] == ["o1"]               # the second frame reused seq 5: dropped
+
+
+# ---- fix round 1: outcomes, socket health, sweep, status ---------------------------------------------------
+class Sock:
+    """A fake private socket: frames put on `q` are read by the adapter's socket loop."""
+
+    def __init__(self):
+        self.q: asyncio.Queue = asyncio.Queue()
+        self.seq = 100
+
+    def put(self, msg):
+        self.q.put_nowait(json.dumps(msg))
+
+    def state(self, orders, positions=()):
+        self.seq += 1
+        self.put(acct_msg(orders, positions, seq=self.seq))
+
+    def patch(self, monkeypatch):
+        sock = self
+
+        class FakeWS:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            def __aiter__(self):
+                async def gen():
+                    while True:
+                        yield await sock.q.get()
+                return gen()
+        monkeypatch.setattr(vest.websockets, "connect", lambda url, **kw: FakeWS())
+
+
+def test_rejected_command_frame_is_ok_false_with_the_code(monkeypatch):
+    ad, gw = mk()
+    sock = Sock()
+    sock.patch(monkeypatch)
+    gw.h[("POST", OPEN)] = lambda req: sock.put(
+        {"channel": "command_events", "data": {"command_id": "c1", "status": "REJECTED", "error_code": 3002,
+                                              "account_id": ACC}}) or httpx.Response(
+        200, json={"orderId": "o1", "positionId": "p1", "commandId": "c1"})
+
+    async def go():
+        await ad.observe_fills(lambda ev: asyncio.sleep(0))
+        r = await ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market"))
+        await ad.close()
+        return r
+    r = run(go())
+    assert not r.ok and r.error == "vest 3002"
+
+
+def test_cancelled_order_frame_is_ok_false_and_filled_frame_is_ok(monkeypatch):
+    ad, gw = mk()
+    sock = Sock()
+    sock.patch(monkeypatch)
+    row = {"order_id": "o1", "position_id": "p1", "account_id": ACC, "symbol": SYM}
+    ans = httpx.Response(200, json={"orderId": "o1", "positionId": "p1", "commandId": "c1"})
+    gw.h[("POST", OPEN)] = lambda req: sock.state([{**row, "status": "cancelled", "error_code": 3029}]) or ans
+
+    async def go():
+        got = []
+
+        async def on_fill(ev):
+            got.append(ev)
+        await ad.observe_fills(on_fill)
+        bad = await ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market"))
+        gw.h[("POST", OPEN)] = lambda req: sock.state(
+            [{**row, "order_id": "o1", "status": "filled", "side": "buy", "executed_quantity": "20", "quantity": "20",
+              "execution_price": "21000"}]) or ans
+        ad._events.clear()
+        good = await ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market"))
+        await asyncio.sleep(0.05)
+        await ad.close()
+        return bad, good, got
+    bad, good, got = run(go())
+    assert not bad.ok and bad.error == "vest 3029" and good.ok
+    assert [g.qty for g in got] == [1]
+
+
+def test_silence_reconciles_by_rest_both_ways(monkeypatch):
+    monkeypatch.setattr(vest, "OUTCOME_S", 0.05)
+    ad, gw = mk()
+    Sock().patch(monkeypatch)                                  # a socket that never speaks
+
+    async def go():
+        await ad.observe_fills(lambda ev: asyncio.sleep(0))
+        ok = await ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Limit", price=21000))     # rests on Vest: found
+        gw.h[("POST", OPEN)] = lambda req: httpx.Response(200, json={"orderId": "o9", "positionId": "p9", "commandId": "c9"})
+        gw.orders.clear()
+        lost = await ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Limit", price=21000))   # nowhere: unconfirmed
+        await ad.close()
+        return ok, lost
+    ok, lost = run(go())
+    assert ok.ok and not lost.ok and lost.error == vest.UNCONFIRMED
+
+
+def test_socket_counts_as_up_only_after_its_first_frame_and_poll_covers_until_then(monkeypatch):
+    monkeypatch.setattr(vest, "POLL_S", 0.01)
+    ad, gw = mk()
+    sock = Sock()
+    sock.patch(monkeypatch)
+    gw.positions = [pos("long", "20")]
+    got = []
+
+    async def go():
+        async def on_fill(ev):
+            got.append(ev)
+        await ad.observe_fills(on_fill)
+        await asyncio.sleep(0.1)                                # connected, silent: poll seeds
+        assert not ad._ws_up
+        gw.positions = [pos("long", "40")]
+        await asyncio.sleep(0.1)
+        polled = list(got)
+        sock.put({"channel": "command_events", "data": {"command_id": "x", "status": "ACCEPTED", "account_id": ACC}})
+        await asyncio.sleep(0.05)
+        up = ad._ws_up
+        await ad.close()
+        return polled, up
+    polled, up = run(go())
+    assert [(g.side, g.qty, g.raw["src"]) for g in polled] == [("Buy", 1, "poll")] and up
+
+
+def test_flatten_closes_even_when_the_orders_read_fails():
+    ad, gw = mk()
+    gw.positions = [pos()]
+    gw.h[("GET", "/v3/positions/opened-orders")] = lambda req: httpx.Response(429)
+    r = run(ad.flatten_all())
+    assert [c.url.path for c in gw.api("POST")] == [CLOSE] and r.raw["closed"] == 1 and not r.ok and "429" in r.error
+
+
+def test_net_position_truncates_toward_zero():
+    ad, gw = mk()
+    gw.positions = [pos("long", "30")]
+    assert run(ad.get_net_position("NQ")) == 1
+    gw.positions = [pos("short", "30")]
+    assert run(ad.get_net_position("NQ")) == -1
+    gw.positions = [pos("long", "5")]
+    assert run(ad.get_net_position("NQ")) == 0
+
+
+def test_get_order_status_from_rest_socket_and_details():
+    ad, gw = mk()
+    gw.orders = [{"order_id": "r1", "account_id": ACC}]
+    assert run(ad.get_order_status("r1")) == "Working"
+    assert run(ad.get_order_status("nope")) is None
+    ad._events["e1"] = ("Canceled", None)
+    assert run(ad.get_order_status("e1")) == "Canceled"
+    ad._pos_of["d1"] = "p7"
+    gw.h[("GET", "/v3/positions/p7/details")] = lambda req: httpx.Response(
+        200, json={"position": {"orders": [{"order_id": "d1", "status": "filled"}]}})
+    assert run(ad.get_order_status("d1")) == "Filled"
+
+
+def test_root_kwarg_caps_and_generic_errors(monkeypatch):
+    ad = VestAdapter("v", keyring_key=KEY, vest_account_id=ACC, session=mk()[0].session, root="MNQ")
+    assert ad.root == "MNQ"
+    (f,) = parse_account_state(acct_msg([order_row(quantity="4", executed_quantity="4", position_id="unknown")]), seen={},
+                               account_id="v", vest_account_id=ACC, default_root=ad.root)
+    assert (f.symbol, f.qty) == ("MNQ", 2)
+    monkeypatch.setattr(vest, "KEEP", 3)
+    d = {i: i for i in range(6)}
+    vest._cap(d)
+    assert list(d) == [3, 4, 5]
+    assert vest._err(RuntimeError("SECRET-TOKEN"))[1] == "vest: RuntimeError"
