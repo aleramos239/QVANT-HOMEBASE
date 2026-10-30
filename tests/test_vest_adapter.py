@@ -69,9 +69,12 @@ class Gateway:
             return httpx.Response(200, json={"accounts": [], "limits": {}})
         if p in (OPEN, CLOSE, REDUCE):
             b = json.loads(req.content)
-            if p == OPEN:
+            if p == OPEN and b["orderType"] == "market":
+                self.positions.append(pos(b["side"], b["quantity"]))
+            elif p == OPEN:
                 self.orders.append({"order_id": "o1", "account_id": ACC, "position_id": "p1", "symbol": SYM,
-                                    "side": "buy" if b["side"] == "long" else "sell", "quantity": b["quantity"]})
+                                    "side": "buy" if b["side"] == "long" else "sell", "quantity": b["quantity"],
+                                    "price": b["price"]})
             elif p == CLOSE:
                 self.positions = [x for x in self.positions if x["positionId"] != b["positionId"]]
             else:
@@ -236,6 +239,7 @@ def test_401_order_resent_once():
     assert run(ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market"))).ok
     assert len(gw.api("POST")) == 2
     gw.calls.clear()
+    gw.positions.clear()
     gw.h[("POST", OPEN)] = lambda req: httpx.Response(401)
     assert not run(ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market"))).ok
     assert len(gw.api("POST")) == 2
@@ -540,14 +544,11 @@ def test_flatten_closes_even_when_the_orders_read_fails():
     assert [c.url.path for c in gw.api("POST")] == [CLOSE] and r.raw["closed"] == 1 and not r.ok and "429" in r.error
 
 
-def test_net_position_truncates_toward_zero():
+def test_net_position_rounds_away_from_zero():
     ad, gw = mk()
-    gw.positions = [pos("long", "30")]
-    assert run(ad.get_net_position("NQ")) == 1
-    gw.positions = [pos("short", "30")]
-    assert run(ad.get_net_position("NQ")) == -1
-    gw.positions = [pos("long", "5")]
-    assert run(ad.get_net_position("NQ")) == 0
+    for side, qty, want in (("long", "7", 1), ("long", "30", 2), ("short", "30", -2), ("long", "5", 1), ("long", "40", 2)):
+        gw.positions = [pos(side, qty)]
+        assert run(ad.get_net_position("NQ")) == want, (side, qty)
 
 
 def test_get_order_status_from_rest_socket_and_details():
@@ -574,3 +575,212 @@ def test_root_kwarg_caps_and_generic_errors(monkeypatch):
     vest._cap(d)
     assert list(d) == [3, 4, 5]
     assert vest._err(RuntimeError("SECRET-TOKEN"))[1] == "vest: RuntimeError"
+
+
+# ---- fix round 2: never report flat (or ok) while a position may still be open -----------------------------------
+def test_sweep_cancels_first_then_closes_and_rereads():
+    ad, gw = mk()
+    gw.positions = [pos()]
+    gw.orders = [{"order_id": "r1", "account_id": ACC, "symbol": SYM}]
+    r = run(ad.flatten_all())
+    assert r.ok and r.raw == {"cancelled": 1, "closed": 1}
+    assert [c.url.path for c in gw.api("POST")] == [CANCEL, CLOSE]
+    opened = [i for i, c in enumerate(gw.calls) if c.url.path == "/v3/positions/opened"]
+    assert gw.calls[-1].url.path == "/v3/positions/opened" and len(opened) >= 2       # read, close (+ its own check), re-read
+
+
+def test_sweep_position_still_open_is_not_ok_and_closes_twice():
+    ad, gw = mk()
+    gw.positions = [pos()]
+    gw.h[("POST", CLOSE)] = lambda req: httpx.Response(200, json={"orderId": "o1", "positionId": "p1", "commandId": "c1"})
+    r = run(ad.flatten_all())
+    assert not r.ok and "position still open" in r.error
+    assert [c.url.path for c in gw.api("POST")].count(CLOSE) == 2                      # one more try, then the truth
+
+
+def test_close_already_requested_is_not_gone():
+    ad, gw = mk()
+    gw.positions = [pos()]
+    gw.h[("POST", CLOSE)] = lambda req: httpx.Response(400, json={"code": 10029, "msg": "CLOSE_ALREADY_REQUESTED"})
+    r = run(ad.flatten_all())
+    assert not r.ok and "position still open" in r.error
+
+    def no_position(req):                                                              # 10009: truly gone
+        gw.positions = []
+        return httpx.Response(400, json={"code": 10009, "msg": "NO_POSITION"})
+    ad, gw = mk()
+    gw.positions = [pos()]
+    gw.h[("POST", CLOSE)] = no_position
+    assert run(ad.flatten_all()).ok
+
+
+def test_sweep_reread_failing_is_not_ok():
+    ad, gw = mk()
+    gw.positions = [pos()]
+    calls = []
+
+    def second_read_fails(req):
+        calls.append(1)
+        return httpx.Response(500) if len(calls) >= 2 else None
+    gw.h[("GET", "/v3/positions/opened")] = second_read_fails
+    r = run(ad.flatten_all())
+    assert not r.ok and len(gw.api("POST")) == 1                                       # closed once; the re-read said nothing
+
+
+def _frames(sock, *states):
+    row = {"order_id": "o1", "position_id": "p1", "account_id": ACC, "symbol": SYM, "side": "sell"}
+    for delay, extra in states:
+        asyncio.get_event_loop().call_later(delay, sock.state, [{**row, **extra}])
+
+
+def test_market_close_accepted_then_cancelled_is_not_ok(monkeypatch):
+    ad, gw = mk()
+    sock = Sock()
+    sock.patch(monkeypatch)
+    gw.positions = [pos("long", "20")]
+    ans = httpx.Response(200, json={"orderId": "o1", "positionId": "p1", "commandId": "c1"})
+    gw.h[("POST", CLOSE)] = lambda req: ans
+
+    async def go():
+        await ad.observe_fills(lambda ev: asyncio.sleep(0))
+        _frames(sock, (0, {"status": "accepted"}), (0.15, {"status": "cancelled", "error_code": 3029}))
+        r = await ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Market"))
+        await ad.close()
+        return r
+    r = run(go())
+    assert not r.ok and r.error == "vest 3029"
+
+
+def test_market_close_accepted_then_filled_is_ok(monkeypatch):
+    ad, gw = mk()
+    sock = Sock()
+    sock.patch(monkeypatch)
+    gw.positions = [pos("long", "20")]
+    gw.h[("POST", CLOSE)] = lambda req: httpx.Response(200, json={"orderId": "o1", "positionId": "p1", "commandId": "c1"})
+
+    async def go():
+        await ad.observe_fills(lambda ev: asyncio.sleep(0))
+        _frames(sock, (0, {"status": "accepted"}),
+                (0.15, {"status": "filled", "executed_quantity": "20", "quantity": "20", "execution_price": "21000"}))
+        r = await ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Market"))
+        await ad.close()
+        return r
+    assert run(go()).ok
+
+
+def test_market_close_partially_filled_then_silence_with_position_open_is_not_ok(monkeypatch):
+    monkeypatch.setattr(vest, "OUTCOME_S", 0.1)
+    ad, gw = mk()
+    sock = Sock()
+    sock.patch(monkeypatch)
+    gw.positions = [pos("long", "20")]
+    gw.h[("POST", CLOSE)] = lambda req: httpx.Response(200, json={"orderId": "o1", "positionId": "p1", "commandId": "c1"})
+
+    async def go():
+        await ad.observe_fills(lambda ev: asyncio.sleep(0))
+        _frames(sock, (0, {"status": "partially_filled", "executed_quantity": "5", "quantity": "20"}))
+        r = await ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Market"))
+        await ad.close()
+        return r
+    r = run(go())
+    assert not r.ok and r.error == vest.UNCONFIRMED
+
+
+def test_lost_market_exit_is_decided_by_the_position_not_a_resting_tp():
+    def lost(req):
+        raise httpx.ReadTimeout("slow", request=req)
+    ad, gw = mk()
+    gw.positions = [pos("long", "20")]
+    gw.orders = [{"order_id": "tp1", "account_id": ACC, "position_id": "p1", "symbol": SYM, "side": "sell", "quantity": "20"}]
+    gw.h[("POST", CLOSE)] = lost
+    r = run(ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Market")))
+    assert not r.ok and r.error == vest.UNCONFIRMED                                    # the position is still there
+    ad, gw = mk()
+    gw.positions = [pos("long", "20")]
+
+    def lost_but_closed(req):
+        gw.positions = []
+        raise httpx.ReadTimeout("slow", request=req)
+    gw.h[("POST", CLOSE)] = lost_but_closed
+    assert run(ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Market"))).ok
+    ad, gw = mk()
+    gw.positions = [pos("long", "20")]
+    gw.h[("POST", REDUCE)] = lost                                                      # a reduce: smaller position = done
+    assert not run(ad.place_order(OrderRequest("MNQZ6", "Sell", 1, "Market"))).ok
+
+    def lost_but_reduced(req):
+        gw.positions = [pos("long", "18")]
+        raise httpx.ReadTimeout("slow", request=req)
+    gw.h[("POST", REDUCE)] = lost_but_reduced
+    assert run(ad.place_order(OrderRequest("MNQZ6", "Sell", 1, "Market"))).ok
+
+
+def test_lost_open_matches_by_position_for_market_and_by_side_qty_price_for_limit():
+    def lost(req):
+        raise httpx.ReadTimeout("slow", request=req)
+    ad, gw = mk()
+    gw.orders = [{"order_id": "z", "account_id": ACC, "symbol": SYM, "side": "buy", "quantity": "20"}]
+    gw.h[("POST", OPEN)] = lost
+    assert not run(ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market"))).ok        # a resting order is no market fill
+    for price, ok in (("20000", False), ("21000", True)):
+        ad, gw = mk()
+        gw.orders = [{"order_id": "z", "account_id": ACC, "symbol": SYM, "side": "buy", "quantity": "20", "price": price}]
+        gw.h[("POST", OPEN)] = lost
+        assert run(ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Limit", price=21000))).ok is ok
+
+
+def test_flatten_tagged_order_with_no_position_never_opens():
+    ad, gw = mk()
+    r = run(ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Market", text="homebase:flat NQ")))
+    assert r.ok and not gw.api("POST")
+    assert run(ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Market"))).ok and [c.url.path for c in gw.api("POST")] == [OPEN]
+
+
+def test_non_dict_200_body_is_reconciled_not_rejected():
+    ad, gw = mk()
+
+    def odd(req):
+        gw.positions = [pos("long", "20")]
+        return httpx.Response(200, json=["not", "a", "dict"])
+    gw.h[("POST", OPEN)] = odd
+    assert run(ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market"))).ok
+
+
+def test_poll_then_socket_reports_the_fill_once():
+    kw = dict(account_id="vest1", vest_account_id=ACC)
+    frame = acct_msg([order_row(quantity="20", executed_quantity="20")])
+    seen, polled = {}, {}
+    _, cur = poll_fills(None, [], **kw)
+    ev, cur = poll_fills(cur, [pos(qty="20")], polled=polled, **kw)
+    assert [e.qty for e in ev] == [1]
+    assert parse_account_state(frame, seen=seen, polled=polled, **kw) == []              # the socket's twin of the poll fill
+    seen, polled = {}, {}
+    _, cur = poll_fills(None, [], **kw)
+    _, cur = poll_fills(cur, [pos(qty="10")], polled=polled, **kw)                       # poll saw 10 of the 20
+    (rest,) = parse_account_state(frame, seen=seen, polled=polled, **kw)
+    assert rest.raw["units"] == "10" and rest.qty == 1
+
+
+def test_poll_does_not_emit_when_the_socket_spoke_during_its_read(monkeypatch):
+    monkeypatch.setattr(vest, "POLL_S", 0.01)
+    ad, gw = mk()
+    Sock().patch(monkeypatch)
+    gw.positions = [pos("long", "20")]
+    reads, got = [], []
+
+    def read(req):
+        reads.append(1)
+        if len(reads) == 2:                      # the socket speaks while the poll is reading
+            ad._ws_up = True
+            gw.positions = [pos("long", "40")]
+
+    gw.h[("GET", "/v3/positions/opened")] = read
+
+    async def go():
+        async def on_fill(ev):
+            got.append(ev)
+        await ad.observe_fills(on_fill)
+        await asyncio.sleep(0.2)
+        await ad.close()
+    run(go())
+    assert len(reads) >= 2 and got == []
