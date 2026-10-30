@@ -346,7 +346,8 @@ class VestAdapter(BrokerAdapter):
             # the row shape is unknown: a kind is read from the row's own words, never guessed
             words = " ".join([k.lower() for k, v in r.items() if v is True and "id" not in k.lower()]
                              + [v.lower() for k, v in r.items() if isinstance(v, str) and "id" not in k.lower()])
-            kind = "demo" if ("eval" in words or "demo" in words) else "funded" if "funded" in words else None
+            # demo only when Vest says demo; an eval is real money: live, the funded confirm (R63)
+            kind = "demo" if "demo" in words else "eval" if "eval" in words else "funded" if "funded" in words else None
             aid = r.get("account_id") or r.get("accountId") or r.get("id")
             if kind and aid:
                 out.append({"name": f"Vest {kind} {str(aid)[:6]}", "id": aid, "kind": kind, "demo": kind == "demo"})

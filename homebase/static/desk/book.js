@@ -428,8 +428,8 @@ async function vestSaved() {
    can't be ticked. Every broker-supplied name is escaped, and reaches its handler through jsArg. */
 const wizOnDesk = (a) => a.on_desk !== undefined ? !!a.on_desk
   : Object.keys((ST && ST.accounts) || {}).includes(String(a.name).toLowerCase());
-/* A Vest row's kind in words (Demo / Funded / Primary); a Tradovate row has none. */
-const vestKind = (a) => WIZ.broker !== "vest" ? "" : ({demo: "Demo", funded: "Funded", primary: "Primary"}[a.kind]
+/* A Vest row's kind in words (Demo / Eval / Funded / Primary); a Tradovate row has none. */
+const vestKind = (a) => WIZ.broker !== "vest" ? "" : ({demo: "Demo", eval: "Eval", funded: "Funded", primary: "Primary"}[a.kind]
   || (a.demo === undefined ? "" : a.demo ? "Demo" : "Funded"));
 const wizAddable = () => WIZ.accounts.filter(a => !wizOnDesk(a));
 function renderAcctList() {

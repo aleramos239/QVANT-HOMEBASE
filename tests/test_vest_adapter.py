@@ -330,9 +330,11 @@ def test_balance_and_accounts():
 def test_capital_accounts_kind_never_guessed():
     ad, gw = mk()
     gw.h[("GET", "/v3/capital/accounts")] = lambda req: httpx.Response(200, json={"accounts": [
-        {"account_id": "c1", "stage": "Evaluation"}, {"account_id": "c2", "status": "funded"}, {"account_id": "c3", "mystery": 1}]})
+        {"account_id": "c1", "stage": "Evaluation"}, {"account_id": "c2", "status": "funded"}, {"account_id": "c3", "mystery": 1},
+        {"account_id": "c4", "type": "DEMO"}]})
     kinds = {r["id"]: (r["kind"], r["demo"]) for r in run(ad.list_accounts())}
-    assert kinds == {ACC: ("primary", False), "c1": ("demo", True), "c2": ("funded", False)}      # c3 skipped
+    # demo only when Vest says demo: an eval is real money, so the funded confirm and live=True (R63)
+    assert kinds == {ACC: ("primary", False), "c1": ("eval", False), "c2": ("funded", False), "c4": ("demo", True)}
 
 
 # ---- fills -------------------------------------------------------------------------------------------------
