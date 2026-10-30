@@ -29,7 +29,7 @@ from ..core.clock import ET
 from ..paths import state_dir
 from .base import BrokerAdapter, FillCallback, FillEvent, OrderRequest, OrderResult
 from .paper import root_of
-from .vest_auth import HEADERS, NeedsSignature, VestSession
+from .vest_auth import HEADERS, NeedsSignature, VestSession, urgent
 from .vest_held import HeldBook, HeldEntry, _proot, floor_room, reached, slip_ok
 
 log = logging.getLogger(__name__)
@@ -476,6 +476,9 @@ class VestAdapter(BrokerAdapter):
             return False
 
     async def place_order(self, req: OrderRequest) -> OrderResult:
+        if (req.text or "").startswith(EXIT_TAGS):     # the engine's kill / flatten: never waits out a refresh backoff
+            with urgent():
+                return await self._guard(lambda: self._order(req, bracket=False))
         return await self._guard(lambda: self._order(req, bracket=False))
 
     async def place_bracket(self, req: OrderRequest) -> OrderResult:
@@ -534,7 +537,8 @@ class VestAdapter(BrokerAdapter):
         self._sweeping += 1                             # from here no entry, fire or limit, POSTs (R41)
         self._sweeps += 1
         try:
-            return await self._sweep_now(close=close)
+            with urgent():                              # only a 401 stops a kill / flatten (R57)
+                return await self._sweep_now(close=close)
         finally:
             self._sweeping -= 1
 

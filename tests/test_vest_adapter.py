@@ -1105,3 +1105,35 @@ def test_connect_refuses_an_account_not_on_this_login():
     ad, gw = mk()
     run(ad.connect())
     assert ad.connected
+
+
+def _blocked_login(ad, gw):
+    """Every token expired, the refresh inside its backoff and the wallet-login budget cooling down (a 429)."""
+    from homebase.broker import vest_auth
+    gw.h[("POST", "/v3/auth/refresh")] = lambda req: httpx.Response(200, json={
+        "accessToken": "AT-2", "accessExpiresAtMs": FAR, "refreshToken": "RT-2", "refreshTokenId": "RTID-2",
+        "refreshExpiresAtMs": FAR})
+    ad.session._user, ad.session._accounts = None, {}
+    ad.session._refresh_fails, ad.session._refresh_next_ms = 3, vest_auth._now_ms() + 60_000
+    ad.session.budget.note_error(KEY, "status=429")
+
+
+def test_a_flatten_during_a_login_block_still_sends_its_close():
+    """I3 (R57 d): kill / flatten are never refused by a backoff or a budget block; only a 401 stops them."""
+    ad, gw = mk()
+    gw.positions = [pos("long", "20")]
+    _blocked_login(ad, gw)
+    assert run(ad.flatten_all()).ok
+    assert CLOSE in [c.url.path for c in gw.api("POST")]
+    ad, gw = mk()
+    gw.positions = [pos("long", "20")]
+    _blocked_login(ad, gw)
+    assert run(ad.place_order(OrderRequest("NQZ6", "Sell", 1, "Market", text="homebase:kill"))).ok
+    assert CLOSE in [c.url.path for c in gw.api("POST")]
+
+
+def test_an_entry_during_the_refresh_backoff_is_refused():
+    ad, gw = mk()
+    _blocked_login(ad, gw)
+    r = run(ad.place_order(OrderRequest("NQZ6", "Buy", 1, "Market")))
+    assert not r.ok and "LoginDeferred" in r.error and not gw.api("POST")

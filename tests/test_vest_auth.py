@@ -272,20 +272,20 @@ def test_user_level_401_refreshes_and_resends():
     assert seen == ["Bearer AT-1", "Bearer AT-2"]
 
 
-def test_refresh_403_is_not_sticky():
+def test_refresh_403_is_not_sticky(monkeypatch):
     v = Vest()
+    s = registered(v)
     clock = [1_000_000]
-    b = LoginBudget(clock=lambda: clock[0] / 1)
-    s = registered(v, budget=b)
+    monkeypatch.setattr(vest_auth, "_now_ms", lambda: clock[0])
     expire_user_token(s)
     v.handlers["/v3/auth/refresh"] = lambda req: httpx.Response(403, text="waf")
     with pytest.raises(httpx.HTTPStatusError):
         run(s.user_token())
     assert not s.needs_signature
-    with pytest.raises(RuntimeError, match="backing off"):                 # still inside the budget's backoff
+    with pytest.raises(RuntimeError, match="backing off"):                 # still inside the refresh's own backoff
         run(s.user_token())
     assert v.paths().count("/v3/auth/refresh") == 1
-    clock[0] += 400                                                        # past BACKOFF_BASE_S
+    clock[0] += 11_000                                                     # past the first 10 s
     v.handlers.pop("/v3/auth/refresh")
     assert run(s.user_token()) == "AT-2"
 
@@ -343,7 +343,7 @@ def test_secrets_never_logged(caplog):
     for answer in (httpx.Response(500, text="BODY-SECRET"), httpx.Response(401, text="BODY-SECRET")):   # error paths too
         v.handlers["/v3/auth/refresh"] = lambda req, a=answer: a
         expire_user_token(s)
-        s.budget.login_result(KEY)                                     # lift the backoff the 500 started
+        s._refresh_next_ms = 0                                         # lift the backoff the 500 started
         with pytest.raises((httpx.HTTPStatusError, NeedsSignature)) as e:
             run(s.user_token())
         errs.append(str(e.value) + repr(e.value))
@@ -405,3 +405,76 @@ def test_a_refresh_in_flight_never_overwrites_a_fresh_register():
     creds = secrets_store.get_credentials(KEY)
     assert creds["refresh_token_id"] == "RTID-7" and creds["refresh_expires_ms"] == FAR + 7
     assert s._user[0] == "AT-7"
+
+
+# ---- final fix I3 (R57) --------------------------------------------------------------------------------------
+def test_a_429_on_a_trading_call_books_no_cooldown_an_auth_429_does():
+    v = Vest()
+    b = LoginBudget()
+    s = registered(v, budget=b)
+    v.handlers["/v3/orders"] = lambda req: httpx.Response(429)
+    with pytest.raises(httpx.HTTPStatusError):
+        run(s.request("GET", "/v3/orders"))
+    assert b.blocked(KEY, manual=True) is None
+    expire_user_token(s)
+    v.handlers["/v3/auth/refresh"] = lambda req: httpx.Response(429)
+    with pytest.raises(httpx.HTTPStatusError):
+        run(s.user_token())
+    assert "429" in (b.blocked(KEY, manual=True) or "")
+
+
+def test_a_failed_refresh_retries_after_about_10s_doubling_to_60s(monkeypatch):
+    v = Vest()
+    b = LoginBudget()
+    s = registered(v, budget=b)
+    clock = [1_000_000]
+    monkeypatch.setattr(vest_auth, "_now_ms", lambda: clock[0])
+    v.handlers["/v3/auth/refresh"] = lambda req: httpx.Response(500)
+    waits = []
+    expire_user_token(s)
+    with pytest.raises(httpx.HTTPStatusError):
+        run(s.user_token())
+    for _ in range(5):
+        t0 = clock[0]                                               # the last failure: the wait starts here
+        while clock[0] - t0 < 400_000:                               # bounded: the old 300 s backoff would loop
+            clock[0] += 1_000
+            try:
+                run(s.user_token())
+            except httpx.HTTPStatusError:
+                break                                               # it tried again (and failed again)
+            except RuntimeError as e:
+                assert "backing off" in str(e)
+        waits.append((clock[0] - t0) // 1000)
+    assert waits[:4] == [10, 20, 40, 60] and waits[4] == 60
+    assert b.blocked(KEY) is None                                   # the wallet-login budget is untouched by refreshes
+
+
+def test_tokens_renew_with_5_minutes_left(monkeypatch):
+    v = Vest()
+    s = registered(v)
+    monkeypatch.setattr(vest_auth, "_now_ms", lambda: 1_000_000)
+    s._user = ("AT-1", 1_000_000 + 299_000)
+    assert run(s.user_token()) == "AT-2"
+    s._accounts["a1"] = ("ACCT-old", 1_000_000 + 299_000)
+    assert run(s.account_token("a1")) != "ACCT-old"
+
+
+def test_urgent_skips_the_refresh_backoff_but_never_a_rejected_login(monkeypatch):
+    v = Vest()
+    s = registered(v)
+    clock = [1_000_000]
+    monkeypatch.setattr(vest_auth, "_now_ms", lambda: clock[0])
+    expire_user_token(s)
+    v.handlers["/v3/auth/refresh"] = lambda req: httpx.Response(500)
+    with pytest.raises(httpx.HTTPStatusError):
+        run(s.user_token())
+    v.handlers.pop("/v3/auth/refresh")
+
+    async def go():
+        with vest_auth.urgent():
+            return await s.user_token()
+    assert run(go()) == "AT-2"                                      # a kill/flatten refreshes at once
+    expire_user_token(s)
+    v.handlers["/v3/auth/refresh"] = lambda req: httpx.Response(401)
+    with pytest.raises(NeedsSignature):
+        run(go())

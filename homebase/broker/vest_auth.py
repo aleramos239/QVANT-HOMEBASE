@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
+import contextvars
 import logging
 import secrets
 import time
@@ -30,7 +32,19 @@ BASE = "https://api-gateway.hz.vestmarkets.com"
 HEADERS = {"Origin": "https://next.vestmarkets.com", "Referer": "https://next.vestmarkets.com/"}
 CHAIN_ID = 8453
 CHALLENGE_TTL_MS = 86_400_000
-RENEW_LEFT_MS = 60_000          # a token with less than this left is renewed before use
+RENEW_LEFT_MS = 300_000         # a token with less than this left is renewed before use (room for a retry, R57)
+REFRESH_BACKOFF_MS = (10_000, 60_000)   # a failed refresh waits 10 s, doubling to 60 s (its own, not the login budget's)
+_URGENT = contextvars.ContextVar("vest_urgent", default=False)
+
+
+@contextlib.contextmanager
+def urgent():
+    """A kill / flatten / exit: its refresh never waits out the refresh backoff (only a 401 stops it, R57)."""
+    tok = _URGENT.set(True)
+    try:
+        yield
+    finally:
+        _URGENT.reset(tok)
 
 
 def _now_ms() -> int:
@@ -83,6 +97,8 @@ class VestSession:
         self._user: tuple[str, int] | None = None            # (access token, expiry ms)
         self._accounts: dict[str, tuple[str, int]] = {}
         self._rejected_id: str | None = None                 # refresh_token_id Vest answered 401 to
+        self._refresh_fails = 0                               # failed refreshes in a row (not 401s)
+        self._refresh_next_ms = 0                             # no routine refresh before this
         self._user_lock = asyncio.Lock()                      # refresh tokens rotate: one refresh at a time
         self._acct_lock = asyncio.Lock()
 
@@ -115,7 +131,7 @@ class VestSession:
             self._http = httpx.AsyncClient(timeout=15.0)
         kw["headers"] = {**HEADERS, **kw.get("headers", {})}
         resp = await self._http.request(method, BASE + path, **kw)
-        if resp.status_code == 429:
+        if resp.status_code == 429 and path.startswith("/v3/auth/"):    # a trading call's 429 never blocks logins (R57)
             self.budget.note_error(self.key, "status=429")
         return resp
 
@@ -181,20 +197,27 @@ class VestSession:
         c = self._creds()
         if self.needs_signature:
             raise NeedsSignature(f"{self.key}: sign with the wallet again")
-        # Routine refreshes (every ~15 min) are not booked as logins (they would fill the hourly cap): the cool-down and
-        # the failure backoff still apply.
-        why = self.budget.blocked(self.key)
-        if why:
-            raise LoginDeferred(why)
+        # Refreshes are not wallet logins: the login budget never blocks them (R57); their own short backoff does, except
+        # for a kill / flatten / exit (urgent).
+        now = _now_ms()
+        if now < self._refresh_next_ms and not _URGENT.get():
+            raise LoginDeferred(f"vest: refresh backing off — next try in {(self._refresh_next_ms - now) // 1000 + 1} s")
         device = DeviceKey.from_pem(c["device_pem"])
-        resp = await self._auth_call("/v3/auth/refresh", {
-            "refreshToken": c["refresh_token"], "requestId": str(uuid.uuid4()),
-            "deviceSignature": device.sign_refresh(c["refresh_token_id"])}, ok_codes=(200, 401))
-        if resp.status_code == 401:       # a 403 (gateway / WAF) is transient: raised below, backoff only
-            self._rejected_id = c["refresh_token_id"]
-            self._user = None
-            raise NeedsSignature(f"{self.key}: refresh rejected, sign with the wallet again")
-        resp.raise_for_status()
+        try:
+            resp = await self._send("POST", "/v3/auth/refresh", json={
+                "refreshToken": c["refresh_token"], "requestId": str(uuid.uuid4()),
+                "deviceSignature": device.sign_refresh(c["refresh_token_id"])})
+            if resp.status_code == 401:   # a 403 (gateway / WAF) is transient: raised below, backoff only
+                self._rejected_id = c["refresh_token_id"]
+                self._user = None
+                raise NeedsSignature(f"{self.key}: refresh rejected, sign with the wallet again")
+            resp.raise_for_status()
+        except (httpx.HTTPError, ValueError):
+            self._refresh_fails += 1
+            base, cap = REFRESH_BACKOFF_MS
+            self._refresh_next_ms = _now_ms() + min(base * 2 ** (self._refresh_fails - 1), cap)
+            raise
+        self._refresh_fails, self._refresh_next_ms = 0, 0
         self._take(resp.json(), c["device_pem"], c["primary_addr"])
         log.debug("vest %s: refreshed", self.key)
 
