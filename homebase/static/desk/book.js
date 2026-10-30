@@ -300,7 +300,7 @@ async function loadLogins() {
 }
 function pickLogin(key) {
   WIZ.saved = key;
-  if (WIZ.broker === "vest") { loadLoginsPaint(); vestPaint(); return; }
+  if (WIZ.broker === "vest") { vestSay(""); loadLoginsPaint(); vestPaint(); return; }
   $("#newLoginFields").style.display = key === null ? "" : "none";
   $("#optNew").classList.toggle("sel", key === null);
   loadLoginsPaint();
