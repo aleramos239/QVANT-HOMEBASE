@@ -94,6 +94,9 @@ class AccountCfg:
     # entries are cancelled, open trades run to their own stop / target). The engine's day_lock, set per account
     # instead of per strategy: it does not stop a Lab strategy from sharing the account (day_take / target_take do).
     day_lock: float = 0.0
+    # The mirror, $ of CLOSED net LOSS, 0 = off: a Desk trade closes with the day's closed net <= -day_loss -> the same
+    # whole-account lock ("day_loss"), never lifted the same day.
+    day_loss: float = 0.0
 
 
 HARD_MAX_ORDER_QTY = 50        # the settings route cannot store chart-trading limits above these (no longer enforced)
@@ -284,6 +287,8 @@ def save(cfg: AppCfg) -> None:
     for a in d["accounts"].values():
         if not a.get("day_lock"):
             a.pop("day_lock", None)
+        if not a.get("day_loss"):
+            a.pop("day_loss", None)
     # atomic: a crash mid-write must never leave a truncated config (the desk now
     # rewrites it on its own, e.g. removing a closed account)
     path = config_path()

@@ -3964,6 +3964,17 @@ def test_a_day_take_of_zero_is_off_and_the_strategys_own_day_lock_still_counts(t
     assert eng.rules_for("a1").day_lock == 500.0
 
 
+def test_an_accounts_day_loss_locks_after_a_losing_trade_and_alone_does_not_refuse_a_lab_entry(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    eng.cfg.accounts["a1"].day_loss = 100.0
+    assert eng.rules_for("a1").day_loss == 100.0
+    settle(eng, ads["a1"], exit_px=95.0, by="sl")            # a day_loss alone is no take rule: the entry went in; -$104
+    assert eng.books["a1"].closed_net == -104.0 and eng.account_locked("a1") == "day_loss"
+    assert eng.day_view("a1")["day_loss"] == 100.0
+    out = go(eng, leg(iid=2))
+    assert out["accounts"]["a1"]["reason"] == "This account is stopped for the day."
+
+
 def test_a_day_take_stops_a_built_in_strategy_on_the_account_too(tmp_path):
     """The take is the ACCOUNT's: the straddle booked beside the Lab strategy sits the day out after the lock."""
     eng, ads, _ = mk(tmp_path, extra={"nq930": straddle_cfg("ES")}, book={"nq930": [{"account": "a1", "qty": 1}]})
@@ -3977,7 +3988,7 @@ def test_a_day_take_stops_a_built_in_strategy_on_the_account_too(tmp_path):
 def test_a_day_take_set_at_or_below_the_days_closed_pnl_locks_now_and_a_lock_stays(tmp_path):
     eng, ads, _ = mk(tmp_path)
     settle(eng, ads["a1"])                                   # +$196, no take yet
-    assert eng.day_view("a1") == {"day_lock": 0.0, "closed_net": 196.0, "closes": 1, "locked": None}
+    assert eng.day_view("a1") == {"day_lock": 0.0, "day_loss": 0.0, "closed_net": 196.0, "closes": 1, "locked": None}
     eng.cfg.accounts["a1"].day_lock = 500.0
     assert run(eng.apply_day_lock("a1")) is None             # above the day's closed P&L: not yet
     eng.cfg.accounts["a1"].day_lock = 196.0

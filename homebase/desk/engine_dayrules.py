@@ -15,7 +15,7 @@ from ..broker.base import BrokerAdapter
 from ..config import StrategyCfg, assignments
 from ..contracts import point_value
 from ..core import atomic
-from .dayrules import LOCK_LOCK, LOCK_TAKE, DayBook, DayRules, merge_rules, standing, take_level
+from .dayrules import LOCK_LOCK, LOCK_LOSS, LOCK_TAKE, DayBook, DayRules, merge_rules, standing, take_level
 from .daystate import TERMINAL, DayState
 
 TAKE_PRINT_NOTE = "day take booked at the last print -- the fill trues it up"
@@ -61,12 +61,13 @@ class DayRulesMixin:
               if s.enabled and any(a.get("account") == account for a in assignments(self.cfg, n))]
         acct = self.cfg.accounts.get(account)
         own = float(getattr(acct, "day_lock", 0.0) or 0.0)         # the account's own (group) day take
-        if own > 0:
-            rs.append(DayRules(0.0, own, False))
+        own_loss = float(getattr(acct, "day_loss", 0.0) or 0.0)    # the account's own loss lock
+        if own > 0 or own_loss > 0:
+            rs.append(DayRules(0.0, own, False, own_loss))
         return merge_rules(rs)
 
     def account_locked(self, account: str) -> Optional[str]:
-        """"day_take" / "day_lock" when the account is stopped for the day, else None."""
+        """"day_take" / "day_lock" / "day_loss" when the account is stopped for the day, else None."""
         b = self.books.get(account)
         return b.locked if b is not None and b.date == self._today() else None
 
@@ -152,7 +153,8 @@ class DayRulesMixin:
         Reads only (a day that has not started has no book: zeros)."""
         b = self.books.get(account)
         today = b is not None and b.date == self._today()
-        return {"day_lock": self.rules_for(account).day_lock, "closed_net": b.closed_net if today else 0.0,
+        r = self.rules_for(account)
+        return {"day_lock": r.day_lock, "day_loss": r.day_loss, "closed_net": b.closed_net if today else 0.0,
                 "closes": b.closes if today else 0, "locked": b.locked if today else None}
 
     async def apply_day_lock(self, account: str) -> Optional[str]:
@@ -165,6 +167,8 @@ class DayRulesMixin:
         rules = self.rules_for(account)
         if not b.locked and b.closes and rules.day_lock and b.closed_net >= rules.day_lock - 1e-9:
             await self._lock_account(account, LOCK_LOCK, why="the day take was set at or below the day's closed P&L")
+        elif not b.locked and b.closes and rules.day_loss and b.closed_net <= -rules.day_loss + 1e-9:
+            await self._lock_account(account, LOCK_LOSS, why="the loss lock was set at or below the day's closed loss")
         return b.locked
 
     async def _lock_account(self, account: str, reason: str, *, why: str = "") -> None:
