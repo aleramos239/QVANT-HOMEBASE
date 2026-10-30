@@ -42,6 +42,8 @@ def test_cap_usd_and_unmeasurable_stop():
     assert row_size({"account": "A", "qty": 1, "size": "risk", "risk_usd": 500}, [None], MNQ, NQ, None, 0) == (None, ROW_NO_SIZE)
     assert row_size({"account": "A", "qty": 1, "size": "risk", "risk_usd": 500}, [float("nan")], MNQ, NQ, None, 0) == (None, ROW_NO_SIZE)
     assert row_size({"account": "A", "qty": 2, "size": "contracts"}, [10], None, NQ, None, 0) == (None, ROW_NO_SIZE)
+    assert row_size({"account": "A", "qty": 1, "size": "risk", "risk_usd": 500}, [10, float("nan")], MNQ, NQ, None, 0) == (None, ROW_NO_SIZE)
+    assert row_size({"account": "A", "qty": 1, "size": "risk", "risk_usd": 500}, [], MNQ, NQ, None, 0) == (None, ROW_NO_SIZE)
 
 
 def test_most_default():

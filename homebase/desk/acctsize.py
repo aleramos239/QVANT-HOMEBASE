@@ -31,9 +31,9 @@ def row_size(row: dict, dists: list, pv: float, full_pv: float, own_qty: int | N
         if size == "contracts":
             n = int(row["qty"])
         elif size == "risk":
+            if not dists or not all(isinstance(x, (int, float)) and math.isfinite(x) and x > 0 for x in dists):
+                return None, ROW_NO_SIZE             # every leg's stop must be measurable (a NaN slips past max())
             dist = max(dists)
-            if not (math.isfinite(dist) and dist > 0):
-                return None, ROW_NO_SIZE
             per, risk = dist * pv, float(row["risk_usd"])
             n = round(risk / per)
             if n * per > risk * OVER_MOST:       # rounding up a big contract (1 NQ at $1,660 for $1,000) goes down

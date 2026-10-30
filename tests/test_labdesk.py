@@ -1345,9 +1345,9 @@ def test_set_book_keeps_the_new_fields_in_the_sidecar_and_memory(tmp_path):
 RISK_A = {"account": "a1", "qty": 1, "size": "risk", "risk_usd": 500}
 
 
-def sized_desk(tmp_path, rows, **kw):
+def sized_desk(tmp_path, rows, cap=100_000, **kw):
     """A micro (MNQ, $2 a point) strategy with no dollar cap, booked with `rows`; lab_enter's sizes are recorded."""
-    d = mkdesk(tmp_path, accounts=("a1", "a2"), qty=0, limits={**LIMITS, "max_risk_usd": 100_000},
+    d = mkdesk(tmp_path, accounts=("a1", "a2"), qty=0, limits={**LIMITS, "max_risk_usd": cap},
                rec_kw={"exec_root": "MNQ", **kw})
     run(d.ld.set_book(LAB, rows))
     d.sizes, real = [], d.eng.lab_enter
@@ -1402,3 +1402,30 @@ def test_an_on_cycle_group_with_risk_keeps_its_own_size(tmp_path):
 def test_status_says_the_default_most_contracts(tmp_path):
     assert mkdesk(tmp_path / "a").ld.status_view(LAB)["most_default"] == 2
     assert mkdesk(tmp_path / "b", rec_kw={"exec_root": "MNQ"}).ld.status_view(LAB)["most_default"] == 20
+
+
+def test_a_refused_oco_leg_is_sent_at_the_size_the_door_judged(tmp_path):
+    d = sized_desk(tmp_path, [RISK_A, {"account": "a2", "qty": 2}])
+    legs = [entry(3, price=110.0, sl=100.0), entry(4, price=112.0, sl=87.0), {"op": "oco", "ids": [3, 4]}]   # both long
+    out = send(d, legs)
+    assert out["results"][2]["refused"] == door.NOT_A_PAIR
+    assert d.sizes == [{"a1": 10, "a2": 2}]          # judged on the wider (25-pt) stop: sent at that size, not 25
+
+
+def test_a_contracts_row_is_still_held_to_the_strategys_dollars_at_risk(tmp_path):
+    d = sized_desk(tmp_path, [{"account": "a1", "qty": 5, "size": "contracts"}, {"account": "a2", "qty": 2}], cap=200)
+    out = send(d, entry(sl=85.0))                     # 5 micros x 25 pts x $2 = $250 > $200; 2 = $100
+    assert d.sizes == [{"a2": 2}]
+    assert out["results"][0]["accounts"]["a1"]["reason"] == "Stop too far: $250 at risk, limit $200."
+
+
+def test_takers_refuses_a_set_row_with_no_judged_size():
+    rows = [{"account": "a1", "qty": 3, "size": "contracts"}, {"account": "a2", "qty": 2}]
+    accounts, sizes = LabDesk._takers([0], {0: {"a1": None, "a2": None}}, rows, None, {0: {}})
+    assert accounts == {"a1": labdesk.ROW_NO_SIZE, "a2": None} and sizes == {"a2": 2}
+
+
+def test_most_default_never_raises_on_an_unknown_point_value(tmp_path, monkeypatch):
+    d = mkdesk(tmp_path)
+    monkeypatch.setattr(labdesk, "point_value", lambda s: None)
+    assert d.ld._most_default(LAB) == 2

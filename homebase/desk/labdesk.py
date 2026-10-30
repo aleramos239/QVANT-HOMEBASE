@@ -1257,7 +1257,8 @@ class LabDesk:
 
     def _verdicts(self, name: str, ev, booked: list) -> tuple:
         """Checks 7 and 8, once per booked account with that account's size: ({entry index: {account: sentence |
-        None}}, {oco index: sentence | None}, {entry index: its pair's other index}). Judged against the state as it is when asked
+        None}}, {oco index: sentence | None}, {entry index: its pair's other index}, {entry index: {account: size}} of
+        the rows with settings -- the size the door judged is the size sent, one source). Judged against the state as it is when asked
         (an entry after a cancel or flatten of the same event is asked again after them, 2026-10-26); first against the state BEFORE
         the event, as the shadow host judges (host.py), so the owner reads the sentences he read in shadow."""
         d, limits, rec = self._rec(name), labcfg.limits_of(self.cfg, name), labcfg.record_of(self.cfg, name) or {}
@@ -1299,6 +1300,7 @@ class LabDesk:
         per: dict = {i: {} for i in entries}
         oco: dict = {}
         pair: dict = {}
+        judged: dict = {i: {} for i in entries}
         for row in booked:
             a, q = row["account"], int(row["qty"])
             sized = {i: row_size(row, dists[i], lim["point_value"], full, None, limits.max_risk_usd)[0]
@@ -1317,12 +1319,14 @@ class LabDesk:
                     why = UNEVEN_PAIR
                 if why is None and sized is not None and sized[i] is None:
                     why = ROW_NO_SIZE
+                if sized is not None and sized[i] is not None:
+                    judged[i][a] = sized[i]
                 if why is None and sized is None and q > limits.max_qty:
                     why = f"Size is capped at {limits.max_qty} here."
                 if why is None and self._past(ev.intents[i], last):
                     why = PRICE_PAST
                 per[i][a] = why
-        return per, oco, pair
+        return per, oco, pair, judged
 
     @staticmethod
     def _leg(it: dict, last: float | None, tick: float | None):
@@ -1403,7 +1407,7 @@ class LabDesk:
         orders = [it for it in ev.intents if it["op"] in intents.ORDER_OPS or it["op"] == "stop"]
         digest = self._digest(ev.t_ns, orders)
         why, same, booked = None, False, []
-        per, oco, pair = ({}, {}, {})
+        per, oco, pair, sized = ({}, {}, {}, {})
         try:
             # this event counts its `seq` with the promotion the desk knows, today
             same = bool(known and ev.date == d["date"] and list(ev.mark) == labcfg.mark_of(self.cfg, name))
@@ -1442,7 +1446,7 @@ class LabDesk:
             if why is None and ev.entries and not booked:
                 why = OUT_OF_DATE                            # no account is booked: the runner's view of the book is old
             if why is None and ev.entries:
-                per, oco, pair = self._verdicts(name, ev, booked)        # 7, 8
+                per, oco, pair, sized = self._verdicts(name, ev, booked)        # 7, 8
         except Exception as e:  # noqa: BLE001 -- fail closed: what cannot be checked is not sent
             self._journal("lab_event_error", strategy=name, seq=ev.seq, error=f"{type(e).__name__}: {e}"[:200])
             why = door.CANNOT_CHECK
@@ -1475,9 +1479,9 @@ class LabDesk:
                     if no is None and exited:
                         # "cancel the old order, place a new one" in one event (owner 2026-10-26, FVG at 11:15): the entry is
                         # judged on the state AFTER the event's own cancels, as the backtest takes it -- not before
-                        per, oco, _ = self._verdicts(name, ev, booked)
+                        per, oco, _, sized = self._verdicts(name, ev, booked)
                     if no is None:
-                        accounts, sizes = self._takers(unit, per, booked, want, self._row_sizes(name, ev, unit, booked, self._last_price(ev)))
+                        accounts, sizes = self._takers(unit, per, booked, want, sized)
                         if not sizes and accounts and all(s == LAST_TRADE for s in accounts.values()) \
                                 and await self._settled(name, min(
                                     SETTLE_MARKET_S if any(ev.intents[j]["kind"] == "market" for j in unit) else SETTLE_WAIT_S,
@@ -1485,8 +1489,8 @@ class LabDesk:
                             # the last trade ended a moment ago and its orders are read ended now: asked again
                             no = self._stale(ev) or self._not_now(name)
                             if no is None:
-                                per, oco, _ = self._verdicts(name, ev, booked)
-                                accounts, sizes = self._takers(unit, per, booked, want, self._row_sizes(name, ev, unit, booked, self._last_price(ev)))
+                                per, oco, _, sized = self._verdicts(name, ev, booked)
+                                accounts, sizes = self._takers(unit, per, booked, want, sized)
                         if sizes:
                             waited = False
                             if go is None:
@@ -1501,8 +1505,8 @@ class LabDesk:
                                 if not booked:
                                     no = OUT_OF_DATE
                                 else:
-                                    per, oco, _ = self._verdicts(name, ev, booked)
-                                    accounts, sizes = self._takers(unit, per, booked, want, self._row_sizes(name, ev, unit, booked, self._last_price(ev)))
+                                    per, oco, _, sized = self._verdicts(name, ev, booked)
+                                    accounts, sizes = self._takers(unit, per, booked, want, sized)
                         if sizes and no is None:
                             rows = await self._enter(name, ev, d, unit, ids, sizes, accounts)
                         else:
@@ -1573,31 +1577,23 @@ class LabDesk:
         except (TypeError, KeyError):
             return None
 
-    def _row_sizes(self, name: str, ev, unit: list, booked: list, last) -> dict:
-        """{account: size} of the booked rows with settings (`size`) that one contract fits, for an entry or a pair
-        (`unit`, sized on its wider stop, as _verdicts sized it). A legacy row is not in it: the Desk's own size stands."""
-        rec = labcfg.record_of(self.cfg, name) or {}
-        limits = labcfg.limits_of(self.cfg, name)
-        if not rec.get("root") or limits is None:
-            return {}
-        pv, full = point_value(labcfg.exec_symbol(rec)), point_value(rec["root"])
-        dists = [self._dist(ev.intents[j], last) for j in unit]
-        got = {r["account"]: row_size(r, dists, pv, full, None, limits.max_risk_usd)[0]
-               for r in booked if r.get("size") is not None}
-        return {a: n for a, n in got.items() if n is not None}
-
     def _most_default(self, name: str) -> int:
         rec = labcfg.record_of(self.cfg, name) or {}
-        return most_default(point_value(labcfg.exec_symbol(rec)), point_value(rec["root"])) if rec.get("root") else 2
+        pv = point_value(labcfg.exec_symbol(rec)) if rec.get("root") else None
+        full = point_value(rec["root"]) if rec.get("root") else None
+        return most_default(pv, full) if pv and full else 2      # unknown market: the mini's (the smaller) default
 
     @staticmethod
-    def _takers(unit: list, per: dict, booked: list, want: int | None = None, row_sizes: dict | None = None) -> tuple:
+    def _takers(unit: list, per: dict, booked: list, want: int | None = None, sized: dict | None = None) -> tuple:
         """({account: the sentence that refuses this entry there | None}, {account: size} of the ones that may take
         it). A lone leg of a pair never goes out: an account takes both legs or neither, and says the first refused
         leg's sentence. `want`: the entry's own size (a strategy that sizes its orders) -- an account sends that,
-        never more than the size set on it. `row_sizes`: {account: size} of the rows with settings, which replaces
-        that account's size (the account wins over the strategy's own); a set row missing from it never goes out."""
-        row_sizes = row_sizes or {}
+        never more than the size set on it. `sized`: _verdicts' {entry index: {account: size}} of the rows with
+        settings -- that size replaces the account's (the account wins over the strategy's own); a set row with no
+        size on every leg of the unit never goes out."""
+        sized = sized or {}
+        row_sizes = {r["account"]: min(sized[j][r["account"]] for j in unit) for r in booked
+                     if r.get("size") is not None and all(r["account"] in sized.get(j, {}) for j in unit)}
         accounts = {r["account"]: next((per[j][r["account"]] for j in unit if per[j][r["account"]]), None) for r in booked}
         for r in booked:                             # fail closed: a set row with no size of its own sits this one out
             if r.get("size") is not None and accounts[r["account"]] is None and r["account"] not in row_sizes:
