@@ -196,3 +196,11 @@ def test_a_set_row_is_not_held_to_the_cap_and_keeps_its_settings_on_the_switch(m
     r = ident(mini, instrument="micro")
     assert r.status_code == 200
     assert mini.cfg.book[LAB] == [{**row, "qty": 40, "most": 50}]
+
+
+def test_a_most_over_1000_micros_after_the_switch_is_held_at_1000(mini):
+    assert set_limits(mini, max_qty=1).status_code == 200
+    row = {"account": "main", "qty": 4, "size": "contracts", "most": 200}       # 200 minis = 2,000 micros: over the box's 1,000
+    assert mini.post("/api/book", json={"strategy": LAB, "assignments": [row]}).status_code == 200
+    assert ident(mini, instrument="micro").status_code == 200
+    assert mini.cfg.book[LAB] == [{**row, "qty": 40, "most": 1000}]

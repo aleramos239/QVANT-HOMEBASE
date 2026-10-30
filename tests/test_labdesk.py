@@ -1339,3 +1339,66 @@ def test_set_book_keeps_the_new_fields_in_the_sidecar_and_memory(tmp_path):
     run(d.ld.set_book(LAB, [row]))
     assert d.cfg.book[LAB] == [row]
     assert store.get_desk(rec()["name"])["book"] == [row]
+
+
+# ---------------------------------------------------------------- per-account sizing (per-account settings 2)
+RISK_A = {"account": "a1", "qty": 1, "size": "risk", "risk_usd": 500}
+
+
+def sized_desk(tmp_path, rows, **kw):
+    """A micro (MNQ, $2 a point) strategy with no dollar cap, booked with `rows`; lab_enter's sizes are recorded."""
+    d = mkdesk(tmp_path, accounts=("a1", "a2"), qty=0, limits={**LIMITS, "max_risk_usd": 100_000},
+               rec_kw={"exec_root": "MNQ", **kw})
+    run(d.ld.set_book(LAB, rows))
+    d.sizes, real = [], d.eng.lab_enter
+
+    async def spy(name, legs, sizes, **k):
+        d.sizes.append(dict(sizes))
+        return await real(name, legs, sizes, **k)
+    d.eng.lab_enter = spy
+    return d
+
+
+def test_each_account_sends_its_own_size(tmp_path):
+    d = sized_desk(tmp_path, [RISK_A, {"account": "a2", "qty": 2}])
+    out = send(d, entry(sl=85.0))                                    # 25 pts x $2 = $50 a micro: $500 = 10
+    assert out["results"][0]["status"] == "working" and d.sizes == [{"a1": 10, "a2": 2}]
+
+
+def test_a_risk_row_no_contract_fits_sits_out_alone(tmp_path):
+    d = sized_desk(tmp_path, [{**RISK_A, "risk_usd": 40}, {"account": "a2", "qty": 2}])   # $40 < one $50 micro
+    out = send(d, entry(sl=85.0))
+    assert d.sizes == [{"a2": 2}]
+    assert out["results"][0]["accounts"]["a1"] == {"ok": False, "round": None, "reason": labdesk.ROW_NO_SIZE}
+
+
+def test_a_set_row_is_not_held_to_the_backtested_cap_at_order_time(tmp_path):
+    d = sized_desk(tmp_path, [{"account": "a1", "qty": 5, "size": "contracts"}, {"account": "a2", "qty": 2}])
+    send(d, entry(sl=85.0))                                           # max_qty 2: the set row sends 5 all the same
+    assert d.sizes == [{"a1": 5, "a2": 2}]
+
+
+def test_a_set_row_wins_over_the_strategys_own_size(tmp_path):
+    d = sized_desk(tmp_path, [{"account": "a1", "qty": 4, "size": "contracts"}, {"account": "a2", "qty": 2}], own_size=True)
+    send(d, entry(sl=85.0, qty=1, own_qty=True))
+    assert d.sizes == [{"a1": 4, "a2": 1}]                            # the legacy row: the order's own, at most its 2
+
+
+def test_a_pair_is_sized_on_its_wider_stop_and_stays_a_pair(tmp_path):
+    d = sized_desk(tmp_path, [RISK_A, {"account": "a2", "qty": 2}])
+    ps = pair(dist=10.0)
+    ps[1]["sl"] = 90.0 + 25.0                                         # the short's stop is 25 pts away
+    out = send(d, ps)
+    assert out["results"][2]["refused"] is None and d.sizes == [{"a1": 10, "a2": 2}]
+
+
+def test_an_on_cycle_group_with_risk_keeps_its_own_size(tmp_path):
+    d = sized_desk(tmp_path, [RISK_A, {"account": "a2", "qty": 2}])
+    d.eng.groups["g1"] = {"name": "x", "members": [LAB], "accounts": [], "risk_usd": 300.0, "max_minis": 17, "on": True}
+    send(d, entry(sl=85.0))
+    assert d.sizes == [{"a1": 6, "a2": 6}]                            # $300 / $50 for every account, the row ignored
+
+
+def test_status_says_the_default_most_contracts(tmp_path):
+    assert mkdesk(tmp_path / "a").ld.status_view(LAB)["most_default"] == 2
+    assert mkdesk(tmp_path / "b", rec_kw={"exec_root": "MNQ"}).ld.status_view(LAB)["most_default"] == 20
