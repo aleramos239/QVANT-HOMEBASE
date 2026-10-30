@@ -462,7 +462,7 @@ def test_a_trade_push_becomes_one_FillEvent_and_a_repeat_is_ignored(api):
         await a._pump
     run(go())
     assert [(e.symbol, e.side, e.qty, e.price, e.position_after) for e in a.got] == [
-        ("NQ", "Buy", 2, 20001.25, 2), ("NQ", "Sell", 2, 20010.0, 2)]     # position_after = the cache when the trade came
+        ("NQ", "Buy", 2, 20001.25, None), ("NQ", "Sell", 2, 20010.0, None)]    # unknown until the push order is confirmed
     assert a.got[0].account_id == "acct-1" and a.got[0].raw["id"] == 501 and a.got[0].ts > 0
     assert a.notes.count("fill") == 2 and a.notes.count("position") == 2
 
@@ -569,19 +569,13 @@ def test_session_taken_journals_relogs_in_once_and_replays_missed_trades(api, tm
     run(b.connect())                                                   # a second desk account on the same login
     hub = StubHub.made[-1]
     assert hub.on_auth_lost is not None and len(StubHub.made) == 1
-    real_relogin = s.relogin
-
-    async def slow_relogin(why):                                       # a login takes time: the second call arrives meanwhile
-        await asyncio.sleep(0.01)
-        await real_relogin(why)
-    s.relogin = slow_relogin
 
     async def go():
         await a.observe_fills(sink)
         await hub.on_up()                                              # the first open: seeds, delivers nothing
         assert a.got == []
-        # the owner opens TopstepX: our socket is refused with a 401 at reopen; two paths call the handler at once
-        await asyncio.gather(hub.on_auth_lost(), hub.on_auth_lost())
+        hub._token = TOKEN
+        await hub.on_auth_lost()                                       # the owner opens TopstepX: our socket gets a 401 at reopen
         api.trades = [trade(601), trade(603, side=1, ts="2026-10-30T14:07:00Z"), trade(602, ts="2026-10-30T14:05:00Z")]
         await hub.on_up()                                              # the socket is back: the gap is read
         await hub.on_up()                                              # and a second open finds nothing new
@@ -599,17 +593,32 @@ def test_session_taken_with_the_budget_spent_does_not_log_in_and_says_why(api, t
     from homebase.broker.login_budget import LoginBudget
     budget = LoginBudget()
     s = _kick_setup(api, tmp_path, monkeypatch, budget=budget)
+    pauses = []
+
+    async def fake_pause(sec):
+        pauses.append(sec)
+    monkeypatch.setattr(topstepx, "_pause", fake_pause)
     for _ in range(4):
         budget.record_login("tsx:owner")                               # the hourly cap is reached
     a, sink = live(api, session=s)
     hub = StubHub.made[-1]
+    hub._token = TOKEN
     run(hub.on_auth_lost())                                            # returns: no raise, no spin
+    run(hub.on_auth_lost())                                            # the hub retries with the same dead token
     run(hub.on_auth_lost())
     assert ("POST", "/Login") not in api.paths() and s._token == TOKEN
     lines = [kw for e, kw in s.rec if e == "tsx_session_taken"]
-    assert [k.get("deferred") for k in lines] == [None, lines[1]["deferred"], None, lines[3]["deferred"]]
+    assert len(lines) == 2 and "deferred" not in lines[0] and lines[0]["count"] == 1      # the kick, once
     assert "logins on this user in the last hour" in lines[1]["deferred"] and lines[1]["count"] == 1
-    assert s.taken == 2 and run(a.get_metrics())["session_taken"] == 2
+    assert s.taken == 1 and run(a.get_metrics())["session_taken"] == 1
+    assert pauses == [topstepx.DEFER_PAUSE_S] * 3 and topstepx.DEFER_PAUSE_S == 60.0     # paced, hub not stopped
+    assert StubHub.made[-1].stopped == 0
+    budget._users["tsx:owner"].logins.clear()                          # the budget frees up: the next retry logs in, once
+    run(hub.on_auth_lost())
+    assert api.paths().count(("POST", "/Login")) == 1 and s.taken == 1 and len([1 for e, _ in s.rec if e == "tsx_session_taken"]) == 2
+    hub._token = "TOK-NEW"                                             # a later, real kick counts again
+    run(hub.on_auth_lost())
+    assert s.taken == 2
 
 
 def test_a_failed_relogin_is_journaled_by_class_only_and_reaches_the_hub(api, tmp_path, monkeypatch):
@@ -655,3 +664,37 @@ def test_session_pushes_do_not_log_in_and_violations_are_journaled_and_shown(api
     assert run(a.get_metrics())["tsx_violation"] == "RealTimeRiskSettingsLockout"
     a._on_event("RealTimeAccount", {"id": 22, "balance": 49000.5})
     assert run(a.get_metrics())["balance"] == 49000.5
+
+
+def test_a_rest_relogin_that_came_first_means_one_login_for_the_kick(api, tmp_path, monkeypatch):
+    s = _kick_setup(api, tmp_path, monkeypatch)
+    a, sink = live(api, session=s)
+    hub = StubHub.made[-1]
+    hub._token = TOKEN                                                 # the token the socket was refused with
+    reads = []
+
+    def positions(req):
+        reads.append(req.headers["authorization"])
+        if len(reads) == 1:
+            return httpx.Response(401, json={})                        # the kick: the desk's REST read is refused too
+        return httpx.Response(200, json=[pos(1)])
+    api.handlers[("GET", "/Position/all/account/22")] = positions
+    assert run(a.get_net_position("NQ")) == 1                          # TsxSession.request re-logged in (1 /Login)
+    assert s._token == "TOK-NEW" and api.paths().count(("POST", "/Login")) == 1
+    run(hub.on_auth_lost())                                            # the socket's 401 arrives after
+    assert api.paths().count(("POST", "/Login")) == 1 and s.taken == 1
+    assert [kw for e, kw in s.rec if e == "tsx_session_taken"] == [{"accounts": ["Combine-50K"], "count": 1}]
+
+
+def test_the_cache_is_not_trusted_while_on_up_is_reading_a_fresh_book(api):
+    a, sink = live(api)
+    run(a.get_net_position("NQ"))
+    assert a._pos_ok
+    seen = []
+
+    def positions(req):
+        seen.append(a._pos_ok)
+        return httpx.Response(200, json=[pos(2)])
+    api.handlers[("GET", "/Position/all/account/22")] = positions
+    run(a._on_up())
+    assert seen == [False] and a._pos_ok and run(a.get_net_position("NQ")) == 2

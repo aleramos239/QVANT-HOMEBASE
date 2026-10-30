@@ -272,20 +272,14 @@ class TopstepXAdapter(BrokerAdapter):
             t = _trade_fields(arg)
             if t is None or not _same(t["accountId"], self._acct_id):    # voided, another account's, or not provably ours
                 return
-            if not self._take(t, arg, after=self._net_root(_code_of(t["contractId"]))):
-                return
+            if not self._take(t, arg):      # position_after stays None until the spike shows whether a trade push
+                return              # comes before or after its position push (a cached net could be one fill stale)
         except Exception as e:  # noqa: BLE001 -- the next on_up reads the account's trades and finds it
             log.warning("topstepx %s: trade push unreadable (%s)", self.account_id, type(e).__name__)
             self._journal("tsx_trade_unreadable", keys=sorted(arg))
             return
         self._notify("fill", arg)
         self._kick()
-
-    def _net_root(self, code: str) -> Optional[int]:
-        """Net position of a market from the cache; None when the cache is not trustworthy."""
-        if not self._pos_ok or not code:
-            return None
-        return sum(n for cid, n in self._pos.items() if _code_of(cid) == code)
 
     def _mark_seen(self, tid) -> bool:
         """Record a trade id; True if it was not seen before."""
@@ -297,15 +291,14 @@ class TopstepXAdapter(BrokerAdapter):
         self._seen.add(tid)
         return True
 
-    def _take(self, t: dict, row: dict, *, after: Optional[int]) -> bool:
+    def _take(self, t: dict, row: dict) -> bool:
         """Queue a trade for the fill callback unless it was already seen (True = queued)."""
-        code = _code_of(t["contractId"])
-        ev = FillEvent(account_id=self.account_id, symbol=ROOTS.get(code) or code or t["contractId"], side=t["side"],
-                       qty=t["size"], price=t["price"], position_after=after, ts=time.time(), raw=dict(row),
-                       seen=time.perf_counter())
         if not self._mark_seen(t["id"]):
             return False
-        self._out.append(ev)
+        code = _code_of(t["contractId"])
+        self._out.append(FillEvent(account_id=self.account_id, symbol=ROOTS.get(code) or code or t["contractId"],
+                                   side=t["side"], qty=t["size"], price=t["price"], ts=time.time(), raw=dict(row),
+                                   seen=time.perf_counter()))
         return True
 
     def _kick(self) -> Optional[asyncio.Task]:
@@ -331,6 +324,7 @@ class TopstepXAdapter(BrokerAdapter):
         """The shared socket opened (first time or again). Never raises into the hub."""
         if self._acct_id is None:
             return
+        self._pos_ok = False                            # not trusted until the fresh read below returns
         try:
             await self._seed_positions()                # a fresh book after every open: pushes may have been missed
         except Exception as e:  # noqa: BLE001
@@ -360,8 +354,7 @@ class TopstepXAdapter(BrokerAdapter):
             return
         found.sort(key=lambda p: (str(p[0]["creationTimestamp"] or ""), str(p[0]["id"]).zfill(20)))
         for t, row in found:
-            # position_after stays unknown for a replay: the cache holds the net AFTER all of them
-            if self._take(t, row, after=None):
+            if self._take(t, row):      # position_after unknown: the book holds the net AFTER all of them
                 self._notify("fill", row)
         pump = self._kick()
         if pump is not None:
@@ -634,28 +627,49 @@ def _fan_events(session: TsxSession):
     return on_event
 
 
+DEFER_PAUSE_S = 60.0        # after a refused login the handler waits this long, so the hub's retries are paced
+
+
+async def _pause(seconds: float) -> None:       # tests shorten the wait here
+    await asyncio.sleep(seconds)
+
+
 def _session_taken(session: TsxSession):
     """The login's ONE handler for 'TopstepX ended this session' (the hub calls it on a socket 401 at open): one kick = one
-    count, one journal line, one login through the budget. It runs inside the hub's own task, so it never stops the hub: a
-    refused login returns and the hub's backoff paces the next try."""
-    lock = asyncio.Lock()
+    count, one journal line, at most one login (through the budget). It runs inside the hub's own task, so it never stops the
+    hub. It takes the session's login lock, so a REST call that re-logs in at the same moment cannot make a second login:
+    if the token was already replaced, the kick is counted and no login is sent. A refused login (LoginDeferred) is
+    remembered by the token it was refused for: the hub's next refusal with that same token only asks the budget again (no
+    count, no journal line) after a pause."""
+    deferred: Optional[str] = None
 
     async def taken() -> None:
-        called_with = session._token
-        async with lock:
-            if session._token != called_with:       # a call that ran before us already logged in again
-                return
-            session.taken += 1
+        nonlocal deferred
+        hub = session.hub
+        refused = getattr(hub, "_token", "") or session._token      # the token the socket was refused with
+        wait = False
+        async with session._lock:                   # relogin() itself takes no lock
+            again = refused == deferred
             names = [a.account_name for a in list(session.listeners)]
-            session.journal("tsx_session_taken", accounts=names, count=session.taken)
+            if not again:
+                session.taken += 1
+                session.journal("tsx_session_taken", accounts=names, count=session.taken)
+            if session._token != refused:           # another path already logged in
+                deferred = None
+                return
             try:
                 await session.relogin("taken")
+                deferred = None
             except LoginDeferred as e:
+                deferred, wait = refused, True
                 log.warning("topstepx %s: session taken, login deferred", session.key)
-                session.journal("tsx_session_taken", accounts=names, count=session.taken, deferred=str(e))
+                if not again:
+                    session.journal("tsx_session_taken", accounts=names, count=session.taken, deferred=str(e))
             except Exception as e:  # noqa: BLE001 -- the hub logs it; the journal gets the class only (no text)
                 session.journal("tsx_session_taken", accounts=names, count=session.taken, failed=type(e).__name__)
                 raise
+        if wait:
+            await _pause(DEFER_PAUSE_S)
     return taken
 
 
