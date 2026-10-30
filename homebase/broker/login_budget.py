@@ -146,7 +146,7 @@ class LoginBudget:
             u = self._u(key)
             self._expire(key, u, now)
             if u.cool_until:
-                broker = "Vest" if key.startswith("vest:") else "Tradovate"
+                broker = ("Vest" if key.startswith("vest:") else "TopstepX" if key.startswith("tsx:") else "Tradovate")
                 return (f"{broker} rate-limited this login (429) — logins paused until "
                         f"{_hhmm(u.cool_until)}")
             if first:

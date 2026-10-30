@@ -13,6 +13,8 @@ from .. import config as config_mod
 from ..broker.base import AccountNotOnLogin, BrokerAdapter
 from ..broker.login_budget import LoginDeferred, is_rate_limited
 from ..broker.paper import PaperAdapter
+from ..broker.topstepx import TopstepXAdapter
+from ..broker.topstepx_auth import NeedsCode, TsxSession
 from ..broker.tradovate import TradovateAdapter
 from ..broker.vest import VestAdapter
 from ..broker.vest_auth import NeedsSignature, VestSession
@@ -25,7 +27,9 @@ GONE_CONFIRM_S = 300       # an account missing from its login is removed only w
 GONE_CHECK_TIMEOUT_S = 30  # a confirming re-sync runs in its own task, at most this long
 NOTICES_KEPT = 10
 NEEDS_SIGNATURE = "needs a new wallet signature"
+NEEDS_CODE = "TopstepX needs a code"
 _VEST_SESSIONS: dict = {}     # keyring key -> its one VestSession (refresh tokens rotate: one per login)
+_TSX_SESSIONS: dict = {}      # keyring key -> its one TsxSession (one token and one socket per login)
 INPLACE_RETRY_S = (10, 60)   # a dropped socket whose token is still valid, while its user's
                              # logins are paused: retry in place 10 s, doubling to 60 s
 
@@ -40,12 +44,24 @@ def vest_session(key: str) -> VestSession:
     return _VEST_SESSIONS.get(key) or _VEST_SESSIONS.setdefault(key, VestSession(key))
 
 
+def is_tsx_key(key: str) -> bool:
+    """A TopstepX login: 'tsx:<username lowercased>'."""
+    return key.startswith("tsx:")
+
+
+def tsx_session(key: str) -> TsxSession:
+    """The login's one TsxSession, made on first use: build_adapter and the connect routes both take it here."""
+    return _TSX_SESSIONS.get(key) or _TSX_SESSIONS.setdefault(key, TsxSession(key))
+
+
 def _key_env(key: str) -> str:
     """A login key is 'tv:<env>:<user>' — the env it was verified on. The
     user part may itself hold colons (Google-linked logins are
-    'Google:1012...'), so split twice at most. A Vest login is 'vest'."""
+    'Google:1012...'), so split twice at most. A Vest login is 'vest', a TopstepX login 'tsx'."""
     if is_vest_key(key):
         return "vest"
+    if is_tsx_key(key):
+        return "tsx"
     parts = key.split(":", 2)
     return "live" if len(parts) == 3 and parts[1] == "live" else "demo"
 
@@ -74,8 +90,8 @@ def md_source(cfg: config_mod.AppCfg, adapters: dict):
     after the early renewal (09:10-09:19:30 ET) the timer's 09:20 / 09:28:30
     md socket starts on a token that lasts past 10:10. Returns
     (keyring_key, env, token_provider)."""
-    ranked = sorted(((aid, a) for aid, a in cfg.accounts.items() if not is_vest_key(a.keyring_key)),
-                    key=lambda kv: kv[1].live)      # a Vest login has no CME market data
+    ranked = sorted(((aid, a) for aid, a in cfg.accounts.items() if not is_vest_key(a.keyring_key) and not is_tsx_key(a.keyring_key)),
+                    key=lambda kv: kv[1].live)      # a Vest or TopstepX login is never a market-data source
     up = [(a, adapters[aid]) for aid, a in ranked
           if a.keyring_key and adapters.get(aid) is not None and _md_token_of(adapters[aid])]
     if up:
@@ -97,6 +113,9 @@ def build_adapter(account_id: str, a: config_mod.AccountCfg) -> BrokerAdapter:
         return VestAdapter(account_id, keyring_key=a.keyring_key, vest_account_id=a.vest_account_id,
                            session=vest_session(a.keyring_key),
                            floors=dict(a.floors), slip_frac=a.slip_frac)
+    if is_tsx_key(a.keyring_key):    # one session (and one socket) per login, shared by every account on it
+        return TopstepXAdapter(account_id, keyring_key=a.keyring_key, account_name=a.account_name,
+                               session=tsx_session(a.keyring_key), live=a.live)
     env = "live" if a.live else "demo"
     sel = {"account_name": a.account_name} if a.account_name else None
     # entries on one login share its token: one login / renewal per Tradovate user
@@ -157,6 +176,8 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
         return "…" + name[-3:] if len(name) > 6 else name
 
     def _login_label(aid: str) -> str:
+        if is_tsx_key(_login_key(aid)):
+            return "TopstepX"
         tail = _login_key(aid).rsplit(":", 1)[-1].split("_", 1)[0]
         return tail.capitalize() if tail else "Tradovate"
 
@@ -212,6 +233,10 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
         if isinstance(ad, VestAdapter):
             ad.journal = engine.journal     # its held-entry fires and skips go on the desk's journal
             ad.session.budget = budget      # the login's one session books on the desk's budget (R48)
+        elif isinstance(ad, TopstepXAdapter):
+            ad.journal = engine.journal     # tsx_violation
+            ad.session.budget = budget      # every TopstepX login (first, renewal, after a 401 or a kick) is booked on it
+            ad.session.journal = engine.journal     # tsx_session_taken
 
         login_id = (key, a.live)
 
@@ -232,7 +257,9 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
                                error=str(fell_back_from)[:200])
             _logged_in_once.add(aid)
             _login_first_spent.add(login_id)
-            if not isinstance(ad, VestAdapter):     # a Vest connect mints a token on the signed session: no login (R6)
+            # A Vest connect mints a token on the signed session: no login (R6). A TopstepX connect sends /Login only
+            # when its session holds no token, and that session books it (session.budget) -- booked here too it counts twice.
+            if not isinstance(ad, (VestAdapter, TopstepXAdapter)):
                 budget.record_login(key)
             try:
                 await ad.connect()
@@ -240,7 +267,8 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
                 budget.login_result(key)    # the login itself worked / none was tried (the wallet must sign): no backoff
                 raise
             except Exception as e:  # noqa: BLE001
-                budget.login_result(key, e)
+                if not isinstance(ad, TopstepXAdapter):     # its session already booked a failed login
+                    budget.login_result(key, e)
                 raise
             budget.login_result(key)
 
@@ -325,6 +353,13 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
                 engine.journal("vest_needs_signature", account=aid)
             acct_status[aid] = {"connected": False, "error": NEEDS_SIGNATURE}
             _login_cooldown.pop(aid, None)
+            return
+        if isinstance(e, NeedsCode):
+            # the login stays asked for a code until the owner answers it in the wizard: never retried soon
+            if (acct_status.get(aid) or {}).get("error") != NEEDS_CODE:
+                engine.journal("tsx_needs_code", account=aid)
+            acct_status[aid] = {"connected": False, "error": NEEDS_CODE}
+            _login_cooldown[aid] = _t.time() + 1800
             return
         if isinstance(e, AccountNotOnLogin):
             a = cfg.accounts.get(aid)
