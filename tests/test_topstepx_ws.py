@@ -288,3 +288,21 @@ def test_a_handshake_error_reply_is_logged_without_the_token(capsys):
     err = capsys.readouterr().err
     assert "server error: Requested protocol 'x' is not available ***" in err
     assert TOKEN not in err
+
+
+def test_a_token_echoed_across_the_cut_is_scrubbed_before_the_cut(capsys):
+    async def script(ws, n):
+        await ws.send(json.dumps({"error": "x" * 190 + TOKEN + " tail"}) + RS)
+        await asyncio.sleep(0.2)
+
+    async def go():
+        server = Server(script)
+        async with server.serving() as srv:
+            hub = TsxHub(FakeSession(), lambda t, a: None, url=url_of(srv))
+            await hub.start()
+            await asyncio.sleep(0.2)
+            await hub.stop()
+    asyncio.run(go())
+    err = capsys.readouterr().err
+    assert "server error: " + "x" * 190 + "***" in err
+    assert TOKEN[:8] not in err

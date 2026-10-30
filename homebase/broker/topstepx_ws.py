@@ -139,7 +139,7 @@ class TsxHub:
                 continue
             kind = msg.get("type") if isinstance(msg, dict) else None
             if isinstance(msg, dict) and msg.get("error"):        # a refused handshake has no type, only this
-                log(f"server error: {str(msg['error'])[:200].replace(self._token or chr(0), '***')}")
+                log(f"server error: {str(msg['error']).replace(self._token or chr(0), '***')[:200]}")
             if kind == 1:
                 for arg in msg.get("arguments") or []:
                     try:
