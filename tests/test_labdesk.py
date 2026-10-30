@@ -1429,3 +1429,19 @@ def test_most_default_never_raises_on_an_unknown_point_value(tmp_path, monkeypat
     d = mkdesk(tmp_path)
     monkeypatch.setattr(labdesk, "point_value", lambda s: None)
     assert d.ld._most_default(LAB) == 2
+
+
+def test_an_account_done_for_the_day_is_not_an_untaken_entry(tmp_path):
+    """Both entries are refused on their only account for its stop-after rule: that is the account's own rule, so
+    two of them do not stop the strategy for the day."""
+    d = mkdesk(tmp_path)
+    run(d.ld.set_book(LAB, [{"account": "a1", "qty": 1, "stop_after": "win"}]))
+    working(d)
+    fill_entry(d.eng, d.ads["a1"], st(d), 110.25)
+    fill_exit(d.eng, d.ads["a1"], st(d), 125.0, "tp")
+    tick(d)
+    for seq in (2, 3):
+        out = send(d, entry(seq), seq=seq)
+        assert refusal(out) == engine_lab.LAB_DONE_WIN and out["results"][0]["status"] == "cancelled"
+    assert (d.ld._rec(LAB)["untaken"], d.ld._rec(LAB)["stopped"]) == (0, None)
+    assert len(d.ads["a1"].brackets) == 1

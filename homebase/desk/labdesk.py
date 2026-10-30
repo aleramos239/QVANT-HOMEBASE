@@ -62,7 +62,7 @@ from ..contracts import commission_rt, micro_of, point_value, tick_size
 from ..core.num import is_int as _whole
 from . import engine_lab
 from .acctsize import OVER_MOST, ROW_NO_SIZE, most_default, row_size
-from .engine_lab import GROUP_HEDGE
+from .engine_lab import GROUP_HEDGE, LAB_ACCOUNT_STOPPED, LAB_DONE_PROFIT, LAB_DONE_WIN
 from .labcfg import LAB
 from ..labrun import door, fanout, intents, store
 
@@ -88,6 +88,9 @@ CANNOT_READ_LIMITS = "The Desk cannot read its limits."
 SWITCH_NOT_OFF = "Flattened. Could not switch it off: try the switch again."
 SWITCHED_OFF = "Lab strategies are switched off on this Desk."
 RUNNER_NOT_CONNECTED = "The runner is not connected to the Desk."
+# An account that sits an entry out for a rule of its own (or the group's turn) is not "none of them took it": it does not
+# count towards stopping the strategy for the day.
+OWN_RULE = (door.SLOT_BUSY, GROUP_HEDGE, ROW_NO_SIZE, LAB_ACCOUNT_STOPPED, LAB_DONE_WIN, LAB_DONE_PROFIT)
 
 # ---- the intake half (task B3): the runner's orders, the heartbeat rule, the stream back (see THE INTAKE HALF below)
 RATE_N, RATE_WINDOW_S = 5, 1.0           # entries: at most this many requests a second per strategy (trading.py's own)
@@ -1654,7 +1657,7 @@ class LabDesk:
         if not took:
             text = whole or next(iter(said.values()), door.CANNOT_CHECK)
             self._dead(d, ids)
-            if whole is None and not all(s in (door.SLOT_BUSY, GROUP_HEDGE) for s in said.values()):
+            if whole is None and not all(s in OWN_RULE for s in said.values()):
                 d["untaken"] += 1                            # it was offered to its accounts and none took it (one
                                                              # skipped for the group's turn is not counted)
         if not took and whole is not None:

@@ -4001,3 +4001,81 @@ def test_the_day_take_never_stops_a_trade_that_is_open_and_other_accounts_keep_t
     assert go(eng, leg(iid=2), {"a1": 1, "a2": 1})["accounts"] == {
         "a1": {"ok": False, "round": None, "reason": "This account is stopped for the day."},
         "a2": {"ok": False, "round": None, "reason": "One position at a time."}}
+
+
+# ------------------------------------------------------------------------------------------------ stop after (per account)
+def stop_rule(eng, account, rule):
+    for r in eng.cfg.book[LAB]:
+        if r["account"] == account:
+            r["stop_after"] = rule
+
+
+def sits_out(eng, account="a1"):
+    return eng._lab_sits_out(LAB, eng.cfg.strategies[LAB], account, 1, 10)
+
+
+def test_stop_after_win_sits_out_after_a_winner(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    stop_rule(eng, "a1", "win")
+    trade(eng, ads["a1"], exit_px=95.0, by="sl", max_rounds=10)               # a loser: still trading
+    assert sits_out(eng) is None
+    trade(eng, ads["a1"], exit_px=110.0, by="tp", max_rounds=10)
+    assert sits_out(eng) == engine_lab.LAB_DONE_WIN == "Done for today on this account: a trade won."
+    out = go(eng, leg(), max_rounds=10)
+    assert out["accounts"]["a1"] == {"ok": False, "round": None, "reason": engine_lab.LAB_DONE_WIN}
+    assert len(ads["a1"].brackets) == 2
+
+
+def test_stop_after_win_ignores_a_winner_that_does_not_cover_its_fee(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    stop_rule(eng, "a1", "win")
+    trade(eng, ads["a1"], exit_px=100.1, by="tp", max_rounds=10)              # gross +$2, net below $0 after the fee
+    assert rnd(eng).pnl > 0 and sits_out(eng) is None
+
+
+def test_stop_after_profit_sums_closed_nets(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    trade(eng, ads["a1"], exit_px=110.0, by="tp", max_rounds=10)              # +200 gross
+    trade(eng, ads["a1"], exit_px=87.5, by="sl", max_rounds=10)               # -250 gross
+    stop_rule(eng, "a1", "profit")
+    assert sits_out(eng) is None
+    stop_rule(eng, "a1", "win")
+    assert sits_out(eng) == engine_lab.LAB_DONE_WIN                           # one winner is enough for "win"
+    (tmp_path / "two").mkdir()
+    eng2, ads2, _ = mk(tmp_path / "two")
+    trade(eng2, ads2["a1"], exit_px=110.0, by="tp", max_rounds=10)
+    trade(eng2, ads2["a1"], exit_px=95.0, by="sl", max_rounds=10)             # -100 gross: still in profit
+    stop_rule(eng2, "a1", "profit")
+    assert sits_out(eng2) == engine_lab.LAB_DONE_PROFIT == "Done for today on this account: it is in profit."
+
+
+def test_an_open_round_is_not_counted(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    stop_rule(eng, "a1", "profit")
+    go(eng, leg())
+    fill_entry(eng, ads["a1"], rnd(eng), 100.0)
+    assert rnd(eng).status == "live" and rnd(eng).pnl is None
+    assert eng._lab_sits_out(LAB, eng.cfg.strategies[LAB], "a1", 1, 10) == engine_lab.LAB_ONE_AT_A_TIME   # open, not "done"
+    rnd(eng).pnl = 500.0                                                      # even a booked gross on an open round
+    assert sits_out(eng) == engine_lab.LAB_ONE_AT_A_TIME
+
+
+def test_stop_after_is_per_account(tmp_path):
+    eng, ads, _ = mk(tmp_path, accounts=("a1", "a2"))
+    stop_rule(eng, "a1", "win")
+    go(eng, leg(), {"a1": 1, "a2": 1})
+    for a in ("a1", "a2"):
+        fill_entry(eng, ads[a], rnd(eng, a), 100.0)
+        fill_exit(eng, ads[a], rnd(eng, a), 110.0, "tp")
+    tick(eng)
+    assert sits_out(eng, "a1") == engine_lab.LAB_DONE_WIN and sits_out(eng, "a2") is None   # a2 has no rule
+    out = go(eng, leg(iid=2), max_rounds=10)
+    assert out["accounts"]["a1"]["reason"] == engine_lab.LAB_DONE_WIN and out["accounts"]["a2"]["ok"] is True
+
+
+def test_another_strategys_win_on_the_account_does_not_stop_this_one(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    stop_rule(eng, "a1", "win")
+    other = eng._state("other", "a1")                                         # a win of another strategy, same account
+    other.status, other.pnl = "done", 500.0
+    assert sits_out(eng) is None

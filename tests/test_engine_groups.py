@@ -273,3 +273,19 @@ def test_follow_group_keeps_name_and_members_in_step(tmp_path):
     assert eng.follow_group("g", None, [])["on"] is False                # no strategy left: off
     with pytest.raises(GroupMissing):
         eng.follow_group("zz", "x", [])
+
+
+def test_an_account_done_for_the_day_passes_the_cycle_turn_on(tmp_path):
+    """stop_after is the account's own rule: the group's turn skips it (as it skips a busy account) and moves on."""
+    eng, ads, _ = mk(tmp_path)
+    group(eng)
+    for r in eng.cfg.book[tlab.LAB]:
+        if r["account"] == "a1":
+            r["stop_after"] = "win"
+    st = tlab.run(eng.lab_enter(tlab.LAB, [tlab.leg(iid=1)], {"a1": 1}, max_rounds=5))["accounts"]["a1"] and tlab.rnd(eng)
+    tlab.fill_entry(eng, ads["a1"], st, 100.0)
+    tlab.fill_exit(eng, ads["a1"], st, 110.0, "tp")                   # a1 won
+    tlab.tick(eng)
+    eng.groups["g"]["last"] = "a3"                                    # a1 is next ...
+    assert took(enter(eng, tlab.LAB, tlab.leg(iid=2))) == ["a2"]      # ... but it is done: the turn moves on
+    assert len(ads["a1"].brackets) == 1
