@@ -1745,3 +1745,25 @@ test('a family folds its variants by their short names, the rest follow; the cyc
   assert.match(page, /<span class="t dim">1<\/span><\/div>/, 'booked on one account');
   assert.match(vm.runInContext('familyView("f9")', t.ctx), /not there any more/);
 });
+
+// ---- a family archived together (owner 2026-10-30): one confirm, each member's three steps; the Archive groups it under its name ----
+test('Archive family: one confirm, each Lab member archived; the Archive lists it under the family; the sidebar drops it', async () => {
+  const t = groupDesk({});
+  vm.runInContext(`DESKFAM = {families: [{id: "f1", name: "NQ ORB", members: ["lab_nq_orb"], short: {}}], ok: true};
+    var CP = []; chartPost = async (u, b) => { CP.push([u, b]); return {ok: true}; };`, t.ctx);
+  assert.match(vm.runInContext('familyView("f1")', t.ctx), /onclick="archiveFamily\(&quot;f1&quot;\)"[^>]*>Archive family<\/button>/);
+  await vm.runInContext('archiveFamily("f1")', t.ctx);
+  assert.equal(t.confirms.length, 1);
+  assert.match(t.confirms[0].title, /Archive the NQ ORB family\?/);
+  assert.deepEqual(plain(vm.runInContext('CP', t.ctx)).map((c) => c[0]), ['/api/tester/desklab/archive', '/api/tester/desklab/filed']);
+  assert.deepEqual(t.posts.map((p) => p.url), ['/api/lab-remove'], 'the Desk takes it off');
+  assert.match(t.toasts.at(-1), /NQ ORB family is archived/);
+  // the chart service now lists it archived: the family sits in the Archive, under its name, with a loose one after it
+  vm.runInContext(`DESKLAB.archived = [{name: "nq_orb", label: "NQ ORB 1.5R", root: "NQ", archived_utc: "2026-10-30T20:00:00Z"},
+    {name: "nq_gap", label: "NQ gap", root: "NQ"}];`, t.ctx);
+  assert.doesNotMatch(t.side(), /<span>NQ ORB<\/span>/, 'a family all archived leaves the sidebar');
+  const arch = vm.runInContext('archiveView()', t.ctx);
+  assert.match(arch, /<h2>NQ ORB · 1<\/h2>[\s\S]*NQ ORB 1\.5R[\s\S]*Restore family[\s\S]*<h2>No family<\/h2>[\s\S]*NQ gap/);
+  await vm.runInContext('restoreFamily("f1")', t.ctx);
+  assert.deepEqual(plain(vm.runInContext('CP', t.ctx)).at(-1), ['/api/tester/desklab/restore', { name: 'nq_orb' }], 'only the family\'s own');
+});

@@ -66,6 +66,8 @@ const FAMILY_FAULT = "The family could not be shown.";
 const famOf = (id) => DESKFAM.families.find(f => f.id === id) || null;
 const famOfStrat = (sid) => DESKFAM.families.find(f => f.members.includes(sid)) || null;
 const famShort = (sid) => { const f = famOfStrat(sid); return (f && f.short[sid]) || ""; };
+const archivedId = (w) => w.builtin === true ? w.name : "lab_" + w.name;      // an archived row's Desk id, as families list it
+const famArchived = (f) => { const a = new Set((DESKLAB.archived || []).map(archivedId)); return f.members.length > 0 && f.members.every(m => a.has(m)); };
 function takeFamilies(list) {      // only well-formed families are kept; a wrong shape is dropped, never thrown on
   return (Array.isArray(list) ? list : []).filter(f => f && typeof f === "object" && FAMILY_ID.test(String(f.id)) && typeof f.name === "string")
     .map(f => {
@@ -129,6 +131,7 @@ function familyView(id) {
       ${rows.join("")}</div></div>` : `<div class="eq-empty">No variants yet. Add them in Manage.</div>`}
     ${gone.length ? `<div class="sec"><h2>Not on the Desk any more</h2><div class="agroup feed static">${gone.map(g => `<div class="feed-row"><span class="h">${esc(g)}</span></div>`).join("")}</div></div>` : ""}
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openGroupMgr()">Manage</button>
+      <button class="btn btn-outline btn-sm" onclick="archiveFamily(${jsArg(f.id)})"${DESKLAB_BUSY ? " disabled" : ""} title="All of them off the Desk, switched off, kept together in Archive">Archive family</button>
       <button class="btn btn-outline btn-sm" onclick="deleteFamily(${jsArg(f.id)})" title="The strategies stay on the Desk, in no family.">Delete family</button></div>`;
 }
 async function deleteFamily(id) {

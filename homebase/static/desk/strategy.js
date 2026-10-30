@@ -24,7 +24,7 @@ function renderSide(names, hiddenCount, issues) {
      Account cycles (the Desk groups) are their own section below: a variant can be in a family and a cycle at once. */
   const inFam = new Set(DESKFAM.families.flatMap(f => f.members));
   const loose = names.concat(labIds).filter(id => !inFam.has(id)).map(id => rowOf[id] || "").join("");
-  const famBlocks = DESKFAM.families.map(f => {
+  const famBlocks = DESKFAM.families.filter(f => !famArchived(f)).map(f => {      // a family all in the Archive sits there, not here
     const k = "f:" + f.id, rows = f.members.map(id => rowOf[id]).filter(Boolean);
     const opened = sel("family", f.id) !== "";
     const open = `<button class="sh-btn" title="Open ${esc(f.name)}" aria-label="Open ${esc(f.name)}"${opened ? ' aria-current="page" style="color:var(--foreground)"' : ""} onclick="setView('family',${jsArg(f.id)})">›</button>`;
