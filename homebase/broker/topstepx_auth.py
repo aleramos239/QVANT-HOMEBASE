@@ -14,6 +14,7 @@ import asyncio
 import base64
 import json
 import logging
+import re
 import time
 
 import httpx
@@ -32,6 +33,7 @@ RENEW_LEFT_S = 600              # a token with less than this left is renewed be
 TOKEN_TTL_S = 23 * 3600         # when the token is not a JWT (or has no exp)
 TOKEN_FIELD = "token"           # unconfirmed: the token's name in the /Login answer
 USER_ID_FIELD = "userId"        # unconfirmed
+_CODE_ASKED = re.compile(r"verification code|one-time code|enter (the |your )?code|code (was )?sent|two-factor|2fa", re.I)
 
 
 class NeedsCode(RuntimeError):
@@ -43,12 +45,15 @@ class TsxLoginFailed(RuntimeError):
 
 
 def _needs_code(answer: dict) -> bool:
-    """Unconfirmed shape: no token, and a code-ish key is set or the error message talks about a code."""
+    """Unconfirmed shape: no token, and a code-request key is set (error / status keys never count: `errorCode: 3` is a
+    bad password) or the error message asks for a code in so many words ("error code 5" does not)."""
     if answer.get(TOKEN_FIELD):
         return False
-    if any(("code" in k.lower() or "twofactor" in k.lower()) and v for k, v in answer.items()):
-        return True
-    return "code" in str(answer.get("errorMessage") or "").lower()
+    for k, v in answer.items():
+        k = k.lower()
+        if v and ("code" in k or "twofactor" in k) and "error" not in k and "status" not in k:
+            return True
+    return bool(_CODE_ASKED.search(str(answer.get("errorMessage") or "")))
 
 
 def _expiry(token: str) -> float:

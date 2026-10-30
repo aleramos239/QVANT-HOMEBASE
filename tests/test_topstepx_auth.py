@@ -96,6 +96,16 @@ def test_a_code_request_raises_NeedsCode():
         run(make(t).login())
 
 
+@pytest.mark.parametrize("answer", [
+    {"token": None, "success": False, "errorCode": 3, "errorMessage": "Invalid username or password"},
+    {"token": None, "success": False, "statusCode": 401, "errorMessage": "error code 5"}])
+def test_a_wrong_password_with_an_error_code_is_not_a_code_request(answer):
+    t = Tsx()
+    t.handlers["/Login"] = lambda req: httpx.Response(200, json=answer)
+    with pytest.raises(TsxLoginFailed):
+        run(make(t).login())
+
+
 def test_a_token_in_the_answer_is_never_a_code_request():
     t = Tsx()
     t.handlers["/Login"] = lambda req: httpx.Response(200, json={"token": "TOK-X", "twoFactorCode": "yes"})
