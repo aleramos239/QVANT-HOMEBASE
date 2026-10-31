@@ -662,6 +662,82 @@ def test_flatten_closes_again_only_when_the_net_flipped_sign(monkeypatch):
     asyncio.run(go())
 
 
+def test_a_second_flip_after_the_re_close_sends_nothing_more(monkeypatch):
+    monkeypatch.setattr(alphatrader, "ORDER_WAIT_S", 0.05)
+
+    async def go():
+        a, sock = await ready({"accountPosition": pos("A1", NQZ26, "NQ", buys=2)}, working("U10", NQZ26))
+        sock.reply = t4(after={NQZ26: [(0, 2), (2, 0)]})             # flipped short, then long again
+        r = await a.flatten_symbol("NQ")
+        assert [(s["orders"][0]["buySell"], s["orders"][0]["volume"]) for s in subs(sock)] == \
+            [(proto.SELL, 2), (proto.BUY, 2)]                        # exactly one re-close
+        assert not r.ok and "still +2 after its close and one re-close" in r.error and pulls(sock) == []
+    asyncio.run(go())
+
+
+def test_an_earlier_close_still_live_on_a_market_gone_flat_is_pulled(monkeypatch):
+    monkeypatch.setattr(alphatrader, "ORDER_WAIT_S", 0.05)
+
+    async def go():
+        a, sock = await ready({"accountPosition": pos("A1", NQZ26, "NQ", buys=2)}, working("U10", NQZ26))
+        sock.reply = lambda p, d: [("orderUpdate", {"uniqueId": "U1", "accountId": "A1", "marketId": NQZ26,
+                                                    "status": proto.WORKING, "tagClOrdId": d["orders"][0]["ClOrdId"],
+                                                    "currentVolume": 2, "buySell": proto.SELL, "tag": "homebase:flatten",
+                                                    "priceType": proto.MARKET})]
+        assert not (await a.flatten_symbol("NQ")).ok                 # the close sits working
+        sock.push("orderUpdate", {"uniqueId": "U10", "accountId": "A1", "marketId": NQZ26, "status": proto.FINISHED,
+                                  "totalFillVolume": 2})             # the stop took the position out instead
+        sock.push("accountPosition", pos("A1", NQZ26, "NQ"))
+        sock.reply = t4()
+        r = await a.flatten_symbol("NQ")
+        assert r.ok, r.error
+        assert len(subs(sock)) == 1 and pulls(sock) == [(NQZ26, "U1")]   # never a live market order on a flat market
+    asyncio.run(go())
+
+
+def test_an_unanswered_close_asks_for_the_snapshots_and_the_book_settles_it(monkeypatch):
+    monkeypatch.setattr(alphatrader, "ORDER_WAIT_S", 0.05)
+
+    async def go():
+        a, sock = await ready({"accountPosition": pos("A1", NQZ26, "NQ", buys=2)})
+        sock.reply = None                                            # T4 says nothing
+        r = await a.flatten_symbol("NQ")
+        assert not r.ok and [k for k, _ in sock.sent] == ["orderSubmit", "accountSubscribe"]
+        cid = subs(sock)[0]["orders"][0]["ClOrdId"]
+        r = await a.flatten_symbol("NQ")
+        assert not r.ok and "still working or unanswered" in r.error and len(subs(sock)) == 1
+        sock.push("accountSnapshot", snapshot("A1", {"accountPosition": pos("A1", NQZ26, "NQ", buys=2)},
+                                              {"orderUpdate": {"uniqueId": "U7", "accountId": "A1", "marketId": NQZ26,
+                                                               "status": proto.WORKING, "tag": "homebase:flatten",
+                                                               "currentVolume": 2}}))   # no tagClOrdId: the tag
+        assert a._orders["U7"]["clOrdId"] == cid
+        r = await a.flatten_symbol("NQ")
+        assert not r.ok and "still working" in r.error and len(subs(sock)) == 1
+        a._orders.pop("U7")                                          # a book that never held it: T4 never got it
+        sock.push("accountSnapshot", snapshot("A1", {"accountPosition": pos("A1", NQZ26, "NQ", buys=2)}))
+        sock.reply = t4()
+        r = await a.flatten_symbol("NQ")
+        assert r.ok, r.error
+        assert len(subs(sock)) == 2
+    asyncio.run(go())
+
+
+def test_a_close_cancelled_mid_wait_stays_on_record():
+    async def go():
+        a, sock = await ready({"accountPosition": pos("A1", NQZ26, "NQ", buys=2)})
+        sock.reply = None
+        t = asyncio.get_running_loop().create_task(a.flatten_symbol("NQ"))
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert len(subs(sock)) == 1
+        t.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await t
+        r = await a.flatten_symbol("NQ")
+        assert not r.ok and "still working or unanswered" in r.error and len(subs(sock)) == 1
+    asyncio.run(go())
+
+
 def test_a_close_not_filled_in_the_wait_keeps_the_stop_and_blocks_a_second_close(monkeypatch):
     monkeypatch.setattr(alphatrader, "ORDER_WAIT_S", 0.05)
 
@@ -789,7 +865,8 @@ def test_bad_prices_and_quantities_are_refused_and_nothing_is_sent():
                     OrderRequest("NQZ26", "Buy", 1, "Limit", price=float("inf")),
                     OrderRequest("NQZ26", "Buy", 1, "Limit", price=0),
                     OrderRequest("NQZ26", "Buy", 1, "Limit", price=20000, stop_price=-5),
-                    OrderRequest("NQZ26", "Buy", 1, "Limit", price="20000")):
+                    OrderRequest("NQZ26", "Buy", 1, "Limit", price="20000"),
+                    OrderRequest("NQZ26", "Buy", 1, "Limit", price=True)):
             r = await a.place_order(req)
             assert not r.ok and "bad price" in r.error, req
         for qty in (0, -1, 1.5, True, "1"):
@@ -809,6 +886,9 @@ def test_the_stop_rounds_away_from_the_entry_and_the_target_to_the_nearest_tick(
         (_, btp, bsl), (_, stp, ssl) = (s["orders"] for s in subs(sock))
         assert (bsl["stopPrice"], btp["limitPrice"]) == ({"value": "19990.00"}, {"value": "20020.25"})
         assert (ssl["stopPrice"], stp["limitPrice"]) == ({"value": "20010.25"}, {"value": "19980.00"})
+        assert (await a.place_order(OrderRequest("NQZ26", "Sell", 1, "Stop", stop_price=19990.24))).ok   # guards a long
+        assert (await a.place_order(OrderRequest("NQZ26", "Buy", 1, "Stop", stop_price=20010.01))).ok    # guards a short
+        assert [s["orders"][0]["stopPrice"] for s in subs(sock)[2:]] == [{"value": "19990.00"}, {"value": "20010.25"}]
     asyncio.run(go())
 
 

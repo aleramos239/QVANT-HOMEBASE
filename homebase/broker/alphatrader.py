@@ -318,8 +318,17 @@ class AlphaTraderAdapter(BrokerAdapter):
                 self._apply(name, d)
         self._dirty, self._resynced = set(), False      # the snapshot's positions come after its trades
         self._pos_ok = self._orders_ok = True
-        # a flatten close the whole book does not hold never reached T4: it no longer blocks the next flatten
-        self._closes = {c: m for c, m in self._closes.items() if self._by_cid(c) is not None}
+        # a flatten close the whole book does not hold (and no submit still waits on) never reached T4: it no longer blocks
+        for c, m in list(self._closes.items()):
+            if self._by_cid(c) is not None or c in self._waits:
+                continue
+            # unconfirmed: a book row without its tagClOrdId is taken as our close by its flatten tag (a live one first)
+            o = min((o for o in self._orders.values() if not o["clOrdId"] and o["tag"] == FLATTEN_TAG
+                     and o["marketId"] == m), key=lambda o: o["status"] not in _LIVE, default=None)
+            if o is None:
+                del self._closes[c]
+            else:
+                o["clOrdId"] = c
 
     def _by_cid(self, cid: str) -> Optional[dict]:
         return next((o for o in self._orders.values() if o["clOrdId"] == cid), None)
@@ -422,9 +431,10 @@ class AlphaTraderAdapter(BrokerAdapter):
         if isinstance(req.qty, bool) or not isinstance(req.qty, numbers.Integral) or req.qty < 1:
             raise _Refused(f"alphatrader: qty must be a whole number above 0, not {req.qty!r}")
         for v in (req.price, req.stop_price, req.tp_price, req.trigger_price):
-            if v is not None and not (isinstance(v, numbers.Real) and math.isfinite(v) and v > 0):
+            if v is not None and (isinstance(v, bool) or not (isinstance(v, numbers.Real) and math.isfinite(v) and v > 0)):
                 raise _Refused(f"alphatrader: bad price {v!r}")
         ot = req.order_type
+        protective = ot == "Stop" and not bracket and req.stop_price is not None
         if ot not in TYPE:
             raise _Refused(f"alphatrader: unknown order type {ot!r}")
         if ot == "Limit":
@@ -432,7 +442,7 @@ class AlphaTraderAdapter(BrokerAdapter):
         elif ot == "StopLimit":
             level = {"limitPrice": req.price, "stopPrice": req.trigger_price}
         elif ot == "Stop":     # a stop entry's trigger is its price; a bare protective Stop carries it in stop_price
-            level = {"stopPrice": req.price if bracket or req.stop_price is None else req.stop_price}
+            level = {"stopPrice": req.stop_price if protective else req.price}
         else:
             level = {}
         if any(v is None for v in level.values()):
@@ -441,6 +451,8 @@ class AlphaTraderAdapter(BrokerAdapter):
         tag = str(req.text or "")[:40]
         entry = {"buySell": side, "priceType": TYPE[ot], "timeType": proto.NORMAL, "volume": int(req.qty),
                  **{k: px(v) for k, v in level.items()}, "tag": tag, "ClOrdId": _cl_ord_id()}
+        if protective:         # away from the position it guards (wider, never tighter): a sell stop down, a buy stop up
+            entry["stopPrice"] = px(req.stop_price, ROUND_FLOOR if side == proto.SELL else ROUND_CEILING)
         if not bracket:
             return [entry]
         ref = req.trigger_price if ot == "StopLimit" else req.price
@@ -654,18 +666,22 @@ class AlphaTraderAdapter(BrokerAdapter):
                     errors.append(r.error)
             flat = {mid for mid, (_, r) in res.items() if r.ok}
             if self.orders_known:
+                # a flat market's working orders all go, an earlier close still live there too (a market order on flat)
                 errors += await self._pull_all([o for o in self._orders.values() if o["status"] in _LIVE
-                                                and o["clOrdId"] not in self._closes and in_scope(o["marketId"])
+                                                and in_scope(o["marketId"])
                                                 and (o["marketId"] in flat or o["marketId"] not in held)])
             else:
                 errors.append("alphatrader: working orders unknown, none pulled")
+            errors += [f"alphatrader: {m}: an earlier flatten close was never answered: it may be working, check it"
+                       for m in sorted({m for c, m in self._closes.items()
+                                        if m not in held and in_scope(m) and self._by_cid(c) is None})]
             raw["flattened"] = len(flat)
             return OrderResult(ok=not errors, error="; ".join(errors) or None, raw=raw)
 
     async def _close_market(self, mid: str, net: int) -> tuple[OrderResult, OrderResult]:
         """(the first close's answer, the verdict: ok only when the market reads flat after our own fills)."""
         first = r = await self._close(mid, net)
-        for _ in range(2):                              # the close, then at most one more on a flipped sign
+        for again in (False, True):                     # the close, then at most ONE re-close on a flipped sign
             if not r.ok:
                 return first, r
             why = await self._filled(r.order_id, abs(net), mid)
@@ -674,12 +690,13 @@ class AlphaTraderAdapter(BrokerAdapter):
             now = self._pos.get(mid, ("", 0))[1]
             if not now:
                 return first, OrderResult(ok=True)
-            if now * net > 0:
-                break                                   # still held the same way: never a second close
+            if again or now * net > 0:                  # same sign, or flipped after the re-close: never another close
+                return first, OrderResult(ok=False, error=f"alphatrader: {mid}: still {now:+d} after its close"
+                                          f"{' and one re-close' if again else ''} (not sent again): its orders are "
+                                          "left working")
             net = now
             r = await self._close(mid, now)             # the net flipped (a stop filled too): close what is held now
-        return first, OrderResult(ok=False, error=f"alphatrader: {mid}: still {self._pos.get(mid, ('', 0))[1]:+d} "
-                                                  "after its close (not sent again): its orders are left working")
+        raise AssertionError("unreachable")
 
     async def _filled(self, uid: str, qty: int, mid: str) -> Optional[str]:
         """Wait for the close's own fill of `qty` and the market's position after it. None = both landed, else why not."""
@@ -695,10 +712,13 @@ class AlphaTraderAdapter(BrokerAdapter):
 
     async def _close(self, mid: str, net: int) -> OrderResult:
         cid = _cl_ord_id()
+        self._closes[cid] = mid                         # before the send: a caller cancelled mid-wait leaves it on record
         r = await self._submit(mid, [{"buySell": proto.SELL if net > 0 else proto.BUY, "priceType": proto.MARKET,
                                       "timeType": proto.NORMAL, "volume": abs(net), "tag": FLATTEN_TAG, "ClOrdId": cid}])
-        if r.ok or r.raw.get("outcome_unknown"):
-            self._closes[cid] = mid                     # it may be working: the next flatten waits for it
+        if r.raw.get("outcome_unknown"):
+            await _resubscribe(self.session)            # the snapshots settle it: in the book (wait for it) or not (gone)
+        elif not r.ok:
+            self._closes.pop(cid, None)                 # not sent, or refused: never working
         if not r.ok:
             r.error = f"{mid}: {r.error}"
         return r
