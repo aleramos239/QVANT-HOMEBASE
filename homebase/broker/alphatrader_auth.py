@@ -214,7 +214,10 @@ class AtrSession:
             if any(m in json.dumps(answer).lower() for m in CODE_MARKERS):
                 raise NeedsCode(CODE_ASKED)
             why = next((str(answer[k]) for k in ERROR_FIELDS if answer.get(k)), f"status {resp.status_code}")
-            raise AtrLoginFailed(why.replace(c["password"], "***")[:200])
+            pw = c["password"]      # the raw value, and as str() / json.dumps() escape it inside a dict or list error field
+            for form in sorted({pw, repr(pw)[1:-1], json.dumps(pw)[1:-1]}, key=len, reverse=True):
+                why = why.replace(form, "***")
+            raise AtrLoginFailed(why[:200])
         self._keep(tokens)
 
     async def _refresh_tokens(self) -> bool:
@@ -271,11 +274,11 @@ class AtrSession:
         except (ValueError, KeyError, TypeError):
             raise AtrLoginFailed("T4 credentials answer unreadable") from None
 
-    async def t4_login_slot(self) -> None:
+    async def t4_login_slot(self, *, manual: bool = False) -> None:
         """Book one budget slot for a T4 socket login (LoginDeferred when the budget says wait)."""
         b = self.budget
         if b is not None:
-            blocked = b.blocked(self.key)
+            blocked = b.blocked(self.key, manual=manual)        # manual skips only the backoff, never the cap
             if blocked:
                 raise LoginDeferred(blocked)
             b.record_login(self.key)

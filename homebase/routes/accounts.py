@@ -296,7 +296,7 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
             return {"ok": False, "error": _atr_why(e), "key": key}
         probe = adapter_factory("probe", config_mod.AccountCfg(keyring_key=key))
         try:
-            await probe.connect()        # joins the login's T4 socket, or opens one (closed with the probe if it is alone)
+            await probe.connect(manual=True)        # joins the login's T4 socket, or opens one (closed with the probe if it is alone)
             accounts = probe.list_accounts()
         except AtrNeedsCode:
             return {"ok": False, "needs_code": True, "key": key}

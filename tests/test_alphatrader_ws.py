@@ -490,3 +490,42 @@ def test_a_drop_clears_a_stale_lost_so_the_card_does_not_show_an_old_reason(monk
     s, sock = make_session(), None
     asyncio.run(go())
     assert seen[0] is None
+
+
+def test_a_manual_connect_skips_the_backoff_once_and_a_later_automatic_one_does_not(fast):
+    async def go():
+        t4 = T4()
+        s = make_session()
+        s.budget.login_result(KEY, "T4 login result 3")             # the backoff is on
+        async with t4.serving() as srv:
+            sock = AtrSocket(s, lambda p, d: None, url=url_of(srv))
+            await sock.start()
+            await until(lambda: len(fast) >= 1)
+            assert t4.opens == 0 and s.lost.startswith("backing off")  # automatic: deferred
+            sock.manual_once = True                                  # the owner's Reconnect
+            await until(lambda: sock.up)
+            assert t4.opens == 1 and s.budget.slots == 1 and sock.manual_once is False
+            s.budget.login_result(KEY, "T4 login result 3")         # a failure puts the backoff back
+            await sock._ws.close()                                  # a drop: the automatic reconnect must wait
+            n = len(fast)
+            await until(lambda: len(fast) >= n + 2)
+            assert t4.opens == 1 and not sock.up
+            await sock.stop()
+    asyncio.run(go())
+
+
+def test_a_manual_connect_still_honours_the_hourly_cap(monkeypatch, fast):
+    monkeypatch.setattr(login_budget, "MAX_LOGINS_PER_HOUR", 1)
+
+    async def go():
+        t4 = T4()
+        s = make_session()
+        s.budget.record_login(KEY)                                   # the cap is spent
+        async with t4.serving() as srv:
+            sock = AtrSocket(s, lambda p, d: None, url=url_of(srv))
+            sock.manual_once = True
+            await sock.start()
+            await until(lambda: len(fast) >= 1)
+            assert t4.opens == 0 and "logins on this user" in s.lost
+            await sock.stop()
+    asyncio.run(go())

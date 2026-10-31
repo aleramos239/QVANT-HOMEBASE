@@ -69,6 +69,7 @@ class AtrSocket:
         self._ws = None
         self._task: asyncio.Task | None = None
         self._up_at: float | None = None        # when the current socket logged in (monotonic)
+        self.manual_once = False                # the owner's Reconnect: the NEXT connect attempt skips the backoff, once
 
     @property
     def running(self) -> bool:
@@ -136,13 +137,14 @@ class AtrSocket:
     async def _connected(self) -> None:
         """One socket's life, until it drops (returns) or T4 ends it (raises)."""
         s = self.session
-        if s.budget is not None and (why := s.budget.blocked(s.key)):
+        manual, self.manual_once = self.manual_once, False
+        if s.budget is not None and (why := s.budget.blocked(s.key, manual=manual)):
             raise LoginDeferred(why)                    # no bare T4 connect while the budget says wait
         parts = urlsplit(self.url)
         self._log(f"connecting → {parts.netloc}{parts.path}")
         async with websockets.connect(self.url, origin=HEADERS["Origin"], user_agent_header=HEADERS["User-Agent"],
                                       max_size=MAX_FRAME, logger=_WIRE_LOG) as ws:
-            await self._login(ws)
+            await self._login(ws, manual)
             await ws.send(proto.client("accountSubscribe", {"subscribe": proto.ALL_UPDATES, "subscribeAllAccounts": True,
                                                             "uplMode": proto.AVERAGE}))
             beat = asyncio.create_task(self._beat(ws))
@@ -172,11 +174,11 @@ class AtrSocket:
                 beat.cancel()
                 await asyncio.gather(beat, return_exceptions=True)
 
-    async def _login(self, ws) -> None:
+    async def _login(self, ws, manual: bool = False) -> None:
         s = self.session
         async with s.lock:
             c = await s.t4_creds()
-            await s.t4_login_slot()                     # booked after the fetch: a slot is one real T4 login
+            await s.t4_login_slot(manual=manual)                     # booked after the fetch: a slot is one real T4 login
             await ws.send(proto.client("loginRequest", {"firm": c.firm, "username": c.username, "password": c.password,
                                                         "appName": c.app_name, "appLicense": c.app_license,
                                                         "priceFormat": 0}))

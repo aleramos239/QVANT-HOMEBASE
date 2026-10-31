@@ -480,7 +480,6 @@ def test_a_stop_on_the_wrong_side_is_refused():
         for req in (OrderRequest("NQZ26", "Buy", 1, "Limit", price=20000, stop_price=20010, tp_price=20020),
                     OrderRequest("NQZ26", "Buy", 1, "Limit", price=20000, stop_price=20000.1),   # the tick: on the entry
                     OrderRequest("NQZ26", "Sell", 1, "Limit", price=20000, stop_price=19990),
-                    OrderRequest("NQZ26", "Buy", 1, "StopLimit", price=20002, trigger_price=20000, stop_price=20001),
                     OrderRequest("NQZ26", "Buy", 1, "Limit", price=20000, stop_price=19990, tp_price=19995)):
             r = await a.place_bracket(req)
             assert not r.ok and "wrong side" in r.error, req
@@ -1358,3 +1357,47 @@ def test_the_fill_entity_carries_the_desks_keys_and_contract_name_reads_the_mark
     assert e["exchangeTradeId"] == "X9" and e["sequenceOrder"] == 3 and e["uniqueId"] == "U1"     # the T4 fields stay
     assert dt.datetime.fromisoformat(e["timestamp"]).tzinfo is not None
     assert (a.contract_name(NQZ26), a.contract_name("CME_Eq ES"), a.contract_name("")) == ("NQZ26", "ES", None)
+
+
+# ------------------------------------------------------------------ final review fixes
+def test_a_stop_limit_bracket_is_refused_with_nothing_sent():
+    async def go():
+        a, sock = await ready()
+        r = await a.place_bracket(OrderRequest("NQZ26", "Buy", 1, "StopLimit", price=20002, trigger_price=20000,
+                                               stop_price=19990, tp_price=20020))
+        assert not r.ok and "StopLimit" in r.error and not (r.raw or {}).get("outcome_unknown")
+        assert sock.sent == []
+    asyncio.run(go())
+
+
+def test_a_raising_journal_never_turns_a_sent_order_into_an_exception(monkeypatch):
+    monkeypatch.setattr(alphatrader, "ORDER_WAIT_S", 0.05)
+
+    async def go():
+        a, sock = await ready()
+
+        def boom(event, **kw):
+            raise RuntimeError("journal down")
+        a.journal = boom
+        sock.reply = None                                            # T4 never answers: the no-answer path journals
+        r = await a.place_order(OrderRequest("NQZ26", "Buy", 1, "Limit", price=20000))
+        assert not r.ok and r.raw["outcome_unknown"] is True
+
+        async def lost(payload, data):
+            raise ConnectionError("closed mid-send")
+        sock.send = lost                                             # the send-lost path journals
+        r = await a.place_order(OrderRequest("NQZ26", "Buy", 1, "Limit", price=20000))
+        assert not r.ok and r.raw["outcome_unknown"] is True
+    asyncio.run(go())
+
+
+def test_connect_manual_tells_a_down_socket_to_skip_the_backoff_once():
+    async def go():
+        s = session(ROWS)
+        a = adapter(s, "AF-50K-1")
+        await a.connect(manual=True)
+        assert s.socket.manual_once is True                          # set before start(): the socket's next attempt
+        s.socket.manual_once = False
+        await adapter(s, "AF-50K-1").connect(manual=True)
+        assert s.socket.manual_once is False                         # an up socket: nothing to skip
+    asyncio.run(go())

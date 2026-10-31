@@ -215,13 +215,15 @@ class AlphaTraderAdapter(BrokerAdapter):
         return self.session.socket is not None and self.session.socket.up
 
     # ------------------------------------------------------------ lifecycle
-    async def connect(self) -> None:
+    async def connect(self, *, manual: bool = False) -> None:
         s = self.session
         late = self not in s.adapters and s.socket is not None and s.socket.up   # its on_up will not run for this one
         if self not in s.adapters:
             s.adapters.append(self)
         if s.socket is None:
             s.socket = AtrSocket(s, _fan_events(s), on_up=_fan_up(s), on_taken=_session_taken(s))
+        if manual and not s.socket.up:
+            s.socket.manual_once = True                 # the owner's Reconnect: its next login skips the backoff, once
         await s.socket.start()                          # a no-op while it runs; starts again after a stop
         loop = asyncio.get_running_loop()
         end = loop.time() + CONNECT_WAIT_S
@@ -543,7 +545,7 @@ class AlphaTraderAdapter(BrokerAdapter):
         self._journal("atr_no_stop_seen", market=mid, root=root, net=net)
         if ATR_FLATTEN_IF_NO_STOP:
             r = await self.flatten_symbol(root or mid)
-            self.journal("atr_no_stop_flatten", market=mid, root=root, ok=r.ok, error=r.error)
+            self._journal("atr_no_stop_flatten", market=mid, root=root, ok=r.ok, error=r.error)
 
     # ------------------------------------------------------------ accounts and markets
     def list_accounts(self) -> list[dict]:
@@ -629,7 +631,9 @@ class AlphaTraderAdapter(BrokerAdapter):
             entry["stopPrice"] = px(req.stop_price, ROUND_FLOOR if side == proto.SELL else ROUND_CEILING)
         if not bracket:
             return [entry]
-        ref = req.trigger_price if ot == "StopLimit" else req.price
+        if ot == "StopLimit":     # unconfirmed on the wire: refused (nothing sent) until the live check shows T4 takes it
+            raise _Refused("alphatrader: a bracketed StopLimit entry is not supported yet, nothing sent")
+        ref = req.price
         if ref is None:
             raise _Refused(f"alphatrader: a bracketed {ot.lower()} entry needs a price")
         legs = []
@@ -684,7 +688,7 @@ class AlphaTraderAdapter(BrokerAdapter):
                     "manualOrderIndicator": False, "orders": orders})
             except (ConnectionError, AttributeError):       # it was up a moment ago: the frame may have gone out
                 self._unanswered[ids[0]] = mid
-                self.journal("atr_order_send_lost", clOrdId=ids[0], market=mid)
+                self._journal("atr_order_send_lost", clOrdId=ids[0], market=mid)
                 return OrderResult(ok=False, raw={"outcome_unknown": True, "clOrdId": ids[0]}, error=SEND_LOST)
             log.info("alphatrader %s: order %s sent on %s (%d in the submit)", self.account_id, ids[0], mid, len(ids))
             end = loop.time() + ORDER_WAIT_S
@@ -694,7 +698,7 @@ class AlphaTraderAdapter(BrokerAdapter):
                 self._unanswered[ids[0]] = mid
                 while len(self._unanswered) > _ORDER_CAP:
                     self._unanswered.pop(next(iter(self._unanswered)))
-                self.journal("atr_order_no_answer", clOrdId=ids[0], market=mid)
+                self._journal("atr_order_no_answer", clOrdId=ids[0], market=mid)
                 log.warning("alphatrader %s: no answer to order %s", self.account_id, ids[0])
                 return OrderResult(ok=False, raw={"outcome_unknown": True, "clOrdId": ids[0]},
                                    error=f"alphatrader: no answer within {ORDER_WAIT_S:g} s: the order may be working, "
@@ -716,7 +720,7 @@ class AlphaTraderAdapter(BrokerAdapter):
                     lname, ld = f.result()
                     if lname == "orderUpdateFailed" or ld.get("status") == proto.REJECTED:
                         raw.setdefault("protective_errors", []).append(f"{key[:2]}: {ld.get('statusDetail') or 'refused'}")
-                        self.journal("atr_bracket_leg_refused", leg=key[:2], clOrdId=ids[0], market=mid)
+                        self._journal("atr_bracket_leg_refused", leg=key[:2], clOrdId=ids[0], market=mid)
                     else:
                         raw[key] = ld.get("uniqueId") or None
             return OrderResult(ok=True, order_id=uid or None, raw=raw)

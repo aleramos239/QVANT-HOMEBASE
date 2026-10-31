@@ -256,3 +256,17 @@ def test_nothing_secret_in_repr_or_errors():
     for text in texts:
         for secret in (PW, access, "REF-LOGIN1", "ID-LOGIN1", "SIGNED"):
             assert secret not in text
+
+
+@pytest.mark.parametrize("pw", ["it's-a\\pw", 'q"uo\\te', "plain-pw-1"])
+def test_the_password_is_masked_in_every_escaped_form_inside_a_dict_error(pw):
+    secrets_store.set_credentials(KEY, username="o@x.com", password=pw)
+    a = Alpha()
+    for err in ({"password": pw}, [pw], {"a": {"b": [pw]}}, pw):
+        a.handlers[aa.LOGIN_PATH] = lambda req, e=err: httpx.Response(400, json={"error": e})
+        with pytest.raises(AtrLoginFailed) as e:
+            run(make(a).login())
+        text = str(e.value) + repr(e.value)
+        for form in (pw, repr(pw)[1:-1], json.dumps(pw)[1:-1]):
+            assert form not in text, (err, form)
+        assert "***" in text

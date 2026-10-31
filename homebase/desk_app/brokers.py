@@ -293,7 +293,7 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
             if not isinstance(ad, (VestAdapter, TopstepXAdapter, AlphaTraderAdapter)):
                 budget.record_login(key)
             try:
-                await ad.connect()
+                await (ad.connect(manual=manual) if isinstance(ad, AlphaTraderAdapter) else ad.connect())
             except (AccountNotOnLogin, NeedsSignature):
                 budget.login_result(key)    # the login itself worked / none was tried (the wallet must sign): no backoff
                 raise
