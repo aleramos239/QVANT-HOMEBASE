@@ -657,6 +657,9 @@
       <div class="opt" id="optTsx" onclick="wizBroker('tsx')"><span class="glyph">Tx</span>
         <span><span class="t">TopstepX</span><br><span class="sub">Username &amp; password</span></span>
         <span class="spacer"></span><span class="radio"></span></div>
+      <div class="opt" id="optAtr" onclick="wizBroker('atr')"><span class="glyph">At</span>
+        <span><span class="t">AlphaTrader</span><br><span class="sub">Alpha Futures · email &amp; password</span></span>
+        <span class="spacer"></span><span class="radio"></span></div>
       <div class="opt" id="optPaper" onclick="wizPaper()"><span class="glyph">Pa</span>
         <span><span class="t">Add paper account</span><br><span class="sub">Simulated fills on live prices — never sent to a broker</span></span>
         <span class="spacer"></span><span class="radio"></span></div>
@@ -682,7 +685,7 @@
         <span class="sub">it's remembered for next time</span></span>
         <span class="spacer"></span><span class="radio"></span></div>
       <div id="newLoginFields" style="display:none">
-        <div class="field"><label>Username</label>
+        <div class="field"><label id="cUserLbl">Username</label>
           <input id="cUser" autocomplete="off" spellcheck="false"></div>
         <div class="field"><label>Password</label>
           <div style="position:relative">
@@ -694,7 +697,7 @@
             </button>
           </div></div>
       </div>
-      <div class="field" id="cCodeRow" style="display:none"><label>Code from TopstepX</label>
+      <div class="field" id="cCodeRow" style="display:none"><label id="cCodeLbl">Code from TopstepX</label>
         <input id="cCode" autocomplete="off" spellcheck="false" inputmode="numeric"></div>
       <div class="row-btns">
         <button class="btn btn-outline" onclick="wizGoto(1)">&larr; Back</button>
@@ -989,7 +992,7 @@
 <script src="/static/desk/strategy.js?v=14"></script>
 <script src="/static/desk/labdesk.js?v=14"></script>
 <script src="/static/desk/demo.js?v=2"></script>
-<script src="/static/desk/book.js?v=13"></script>
+<script src="/static/desk/book.js?v=14"></script>
 <script src="/static/desk/acctset.js?v=4"></script>
 <script src="/static/desk/settings.js?v=8"></script>
 <script src="/static/desk/popups.js?v=7"></script>

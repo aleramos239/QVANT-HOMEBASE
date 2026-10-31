@@ -24,14 +24,14 @@ def test_step_1_offers_topstepx():
     assert "Code from TopstepX" in row and 'id="cCode"' in row and 'autocomplete="off"' in row
     assert INDEX.index('id="newLoginFields"') < INDEX.index('id="cCodeRow"') < INDEX.index('id="cGo"')
     assert 'id="wstep2"' in INDEX and 'id="wBroker2"' in INDEX
-    assert 'book.js?v=13' in INDEX
+    assert 'book.js?v=14' in INDEX
 
 
 def test_the_env_switch_is_hidden_for_tsx():
-    assert 'WIZ.broker = b === "vest" ? "vest" : b === "tsx" ? "tsx" : "tv";' in BOOK
+    assert 'WIZ.broker = b === "vest" ? "vest" : b === "tsx" ? "tsx" : b === "atr" ? "atr" : "tv";' in BOOK
     assert '$("#optTsx").classList.toggle("sel", WIZ.broker === "tsx");' in BOOK
     assert 'setEnv(WIZ.broker === "tv" ? "demo" : WIZ.broker);' in BOOK
-    assert '$("#envSeg").style.display = env === "vest" || env === "tsx" ? "none" : "";' in BOOK
+    assert '$("#envSeg").style.display = env === "vest" || env === "tsx" || env === "atr" ? "none" : "";' in BOOK
     assert "A TopstepX login lists every account under it. Nothing trades until you assign it to a strategy." in BOOK
     assert "Log in to TopstepX" in BOOK
     assert 'wizBroker("tv"); wizGoto(1)' in BOOK                              # every opening starts on Tradovate

@@ -241,22 +241,26 @@ let WIZ = {saved: null, key: null, accounts: [], picks: new Set(), env: "demo", 
 function openConnect() {
   wizBroker("tv"); wizGoto(1); showOverlay("connectOverlay");
 }
-/* Step 1's broker choice. Vest and TopstepX list all their accounts under one login, so the Demo/Live switch is
-   hidden for them (WIZ.env "vest" / "tsx" is what their saved logins carry) and comes back for Tradovate. */
+/* Step 1's broker choice. Vest, TopstepX and AlphaTrader list all their accounts under one login, so the Demo/Live switch is
+   hidden for them (WIZ.env "vest" / "tsx" / "atr" is what their saved logins carry) and comes back for Tradovate. */
 function wizBroker(b) {
-  WIZ.broker = b === "vest" ? "vest" : b === "tsx" ? "tsx" : "tv";
+  const was = WIZ.broker;
+  WIZ.broker = b === "vest" ? "vest" : b === "tsx" ? "tsx" : b === "atr" ? "atr" : "tv";
   $("#optTv").classList.toggle("sel", WIZ.broker === "tv");
   $("#optVest").classList.toggle("sel", WIZ.broker === "vest");
   $("#optTsx").classList.toggle("sel", WIZ.broker === "tsx");
-  $("#wBroker2").textContent = WIZ.broker === "tsx" ? "Log in to TopstepX" : "Log in to Tradovate";
-  if (WIZ.broker !== "tsx") $("#cCodeRow").style.display = "none";
+  $("#optAtr").classList.toggle("sel", WIZ.broker === "atr");
+  $("#wBroker2").textContent = WIZ.broker === "tsx" ? "Log in to TopstepX" : WIZ.broker === "atr" ? "Log in to AlphaTrader" : "Log in to Tradovate";
+  $("#cUserLbl").textContent = WIZ.broker === "atr" ? "Email" : "Username";
+  $("#cCodeLbl").textContent = WIZ.broker === "atr" ? "Code from AlphaTrader" : "Code from TopstepX";
+  if (WIZ.broker !== was || (WIZ.broker !== "tsx" && WIZ.broker !== "atr")) $("#cCodeRow").style.display = "none";   // a code belongs to one broker's login
   setEnv(WIZ.broker === "tv" ? "demo" : WIZ.broker);
   if (WIZ.broker === "vest") vestWarm();
 }
 function setEnv(env) {
   if (WIZ.env !== env) WIZ.saved = null;          // saved logins are per env
   WIZ.env = env;
-  $("#envSeg").style.display = env === "vest" || env === "tsx" ? "none" : "";
+  $("#envSeg").style.display = env === "vest" || env === "tsx" || env === "atr" ? "none" : "";
   $("#envDemo").classList.toggle("sel", env === "demo");
   $("#envLive").classList.toggle("sel", env === "live");
   $("#envDemo").setAttribute("aria-pressed", String(env === "demo"));
@@ -266,6 +270,8 @@ function setEnv(env) {
     ? "A Vest login lists its demo and funded accounts together. A funded account is never ticked for you."
     : env === "tsx"
     ? "A TopstepX login lists every account under it. Nothing trades until you assign it to a strategy."
+    : env === "atr"
+    ? "An AlphaTrader login lists every Alpha account under it. Nothing trades until you assign it to a strategy."
     : env === "live"
     ? "LIVE — real money. Orders on a live account are real. It won't trade until you assign it to a strategy."
     : "Demo is the safe default.";
@@ -310,7 +316,7 @@ async function loadLogins() {
   box.innerHTML = d.logins.map(l => `
     <div class="opt ${WIZ.saved === l.key ? "sel" : ""}" data-login="${esc(l.key)}" onclick="pickLogin(${jsArg(l.key)})">
       <span><span class="t">${esc(l.label)}</span><br>
-      <span class="sub">${esc(l.env === "vest" ? "wallet" : l.env === "tsx" ? "TopstepX" : l.env)}${l.in_use ? " · connected now" : ""}</span></span>
+      <span class="sub">${esc(l.env === "vest" ? "wallet" : l.env === "tsx" ? "TopstepX" : l.env === "atr" ? "AlphaTrader" : l.env)}${l.in_use ? " · connected now" : ""}</span></span>
       <span class="spacer"></span>
       <button class="x" onclick="event.stopPropagation();delLogin(${jsArg(l.key)})" title="Forget this login"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#ic-trash"/></svg></button>
       <span class="radio"></span>
@@ -350,9 +356,10 @@ async function doConnect() {
   const btn = $("#cGo"); btn.disabled = true; btn.textContent = "Connecting…";
   try {
     const codeRow = $("#cCodeRow"), code = $("#cCode").value.trim();
-    const withCode = WIZ.broker === "tsx" && code && codeRow.style.display !== "none" ? {code} : {};   // TopstepX's one-time code
+    const withCode = (WIZ.broker === "tsx" || WIZ.broker === "atr") && code && codeRow.style.display !== "none" ? {code} : {};   // the one-time code of TopstepX / AlphaTrader
     const body = WIZ.saved ? {saved_key: WIZ.saved, ...withCode}
       : WIZ.broker === "tsx" ? {broker: "tsx", username: $("#cUser").value, password: $("#cPass").value, ...withCode}
+      : WIZ.broker === "atr" ? {broker: "atr", username: $("#cUser").value, password: $("#cPass").value, ...withCode}
       : {username: $("#cUser").value, password: $("#cPass").value, env: WIZ.env};
     let r;
     try { r = await post("/api/connect", body); }
@@ -360,7 +367,7 @@ async function doConnect() {
     if (r.ok) { codeRow.style.display = "none"; wizAccepted(r); }
     else if (r.needs_code) {
       codeRow.style.display = ""; $("#cCode").focus();
-      toast("TopstepX sent you a code — type it in", 6000);
+      toast(WIZ.broker === "atr" ? "AlphaTrader sent you a code — type it in" : "TopstepX sent you a code — type it in", 6000);
     }
     else toast("Connect failed — " + (r.error || r.detail || "unknown"), 6000);
   } finally { btn.disabled = false; btn.textContent = "Find my accounts"; refresh(); }
