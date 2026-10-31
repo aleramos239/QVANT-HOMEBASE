@@ -696,7 +696,8 @@ class AlphaTraderAdapter(BrokerAdapter):
                              if self._pos_ok and due(m) and not now_flat(m)}):
                 errors.append(f"alphatrader: {m} filled during the flatten: "
                               + ("its orders were being pulled, check its stop" if m in legs
-                                 else "its stop kept" if m in entries and has_live(m) else "its orders kept"))
+                                 else "its stop kept" if m in entries and has_live(m)
+                                 else "no stop on it, check it" if m in entries else "its orders kept"))
             errors += [f"alphatrader: {m}: an earlier flatten close was never answered: it may be working, check it"
                        for m in sorted({m for c, m in self._closes.items()
                                         if m not in held and in_scope(m) and self._by_cid(c) is None})]

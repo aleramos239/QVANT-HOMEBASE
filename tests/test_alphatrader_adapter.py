@@ -621,6 +621,18 @@ def test_an_entry_filling_during_its_own_pull_keeps_its_stop_and_target():
     asyncio.run(go())
 
 
+def test_a_plain_entry_filling_during_its_own_pull_says_no_stop():
+    async def go():
+        a, sock = await ready(working("U20", ESZ26, side=proto.BUY, ptype=proto.LIMIT))     # no bracket
+        answer = t4()
+        sock.reply = lambda p, d: [("orderUpdateTrade", {"uniqueId": "U20", "accountId": "A1", "marketId": ESZ26,
+                                                         "status": proto.FINISHED, "totalFillVolume": 1})] + answer(p, d)
+        r = await a.flatten_all()
+        assert not r.ok and f"{ESZ26} filled during the flatten: no stop on it, check it" in r.error
+        assert pulls(sock) == [(ESZ26, "U20")]
+    asyncio.run(go())
+
+
 def test_a_refused_entry_pull_keeps_its_markets_legs():
     async def go():
         a, sock = await ready(*ES_BRACKET)
