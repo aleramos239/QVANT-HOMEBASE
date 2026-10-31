@@ -1302,3 +1302,59 @@ def test_a_raising_journal_never_loses_a_fill():
         await settle()
         assert [e.raw["uniqueId"] for e in got] == ["Z1", "Z2"]
     asyncio.run(go())
+
+
+# ------------------------------------------------------------------ Task 7 fold-ins
+def test_a_raising_journal_still_lets_a_late_answers_fill_through():
+    async def go():
+        a, sock, got, _ = await watching()
+
+        def boom(event, **kw):
+            raise RuntimeError("journal down")
+        a.journal = boom
+        a._unanswered["HB_late"] = NQZ26                             # a submit whose answer came after the wait
+        sock.push("orderUpdate", {"uniqueId": "U8", "accountId": "A1", "marketId": NQZ26, "status": proto.FINISHED,
+                                  "buySell": proto.BUY, "currentVolume": 1, "totalFillVolume": 1, "tagClOrdId": "HB_late",
+                                  "trades": [{"sequenceOrder": 1, "volume": 1, "price": {"value": "20000"}}]})
+        await settle()
+        assert [(e.raw["uniqueId"], e.qty) for e in got] == [("U8", 1)] and "HB_late" not in a._unanswered
+    asyncio.run(go())
+
+
+def test_a_partial_trades_list_counts_its_totals_back_from_the_orders_filled():
+    async def go():
+        a, sock, got, _ = await watching()
+        bare = lambda n: {"uniqueId": "U4", "accountId": "A1", "marketId": NQZ26, "volume": 1,   # noqa: E731
+                          "totalFillVolume": n, "price": {"value": f"2000{n}"}}
+        sock.push("orderUpdate", {"uniqueId": "U4", "accountId": "A1", "marketId": NQZ26, "status": proto.WORKING,
+                                  "buySell": proto.BUY, "currentVolume": 3})
+        sock.push("orderUpdateTrade", bare(1))                       # fill 1 seen through orderUpdateTrade
+        # fill 2 only through an orderUpdate whose trades[] holds just the latest trade: its total is 2, not 1
+        sock.push("orderUpdate", {"uniqueId": "U4", "accountId": "A1", "marketId": NQZ26, "status": proto.WORKING,
+                                  "buySell": proto.BUY, "currentVolume": 3, "totalFillVolume": 2,
+                                  "trades": [{"volume": 1, "price": {"value": "20002"}}]})
+        await settle()
+        assert [(e.qty, e.price) for e in got] == [(1, 20001.0), (1, 20002.0)]
+        sock.push("orderUpdateTrade", bare(2))                       # the same fill 2, late: not reported again
+        await settle()
+        assert len(got) == 2
+    asyncio.run(go())
+
+
+def test_the_fill_entity_carries_the_desks_keys_and_contract_name_reads_the_market():
+    async def go():
+        a, sock, _, _ = await watching()
+        ents = []
+        a.add_listener(lambda et, ent: et == "fill" and ents.append(ent))
+        sock.push("orderUpdate", {"uniqueId": "U1", "accountId": "A1", "marketId": NQZ26, "status": proto.WORKING,
+                                  "buySell": proto.SELL, "currentVolume": 2})
+        sock.push("orderUpdateTrade", trade("U1", vol=2, xid="X9", seq=3))
+        await settle()
+        return a, ents
+    a, ents = asyncio.run(go())
+    (e,) = ents
+    assert {k: e[k] for k in ("id", "orderId", "contractId", "action", "qty", "price")} == \
+        {"id": "seq:U1:3", "orderId": "U1", "contractId": NQZ26, "action": "Sell", "qty": 2, "price": 20000.25}
+    assert e["exchangeTradeId"] == "X9" and e["sequenceOrder"] == 3 and e["uniqueId"] == "U1"     # the T4 fields stay
+    assert dt.datetime.fromisoformat(e["timestamp"]).tzinfo is not None
+    assert (a.contract_name(NQZ26), a.contract_name("CME_Eq ES"), a.contract_name("")) == ("NQZ26", "ES", None)

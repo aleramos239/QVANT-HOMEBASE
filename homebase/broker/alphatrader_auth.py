@@ -50,6 +50,7 @@ REFRESH_FIELD = "refresh_token"                     # unconfirmed
 ID_FIELD = "id_token"                               # unconfirmed
 ERROR_FIELDS = ("message", "detail", "error")       # unconfirmed: where Alpha's own words sit in a failed answer
 CRED_TOKEN_FIELD = "signed_credential_token"        # in `data` of the CRED_PATH answer
+CODE_ASKED = "AlphaTrader needs a code"               # a NeedsCode's words (the desk card shows them)
 T4_FIELDS = ("t4_firm", "t4_username", "t4_password", "t4_app_name", "t4_app_license")   # the credential JWT's payload
 
 
@@ -210,7 +211,7 @@ class AtrSession:
         tokens = _tokens(answer)
         if not (tokens.get(ACCESS_FIELD) or tokens.get(ID_FIELD)):
             if any(m in json.dumps(answer).lower() for m in CODE_MARKERS):
-                raise NeedsCode("AlphaTrader needs a code")
+                raise NeedsCode(CODE_ASKED)
             why = next((str(answer[k]) for k in ERROR_FIELDS if answer.get(k)), f"status {resp.status_code}")
             raise AtrLoginFailed(why.replace(c["password"], "***")[:200])
         self._keep(tokens)

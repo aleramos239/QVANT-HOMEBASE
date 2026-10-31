@@ -29,7 +29,7 @@ from typing import Optional
 from .. import symbols
 from ..contracts import root_of
 from . import alphatrader_proto as proto
-from .alphatrader_auth import AtrSession
+from .alphatrader_auth import CODE_ASKED, AtrSession, NeedsCode
 from .alphatrader_ws import AtrSocket
 from .base import AccountNotOnLogin, BrokerAdapter, FillCallback, FillEvent, OrderRequest, OrderResult
 
@@ -69,6 +69,7 @@ SEND_LOST = "alphatrader: the socket closed during the send: it may have gone ou
 # T4 status -> the desk's words (homebase/desk/daystate.py); FINISHED reads Filled / Canceled by its fills
 STATUS_WORDS = {proto.WORKING: "Working", proto.HELD: "Suspended", proto.REJECTED: "Rejected"}
 FLATTEN_TAG = "homebase:flatten"
+TAKEN_LOST = "T4 session taken"                   # session.lost while a kicked session logs in again
 _ORDER_CAP = 5000
 _SEEN_FILL_CAP = 20000
 SIDE_WORDS = {proto.BUY: "Buy", proto.SELL: "Sell"}
@@ -225,8 +226,10 @@ class AlphaTraderAdapter(BrokerAdapter):
         loop = asyncio.get_running_loop()
         end = loop.time() + CONNECT_WAIT_S
         while not s.socket.up:
-            if loop.time() >= end:
+            if loop.time() >= end or not s.socket.running:     # not running: stopped for good (a code, a refusal)
                 await self.close()
+                if s.lost == CODE_ASKED:
+                    raise NeedsCode(CODE_ASKED)
                 raise RuntimeError(f"alphatrader {self.account_id}: not connected ({s.lost or 'the T4 socket did not log in'})")
             await _pause(0.05)
         if not self.account_name:
@@ -317,9 +320,14 @@ class AlphaTraderAdapter(BrokerAdapter):
             if name == "orderUpdateTrade":
                 self._fill(data, data, row, data.get("totalFillVolume", 0))
             elif name == "orderUpdate":
-                total = 0                               # unconfirmed: trades[] holds the order's trades, oldest first
-                for t in data.get("trades", []):
-                    total += int(t.get("volume", 0))
+                # unconfirmed: trades[] holds the order's latest trades, oldest first (maybe not all of them): each one's
+                # filled total counts back from the order's own, the last one's total being `filled`
+                trades = data.get("trades", [])
+                left, totals = (row["filled"] if row is not None else 0), []
+                for t in reversed(trades):
+                    totals.append(left)
+                    left -= int(t.get("volume", 0))
+                for t, total in zip(trades, reversed(totals)):
                     self._fill(t, data, row, total)
                 old = self._snap_filled.get(row["uniqueId"], 0) if row is not None else 0
                 if self._snap and self._trades_seeded and row is not None and not data.get("trades") \
@@ -337,7 +345,7 @@ class AlphaTraderAdapter(BrokerAdapter):
         cid = data.get("tagClOrdId", "")
         if cid in self._unanswered and (failed or data.get("status", 0) in _ANSWERED):
             self._unanswered.pop(cid)                   # the answer after the wait: on record, never acted on
-            self.journal("atr_order_late_answer", clOrdId=cid, uniqueId=data.get("uniqueId", ""), failed=failed,
+            self._journal("atr_order_late_answer", clOrdId=cid, uniqueId=data.get("uniqueId", ""), failed=failed,
                          status=data.get("status", 0), statusDetail=data.get("statusDetail", ""))
         f = self._waits.get(cid)
         if f is not None and not f.done() and (failed or data.get("status", 0) in _ANSWERED):
@@ -441,14 +449,19 @@ class AlphaTraderAdapter(BrokerAdapter):
         side = SIDE_WORDS.get((row or {}).get("buySell") or t.get("buySell"), "")
         qty, raw = int(t.get("volume", 0)), {"uniqueId": uid, "marketId": mid, **t}
         known = self._pos_ok and mid in self._pos and mid not in self._dirty
+        ts = time.time()
         self._out.append(FillEvent(account_id=self.account_id, symbol=self._root_of_market(mid) or mid, side=side,
                                    qty=qty, price=_price(t.get("price")),
-                                   position_after=self._pos[mid][1] if known else None, ts=time.time(), raw=raw,
+                                   position_after=self._pos[mid][1] if known else None, ts=ts, raw=raw,
                                    seen=time.perf_counter()))
         if not side or qty <= 0:                        # a missed fill is worse than one without a side: reported anyway
             log.warning("alphatrader %s: fill %s unreadable (side %r, qty %d)", self.account_id, uid, side, qty)
             self._journal("atr_fill_unreadable", uniqueId=uid, market=mid, side=side, qty=qty)
-        self._notify("fill", raw)
+        # the desk's fill view reads these keys (desk/trading.py _fill_view); the T4 fields stay beside them, except `price`
+        # (T4's {"value": ...}), which the desk reads as a number
+        self._notify("fill", {**raw, "id": ":".join(map(str, keys[0])) if keys else None,
+                              "orderId": uid, "contractId": mid, "action": side, "qty": qty, "price": _price(t.get("price")),
+                              "timestamp": dt.datetime.fromtimestamp(ts, dt.timezone.utc).isoformat()})
         if mid:
             self._touched.add(mid)
             if self._guard is None or self._guard.done():
@@ -527,7 +540,7 @@ class AlphaTraderAdapter(BrokerAdapter):
             return
         self._no_stop.add(mid)
         log.warning("alphatrader %s: no working stop seen on %s (net %d)", self.account_id, mid, net)
-        self.journal("atr_no_stop_seen", market=mid, root=root, net=net)
+        self._journal("atr_no_stop_seen", market=mid, root=root, net=net)
         if ATR_FLATTEN_IF_NO_STOP:
             r = await self.flatten_symbol(root or mid)
             self.journal("atr_no_stop_flatten", market=mid, root=root, ok=r.ok, error=r.error)
@@ -777,6 +790,13 @@ class AlphaTraderAdapter(BrokerAdapter):
     def _root_of_market(self, mid: str) -> str:
         return self._pos[mid][0] if mid in self._pos else _pos_root("", mid)
 
+    def contract_name(self, contract_id) -> Optional[str]:
+        """A T4 marketId's contract: the root plus its month when the id names one ("XCME_Eq NQ (Z26)" -> NQZ26), else the
+        root; None when unreadable."""
+        root = self._root_of_market(str(contract_id or ""))
+        month = re.search(r"\(([FGHJKMNQUVXZ]\d{2})\)", str(contract_id or ""))
+        return (root + month.group(1) if month else root) or None
+
     async def _until(self, cond) -> bool:
         """Wait up to ORDER_WAIT_S for cond() to hold (the socket's pushes land meanwhile)."""
         loop = asyncio.get_running_loop()
@@ -1006,7 +1026,7 @@ def _session_taken(session: AtrSession):
     snapshot reseeds the caches and replays the fills missed meanwhile, once."""
     async def taken(why: str) -> None:
         session.taken += 1
-        session.lost = f"T4 session taken ({why}): logging in again"
+        session.lost = f"{TAKEN_LOST} ({why}): logging in again"
         log.warning("alphatrader %s: T4 session taken (%s), %d time(s)", session.key, why, session.taken)
         for a in list(session.adapters):               # the book is stale until the next login's snapshot
             a._pos_ok = a._orders_ok = False

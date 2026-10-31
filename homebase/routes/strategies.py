@@ -6,9 +6,9 @@ from __future__ import annotations
 from fastapi import HTTPException, Request
 
 from .. import config as config_mod
-from ..broker import topstepx
+from ..broker import alphatrader, topstepx
 from ..desk import labcfg, labdesk as labdesk_mod
-from ..desk_app.brokers import is_tsx_key
+from ..desk_app.brokers import is_atr_key, is_tsx_key
 
 
 def register(app, *, cfg, engine, labdesk) -> None:
@@ -138,6 +138,8 @@ def register(app, *, cfg, engine, labdesk) -> None:
                     raise HTTPException(400, str(e)) from None
         if not topstepx.TSX_BOOKING_OPEN and any(is_tsx_key(cfg.accounts[r["account"]].keyring_key) for r in rows):
             raise HTTPException(409, topstepx.TSX_BOOKING_CLOSED)
+        if not alphatrader.ATR_BOOKING_OPEN and any(is_atr_key(cfg.accounts[r["account"]].keyring_key) for r in rows):
+            raise HTTPException(409, alphatrader.ATR_BOOKING_CLOSED)
         previous = [dict(r) for r in cfg.book.get(name) or []]
         try:
             if labdesk.is_lab(name):         # its book lives in its own file beside its record, never in config.json

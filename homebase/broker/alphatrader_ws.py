@@ -23,7 +23,7 @@ from zoneinfo import ZoneInfo
 import websockets
 
 from . import alphatrader_proto as proto
-from .alphatrader_auth import HEADERS, WS_URL, AtrLoginFailed, AtrSession, NeedsCode
+from .alphatrader_auth import CODE_ASKED, HEADERS, WS_URL, AtrLoginFailed, AtrSession, NeedsCode
 from .login_budget import LoginDeferred
 
 HEARTBEAT_S = 20.0
@@ -69,6 +69,11 @@ class AtrSocket:
         self._ws = None
         self._task: asyncio.Task | None = None
         self._up_at: float | None = None        # when the current socket logged in (monotonic)
+
+    @property
+    def running(self) -> bool:
+        """False once stopped, or stopped for good by a refused login (a code asked, a wrong password)."""
+        return self._task is not None and not self._task.done()
 
     async def start(self) -> None:
         if self._task is None or self._task.done():
@@ -190,7 +195,7 @@ class AtrSocket:
             if r == proto.LOGGED_IN_ELSEWHERE:
                 raise _Taken()
             if r == proto.TWO_FACTOR_REQUIRED:
-                raise NeedsCode("AlphaTrader needs a code")
+                raise NeedsCode(CODE_ASKED)
             if r in STOP_WORDS:
                 why = data.get("errorMessage", "")
                 for secret in (c.username, c.password):

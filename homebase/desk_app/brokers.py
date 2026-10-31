@@ -10,6 +10,9 @@ import weakref
 from types import SimpleNamespace
 
 from .. import config as config_mod
+from ..broker.alphatrader import ATR_BOOKING_OPEN, TAKEN_LOST, AlphaTraderAdapter
+from ..broker.alphatrader_auth import AtrSession
+from ..broker.alphatrader_auth import NeedsCode as AtrNeedsCode
 from ..broker.base import AccountNotOnLogin, BrokerAdapter
 from ..broker.login_budget import LoginDeferred, is_rate_limited
 from ..broker.paper import PaperAdapter
@@ -28,8 +31,10 @@ GONE_CHECK_TIMEOUT_S = 30  # a confirming re-sync runs in its own task, at most 
 NOTICES_KEPT = 10
 NEEDS_SIGNATURE = "needs a new wallet signature"
 NEEDS_CODE = "TopstepX needs a code"
+NEEDS_CODE_ATR = "AlphaTrader needs a code"
 _VEST_SESSIONS: dict = {}     # keyring key -> its one VestSession (refresh tokens rotate: one per login)
 _TSX_SESSIONS: dict = {}      # keyring key -> its one TsxSession (one token and one socket per login)
+_ATR_SESSIONS: dict = {}      # keyring key -> its one AtrSession (one token and one T4 socket per login)
 INPLACE_RETRY_S = (10, 60)   # a dropped socket whose token is still valid, while its user's
                              # logins are paused: retry in place 10 s, doubling to 60 s
 
@@ -54,14 +59,26 @@ def tsx_session(key: str) -> TsxSession:
     return _TSX_SESSIONS.get(key) or _TSX_SESSIONS.setdefault(key, TsxSession(key))
 
 
+def is_atr_key(key: str) -> bool:
+    """An AlphaTrader login: 'atr:<email lowercased>'."""
+    return key.startswith("atr:")
+
+
+def atr_session(key: str) -> AtrSession:
+    """The login's one AtrSession, made on first use: build_adapter and the connect routes both take it here."""
+    return _ATR_SESSIONS.get(key) or _ATR_SESSIONS.setdefault(key, AtrSession(key))
+
+
 def _key_env(key: str) -> str:
     """A login key is 'tv:<env>:<user>' — the env it was verified on. The
     user part may itself hold colons (Google-linked logins are
-    'Google:1012...'), so split twice at most. A Vest login is 'vest', a TopstepX login 'tsx'."""
+    'Google:1012...'), so split twice at most. A Vest login is 'vest', a TopstepX login 'tsx', an AlphaTrader one 'atr'."""
     if is_vest_key(key):
         return "vest"
     if is_tsx_key(key):
         return "tsx"
+    if is_atr_key(key):
+        return "atr"
     parts = key.split(":", 2)
     return "live" if len(parts) == 3 and parts[1] == "live" else "demo"
 
@@ -90,8 +107,9 @@ def md_source(cfg: config_mod.AppCfg, adapters: dict):
     after the early renewal (09:10-09:19:30 ET) the timer's 09:20 / 09:28:30
     md socket starts on a token that lasts past 10:10. Returns
     (keyring_key, env, token_provider)."""
-    ranked = sorted(((aid, a) for aid, a in cfg.accounts.items() if not is_vest_key(a.keyring_key) and not is_tsx_key(a.keyring_key)),
-                    key=lambda kv: kv[1].live)      # a Vest or TopstepX login is never a market-data source
+    ranked = sorted(((aid, a) for aid, a in cfg.accounts.items() if not (is_vest_key(a.keyring_key) or is_tsx_key(a.keyring_key)
+                                                                 or is_atr_key(a.keyring_key))),
+                    key=lambda kv: kv[1].live)      # a Vest, TopstepX or AlphaTrader login is never a market-data source
     up = [(a, adapters[aid]) for aid, a in ranked
           if a.keyring_key and adapters.get(aid) is not None and _md_token_of(adapters[aid])]
     if up:
@@ -116,6 +134,9 @@ def build_adapter(account_id: str, a: config_mod.AccountCfg) -> BrokerAdapter:
     if is_tsx_key(a.keyring_key):    # one session (and one socket) per login, shared by every account on it
         return TopstepXAdapter(account_id, keyring_key=a.keyring_key, account_name=a.account_name,
                                session=tsx_session(a.keyring_key), live=a.live)
+    if is_atr_key(a.keyring_key):    # one session (and one T4 socket) per login, shared by every account on it
+        return AlphaTraderAdapter(account_id, keyring_key=a.keyring_key, account_name=a.account_name,
+                                  session=atr_session(a.keyring_key), live=a.live)
     env = "live" if a.live else "demo"
     sel = {"account_name": a.account_name} if a.account_name else None
     # entries on one login share its token: one login / renewal per Tradovate user
@@ -178,6 +199,8 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
     def _login_label(aid: str) -> str:
         if is_tsx_key(_login_key(aid)):
             return "TopstepX"
+        if is_atr_key(_login_key(aid)):
+            return "AlphaTrader"
         tail = _login_key(aid).rsplit(":", 1)[-1].split("_", 1)[0]
         return tail.capitalize() if tail else "Tradovate"
 
@@ -233,8 +256,8 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
         if isinstance(ad, VestAdapter):
             ad.journal = engine.journal     # its held-entry fires and skips go on the desk's journal
             ad.session.budget = budget      # the login's one session books on the desk's budget (R48)
-        elif isinstance(ad, TopstepXAdapter):
-            ad.journal = engine.journal     # tsx_violation
+        elif isinstance(ad, (TopstepXAdapter, AlphaTraderAdapter)):
+            ad.journal = engine.journal     # tsx_violation / atr_*
             ad.session.budget = budget      # every TopstepX login (first, renewal, after a 401 or a kick) is booked on it
             ad.session.journal = engine.journal     # tsx_session_taken
 
@@ -249,8 +272,10 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
             first = (aid not in _logged_in_once and login_id not in _login_first_spent
                      and aid not in _went_private)
             # a TopstepX session that holds a token sends no /Login on connect: nothing to refuse (a renewal or a
-            # re-login still asks the budget, in the session)
-            holds = isinstance(ad, TopstepXAdapter) and ad.session._token is not None
+            # re-login still asks the budget, in the session). An AlphaTrader adapter joining its login's T4 socket while it
+            # is up sends no login either; a socket that must log in books it itself (session and socket ask the budget)
+            holds = ((isinstance(ad, TopstepXAdapter) and ad.session._token is not None)
+                     or (isinstance(ad, AlphaTraderAdapter) and ad.session.socket is not None and ad.session.socket.up))
             why = None if holds else budget.blocked(key, first=first, manual=manual)
             if why:
                 raise LoginDeferred(why if fell_back_from is None else
@@ -262,7 +287,7 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
             _login_first_spent.add(login_id)
             # A Vest connect mints a token on the signed session: no login (R6). A TopstepX connect sends /Login only
             # when its session holds no token, and that session books it (session.budget) -- booked here too it counts twice.
-            if not isinstance(ad, (VestAdapter, TopstepXAdapter)):
+            if not isinstance(ad, (VestAdapter, TopstepXAdapter, AlphaTraderAdapter)):
                 budget.record_login(key)
             try:
                 await ad.connect()
@@ -270,7 +295,7 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
                 budget.login_result(key)    # the login itself worked / none was tried (the wallet must sign): no backoff
                 raise
             except Exception as e:  # noqa: BLE001
-                if not isinstance(ad, TopstepXAdapter):     # its session already booked a failed login
+                if not isinstance(ad, (TopstepXAdapter, AlphaTraderAdapter)):   # its session already booked a failed login
                     budget.login_result(key, e)
                 raise
             budget.login_result(key)
@@ -313,7 +338,8 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
         g = _gone.pop(aid, None)
         if g is not None:
             restored = []
-            rebook = TSX_BOOKING_OPEN or not is_tsx_key(key)     # a TopstepX account is never booked yet
+            # a TopstepX or AlphaTrader account is never booked yet
+            rebook = (TSX_BOOKING_OPEN or not is_tsx_key(key)) and (ATR_BOOKING_OPEN or not is_atr_key(key))
             for name, rows in (g.get("booked") or {}).items() if rebook else ():
                 have = cfg.book.setdefault(name, [])
                 for r in rows:
@@ -363,6 +389,12 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
             if (acct_status.get(aid) or {}).get("error") != NEEDS_CODE:
                 engine.journal("tsx_needs_code", account=aid)
             acct_status[aid] = {"connected": False, "error": NEEDS_CODE}
+            _login_cooldown[aid] = _t.time() + 1800
+            return
+        if isinstance(e, AtrNeedsCode):
+            if (acct_status.get(aid) or {}).get("error") != NEEDS_CODE_ATR:
+                engine.journal("atr_needs_code", account=aid)
+            acct_status[aid] = {"connected": False, "error": NEEDS_CODE_ATR}
             _login_cooldown[aid] = _t.time() + 1800
             return
         if isinstance(e, AccountNotOnLogin):
@@ -557,6 +589,14 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
                     with contextlib.suppress(Exception):
                         await ad.close()
                     _connect_failed(aid, ad.session.lost)
+                    continue
+                lost = ad.session.lost if isinstance(ad, AlphaTraderAdapter) else None
+                # the same for AlphaTrader: its T4 socket down with a reason (a deferred login, a code, a refusal); a kicked
+                # session logging in again by itself is not lost
+                if lost and ad.connected and not ad._up() and not lost.startswith(TAKEN_LOST):
+                    with contextlib.suppress(Exception):
+                        await ad.close()
+                    _connect_failed(aid, AtrNeedsCode(lost) if lost == NEEDS_CODE_ATR else RuntimeError(lost))
                     continue
                 if ad is not None and ad.connected:
                     continue

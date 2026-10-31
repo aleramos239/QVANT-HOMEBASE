@@ -16,11 +16,12 @@ from .. import config as config_mod
 from ..store import secrets_store
 from ..broker.base import AccountNotOnLogin, OrderRequest
 from ..broker.login_budget import LoginDeferred
+from ..broker.alphatrader_auth import NeedsCode as AtrNeedsCode
 from ..broker.topstepx_auth import NeedsCode, TsxLoginFailed
 from ..broker.vest_auth import NeedsSignature
 from ..data.marketdata import TradovateMD
 from ..desk_app import brokers
-from ..desk_app.brokers import NEEDS_SIGNATURE, is_tsx_key, is_vest_key
+from ..desk_app.brokers import NEEDS_SIGNATURE, is_atr_key, is_tsx_key, is_vest_key
 
 PAPER_ID = "paper"   # the Charts page's built-in paper account (charts/paperbook.PAPER_ID)
 VEST_PENDING_S = 300       # a wallet challenge waits this long for its signature
@@ -57,6 +58,15 @@ def _tsx_why(e: Exception) -> str:
     return f"the TopstepX login failed ({type(e).__name__})"
 
 
+def _atr_why(e: Exception) -> str:
+    """Why an AlphaTrader login step failed, in words that never carry the password, a token nor Alpha's answer body."""
+    if isinstance(e, httpx.HTTPStatusError):
+        return f"AlphaTrader refused it (HTTP {e.response.status_code})"
+    if isinstance(e, RuntimeError):     # the budget's words, Alpha's own (the session masks the password), the socket's
+        return str(e)[:200]
+    return f"the AlphaTrader login failed ({type(e).__name__})"
+
+
 def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
@@ -74,7 +84,7 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
             label = (key.split(":", 2)[-1] or key).upper()
             if is_vest_key(key):                    # the wallet, short: 0xBBE1…1EAB
                 label = "0x" + key[7:11].upper() + "…" + key[-4:].upper()
-            if is_tsx_key(key):                     # the username, as typed
+            if is_tsx_key(key) or is_atr_key(key):  # the username / email, as typed
                 label = str((secrets_store.get_credentials(key) or {}).get("username") or key[4:])
             out.append({"key": key, "label": label,
                         "env": _key_env(key),
@@ -88,10 +98,11 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
         if any(a.keyring_key == key for a in cfg.accounts.values()):
             raise HTTPException(409, "that login is in use by an account")
         secrets_store.delete_credentials(key)
-        sess = brokers._TSX_SESSIONS.pop(key, None)
-        if sess is not None:
-            with contextlib.suppress(Exception):
-                await sess.aclose()
+        for sessions in (brokers._TSX_SESSIONS, brokers._ATR_SESSIONS):
+            sess = sessions.pop(key, None)
+            if sess is not None:
+                with contextlib.suppress(Exception):
+                    await sess.aclose()
         return {"ok": True}
 
     # ------------------------------------------------------------ Vest: the wallet login
@@ -247,6 +258,57 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
         accounts = [{**a, "on_desk": _on_desk(key, str(a["name"])) is not None} for a in accounts]
         return {"ok": True, "key": key, "env": "tsx", "accounts": accounts}
 
+    async def _atr_connect(body: dict, saved: str) -> dict:
+        """/api/connect for AlphaTrader, as TopstepX: a saved login or a new email + password (+ the one-time code the
+        wizard asked for). New credentials, or a code, are checked by a real login here (the session books it on the
+        budget); a saved login reuses its session's token or renews it (refresh, else a booked login). Then a throwaway
+        probe lists the login's accounts, and is closed (it leaves no socket of its own)."""
+        if saved:
+            if not secrets_store.get_credentials(saved):
+                raise HTTPException(404, f"no saved login {saved!r}")
+            key = saved
+        else:
+            email = str(body.get("email") or body.get("username") or "").strip()
+            password = str(body.get("password") or "").strip("\r\n")
+            if not email or not password:
+                raise HTTPException(400, "email and password required")
+            key = f"atr:{email.lower()}"
+            secrets_store.set_credentials(key, username=email, password=password)
+        code = str(body.get("code") or "").strip()
+        login_id = (key, False)
+        why = budget.blocked(key, first=login_id not in _login_first_spent, manual=True)
+        if why:
+            return {"ok": False, "error": why, "key": key}
+        _login_first_spent.add(login_id)
+        sess = brokers.atr_session(key)
+        sess.budget, sess.journal = budget, engine.journal
+        try:
+            if code or not saved:
+                await sess.login(code=code or None)     # books itself on the budget, under the session's lock
+                for aid, a in cfg.accounts.items():     # answered: its accounts need not wait out their cool-down
+                    if a.keyring_key == key:
+                        _login_cooldown.pop(aid, None)
+            else:
+                await sess.access()
+        except AtrNeedsCode:
+            return {"ok": False, "needs_code": True, "key": key}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": _atr_why(e), "key": key}
+        probe = adapter_factory("probe", config_mod.AccountCfg(keyring_key=key))
+        try:
+            await probe.connect()        # joins the login's T4 socket, or opens one (closed with the probe if it is alone)
+            accounts = probe.list_accounts()
+        except AtrNeedsCode:
+            return {"ok": False, "needs_code": True, "key": key}
+        except Exception as e:  # noqa: BLE001 — surface to the wizard
+            return {"ok": False, "error": _atr_why(e), "key": key}
+        finally:
+            with contextlib.suppress(Exception):
+                await probe.close()
+        _listed[key] = {str(a["name"]).lower(): a for a in accounts}     # name -> row: add-many reads id and practice
+        accounts = [{**a, "on_desk": _on_desk(key, str(a["id"])) is not None} for a in accounts]
+        return {"ok": True, "key": key, "env": "atr", "accounts": accounts}
+
     @app.post("/api/connect")
     async def connect(request: Request):
         """Validate a login (saved or new; demo by default, live on request)
@@ -260,6 +322,8 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
             return await _vest_connect(body, saved)
         if is_tsx_key(saved) or (not saved and str(body.get("broker") or "").lower() == "tsx"):
             return await _tsx_connect(body, saved)
+        if is_atr_key(saved) or (not saved and str(body.get("broker") or "").lower() == "atr"):
+            return await _atr_connect(body, saved)
         if saved:
             if not secrets_store.get_credentials(saved):
                 raise HTTPException(404, f"no saved login {saved!r}")
@@ -315,6 +379,8 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
             raise HTTPException(400, "add Vest accounts from the wizard")
         if is_tsx_key(key):      # practice or funded is the row's, not the login's
             raise HTTPException(400, "add TopstepX accounts from the wizard")
+        if is_atr_key(key):
+            raise HTTPException(400, "add AlphaTrader accounts from the wizard")
         if not account_name:
             raise HTTPException(400, "account_name required")
         aid = account_name.lower()
@@ -364,6 +430,7 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
         live = _key_env(key) == "live"
         vest = is_vest_key(key)
         tsx = is_tsx_key(key)
+        atr = is_atr_key(key)
         rows: list[dict] = []
         stop = ""                    # why the rest were not tried
         async with _add_lock:
@@ -377,11 +444,12 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
                 if low not in listed:
                     row.update(status="failed", error="not on this login")
                     continue
-                have = _vest_on_desk(key, listed[low].get("id")) if vest else _on_desk(key, name)
+                have = (_vest_on_desk(key, listed[low].get("id")) if vest
+                        else _on_desk(key, str(listed[low].get("id"))) if atr else _on_desk(key, name))
                 if have is not None:
                     row.update(status="exists", id=have)
                     continue
-                aid = _slug(name) if vest else low
+                aid = _slug(name) if vest or atr else low
                 if aid in cfg.accounts:
                     row.update(status="failed", error="another entry on the desk already "
                                "uses this id")
@@ -395,6 +463,10 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
                         row.update(status="failed", error=f"Vest's row for it is unreadable ({type(e).__name__})")
                         continue
                     cfg.accounts[aid] = acct
+                elif atr:    # pinned by its T4 account id (the name shown is its display name); practice = demo, else live
+                    cfg.accounts[aid] = config_mod.AccountCfg(
+                        keyring_key=key, account_name=str(listed[low]["id"]), label=name,
+                        live=not bool(listed[low].get("practice", False)))
                 else:    # TopstepX: a practice account is demo, every other is live (no marker = live, the stricter rules)
                     cfg.accounts[aid] = config_mod.AccountCfg(
                         keyring_key=key, account_name=name, label=name,
@@ -407,7 +479,7 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
                     row["connected"] = True
                     # a Vest entry only mints its account token on the login's one session: it never logs in again
                     # nor a TopstepX one: its session books its own logins, `mode` is always "login"
-                    if row["mode"] == "login" and not vest and not tsx:
+                    if row["mode"] == "login" and not vest and not tsx and not atr:
                         # the shared token did not carry it, so it spent a login: the
                         # next one could too -- stop here, the rest can be added again
                         stop = "the previous account had to log in again"
@@ -419,7 +491,7 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
                         stop = "the connection failed (" + str(e)[:120] + ")"
         counts = {s: sum(1 for r in rows if r["status"] == s)
                   for s in ("added", "exists", "failed")}
-        engine.journal("accounts_added_batch", login=key, live=None if vest or tsx else live, **counts)   # a Vest / TopstepX row has its own
+        engine.journal("accounts_added_batch", login=key, live=None if vest or tsx or atr else live, **counts)   # a Vest / TopstepX / AlphaTrader row has its own
         return {"ok": not counts["failed"], "results": rows, **counts}
 
     @app.post("/api/accounts/reconnect")
