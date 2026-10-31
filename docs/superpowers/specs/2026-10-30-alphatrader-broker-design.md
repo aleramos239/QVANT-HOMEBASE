@@ -108,10 +108,12 @@ for NQ / MNQ / ES / MES / GC / MGC, how an AUTO_OCO bracket is sent and how its 
 A builder read this design first. Each answer is marked: **(project)** follows from the TopstepX code already on main, and
 **(designer's call)** is the owner's to overrule.
 
-1. **Is the bracket attached in the same message as the entry?** Unknown until the spike. **(designer's call)** Send the
-   entry with AUTO_OCO legs. Also copy TopstepX's no-stop guard: a position with no working stop seen after a short grace
+1. **Is the bracket attached in the same message as the entry?** **Yes (read from the site's own order code,
+   `_buildOrderSubmission`, 2026-10-30):** one `OrderSubmit` carries the entry plus a target (opposite side, LIMIT, GTC,
+   volume 0, `activationType` HOLD) and a stop (opposite side, STOP_MARKET, GTC, volume 0, HOLD), with `orderLink`
+   AUTO_OCO_P (7) and absolute prices rounded to the tick. The legs wait until the entry fills. Homebase sends it the same way. Also copy TopstepX's no-stop guard: a position with no working stop seen after a short grace
    period is journaled and flagged on the card. An `ATR_FLATTEN_IF_NO_STOP` switch closes that position; it starts off, like
-   `TSX_FLATTEN_IF_NO_STOP`. Booking stays refused until the spike shows how the legs are sent and reported. Stop-limit
+   `TSX_FLATTEN_IF_NO_STOP`. Booking stays refused until the spike and a first watched order show how the legs report. Stop-limit
    entries may carry a bracket only if the spike shows T4 accepts that. Bracket child ids are tracked from `OrderUpdate*`
    as `sl_order_id` / `tp_order_id`.
 2. **Where do the protobuf field numbers come from?** **(project)** A saved copy of the bundle is at
