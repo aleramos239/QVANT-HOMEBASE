@@ -1,0 +1,31 @@
+{
+ "name": "vh_i2_tp_15_ny",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 2: A pullback inside a trend that holds above its day-average price is a dip the trend's buyers take. Who loses: the sellers of the first red bar of an up day.",
+ "family": "vwap_trend_pull",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "x": [
+   0.05,
+   0.1,
+   0.2
+  ]
+ },
+ "fixed": {
+  "max_loss": 2
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 4,
+  "dir": "both"
+ }
+}

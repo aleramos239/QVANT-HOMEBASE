@@ -1,0 +1,39 @@
+{
+ "name": "nq_b034_on_break_vol",
+ "version": 1,
+ "card": {
+  "why": "Breakout idea #34 of the owner's 100 list (2026-10-28): overnight range break on volume, because the stops of the traders on the other side of the break feed the move.",
+  "loser": "Traders on the wrong side of the break whose stops get hit.",
+  "home": {
+   "market": "NQ",
+   "session": "nyam",
+   "bar": "5"
+  },
+  "neighbors": [
+   "NQ nyam 15"
+  ],
+  "main_setting": "vol_m",
+  "sides": "both",
+  "sides_why": "A break can go either way, one rule.",
+  "loses_when": "Chop days where the break reverses at once."
+ },
+ "run": {
+  "exits": "hm60",
+  "family": "win_break_vol",
+  "params": {
+   "vol_m": [
+    1.5,
+    2.0,
+    3.0
+   ]
+  },
+  "fixed": {
+   "r_start": "00:00",
+   "r_end": "09:30",
+   "mode": "follow"
+  },
+  "limits": {
+   "max_tr": 1
+  }
+ }
+}

@@ -1,0 +1,31 @@
+{
+ "name": "vh_i27_es_onrorb_15_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 27: Where the 09:30 open lands in the 01:00-09:30 range shows which side the overnight session chose; an opening-range break that way on a trending (ADX) day is the day following it. Who loses: opening-range faders fighting the overnight side. The ES twin of the NQ rule, not tuned on ES.",
+ "family": "onr_orb",
+ "markets": [
+  "ES"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "adx_min": [
+   10.0,
+   15.0,
+   20.0
+  ]
+ },
+ "fixed": {
+  "k": 0.3,
+  "earliest": "10:30",
+  "ov_from": "01:00"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

@@ -1,0 +1,68 @@
+3:1 IN-SAMPLE TABLE of i28_level_touch_fade: 60 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  modefade_atr1-r0p5            67%   64%     259     3,809  1.13   100%
+   2  modefade_own2-r0p5            66%   60%     259     8,154  1.33   100%
+   3  modefade_own1p5-r0p5          66%   58%     259     6,959  1.36   100%
+   4  modefade_own1-r0p5            64%   63%     259     1,324  1.08   100%
+   5  modefade_atr2-r0p5            63%   62%     259     1,159  1.02    90%
+   6  modefade_atr1p5-r0p5          62%   63%     259    -1,856  0.96    70%
+   7  modefade_pts15-r0p5           61%   67%     259    -6,011  0.79     0%
+   8  modefade_pts40-r0p5           61%   62%     259    -1,321  0.98    70%
+   9  modefade_atr0p5-r0p5          61%   66%     259    -3,781  0.79    30%
+  10  modefade_own0p5-r0p5          59%   67%     259    -3,811  0.71    30%
+  11  modefade_pts25-r0p5           59%   65%     259   -10,401  0.78     0%
+  12  modefade_own2-r0p75           58%   49%     259    14,259  1.48   100%
+  13  modefade_pts60-r0p5           57%   58%     259    -1,811  0.98    40%
+  14  modefade_own1p5-r0p75         56%   51%     259     6,879  1.26   100%
+  15  modefade_atr1-r0p75           56%   53%     259     3,414  1.09   100%
+  16  modefade_own1-r0p75           56%   51%     259     3,809  1.19   100%
+  17  modefade_atr0p5-r0p75         54%   55%     259    -1,306  0.94   100%
+  18  modefade_pts40-r0p75          53%   54%     259    -1,966  0.97    60%
+  19  modefade_pts60-r0p75          53%   52%     259     4,179  1.05    60%
+  20  modefade_pts25-r0p75          53%   56%     259    -6,911  0.87    10%
+  21  modefade_atr1p5-r0p75         52%   55%     259    -7,191  0.88     0%
+  22  modefade_own0p5-r0p75         52%   57%     259    -2,916  0.81    50%
+  23  modefade_atr1-r1              51%   50%     259     2,464  1.06   100%
+  24  modefade_atr2-r0p75           51%   53%     259    -3,496  0.95    30%
+  25  modefade_own1p5-r1            51%   43%     259    11,704  1.40   100%
+  26  modefade_own2-r1              51%   41%     259    17,054  1.49   100%
+  27  modefade_pts15-r0p75          51%   57%     259    -8,776  0.77     0%
+  28  modefade_own1-r1              50%   45%     259     4,709  1.20   100%
+  29  modefade_pts60-r1             50%   50%     259      -446  1.00    30%
+  30  modefade_pts40-r1             49%   50%     259    -2,826  0.96    40%
+  31  modefade_atr0p5-r1            48%   47%     259     1,194  1.05   100%
+  32  modefade_atr1p5-r1            47%   49%     259    -5,101  0.93    20%
+  33  modefade_pts60-r1p5           47%   47%     259    -1,701  0.98    30%
+  34  modefade_pts15-r1             46%   51%     259    -6,531  0.84     0%
+  35  modefade_pts40-r1p5           46%   46%     259     1,359  1.02    90%
+  36  modefade_atr2-r1              46%   49%     259   -10,786  0.87     0%
+  37  modefade_pts60-r2             45%   48%     259   -10,981  0.90    20%
+  38  modefade_pts25-r1             45%   51%     259   -13,311  0.79     0%
+  39  modefade_own0p5-r1            44%   50%     259    -3,661  0.80    40%
+  40  modefade_pts40-r2             44%   44%     259    -1,701  0.98    50%
+  41  modefade_own2-r1p5            43%   36%     259    16,159  1.38   100%
+  42  modefade_atr1-r1p5            42%   40%     259     5,489  1.10   100%
+  43  modefade_own1-r1p5            42%   36%     259     8,539  1.32   100%
+  44  modefade_own1p5-r1p5          41%   33%     259    15,824  1.45   100%
+  45  modefade_atr2-r1p5            41%   44%     259   -12,636  0.87     0%
+  46  modefade_pts25-r1p5           41%   43%     259    -5,856  0.91    20%
+  47  modefade_pts25-r2             40%   39%     259     1,339  1.02    90%
+  48  modefade_atr1p5-r1p5          39%   42%     259    -8,796  0.89    10%
+  49  modefade_atr2-r2              39%   41%     259    -8,301  0.91    20%
+  50  modefade_pts15-r1p5           38%   41%     259    -6,541  0.86     0%
+  51  modefade_atr0p5-r1p5          37%   36%     259     2,209  1.08   100%
+  52  modefade_own1p5-r2            37%   29%     259    16,804  1.44   100%
+  53  modefade_own0p5-r1p5          37%   38%     259    -1,241  0.94   100%
+  54  modefade_own1-r2              37%   28%     259    13,374  1.46   100%
+  55  modefade_atr1-r2              36%   35%     259     2,104  1.04    90%
+  56  modefade_own2-r2              36%   34%     259     6,069  1.12    80%
+  57  modefade_atr1p5-r2            36%   39%     259    -9,936  0.88     0%
+  58  modefade_atr0p5-r2            33%   33%     259      -426  0.99   100%
+  59  modefade_pts15-r2             32%   36%     259    -8,261  0.84     0%
+  60  modefade_own0p5-r2            32%   33%     259    -1,166  0.95   100%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+REAL OR LUCK (the only lines that block; PF, Sharpe, drawdown and avg trade are shown, never block):
+  [FAIL] boxes        26 of 60 boxes made money in-sample (need 60%): the average of the boxes, not the best
+  [ .. ] picked box   not picked yet: the owner picks a box, then the other lines are read
+NEXT: The owner picks a box by its number: bp.py wf pick i28_level_touch_fade <n> (blueprint_wf_pick).

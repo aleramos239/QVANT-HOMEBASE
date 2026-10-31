@@ -1,0 +1,35 @@
+{
+ "name": "nq_b102_nd_bracket",
+ "version": 1,
+ "card": {
+  "why": "Breakout idea #102 (new family, owner's 100 list, 2026-10-28): break of the multi-day high/low, because the stops of the traders on the other side of the break feed the move.",
+  "loser": "Traders on the wrong side of the break whose stops get hit.",
+  "home": {
+   "market": "NQ",
+   "session": "nyam",
+   "bar": "5"
+  },
+  "neighbors": [
+   "NQ nyam 15"
+  ],
+  "main_setting": "n_d",
+  "sides": "both",
+  "sides_why": "A break can go either way, one rule.",
+  "loses_when": "Chop days where the break reverses at once."
+ },
+ "run": {
+  "exits": "hm60",
+  "family": "nd_bracket",
+  "params": {
+   "n_d": [
+    2,
+    5,
+    10,
+    20
+   ]
+  },
+  "limits": {
+   "max_tr": 1
+  }
+ }
+}

@@ -1,0 +1,28 @@
+{
+ "name": "i27_level_touch_follow",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: continue through the first touch of the prior high or low",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "mode": [
+   "follow"
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "lvl_touch"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

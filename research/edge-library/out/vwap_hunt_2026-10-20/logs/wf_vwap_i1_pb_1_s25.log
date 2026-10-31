@@ -1,0 +1,22 @@
+vwap_i1_pb_1_s25: 3:1 walk-forward in blocks, 15 test months (2022-01 .. 2026-09), 6 stood aside; test days read 2025-07-01 .. 2026-09-22
+stitched: 359 trades, net $2,499, avg $7, win 40.9 %, PF 1.02, worst DD $6,209; build-day months $2,560 (335), test-day months $-61 (24)
+  P6.1 PASS the 3:1 walk-forward made $2,499 on its test months, one contract after costs (need above $0)
+  P6.2 FAIL beats 74.2 % of 4,000 random tables, each month its pick's exit cell (need above 95 %)
+  P6.3 FAIL win rate 40.95 % on 359 trades at a realized reward-to-risk of 1.48 (average win $725, average loss $491): breakeven 40.37 %, need 43.37 % or more (+3 points) (row P3.15 on the stitched months)
+  P6.4 PASS 359 trades on the test months (need 200)
+  2022-01  pts18p75-r2     52  $322
+  2022-05  pts31p25-r0p904  43  $1,403
+  2022-09  pts18p75-r2p50667  50  $4,090
+  2023-01  pts31p25-r1p504  36  $-1,124
+  2023-05  pts31p25-r0p904  32  $-1,748
+  2023-09  pts25-r1p88     29  $1,134
+  2024-01  stood aside      0  $0
+  2024-05  stood aside      0  $0
+  2024-09  stood aside      0  $0
+  2025-01  pts25-r1p5      43  $688
+  2025-05  pts18p75-r1p50667  50  $-2,205
+  2025-09  stood aside      0  $0
+  2026-01  pts31p25-r1p504  24  $-61
+  2026-05  stood aside      0  $0
+  2026-09  stood aside      0  $0
+next month (2026-10): stand aside

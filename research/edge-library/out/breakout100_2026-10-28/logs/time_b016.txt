@@ -1,0 +1,1 @@
+$PY bp.py wf run nq_b016_pd_bracket --owner-said="run them all" --workers 12   1.23s user 1.12s system 0% cpu 50:00.31 total

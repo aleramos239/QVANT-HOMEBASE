@@ -1,0 +1,32 @@
+{
+ "name": "vh_i15_flip_wk_5_ny",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 15: Longer-anchored VWAPs (Globex day, week, yesterday's close, yesterday's / the overnight extremes) are the cost of bigger positions, defended on the first test. Who loses: those who sell into them.",
+ "family": "avwap_flip",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "hold": [
+   1,
+   2,
+   3
+  ]
+ },
+ "fixed": {
+  "line": "rth",
+  "also": "week"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

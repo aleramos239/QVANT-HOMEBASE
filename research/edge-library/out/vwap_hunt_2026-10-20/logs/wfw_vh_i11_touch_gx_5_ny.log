@@ -1,0 +1,144 @@
+2026-10-21T07:50:34+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers)
+2026-10-21T07:50:34+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers): days 1-60 of 883 (360 instances)
+2026-10-21T07:51:18+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers): days 61-120 of 883 (360 instances)
+2026-10-21T07:52:06+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers): days 121-180 of 883 (360 instances)
+2026-10-21T07:52:54+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers): days 181-240 of 883 (360 instances)
+2026-10-21T07:53:42+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers): days 241-300 of 883 (360 instances)
+2026-10-21T07:54:30+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers): days 301-360 of 883 (360 instances)
+2026-10-21T07:55:16+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers): days 361-420 of 883 (360 instances)
+2026-10-21T07:56:03+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers): days 421-480 of 883 (360 instances)
+2026-10-21T07:56:49+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers): days 481-540 of 883 (360 instances)
+2026-10-21T07:57:36+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers): days 541-600 of 883 (360 instances)
+2026-10-21T07:58:24+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers): days 601-660 of 883 (360 instances)
+2026-10-21T07:59:08+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers): days 661-720 of 883 (360 instances)
+2026-10-21T07:59:55+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers): days 721-780 of 883 (360 instances)
+2026-10-21T08:00:43+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers): days 781-840 of 883 (360 instances)
+2026-10-21T08:01:31+00:00 idea vh_i11_touch_gx_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse + vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse; 3 workers): days 841-883 of 883 (360 instances)
+2026-10-21T08:02:06+00:00 wf_is_worse vh_i11_touch_gx_5_ny-NQ-tf5/is-nyam-worse: 120 cells, 77,238 trades, 691.06 s of tape (wall 692 s, 3 workers)
+2026-10-21T08:02:06+00:00 wf_is_worse vh_i11_touch_gx_5_ny-NQ-tf5/is-mid-worse: 120 cells, 56,804 trades, 691.06 s of tape (wall 692 s, 3 workers)
+2026-10-21T08:02:06+00:00 wf_is_worse vh_i11_touch_gx_5_ny-NQ-tf5/is-pm-worse: 120 cells, 42,461 trades, 691.06 s of tape (wall 692 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i11_touch_gx_5_ny: 120 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  away160_atr2-r0p5             68%   65%    1387    75,872  1.13   100%
+   2  away240_atr2-r0p5             68%   65%     824    51,584  1.14   100%
+   3  away240_pts60-r0p5            67%   66%     836    15,586  1.05   100%
+   4  away160_pts60-r0p5            67%   66%    1413    23,558  1.04   100%
+   5  away240_atr1p5-r0p5           67%   65%     831    20,721  1.07   100%
+   6  away160_atr1p5-r0p5           67%   66%    1419    16,474  1.04   100%
+   7  away240_atr1-r0p5             67%   67%     836    -3,254  0.98    80%
+   8  away80_atr2-r0p5              67%   65%    2203    45,373  1.05   100%
+   9  away80_atr1p5-r0p5            67%   66%    2325     2,295  1.00   100%
+  10  away240_pts40-r0p5            67%   67%     836    -4,034  0.98    90%
+  11  away80_pts60-r0p5             66%   66%    2180    15,165  1.02   100%
+  12  away80_pts40-r0p5             66%   67%    2348   -21,502  0.97    70%
+  13  away160_pts40-r0p5            66%   67%    1439   -19,026  0.95    40%
+  14  away80_atr1-r0p5              65%   67%    2411   -44,739  0.91     0%
+  15  away160_atr1-r0p5             65%   67%    1437   -33,918  0.90     0%
+  16  away240_pts25-r0p5            65%   67%     836   -16,499  0.89     0%
+  17  away80_pts25-r0p5             65%   67%    2433   -50,367  0.88     0%
+  18  away160_pts25-r0p5            64%   67%    1439   -31,631  0.88     0%
+  19  away240_atr0p5-r0p5           63%   67%     836   -17,369  0.85     0%
+  20  away80_pts15-r0p5             63%   68%    2438   -57,722  0.79     0%
+  21  away80_atr0p5-r0p5            62%   67%    2436   -54,744  0.81     0%
+  22  away160_atr0p5-r0p5           62%   67%    1439   -32,596  0.82     0%
+  23  away240_pts15-r0p5            62%   68%     836   -22,429  0.77     0%
+  24  away160_pts15-r0p5            62%   68%    1439   -41,896  0.76     0%
+  25  away160_atr2-r0p75            60%   56%    1340   125,600  1.19   100%
+  26  away240_atr2-r0p75            59%   55%     814    80,349  1.18   100%
+  27  away240_atr1-r0p75            59%   57%     836    21,606  1.08   100%
+  28  away160_atr1p5-r0p75          59%   56%    1407    62,047  1.11   100%
+  29  away160_pts60-r0p75           59%   57%    1408    63,058  1.10   100%
+  30  away240_pts60-r0p75           58%   56%     836    34,276  1.09   100%
+  31  away80_atr2-r0p75             58%   56%    2027   105,562  1.11   100%
+  32  away240_atr1p5-r0p75          58%   56%     829    42,259  1.11   100%
+  33  away80_pts60-r0p75            58%   56%    2014    66,009  1.07   100%
+  34  away80_atr1p5-r0p75           58%   57%    2219    38,669  1.05   100%
+  35  away240_pts25-r0p75           58%   58%     836    -2,824  0.98    90%
+  36  away240_pts40-r0p75           58%   57%     836     2,111  1.01   100%
+  37  away160_pts40-r0p75           57%   57%    1439        89  1.00   100%
+  38  away80_pts40-r0p75            57%   57%    2258    -7,352  0.99   100%
+  39  away80_atr1-r0p75             57%   58%    2388   -17,922  0.97    90%
+  40  away160_atr1-r0p75            57%   57%    1437    -7,183  0.98    90%
+  41  away160_pts25-r0p75           56%   58%    1439   -18,946  0.94    60%
+  42  away80_pts25-r0p75            56%   58%    2431   -34,149  0.94    50%
+  43  away240_atr0p5-r0p75          55%   57%     836   -13,364  0.91    10%
+  44  away240_pts15-r0p75           54%   58%     836   -18,004  0.85     0%
+  45  away80_pts15-r0p75            54%   58%    2438   -52,502  0.85     0%
+  46  away160_pts15-r0p75           54%   58%    1439   -31,711  0.84     0%
+  47  away80_atr0p5-r0p75           53%   58%    2435   -57,180  0.84     0%
+  48  away240_pts60-r1              53%   50%     836    61,091  1.14   100%
+  49  away160_atr2-r1               53%   49%    1288   132,178  1.18   100%
+  50  away240_atr1-r1               53%   50%     836    37,046  1.12   100%
+  51  away160_atr1p5-r1             53%   49%    1374    98,539  1.16   100%
+  52  away160_atr0p5-r0p75          53%   57%    1439   -39,441  0.83     0%
+  53  away240_atr1p5-r1             53%   48%     825    74,730  1.18   100%
+  54  away160_pts60-r1              53%   50%    1354    73,869  1.10   100%
+  55  away240_atr2-r1               53%   49%     795    89,140  1.18   100%
+  56  away80_pts60-r1               52%   50%    1889    86,024  1.09   100%
+  57  away80_atr2-r1                52%   49%    1909   121,444  1.12   100%
+  58  away80_atr1p5-r1              51%   49%    2109    78,929  1.09   100%
+  59  away160_pts40-r1              51%   50%    1439    19,304  1.03   100%
+  60  away160_atr1-r1               51%   50%    1435    22,920  1.05   100%
+  61  away80_pts40-r1               51%   50%    2152    24,102  1.03   100%
+  62  away240_pts40-r1              51%   50%     836    10,791  1.03   100%
+  63  away240_pts25-r1              51%   51%     836       771  1.00   100%
+  64  away80_atr1-r1                50%   50%    2341    -1,924  1.00   100%
+  65  away160_pts25-r1              50%   51%    1439   -14,051  0.96    80%
+  66  away80_pts25-r1               49%   51%    2412   -39,698  0.94    70%
+  67  away240_pts15-r1              49%   51%     836   -12,444  0.91    20%
+  68  away80_pts15-r1               48%   51%    2438   -44,582  0.89    10%
+  69  away240_atr0p5-r1             48%   49%     836   -12,139  0.93    60%
+  70  away160_pts15-r1              48%   51%    1439   -30,761  0.87     0%
+  71  away240_pts60-r1p5            47%   42%     815   106,385  1.22   100%
+  72  away160_atr0p5-r1             47%   50%    1439   -31,131  0.88     0%
+  73  away80_atr0p5-r1              47%   51%    2435   -54,160  0.87     0%
+  74  away160_pts60-r1p5            46%   43%    1277   101,952  1.13   100%
+  75  away240_atr2-r1p5             46%   42%     763    87,053  1.16   100%
+  76  away160_atr2-r1p5             46%   42%    1219   131,704  1.17   100%
+  77  away80_pts60-r1p5             45%   43%    1777   126,482  1.12   100%
+  78  away80_atr2-r1p5              44%   41%    1786   133,311  1.12   100%
+  79  away240_pts60-r2              44%   38%     794   133,024  1.27   100%
+  80  away240_atr1p5-r1p5           44%   40%     795    83,875  1.18   100%
+  81  away160_atr1p5-r1p5           44%   40%    1302   107,992  1.15   100%
+  82  away240_atr1-r1p5             44%   40%     832    59,572  1.17   100%
+  83  away160_pts60-r2              43%   39%    1245   145,065  1.18   100%
+  84  away160_pts40-r1p5            43%   41%    1394    41,454  1.07   100%
+  85  away240_pts40-r1p5            43%   41%     836    33,921  1.09   100%
+  86  away80_pts40-r1p5             43%   41%    2007    56,832  1.06   100%
+  87  away240_atr2-r2               43%   39%     748    90,073  1.16   100%
+  88  away80_atr1p5-r1p5            42%   40%    1960    89,235  1.09   100%
+  89  away80_pts60-r2               42%   39%    1732   176,192  1.16   100%
+  90  away160_atr2-r2               42%   38%    1186   142,376  1.18   100%
+  91  away160_atr1-r1p5             42%   40%    1406    51,381  1.09   100%
+  92  away80_atr2-r2                41%   38%    1730   178,070  1.16   100%
+  93  away80_atr1-r1p5              41%   40%    2228    38,733  1.05   100%
+  94  away160_pts25-r1p5            40%   41%    1439    -9,161  0.98    90%
+  95  away240_pts15-r1p5            40%   41%     836    -4,759  0.97   100%
+  96  away240_pts25-r1p5            40%   41%     836    -3,569  0.99   100%
+  97  away80_pts25-r1p5             40%   41%    2298   -24,542  0.96    90%
+  98  away240_atr1p5-r2             40%   36%     780    92,015  1.19   100%
+  99  away240_atr0p5-r1p5           39%   40%     836    -6,044  0.97   100%
+ 100  away160_pts15-r1p5            39%   41%    1439   -24,381  0.91    60%
+ 101  away160_atr1p5-r2             39%   35%    1262   105,717  1.14   100%
+ 102  away80_pts15-r1p5             38%   41%    2437   -47,013  0.90    20%
+ 103  away160_atr0p5-r1p5           38%   40%    1439   -22,241  0.93    60%
+ 104  away80_atr0p5-r1p5            38%   41%    2421   -45,844  0.90    50%
+ 105  away240_pts40-r2              38%   36%     826    37,911  1.09   100%
+ 106  away80_pts40-r2               37%   36%    1930    55,490  1.06   100%
+ 107  away240_atr1-r2               37%   34%     817    67,252  1.18   100%
+ 108  away160_pts40-r2              37%   36%    1342    22,947  1.03   100%
+ 109  away80_atr1p5-r2              37%   35%    1887    91,247  1.09   100%
+ 110  away160_atr1-r2               36%   34%    1366    63,611  1.11   100%
+ 111  away160_pts25-r2              36%   35%    1428    20,098  1.04   100%
+ 112  away240_pts25-r2              35%   34%     836    14,771  1.05   100%
+ 113  away80_atr1-r2                35%   33%    2137    68,012  1.08   100%
+ 114  away80_pts25-r2               35%   34%    2220    16,220  1.02   100%
+ 115  away240_atr0p5-r2             34%   33%     836     8,906  1.04   100%
+ 116  away240_pts15-r2              33%   34%     836    -6,064  0.96   100%
+ 117  away160_atr0p5-r2             33%   33%    1438     4,093  1.01   100%
+ 118  away160_pts15-r2              33%   34%    1439   -23,361  0.92    90%
+ 119  away80_atr0p5-r2              32%   33%    2391   -25,704  0.95   100%
+ 120  away80_pts15-r2               32%   34%    2388   -51,047  0.90    40%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i11_touch_gx_5_ny <n> (blueprint_wf_pick).

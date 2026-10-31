@@ -1,0 +1,32 @@
+{
+ "name": "i15_16_close_loc_follow",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: long after a day that closed in its top 10 percent, short after the bottom 10",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "off_min": [
+   5,
+   30,
+   60
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "loc10",
+  "q": 0.9,
+  "mode": "follow"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

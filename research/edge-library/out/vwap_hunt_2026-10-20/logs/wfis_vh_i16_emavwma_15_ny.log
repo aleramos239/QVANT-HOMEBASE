@@ -1,0 +1,202 @@
+2026-10-21T09:59:14+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers)
+2026-10-21T09:59:14+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers): days 1-60 of 883 (540 instances)
+2026-10-21T09:59:54+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers): days 61-120 of 883 (540 instances)
+2026-10-21T10:00:36+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers): days 121-180 of 883 (540 instances)
+2026-10-21T10:01:17+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers): days 181-240 of 883 (540 instances)
+2026-10-21T10:01:57+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers): days 241-300 of 883 (540 instances)
+2026-10-21T10:02:38+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers): days 301-360 of 883 (540 instances)
+2026-10-21T10:03:19+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers): days 361-420 of 883 (540 instances)
+2026-10-21T10:03:59+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers): days 421-480 of 883 (540 instances)
+2026-10-21T10:04:41+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers): days 481-540 of 883 (540 instances)
+2026-10-21T10:05:23+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers): days 541-600 of 883 (540 instances)
+2026-10-21T10:06:04+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers): days 601-660 of 883 (540 instances)
+2026-10-21T10:06:42+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers): days 661-720 of 883 (540 instances)
+2026-10-21T10:07:24+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers): days 721-780 of 883 (540 instances)
+2026-10-21T10:08:05+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers): days 781-840 of 883 (540 instances)
+2026-10-21T10:08:47+00:00 idea vh_i16_emavwma_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i16_emavwma_15_ny-NQ-tf15/is; 3 workers): days 841-883 of 883 (540 instances)
+2026-10-21T10:09:16+00:00 wf_is vh_i16_emavwma_15_ny-NQ-tf15/is: 180 cells, 172,843 trades, 601.46 s of tape (wall 602 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i16_emavwma_15_ny: 180 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  slow_n50_pts15-r0p5           67%   68%     285    -1,195  0.96   100%
+   2  slow_n50_atr0p5-r0p5          67%   68%     285    -2,950  0.93    60%
+   3  slow_n34_pts60-r0p5           66%   65%    1101    23,426  1.06   100%
+   4  slow_n34_pts40-r0p5           66%   66%    1162      -178  1.00    90%
+   5  slow_n34_atr0p5-r0p5          66%   67%    1197    -6,723  0.96   100%
+   6  slow_n34_atr1p5-r0p5          66%   65%    1130    12,315  1.03   100%
+   7  slow_n34_atr1-r0p5            66%   66%    1177    -2,078  0.99    60%
+   8  slow_n34_pts25-r0p5           66%   67%    1189   -14,551  0.93    20%
+   9  slow_n34_pts15-r0p5           65%   68%    1199   -14,166  0.89    50%
+  10  slow_n20_atr1p5-r0p5          65%   65%    1475    -2,660  1.00    90%
+  11  slow_n50_pts40-r0p5           65%   65%     280    -1,855  0.97    40%
+  12  slow_n34_own0p5-r0p5          65%   64%    1191     8,341  1.03   100%
+  13  slow_n50_pts25-r0p5           65%   67%     285    -5,450  0.89     0%
+  14  slow_n20_pts40-r0p5           64%   66%    1519   -35,546  0.92     0%
+  15  slow_n34_own1-r0p5            64%   62%    1134    42,414  1.09   100%
+  16  slow_n20_atr1-r0p5            64%   66%    1529   -46,121  0.89    10%
+  17  slow_n20_pts60-r0p5           64%   65%    1459   -33,476  0.94    10%
+  18  slow_n34_atr2-r0p5            63%   64%    1081   -17,644  0.97    80%
+  19  slow_n20_pts25-r0p5           63%   67%    1552   -45,638  0.84     0%
+  20  slow_n20_pts15-r0p5           63%   68%    1561   -34,089  0.81     0%
+  21  slow_n50_own0p5-r0p5          63%   66%     284    -9,181  0.88     0%
+  22  slow_n20_atr2-r0p5            63%   63%    1420   -13,895  0.98    80%
+  23  slow_n20_atr0p5-r0p5          62%   68%    1563   -54,202  0.78     0%
+  24  slow_n20_own1-r0p5            62%   63%    1484   -31,656  0.95    10%
+  25  slow_n34_own1p5-r0p5          62%   58%    1093    89,808  1.16   100%
+  26  slow_n50_atr1-r0p5            62%   67%     279   -18,356  0.79     0%
+  27  slow_n20_own1p5-r0p5          61%   61%    1426     9,511  1.01   100%
+  28  slow_n20_own0p5-r0p5          61%   65%    1559   -55,626  0.85     0%
+  29  slow_n50_pts60-r0p5           61%   62%     267    -5,528  0.94    10%
+  30  slow_n50_atr1p5-r0p5          61%   65%     272   -15,813  0.86     0%
+  31  slow_n20_own2-r0p5            61%   59%    1396    47,831  1.06   100%
+  32  slow_n34_own2-r0p5            60%   56%    1065   112,600  1.18   100%
+  33  slow_n50_own1-r0p5            59%   65%     274   -30,311  0.76     0%
+  34  slow_n50_atr2-r0p5            58%   63%     262   -24,663  0.82     0%
+  35  slow_n34_atr1p5-r0p75         58%   56%    1115    35,045  1.07   100%
+  36  slow_n50_own1p5-r0p5          57%   63%     266   -29,039  0.80     0%
+  37  slow_n50_pts25-r0p75          57%   57%     284      -396  0.99    90%
+  38  slow_n34_own1-r0p75           57%   52%    1126   110,011  1.21   100%
+  39  slow_n34_pts40-r0p75          57%   57%    1149     3,309  1.01   100%
+  40  slow_n34_atr2-r0p75           57%   55%    1067    33,312  1.06   100%
+  41  slow_n50_own0p5-r0p75         57%   59%     284    -9,411  0.89     0%
+  42  slow_n34_atr1-r0p75           57%   57%    1168     1,023  1.00   100%
+  43  slow_n34_pts25-r0p75          57%   58%    1184   -10,906  0.96    70%
+  44  slow_n34_pts60-r0p75          56%   56%    1080     7,245  1.01   100%
+  45  slow_n34_own1p5-r0p75         56%   51%    1081   133,166  1.21   100%
+  46  slow_n20_atr1p5-r0p75         56%   56%    1464     8,129  1.01    90%
+  47  slow_n34_atr0p5-r0p75         56%   57%    1197   -11,583  0.94    70%
+  48  slow_n34_pts15-r0p75          56%   58%    1198   -17,022  0.90    50%
+  49  slow_n20_own1p5-r0p75         56%   53%    1415    85,450  1.11   100%
+  50  slow_n34_own0p5-r0p75         55%   55%    1189     5,414  1.01   100%
+  51  slow_n34_own2-r0p75           55%   50%    1054   145,724  1.22   100%
+  52  slow_n20_pts40-r0p75          55%   57%    1510   -33,810  0.93    20%
+  53  slow_n20_pts60-r0p75          55%   56%    1437   -19,568  0.97    80%
+  54  slow_n20_own2-r0p75           55%   53%    1383    84,793  1.10   100%
+  55  slow_n20_atr1-r0p75           55%   57%    1527   -32,448  0.94    20%
+  56  slow_n50_pts60-r0p75          55%   56%     265    -3,210  0.97    70%
+  57  slow_n20_atr2-r0p75           55%   55%    1404     1,159  1.00    90%
+  58  slow_n20_own1-r0p75           55%   54%    1479    24,464  1.04   100%
+  59  slow_n20_pts25-r0p75          54%   58%    1548   -42,942  0.88     0%
+  60  slow_n50_atr1p5-r0p75         54%   58%     270   -20,390  0.85     0%
+  61  slow_n50_atr0p5-r0p75         54%   60%     285   -13,075  0.78     0%
+  62  slow_n50_pts15-r0p75          54%   58%     285    -6,735  0.83     0%
+  63  slow_n50_atr1-r0p75           54%   58%     278   -17,697  0.83     0%
+  64  slow_n50_own2-r0p5            53%   61%     260   -44,925  0.73     0%
+  65  slow_n50_own1p5-r0p75         53%   57%     264   -22,661  0.85     0%
+  66  slow_n50_pts40-r0p75          53%   56%     279   -11,861  0.87     0%
+  67  slow_n50_own1-r0p75           53%   58%     274   -22,996  0.83     0%
+  68  slow_n50_atr2-r0p75           53%   57%     261   -24,399  0.83     0%
+  69  slow_n20_pts15-r0p75          53%   58%    1560   -45,285  0.80     0%
+  70  slow_n34_own1p5-r1            53%   48%    1077   146,352  1.22   100%
+  71  slow_n34_own1-r1              52%   47%    1118   126,313  1.22   100%
+  72  slow_n50_own2-r0p75           52%   57%     260   -26,265  0.84     0%
+  73  slow_n50_own1p5-r1            52%   54%     264    -9,856  0.94    20%
+  74  slow_n34_pts60-r1             52%   50%    1064    47,889  1.09   100%
+  75  slow_n34_own2-r1              52%   47%    1048   155,153  1.23   100%
+  76  slow_n20_own0p5-r0p75         52%   55%    1557   -56,788  0.88     0%
+  77  slow_n34_atr1p5-r1            52%   50%    1108    53,228  1.10   100%
+  78  slow_n20_atr0p5-r0p75         52%   58%    1561   -66,614  0.78     0%
+  79  slow_n20_own2-r1              52%   48%    1371   121,241  1.14   100%
+  80  slow_n34_atr2-r1              51%   50%    1051    45,401  1.07   100%
+  81  slow_n50_atr2-r1              51%   55%     261   -17,749  0.88    10%
+  82  slow_n20_own1p5-r1            51%   48%    1409    92,489  1.11   100%
+  83  slow_n20_atr1p5-r1            51%   50%    1457    31,722  1.04    90%
+  84  slow_n50_atr2-r1p5            51%   50%     261     4,176  1.03    70%
+  85  slow_n50_pts60-r1             51%   52%     265    -6,205  0.95    10%
+  86  slow_n20_pts60-r1             51%   50%    1429    19,274  1.03   100%
+  87  slow_n50_own1-r1              51%   54%     273   -18,927  0.86     0%
+  88  slow_n50_own2-r1              50%   55%     260   -28,540  0.83     0%
+  89  slow_n20_own1-r1              50%   48%    1471    59,816  1.08   100%
+  90  slow_n50_atr1p5-r1            50%   55%     270   -25,545  0.82     0%
+  91  slow_n34_own0p5-r1            50%   48%    1189    34,799  1.08   100%
+  92  slow_n20_atr2-r1              50%   49%    1393    24,703  1.03    90%
+  93  slow_n34_own2-r1p5            50%   44%    1046   187,626  1.27   100%
+  94  slow_n50_atr2-r2              50%   51%     261    -5,039  0.97    20%
+  95  slow_n50_own1p5-r1p5          50%   51%     264    -9,181  0.94    10%
+  96  slow_n34_atr1-r1              50%   50%    1164    -8,676  0.98    70%
+  97  slow_n34_pts40-r1             49%   50%    1137   -12,648  0.97    70%
+  98  slow_n20_atr1-r1              49%   51%    1519   -27,511  0.95    50%
+  99  slow_n34_pts25-r1             49%   51%    1176   -18,369  0.94    40%
+ 100  slow_n50_pts25-r1             49%   51%     284    -4,431  0.94    50%
+ 101  slow_n50_own1p5-r2            49%   50%     264    -5,066  0.97    30%
+ 102  slow_n50_own2-r1p5            49%   52%     260   -22,775  0.87     0%
+ 103  slow_n50_own2-r2              49%   52%     260   -21,730  0.87     0%
+ 104  slow_n34_own1p5-r1p5          49%   43%    1071   174,326  1.25   100%
+ 105  slow_n50_pts15-r1             49%   51%     285    -3,865  0.91    70%
+ 106  slow_n50_own1-r1p5            49%   49%     273      -977  0.99    90%
+ 107  slow_n34_pts15-r1             49%   51%    1197   -16,698  0.91    50%
+ 108  slow_n34_atr0p5-r1            49%   51%    1196   -18,284  0.93    60%
+ 109  slow_n20_pts40-r1             49%   50%    1502   -40,033  0.93    10%
+ 110  slow_n50_atr1p5-r1p5          49%   51%     270   -15,910  0.89     0%
+ 111  slow_n50_atr1-r1              48%   53%     278   -21,787  0.81     0%
+ 112  slow_n50_atr1p5-r2            48%   49%     270    -3,300  0.98    30%
+ 113  slow_n34_own1-r1p5            48%   42%    1112   174,317  1.29   100%
+ 114  slow_n34_own2-r2              48%   42%    1039   180,384  1.25   100%
+ 115  slow_n50_pts60-r1p5           48%   48%     265       355  1.00    70%
+ 116  slow_n20_own2-r1p5            48%   45%    1359   127,239  1.14   100%
+ 117  slow_n20_pts25-r1             47%   51%    1542   -50,668  0.88     0%
+ 118  slow_n50_pts40-r1             47%   51%     279   -15,241  0.86     0%
+ 119  slow_n34_atr2-r1p5            47%   43%    1033   115,303  1.17   100%
+ 120  slow_n20_own1p5-r1p5          47%   44%    1397   126,632  1.15   100%
+ 121  slow_n34_own1p5-r2            47%   41%    1070   188,900  1.27   100%
+ 122  slow_n50_own1-r2              47%   47%     273    -3,137  0.98    60%
+ 123  slow_n50_own0p5-r1            46%   53%     284   -25,966  0.76     0%
+ 124  slow_n50_pts60-r2             46%   46%     265     1,110  1.01    80%
+ 125  slow_n20_pts15-r1             46%   51%    1559   -44,891  0.83     0%
+ 126  slow_n20_own0p5-r1            46%   49%    1555   -45,080  0.91    10%
+ 127  slow_n50_atr0p5-r1            46%   53%     285   -17,500  0.75     0%
+ 128  slow_n20_atr0p5-r1            46%   51%    1559   -65,791  0.81     0%
+ 129  slow_n20_own2-r2              46%   42%    1354   142,599  1.16   100%
+ 130  slow_n34_atr1p5-r1p5          45%   42%    1092    85,837  1.14   100%
+ 131  slow_n34_pts60-r1p5           45%   43%    1046    56,471  1.09   100%
+ 132  slow_n20_own1-r1p5            45%   42%    1462    85,452  1.11   100%
+ 133  slow_n34_own1-r2              45%   39%    1108   181,503  1.29   100%
+ 134  slow_n20_atr2-r1p5            45%   43%    1370    68,430  1.07   100%
+ 135  slow_n34_atr2-r2              45%   41%    1025   102,360  1.14   100%
+ 136  slow_n20_atr1p5-r1p5          44%   43%    1440    61,525  1.07   100%
+ 137  slow_n20_own1p5-r2            44%   41%    1390   122,115  1.14   100%
+ 138  slow_n20_pts60-r1p5           44%   43%    1410    33,920  1.04   100%
+ 139  slow_n50_atr1-r1p5            44%   48%     277   -20,748  0.83     0%
+ 140  slow_n50_pts40-r1p5           43%   46%     279   -11,006  0.90     0%
+ 141  slow_n34_pts40-r1p5           43%   41%    1121    28,296  1.06   100%
+ 142  slow_n34_pts60-r2             43%   40%    1041    81,891  1.13   100%
+ 143  slow_n34_atr1p5-r2            42%   39%    1081   113,996  1.18   100%
+ 144  slow_n34_own0p5-r1p5          42%   38%    1188    82,888  1.18   100%
+ 145  slow_n34_atr1-r1p5            42%   41%    1157    24,727  1.05   100%
+ 146  slow_n50_atr1-r2              42%   45%     277   -14,223  0.89    20%
+ 147  slow_n20_pts40-r1p5           42%   42%    1487     3,567  1.01    90%
+ 148  slow_n20_own1-r2              42%   39%    1455   110,595  1.14   100%
+ 149  slow_n20_atr1-r1p5            42%   42%    1513    -6,892  0.99    80%
+ 150  slow_n20_atr2-r2              41%   40%    1357    41,302  1.04    80%
+ 151  slow_n50_own0p5-r1p5          41%   46%     284   -19,171  0.83     0%
+ 152  slow_n50_pts15-r1p5           41%   41%     285      -410  0.99   100%
+ 153  slow_n20_atr1p5-r2            41%   38%    1429    94,719  1.11   100%
+ 154  slow_n50_pts40-r2             41%   42%     279    -5,251  0.95    40%
+ 155  slow_n20_own0p5-r1p5          40%   40%    1553     5,113  1.01   100%
+ 156  slow_n34_pts25-r1p5           40%   41%    1170    -7,650  0.98   100%
+ 157  slow_n20_pts60-r2             40%   39%    1402    31,872  1.04   100%
+ 158  slow_n50_pts25-r1p5           40%   42%     283    -8,172  0.90     0%
+ 159  slow_n34_atr0p5-r1p5          39%   41%    1195   -22,050  0.92    70%
+ 160  slow_n50_own0p5-r2            39%   43%     284   -17,391  0.85     0%
+ 161  slow_n34_pts15-r1p5           39%   41%    1195   -21,455  0.91    60%
+ 162  slow_n20_pts25-r1p5           39%   41%    1538   -46,662  0.90     0%
+ 163  slow_n50_atr0p5-r1p5          38%   44%     285   -17,535  0.78     0%
+ 164  slow_n20_pts40-r2             38%   37%    1478    36,728  1.05   100%
+ 165  slow_n34_pts40-r2             38%   36%    1114    29,199  1.05   100%
+ 166  slow_n34_atr1-r2              37%   36%    1151    30,021  1.06   100%
+ 167  slow_n20_atr1-r2              37%   37%    1506    18,616  1.03    90%
+ 168  slow_n20_pts15-r1p5           37%   41%    1555   -44,895  0.85     0%
+ 169  slow_n34_own0p5-r2            37%   34%    1185    75,375  1.15   100%
+ 170  slow_n20_atr0p5-r1p5          37%   41%    1559   -67,401  0.83     0%
+ 171  slow_n50_pts25-r2             36%   37%     283    -5,107  0.94    70%
+ 172  slow_n20_own0p5-r2            35%   35%    1548    21,703  1.04   100%
+ 173  slow_n50_pts15-r2             34%   35%     285    -4,320  0.93    80%
+ 174  slow_n34_pts25-r2             34%   35%    1161   -21,399  0.94    70%
+ 175  slow_n50_atr0p5-r2            33%   39%     285   -18,705  0.78     0%
+ 176  slow_n20_pts25-r2             33%   35%    1530   -52,695  0.90     0%
+ 177  slow_n34_pts15-r2             32%   34%    1193   -21,172  0.91    70%
+ 178  slow_n34_atr0p5-r2            32%   34%    1193   -37,822  0.88    10%
+ 179  slow_n20_atr0p5-r2            31%   35%    1556   -72,839  0.83     0%
+ 180  slow_n20_pts15-r2             30%   35%    1554   -63,056  0.81     0%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i16_emavwma_15_ny <n> (blueprint_wf_pick).

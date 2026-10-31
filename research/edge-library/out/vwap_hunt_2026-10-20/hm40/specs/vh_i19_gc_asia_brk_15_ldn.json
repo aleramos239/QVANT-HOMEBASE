@@ -1,0 +1,30 @@
+{
+ "name": "vh_i19_gc_asia_brk_15_ldn",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 19: The London open breaks the quiet Asia range of gold with real flow. Who loses: the Asia range faders.",
+ "family": "donchian",
+ "markets": [
+  "GC"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "london"
+ ],
+ "params": {
+  "n": [
+   8,
+   10,
+   12
+  ]
+ },
+ "fixed": {
+  "w_start": "03:00",
+  "w_end": "05:00"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

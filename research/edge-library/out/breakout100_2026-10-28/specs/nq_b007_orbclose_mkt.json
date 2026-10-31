@@ -1,0 +1,39 @@
+{
+ "name": "nq_b007_orbclose_mkt",
+ "version": 1,
+ "card": {
+  "why": "Breakout idea #7 of the owner's 100 list (2026-10-28): opening range broken on a close, market, because the stops of the traders on the other side of the break feed the move.",
+  "loser": "Traders on the wrong side of the break whose stops get hit.",
+  "home": {
+   "market": "NQ",
+   "session": "nyam",
+   "bar": "5"
+  },
+  "neighbors": [
+   "NQ nyam 15"
+  ],
+  "main_setting": "or_min",
+  "sides": "both",
+  "sides_why": "A break can go either way, one rule.",
+  "loses_when": "Chop days where the break reverses at once."
+ },
+ "run": {
+  "exits": "hm60",
+  "family": "orb_close",
+  "params": {
+   "or_min": [
+    5,
+    15,
+    30,
+    60
+   ]
+  },
+  "fixed": {
+   "entry": "market",
+   "start": "0930"
+  },
+  "limits": {
+   "max_tr": 1
+  }
+ }
+}

@@ -1,0 +1,31 @@
+{
+ "name": "vh_i9_noise_long_5_ny",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 9: A close beyond the VWAP band is one side taking control (the momentum twin of the fade). Who loses: the faders of the band.",
+ "family": "noise_band",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "k": [
+   0.2,
+   0.3,
+   0.4
+  ]
+ },
+ "fixed": {
+  "anchor": "rth"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "long"
+ }
+}

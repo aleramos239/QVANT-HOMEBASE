@@ -1,0 +1,57 @@
+20:33:11 START nq_b002_onr_orb
+20:34:25 END nq_b002_onr_orb rc=0
+20:34:25 START nq_b004_orbclose_retest
+21:54:18 END nq_b004_orbclose_retest rc=0
+21:54:18 START nq_b007_orbclose_mkt
+22:22:29 END nq_b007_orbclose_mkt rc=0
+22:22:29 START nq_b012_ibn_fade
+22:48:41 END nq_b012_ibn_fade rc=0
+22:48:41 START nq_b018_pd_bracket_on
+23:15:36 END nq_b018_pd_bracket_on rc=0
+23:15:36 START nq_b021_pd_bracket_pw
+23:17:57 END nq_b021_pd_bracket_pw rc=0
+23:17:57 START nq_b022_pd_bracket_mon
+23:18:35 END nq_b022_pd_bracket_mon rc=0
+23:18:35 START nq_b028_gap_go
+23:19:48 END nq_b028_gap_go rc=0
+23:19:48 START nq_b030_va_break
+23:22:05 END nq_b030_va_break rc=0
+23:22:05 START nq_b032_lon_break
+23:23:48 END nq_b032_lon_break rc=0
+23:23:48 START nq_b033_on_bracket
+23:25:38 END nq_b033_on_bracket rc=0
+23:25:38 START nq_b034_on_break_vol
+23:27:20 END nq_b034_on_break_vol rc=0
+23:27:20 START nq_b039_pre_bracket
+23:28:56 END nq_b039_pre_bracket rc=0
+23:28:56 START nq_b040_on_close_break
+23:30:34 END nq_b040_on_close_break rc=0
+23:30:34 START nq_b041_london_kz_bracket
+23:32:21 END nq_b041_london_kz_bracket rc=0
+23:32:21 START nq_b044_squeeze
+23:34:27 END nq_b044_squeeze rc=0
+23:34:27 START nq_b051_donchian_bbw
+23:37:31 END nq_b051_donchian_bbw rc=0
+23:37:31 START nq_b059_donchian_trend
+23:39:14 END nq_b059_donchian_trend rc=0
+23:39:14 START nq_b066_open_atr_go
+23:40:40 END nq_b066_open_atr_go rc=0
+23:40:40 START nq_b072_donchian_atr
+23:42:42 END nq_b072_donchian_atr rc=0
+23:42:42 START nq_b073_rvol_break
+23:44:30 END nq_b073_rvol_break rc=0
+23:44:30 START nq_b084_w1030
+23:46:12 END nq_b084_w1030 rc=0
+23:46:12 START nq_b085_w1300
+23:48:07 END nq_b085_w1300 rc=0
+23:48:07 START nq_b086_w1430
+23:50:19 END nq_b086_w1430 rc=0
+23:50:19 START nq_b087_w1500
+23:52:19 END nq_b087_w1500 rc=0
+23:52:19 START nq_b088_lunch_bracket
+23:54:11 END nq_b088_lunch_bracket rc=0
+23:54:11 START nq_b089_ib_break
+23:55:52 END nq_b089_ib_break rc=0
+23:55:52 START nq_b090_w1530
+23:58:00 END nq_b090_w1530 rc=0
+23:58:00 QUEUE DONE

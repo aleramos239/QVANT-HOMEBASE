@@ -1,0 +1,22 @@
+hunt_fv_oside5_a1m3_vwap: 3:1 walk-forward in blocks, 15 test months (2022-01 .. 2026-09), 6 stood aside; test days read 2025-07-01 .. 2026-09-22
+stitched: 443 trades, net $-50,317, avg $-114, win 38.4 %, PF 0.82, worst DD $62,220; build-day months $-59,715 (415), test-day months $9,398 (28)
+  P6.1 FAIL the 3:1 walk-forward made $-50,317 on its test months, one contract after costs (need above $0)
+  P6.2 FAIL beats 0.45 % of 4,000 random tables, each month its pick's exit cell (need above 95 %)
+  P6.3 FAIL win rate 38.37 % on 443 trades at a realized reward-to-risk of 1.31 (average win $1,336, average loss $1,016): breakeven 43.2 %, need 46.2 % or more (+3 points) (row P3.15 on the stitched months)
+  P6.4 PASS 443 trades on the test months (need 200)
+  2022-01  struct-r1p5     54  $-14,406
+  2022-05  struct-r1p125   58  $-12,602
+  2022-09  struct-r1p875   52  $-10,658
+  2023-01  struct-r1p5     53  $-3,417
+  2023-05  stood aside      0  $0
+  2023-09  stood aside      0  $0
+  2024-01  struct-r1p125   58  $-7,752
+  2024-05  stood aside      0  $0
+  2024-09  struct-r1p5     46  $-4,729
+  2025-01  struct-r1p5     47  $-7,518
+  2025-05  struct-r1p875   47  $1,367
+  2025-09  stood aside      0  $0
+  2026-01  stood aside      0  $0
+  2026-05  stood aside      0  $0
+  2026-09  struct-r1p5     28  $9,398
+next month (2026-10): struct-r1p875

@@ -1,0 +1,32 @@
+{
+ "name": "vh_i70_donch15_ons_15_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 70: The same entry, taken only on the side the 09:30 open's third of the overnight range gives (onr_side_study: +1.4 points in-sample). Who loses: the side trapped against the overnight session's choice.",
+ "family": "donchian",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "n": [
+   10,
+   20,
+   40
+  ]
+ },
+ "fixed": {
+  "gate": "onr_side",
+  "g_side": "with"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

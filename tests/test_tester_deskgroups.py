@@ -113,6 +113,18 @@ def test_summarize_and_merged(tmp_path):
     assert s["curve"] == {"days": ["2025-07-01", "2025-07-02", "2025-07-03"], "vals": [800.0, 400.0, 1000.0]}
     assert deskgroups.summarize([]) is None
     assert deskgroups.summarize(ledger)["together_days"] is None
+    assert (s["rr"], s["rr_label"], s["sharpe"]) == (None, None, None), "rows without commission/seconds/bars: no RR or Sharpe, the rest stays"
+
+
+def test_summarize_reads_rr_and_sharpe_off_the_report():
+    # 2 wins of 1000 + 1 loss of 500 over three traded days: payoff 2.0, Sharpe = mean/sd of the day nets x sqrt(252), no padding
+    rows = [{"date": f"2025-07-0{i}", "net": n, "entry_ms": i * 100, "exit_ms": i * 100 + 50, "commission": 4.0, "seconds": 60, "bars": 3,
+             "side": "long", "qty": 1, "mfe_usd": 0.0, "mae_usd": 0.0}
+            for i, n in ((1, 1000.0), (2, -500.0), (3, 1000.0))]
+    s = deskgroups.summarize(rows)
+    assert s["rr"] == 2.0 and s["rr_label"] == "1:2.00"
+    mean, sd = 500.0, (((500) ** 2 + (1000) ** 2 + (500) ** 2) / 2) ** 0.5
+    assert abs(s["sharpe"] - mean / sd * 252 ** 0.5) < 1e-6
 
 
 def _record(name, build_id):

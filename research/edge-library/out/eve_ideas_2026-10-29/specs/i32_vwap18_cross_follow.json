@@ -1,0 +1,32 @@
+{
+ "name": "i32_vwap18_cross_follow",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: follow the first cross of the VWAP anchored at 18:00",
+ "family": "ind_signal",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "lvl": [
+   0.0,
+   0.5,
+   1.0
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "ind": "vwap_dev",
+  "edge": "enter",
+  "mode": "follow"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

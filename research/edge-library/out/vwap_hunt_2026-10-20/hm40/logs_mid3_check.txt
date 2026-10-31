@@ -1,0 +1,14 @@
+# The middle-third skip: in-sample check (Amendment M; every NQ New York store, every box; nothing picked here)
+
+75 stores, 10780 boxes. A middle day = the 09:30 open in the middle third of the 01:00-09:30 range. Averages = the average box of each store.
+
+| Test (expected, written first) | Result |
+|---|---|
+| Holds (other > middle) in >= 70 % of stores, all months | 57 of 75 (76 %) |
+| ... in the first half (2021-10..2023-12) | 55 of 75 (73 %) |
+| ... in the second half (2024-01..2026-04) | 42 of 75 (56 %) |
+| Holds in >= 4 of the 5 full years (stores where other - middle > 0, by year) | 2021: 19/73, 2022: 56/74, 2023: 55/73, 2024: 53/73, 2025: 39/74, 2026: 20/73 |
+| Share of trades on middle days (mean over stores) | 31 % |
+| Average trade, middle vs other days (mean over stores) | $-2.3 vs $23.7 |
+| First half, middle vs other | $-11.6 vs $24.8 |
+| Second half, middle vs other | $8.9 vs $21.8 |

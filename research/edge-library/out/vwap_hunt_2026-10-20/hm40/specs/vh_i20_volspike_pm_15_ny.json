@@ -1,0 +1,27 @@
+{
+ "name": "vh_i20_volspike_pm_15_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 20: An afternoon breakout on a volume spike is institutional flow into the close. Who loses: the faders of the afternoon range.",
+ "family": "vol_spike_break",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "pm"
+ ],
+ "params": {
+  "m": [
+   2.0,
+   3.0,
+   4.0
+  ]
+ },
+ "fixed": {},
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 2,
+  "dir": "both"
+ }
+}

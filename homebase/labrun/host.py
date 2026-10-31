@@ -119,6 +119,7 @@ NOT_ANSWERING = "The Desk is not answering."
 NO_ANSWER = "The Desk did not answer."
 TOO_LATE_ONE = "Too late for this one."
 NO_RESUME = "Could not pick up where it left off."
+UNBOOKED = "Taken off its accounts: the Desk no longer books it today."
 STOPPED_TODAY = "Stopped for today."
 KILLED = "Killed today."
 NO_FILLS = "Not checked: a trade's fills are not known."     # the daily match of a desk day (a round with no price)
@@ -2270,11 +2271,14 @@ class Runner:
         the Desk's flat time."""
         name = rec["name"]
         was = self._day_file(rec, date) or {}
+        car = self._sidecar(rec)
+        empty = isinstance(car, dict) and car.get("mark") == store.mark_of(rec) and car.get("book") == []
+        why = UNBOOKED if empty else NO_RESUME       # (the Desk's book for this promotion is empty: said plainly)
         self._write(store.put_day, name, {
             "date": date.isoformat(), "sha256": rec.get("sha256"), "promoted_utc": rec.get("promoted_utc"),
-            "orders": [], "trades": [], "net": 0.0, **was, "state": "stopped", "why": NO_RESUME,
+            "orders": [], "trades": [], "net": 0.0, **was, "state": "stopped", "why": why,
             "match": {"ok": None, "text": "Not checked: it was stopped."}, "updated_utc": _utc()})
-        self._write(store.journal, name, {"utc": _utc(), "date": date.isoformat(), "kind": "stop", "why": NO_RESUME,
+        self._write(store.journal, name, {"utc": _utc(), "date": date.isoformat(), "kind": "stop", "why": why,
                                           "detail": "its tell-log holds an event and the day cannot run in desk mode"})
         self._final[name] = (date, *_mark(rec))
         self._lost[name] = date

@@ -1,0 +1,27 @@
+{
+ "name": "vh_i60_wincandle_15_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 60: An untried engine family on the hunt's own route (hm60, 3:1 in-sample, wide exits judged broadly). Who loses: as the family's own rationale.",
+ "family": "win_candle",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "k": [
+   0.0,
+   1.0,
+   1.5
+  ]
+ },
+ "fixed": {},
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

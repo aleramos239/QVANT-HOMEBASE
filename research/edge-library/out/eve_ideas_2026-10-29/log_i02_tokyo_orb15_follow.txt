@@ -1,0 +1,68 @@
+3:1 IN-SAMPLE TABLE of i02_tokyo_orb15_follow: 60 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  r_end1915_atr1p5-r0p5         64%   66%     935   -12,130  0.90    40%
+   2  r_end1915_own0p5-r0p5         63%   66%     935   -10,105  0.89    50%
+   3  r_end1915_atr2-r0p5           63%   65%     935   -17,900  0.89    20%
+   4  r_end1915_own1-r0p5           62%   65%     935   -22,645  0.87     0%
+   5  r_end1915_atr1-r0p5           62%   66%     935   -16,410  0.82     0%
+   6  r_end1915_pts15-r0p5          61%   68%     935   -28,140  0.75     0%
+   7  r_end1915_pts25-r0p5          61%   66%     935   -32,855  0.81     0%
+   8  r_end1915_atr0p5-r0p5         60%   67%     935   -13,370  0.73    30%
+   9  r_end1915_own1p5-r0p5         58%   64%     935   -51,885  0.80     0%
+  10  r_end1915_pts40-r0p5          56%   63%     935   -59,580  0.76     0%
+  11  r_end1915_own2-r0p5           56%   62%     935   -66,610  0.79     0%
+  12  r_end1915_atr1-r0p75          54%   57%     935   -14,965  0.87    10%
+  13  r_end1915_own0p5-r0p75        54%   58%     935   -17,790  0.85     0%
+  14  r_end1915_pts15-r0p75         53%   58%     935   -26,760  0.80     0%
+  15  r_end1915_atr0p5-r0p75        53%   58%     935   -11,935  0.80    40%
+  16  r_end1915_pts60-r0p5          52%   57%     935   -53,675  0.82     0%
+  17  r_end1915_atr1p5-r0p75        52%   57%     935   -33,245  0.81     0%
+  18  r_end1915_atr2-r0p75          51%   56%     935   -34,640  0.84     0%
+  19  r_end1915_own1-r0p75          51%   55%     935   -31,290  0.86     0%
+  20  r_end1915_pts25-r0p75         50%   57%     935   -52,560  0.75     0%
+  21  r_end1915_own1p5-r0p75        50%   55%     935   -59,025  0.81     0%
+  22  r_end1915_pts40-r0p75         49%   55%     935   -66,670  0.77     0%
+  23  r_end1915_own2-r0p75          48%   54%     935   -76,570  0.79     0%
+  24  r_end1915_own0p5-r1           47%   51%     935   -19,215  0.86    10%
+  25  r_end1915_pts60-r0p75         47%   53%     935   -63,805  0.80     0%
+  26  r_end1915_atr2-r1             46%   49%     935   -25,925  0.89    20%
+  27  r_end1915_pts15-r1            46%   51%     935   -30,820  0.80     0%
+  28  r_end1915_atr0p5-r1           46%   51%     935   -13,840  0.80    40%
+  29  r_end1915_atr1p5-r1           46%   50%     935   -30,145  0.84    10%
+  30  r_end1915_own1-r1             46%   49%     935   -32,905  0.87     0%
+  31  r_end1915_atr1-r1             45%   51%     935   -25,230  0.81     0%
+  32  r_end1915_pts60-r1            45%   50%     935   -65,115  0.81     0%
+  33  r_end1915_pts25-r1            45%   52%     935   -53,940  0.77     0%
+  34  r_end1915_pts40-r1            45%   52%     935   -73,315  0.76     0%
+  35  r_end1915_own1p5-r1           45%   50%     935   -61,335  0.82     0%
+  36  r_end1915_own2-r1             45%   50%     935   -68,830  0.82     0%
+  37  r_end1915_pts60-r1p5          43%   49%     935   -69,365  0.81     0%
+  38  r_end1915_pts60-r2            42%   48%     935   -72,035  0.80    10%
+  39  r_end1915_pts40-r1p5          42%   47%     935   -65,245  0.80     0%
+  40  r_end1915_own2-r1p5           41%   47%     935   -92,205  0.77     0%
+  41  r_end1915_pts40-r2            41%   45%     935   -56,000  0.83     0%
+  42  r_end1915_own2-r2             40%   46%     935   -89,440  0.78     0%
+  43  r_end1915_own1p5-r1p5         40%   45%     935   -75,630  0.79     0%
+  44  r_end1915_pts25-r1p5          39%   46%     935   -61,065  0.76     0%
+  45  r_end1915_atr2-r1p5           38%   41%     935   -37,880  0.86     0%
+  46  r_end1915_atr0p5-r1p5         38%   41%     935   -10,150  0.87    80%
+  47  r_end1915_own1p5-r2           38%   43%     935   -77,175  0.79     0%
+  48  r_end1915_atr1p5-r1p5         37%   40%     935   -22,545  0.90    20%
+  49  r_end1915_own0p5-r1p5         37%   40%     935   -18,000  0.89    50%
+  50  r_end1915_own1-r1p5           37%   42%     935   -44,875  0.84     0%
+  51  r_end1915_pts15-r1p5          37%   43%     935   -38,750  0.78     0%
+  52  r_end1915_pts25-r2            36%   42%     935   -56,425  0.79     0%
+  53  r_end1915_atr1-r1p5           36%   40%     935   -25,295  0.84    10%
+  54  r_end1915_own1-r2             34%   37%     935   -39,040  0.87     0%
+  55  r_end1915_atr2-r2             33%   36%     935   -43,910  0.85    10%
+  56  r_end1915_pts15-r2            32%   38%     935   -40,810  0.79     0%
+  57  r_end1915_own0p5-r2           32%   34%     935   -16,815  0.90    80%
+  58  r_end1915_atr1p5-r2           32%   34%     935   -27,830  0.88    10%
+  59  r_end1915_atr1-r2             31%   34%     935   -18,825  0.89    30%
+  60  r_end1915_atr0p5-r2           30%   34%     935   -17,650  0.81    70%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+REAL OR LUCK (the only lines that block; PF, Sharpe, drawdown and avg trade are shown, never block):
+  [FAIL] boxes        0 of 60 boxes made money in-sample (need 60%): the average of the boxes, not the best
+  [ .. ] picked box   not picked yet: the owner picks a box, then the other lines are read
+NEXT: The owner picks a box by its number: bp.py wf pick i02_tokyo_orb15_follow <n> (blueprint_wf_pick).

@@ -1,0 +1,142 @@
+2026-10-21T11:59:04+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers)
+2026-10-21T11:59:04+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers): days 1-60 of 883 (360 instances)
+2026-10-21T11:59:37+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers): days 61-120 of 883 (360 instances)
+2026-10-21T12:00:11+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers): days 121-180 of 883 (360 instances)
+2026-10-21T12:00:45+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers): days 181-240 of 883 (360 instances)
+2026-10-21T12:01:19+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers): days 241-300 of 883 (360 instances)
+2026-10-21T12:01:54+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers): days 301-360 of 883 (360 instances)
+2026-10-21T12:02:48+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers): days 361-420 of 883 (360 instances)
+2026-10-21T12:03:48+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers): days 421-480 of 883 (360 instances)
+2026-10-21T12:04:53+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers): days 481-540 of 883 (360 instances)
+2026-10-21T12:06:00+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers): days 541-600 of 883 (360 instances)
+2026-10-21T12:07:02+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers): days 601-660 of 883 (360 instances)
+2026-10-21T12:08:01+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers): days 661-720 of 883 (360 instances)
+2026-10-21T12:08:58+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers): days 721-780 of 883 (360 instances)
+2026-10-21T12:09:58+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers): days 781-840 of 883 (360 instances)
+2026-10-21T12:10:55+00:00 idea vh_i13_reclaim_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i13_reclaim_15_ny-NQ-tf15/is; 3 workers): days 841-883 of 883 (360 instances)
+2026-10-21T12:11:35+00:00 wf_is vh_i13_reclaim_15_ny-NQ-tf15/is: 120 cells, 39,771 trades, 750.6 s of tape (wall 751 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i13_reclaim_15_ny: 120 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  vol_m2_atr0p5-r0p5            77%   66%      73     6,088  1.71   100%
+   2  vol_m2_pts15-r0p5             75%   68%      73     2,448  1.44   100%
+   3  vol_m2_pts40-r0p5             75%   67%      73     6,963  1.48   100%
+   4  vol_m1p5_atr0p5-r0p5          70%   67%     193     4,123  1.14   100%
+   5  vol_m2_pts25-r0p5             70%   68%      73     1,233  1.11   100%
+   6  vol_m1p5_pts25-r0p5           69%   67%     193     2,358  1.08   100%
+   7  vol_m1p5_pts15-r0p5           68%   68%     193       368  1.02   100%
+   8  vol_m1p5_pts40-r0p5           67%   66%     193     1,318  1.03   100%
+   9  vol_m1_atr0p5-r0p5            66%   69%     749   -15,651  0.88     0%
+  10  vol_m2_pts60-r0p5             66%   66%      73        98  1.00   100%
+  11  vol_m1_pts25-r0p5             66%   67%     748    -9,587  0.93    20%
+  12  vol_m1_pts15-r0p5             65%   68%     749    -9,136  0.89    40%
+  13  vol_m2_atr1p5-r0p5            65%   62%      72     5,237  1.17   100%
+  14  vol_m1p5_atr1-r0p5            65%   66%     193    -2,542  0.96    20%
+  15  vol_m1p5_pts60-r0p5           65%   65%     193       488  1.01   100%
+  16  vol_m2_atr0p5-r0p75           64%   59%      73     3,798  1.27   100%
+  17  vol_m2_atr1-r0p5              64%   65%      73      -167  0.99    60%
+  18  vol_m2_pts25-r0p75            64%   58%      73     3,953  1.30   100%
+  19  vol_m1_pts40-r0p5             64%   67%     743   -25,132  0.88     0%
+  20  vol_m1p5_atr1p5-r0p5          64%   63%     191     4,066  1.05   100%
+  21  vol_m2_pts15-r0p75            63%   58%      73     1,803  1.22   100%
+  22  vol_m2_pts40-r0p75            63%   57%      73     5,563  1.26   100%
+  23  vol_m1p5_atr2-r0p5            63%   61%     189    10,464  1.10   100%
+  24  vol_m2_atr2-r0p5              63%   58%      70     8,235  1.22   100%
+  25  vol_m1_atr1p5-r0p5            63%   67%     718   -58,952  0.83     0%
+  26  vol_m1_pts60-r0p5             63%   66%     723   -33,162  0.89     0%
+  27  vol_m1_atr2-r0p5              62%   65%     700   -43,770  0.89     0%
+  28  vol_m1_atr1-r0p5              62%   68%     741   -69,019  0.75     0%
+  29  vol_m1p5_atr0p5-r0p75         59%   58%     193     2,318  1.06   100%
+  30  vol_m1p5_pts15-r0p75          59%   58%     193       728  1.03   100%
+  31  vol_m1p5_pts40-r0p75          59%   57%     193     5,353  1.09   100%
+  32  vol_m1p5_pts60-r0p75          59%   55%     193    13,693  1.17   100%
+  33  vol_m2_pts15-r1               59%   51%      73     3,293  1.35   100%
+  34  vol_m1p5_atr1p5-r0p75         58%   54%     191    20,486  1.20   100%
+  35  vol_m2_pts25-r1               58%   51%      73     4,678  1.30   100%
+  36  vol_m2_pts60-r0p75            58%   56%      73     2,653  1.08   100%
+  37  vol_m2_atr1p5-r0p75           57%   50%      72    11,082  1.31   100%
+  38  vol_m1p5_pts25-r0p75          56%   58%     193    -1,847  0.96    60%
+  39  vol_m2_atr1-r0p75             56%   55%      73     1,123  1.04   100%
+  40  vol_m1_atr0p5-r0p75           56%   59%     749   -18,671  0.89     0%
+  41  vol_m1_pts25-r0p75            56%   58%     748   -12,637  0.92    30%
+  42  vol_m1_pts40-r0p75            56%   57%     740   -16,495  0.94    20%
+  43  vol_m1p5_atr1-r0p75           55%   56%     193    -3,137  0.96    50%
+  44  vol_m2_pts40-r1               55%   51%      73     4,933  1.19   100%
+  45  vol_m1_pts60-r0p75            55%   57%     719   -31,376  0.91     0%
+  46  vol_m1_pts15-r0p75            55%   58%     749   -14,876  0.86    20%
+  47  vol_m1_atr1p5-r0p75           54%   57%     711   -42,794  0.90     0%
+  48  vol_m1p5_pts40-r1             54%   50%     193    12,248  1.18   100%
+  49  vol_m1p5_atr2-r0p75           54%   50%     188    22,458  1.19   100%
+  50  vol_m1_atr1-r0p75             54%   59%     739   -67,426  0.79     0%
+  51  vol_m2_atr0p5-r1              53%   52%      73     1,433  1.08   100%
+  52  vol_m2_atr1-r1                53%   48%      73     7,718  1.23   100%
+  53  vol_m1_atr2-r0p75             53%   56%     689   -48,561  0.90     0%
+  54  vol_m1p5_pts60-r1             53%   50%     193    10,968  1.12   100%
+  55  vol_m2_pts60-r1               52%   49%      73     4,633  1.13   100%
+  56  vol_m1p5_atr1p5-r1            52%   47%     190    24,040  1.21   100%
+  57  vol_m1p5_atr1-r1              51%   50%     193     5,688  1.06   100%
+  58  vol_m1p5_pts15-r1             50%   51%     193    -1,152  0.96   100%
+  59  vol_m1p5_pts25-r1             50%   51%     193    -1,117  0.98   100%
+  60  vol_m1_pts60-r1               50%   51%     716   -23,404  0.94    20%
+  61  vol_m1_atr2-r1                50%   52%     689   -42,876  0.92     0%
+  62  vol_m1p5_atr0p5-r1            49%   50%     193    -2,027  0.96    80%
+  63  vol_m1p5_atr2-r1              49%   49%     188       168  1.00    80%
+  64  vol_m1_atr1p5-r1              49%   51%     706   -39,999  0.91     0%
+  65  vol_m1_pts25-r1               49%   51%     748   -14,572  0.92    20%
+  66  vol_m2_atr2-r0p75             49%   46%      70     5,055  1.12   100%
+  67  vol_m1_pts40-r1               48%   51%     738   -28,592  0.90     0%
+  68  vol_m2_pts15-r1p5             48%   41%      73     3,548  1.30   100%
+  69  vol_m2_pts40-r1p5             48%   42%      73     8,518  1.29   100%
+  70  vol_m2_atr1p5-r1              47%   43%      72     7,862  1.20   100%
+  71  vol_m1_atr1-r1                47%   52%     737   -62,683  0.83     0%
+  72  vol_m1p5_pts40-r1p5           47%   42%     193    16,553  1.21   100%
+  73  vol_m1_atr0p5-r1              47%   52%     749   -36,056  0.82     0%
+  74  vol_m1_pts15-r1               47%   51%     749   -18,246  0.85    10%
+  75  vol_m1_atr2-r1p5              47%   47%     688    -6,602  0.99    50%
+  76  vol_m2_pts25-r1p5             47%   41%      73     4,888  1.25   100%
+  77  vol_m1p5_atr2-r1p5            46%   46%     188     2,168  1.01    70%
+  78  vol_m1_atr2-r2                45%   46%     687   -11,303  0.98    20%
+  79  vol_m1p5_atr2-r2              45%   47%     188   -10,602  0.93     0%
+  80  vol_m1p5_atr1p5-r1p5          45%   44%     190     3,630  1.03    80%
+  81  vol_m2_atr0p5-r1p5            44%   40%      73     3,218  1.15   100%
+  82  vol_m1_atr1p5-r1p5            44%   46%     706   -37,794  0.92     0%
+  83  vol_m1p5_pts60-r1p5           44%   45%     192    -5,578  0.95     0%
+  84  vol_m1p5_atr1p5-r2            44%   42%     190     8,930  1.07   100%
+  85  vol_m1_pts60-r1p5             44%   45%     714   -32,631  0.93     0%
+  86  vol_m2_atr2-r1                43%   42%      70     2,660  1.06   100%
+  87  vol_m2_atr2-r1p5              43%   39%      70     8,350  1.18   100%
+  88  vol_m1p5_atr1-r1p5            43%   40%     192    11,617  1.11   100%
+  89  vol_m1p5_pts60-r2             43%   42%     192     4,407  1.04   100%
+  90  vol_m1p5_pts25-r1p5           42%   41%     193     3,293  1.06   100%
+  91  vol_m2_pts25-r2               42%   35%      73     7,608  1.36   100%
+  92  vol_m1_atr1p5-r2              42%   43%     706    -9,704  0.98    50%
+  93  vol_m2_atr1p5-r1p5            42%   38%      72     6,572  1.14   100%
+  94  vol_m2_atr1p5-r2              42%   38%      72     8,532  1.19   100%
+  95  vol_m1_pts60-r2               42%   41%     714     2,989  1.01    80%
+  96  vol_m2_atr2-r2                41%   41%      70       185  1.00    60%
+  97  vol_m2_atr0p5-r2              41%   34%      73     8,603  1.38   100%
+  98  vol_m2_atr1-r1p5              41%   40%      73     2,688  1.07   100%
+  99  vol_m1_pts40-r1p5             41%   43%     736   -26,524  0.92     0%
+ 100  vol_m1p5_atr0p5-r1p5          40%   40%     193     1,723  1.03   100%
+ 101  vol_m1p5_pts40-r2             40%   38%     193     7,933  1.09   100%
+ 102  vol_m1p5_pts15-r1p5           40%   41%     193    -1,862  0.95   100%
+ 103  vol_m2_pts15-r2               40%   35%      73     3,218  1.24   100%
+ 104  vol_m2_pts40-r2               40%   38%      73     2,988  1.09   100%
+ 105  vol_m2_pts60-r1p5             40%   44%      73    -7,927  0.83     0%
+ 106  vol_m1_atr1-r1p5              39%   43%     735   -66,490  0.84     0%
+ 107  vol_m1_pts25-r1p5             39%   41%     747   -23,113  0.90     0%
+ 108  vol_m2_pts60-r2               38%   42%      73    -6,442  0.86     0%
+ 109  vol_m1_atr0p5-r1p5            38%   42%     748   -36,762  0.84     0%
+ 110  vol_m1p5_atr1-r2              38%   39%     192    -3,163  0.97    60%
+ 111  vol_m1_pts15-r1p5             37%   41%     749   -21,346  0.85     0%
+ 112  vol_m2_atr1-r2                37%   36%      73     1,738  1.04   100%
+ 113  vol_m1_pts40-r2               36%   39%     736   -37,919  0.90     0%
+ 114  vol_m1p5_atr0p5-r2            36%   33%     193    10,108  1.16   100%
+ 115  vol_m1p5_pts25-r2             36%   35%     193     2,768  1.04   100%
+ 116  vol_m1_atr1-r2                35%   40%     735   -71,680  0.84     0%
+ 117  vol_m1p5_pts15-r2             33%   34%     193    -2,232  0.94   100%
+ 118  vol_m1_pts25-r2               33%   35%     747   -26,133  0.90     0%
+ 119  vol_m1_atr0p5-r2              32%   35%     748   -35,067  0.86     0%
+ 120  vol_m1_pts15-r2               31%   35%     749   -26,376  0.84    10%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i13_reclaim_15_ny <n> (blueprint_wf_pick).

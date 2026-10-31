@@ -1,0 +1,142 @@
+2026-10-21T11:25:50+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers)
+2026-10-21T11:25:50+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers): days 1-60 of 883 (360 instances)
+2026-10-21T11:26:30+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers): days 61-120 of 883 (360 instances)
+2026-10-21T11:27:10+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers): days 121-180 of 883 (360 instances)
+2026-10-21T11:27:50+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers): days 181-240 of 883 (360 instances)
+2026-10-21T11:28:31+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers): days 241-300 of 883 (360 instances)
+2026-10-21T11:29:11+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers): days 301-360 of 883 (360 instances)
+2026-10-21T11:29:51+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers): days 361-420 of 883 (360 instances)
+2026-10-21T11:30:31+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers): days 421-480 of 883 (360 instances)
+2026-10-21T11:31:10+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers): days 481-540 of 883 (360 instances)
+2026-10-21T11:31:47+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers): days 541-600 of 883 (360 instances)
+2026-10-21T11:32:25+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers): days 601-660 of 883 (360 instances)
+2026-10-21T11:33:05+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers): days 661-720 of 883 (360 instances)
+2026-10-21T11:33:45+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers): days 721-780 of 883 (360 instances)
+2026-10-21T11:34:24+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers): days 781-840 of 883 (360 instances)
+2026-10-21T11:35:04+00:00 idea vh_i26_es_rv_look_5_ny, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_look_5_ny-ES-tf5/is; 3 workers): days 841-883 of 883 (360 instances)
+2026-10-21T11:35:32+00:00 wf_is vh_i26_es_rv_look_5_ny-ES-tf5/is: 120 cells, 641,311 trades, 578.61 s of tape (wall 581 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i26_es_rv_look_5_ny: 120 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  look120_atr2-r0p5             64%   66%    4759   -92,074  0.90    80%
+   2  look60_atr2-r0p5              63%   66%    5239  -155,281  0.86    30%
+   3  look120_atr1p5-r0p5           63%   67%    5509  -165,836  0.81    40%
+   4  look120_pts6-r0p5             63%   68%    5918  -152,434  0.78    50%
+   5  look30_pts6-r0p5              62%   68%    6403  -167,662  0.78    50%
+   6  look120_pts10-r0p5            62%   67%    4719  -146,564  0.83    20%
+   7  look30_atr1p5-r0p5            62%   67%    6093  -200,197  0.80     0%
+   8  look120_pts15-r0p5            62%   65%    3844   -91,238  0.90    90%
+   9  look30_pts10-r0p5             62%   67%    5468  -176,384  0.82    20%
+  10  look30_atr2-r0p5              62%   66%    5433  -194,570  0.83    10%
+  11  look60_pts10-r0p5             62%   67%    5263  -182,114  0.81    20%
+  12  look120_atr1-r0p5             62%   68%    6366  -157,502  0.78    80%
+  13  look60_pts6-r0p5              62%   68%    6368  -184,884  0.76    20%
+  14  look60_atr1p5-r0p5            62%   68%    5996  -235,896  0.77     0%
+  15  look120_pts4-r0p5             61%   69%    6610  -162,740  0.71   100%
+  16  look60_atr1-r0p5              61%   68%    6848  -190,380  0.76    20%
+  17  look60_pts15-r0p5             61%   65%    4359  -160,061  0.86    20%
+  18  look30_atr1-r0p5              61%   68%    6727  -194,246  0.75     0%
+  19  look30_pts15-r0p5             61%   65%    4607  -171,078  0.86    20%
+  20  look30_pts4-r0p5              61%   69%    6828  -180,250  0.69    50%
+  21  look60_pts4-r0p5              60%   69%    7060  -195,778  0.68    20%
+  22  look120_atr0p5-r0p5           57%   69%    7124  -184,146  0.60    90%
+  23  look30_atr0p5-r0p5            57%   69%    7113  -196,252  0.59    60%
+  24  look60_atr0p5-r0p5            56%   69%    7558  -212,532  0.58    30%
+  25  look120_atr2-r0p75            55%   57%    4271   -87,022  0.92    80%
+  26  look120_pts6-r0p75            54%   59%    5540  -136,235  0.83   100%
+  27  look120_pts10-r0p75           54%   57%    4306  -125,562  0.87    60%
+  28  look30_pts6-r0p75             54%   59%    6124  -159,934  0.82    80%
+  29  look120_pts15-r0p75           54%   56%    3464   -95,018  0.91    70%
+  30  look60_atr2-r0p75             54%   57%    4744  -161,814  0.87    20%
+  31  look60_pts10-r0p75            53%   57%    4840  -164,522  0.85    20%
+  32  look120_atr1p5-r0p75          53%   58%    5082  -165,040  0.84    30%
+  33  look30_pts10-r0p75            53%   57%    5062  -179,686  0.84    20%
+  34  look60_pts15-r0p75            53%   56%    3938  -150,827  0.88     0%
+  35  look30_pts15-r0p75            53%   56%    4182  -158,003  0.88    10%
+  36  look60_pts6-r0p75             53%   59%    6033  -184,394  0.79    20%
+  37  look30_atr1p5-r0p75           53%   58%    5713  -205,127  0.83    10%
+  38  look60_atr1p5-r0p75           53%   58%    5559  -215,924  0.81     0%
+  39  look120_atr1-r0p75            53%   59%    6018  -178,010  0.79    70%
+  40  look30_atr1-r0p75             53%   58%    6514  -196,944  0.79    60%
+  41  look30_atr2-r0p75             53%   57%    4950  -222,862  0.83     0%
+  42  look120_pts4-r0p75            52%   60%    6353  -165,550  0.75    90%
+  43  look60_atr1-r0p75             52%   59%    6536  -219,044  0.76    10%
+  44  look30_pts4-r0p75             52%   60%    6700  -192,200  0.72    40%
+  45  look60_pts4-r0p75             51%   60%    6829  -205,754  0.71    20%
+  46  look120_atr0p5-r0p75          49%   59%    7051  -184,242  0.66    80%
+  47  look30_atr0p5-r0p75           49%   59%    7074  -191,771  0.66    70%
+  48  look60_atr0p5-r0p75           48%   59%    7484  -220,574  0.63    10%
+  49  look120_atr2-r1               48%   50%    3961  -108,782  0.90    80%
+  50  look120_pts15-r1              48%   50%    3234  -106,698  0.90    30%
+  51  look120_pts10-r1              48%   51%    4032  -120,990  0.88    20%
+  52  look60_pts10-r1               48%   51%    4554  -151,828  0.87    20%
+  53  look60_pts15-r1               47%   51%    3685  -166,302  0.87     0%
+  54  look30_pts10-r1               47%   51%    4764  -171,956  0.86    20%
+  55  look120_atr1p5-r1             47%   51%    4746  -147,659  0.86    50%
+  56  look60_atr2-r1                47%   51%    4402  -163,420  0.87    20%
+  57  look120_pts6-r1               47%   52%    5251  -143,154  0.83   100%
+  58  look30_pts15-r1               47%   51%    3885  -194,378  0.86     0%
+  59  look30_atr2-r1                47%   51%    4607  -226,190  0.84     0%
+  60  look30_pts6-r1                46%   52%    5889  -187,468  0.81    50%
+  61  look60_atr1p5-r1              46%   51%    5217  -223,956  0.82     0%
+  62  look60_pts6-r1                46%   52%    5749  -186,321  0.81    40%
+  63  look120_pts4-r1               46%   52%    6137  -156,673  0.78   100%
+  64  look120_atr1-r1               46%   51%    5761  -167,206  0.82    80%
+  65  look30_atr1p5-r1              46%   51%    5381  -224,424  0.82     0%
+  66  look30_atr1-r1                46%   51%    6332  -216,328  0.79     0%
+  67  look30_pts4-r1                46%   52%    6558  -187,320  0.76    60%
+  68  look60_atr1-r1                45%   51%    6268  -218,210  0.78     0%
+  69  look60_pts4-r1                45%   52%    6627  -201,396  0.74    50%
+  70  look120_atr0p5-r1             43%   52%    6948  -182,517  0.70   100%
+  71  look120_pts15-r1p5            42%   44%    3042  -102,306  0.91    30%
+  72  look30_atr0p5-r1              42%   52%    7032  -212,578  0.67    10%
+  73  look60_atr0p5-r1              42%   52%    7393  -232,022  0.65     0%
+  74  look60_pts15-r1p5             42%   45%    3430  -148,745  0.89     0%
+  75  look30_pts15-r1p5             41%   45%    3584  -164,998  0.88     0%
+  76  look120_atr2-r1p5             40%   43%    3641  -120,964  0.90    30%
+  77  look60_atr2-r1p5              40%   43%    4029  -156,441  0.88    20%
+  78  look120_pts15-r2              39%   41%    2934   -80,336  0.93    40%
+  79  look30_atr2-r1p5              39%   43%    4149  -223,346  0.84     0%
+  80  look120_pts10-r1p5            39%   43%    3707  -139,053  0.87     0%
+  81  look30_pts10-r1p5             39%   43%    4371  -198,634  0.85     0%
+  82  look60_pts10-r1p5             39%   43%    4188  -183,490  0.85     0%
+  83  look60_pts15-r2               39%   42%    3310  -157,852  0.88     0%
+  84  look30_pts15-r2               38%   42%    3426  -184,042  0.87     0%
+  85  look120_atr1p5-r1p5           38%   42%    4333  -162,707  0.86    20%
+  86  look30_pts6-r1p5              38%   42%    5556  -168,749  0.84    90%
+  87  look120_pts6-r1p5             38%   42%    4891  -146,489  0.84   100%
+  88  look30_atr1p5-r1p5            38%   42%    4894  -207,226  0.84    10%
+  89  look60_atr1p5-r1p5            38%   42%    4761  -219,532  0.83     0%
+  90  look60_pts6-r1p5              38%   42%    5400  -179,025  0.83    60%
+  91  look120_atr1-r1p5             37%   42%    5397  -164,200  0.83    70%
+  92  look120_pts4-r1p5             37%   42%    5808  -159,244  0.80   100%
+  93  look60_atr2-r2                37%   39%    3846  -142,846  0.89    30%
+  94  look30_atr1-r1p5              37%   42%    5984  -224,386  0.81    30%
+  95  look60_atr1-r1p5              37%   42%    5903  -221,950  0.80    30%
+  96  look120_atr2-r2               36%   39%    3490  -119,435  0.90    40%
+  97  look30_pts4-r1p5              36%   43%    6294  -207,401  0.76    60%
+  98  look60_pts4-r1p5              36%   42%    6310  -208,928  0.76    50%
+  99  look30_atr2-r2                36%   40%    3948  -222,267  0.84     0%
+ 100  look60_pts10-r2               36%   39%    3984  -151,686  0.88     0%
+ 101  look120_pts10-r2              35%   38%    3547  -120,276  0.89    10%
+ 102  look30_pts10-r2               35%   39%    4156  -196,412  0.85     0%
+ 103  look120_atr0p5-r1p5           34%   42%    6762  -195,610  0.71    90%
+ 104  look120_atr1p5-r2             34%   37%    4123  -161,354  0.86    20%
+ 105  look30_atr0p5-r1p5            33%   42%    6926  -224,642  0.70    50%
+ 106  look60_atr1p5-r2              33%   38%    4485  -226,365  0.82     0%
+ 107  look30_atr1p5-r2              33%   37%    4581  -224,186  0.83     0%
+ 108  look60_atr0p5-r1p5            33%   43%    7225  -250,738  0.67    10%
+ 109  look120_pts6-r2               33%   36%    4657  -141,216  0.85    60%
+ 110  look30_pts6-r2                32%   37%    5298  -192,217  0.83    30%
+ 111  look60_pts6-r2                32%   37%    5149  -190,146  0.82    30%
+ 112  look120_atr1-r2               31%   36%    5128  -186,787  0.82    80%
+ 113  look120_pts4-r2               31%   36%    5607  -162,653  0.80   100%
+ 114  look30_atr1-r2                31%   36%    5676  -221,866  0.81    30%
+ 115  look60_atr1-r2                31%   35%    5634  -222,748  0.81    20%
+ 116  look30_pts4-r2                31%   36%    6108  -201,982  0.78    70%
+ 117  look60_pts4-r2                30%   36%    6106  -205,536  0.77    70%
+ 118  look120_atr0p5-r2             28%   35%    6606  -207,374  0.72    90%
+ 119  look30_atr0p5-r2              28%   35%    6854  -229,604  0.71    50%
+ 120  look60_atr0p5-r2              27%   36%    7081  -262,224  0.68    10%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i26_es_rv_look_5_ny <n> (blueprint_wf_pick).

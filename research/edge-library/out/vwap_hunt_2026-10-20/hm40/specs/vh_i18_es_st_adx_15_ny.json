@@ -1,0 +1,34 @@
+{
+ "name": "vh_i18_es_st_adx_15_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 18: A supertrend flip while ADX says the market trends is a trend change. Who loses: the side positioned for the old trend.",
+ "family": "supertrend",
+ "markets": [
+  "ES"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "mult": [
+   2.0,
+   3.0,
+   4.0
+  ]
+ },
+ "fixed": {
+  "gate": "adx",
+  "g_n": 14,
+  "g_lvl": 20.0,
+  "g_side": "with"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 2,
+  "dir": "both"
+ }
+}

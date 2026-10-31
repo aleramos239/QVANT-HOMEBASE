@@ -1,0 +1,813 @@
+{
+ "ranked": [
+  {
+   "id": "i27_nq_onrorb_15",
+   "key": "nq_onrorb_15",
+   "family": "onr_orb",
+   "market": "NQ",
+   "bars": [
+    "15"
+   ],
+   "sessions": [
+    "nyam"
+   ],
+   "main": {
+    "adx_min": [
+     15,
+     20,
+     25
+    ]
+   },
+   "fixed": {
+    "k": 0.3,
+    "earliest": "10:30",
+    "ov_from": "01:00"
+   },
+   "max_tr": 1,
+   "dir": "both",
+   "reason": "Where the 09:30 open lands in the 01:00-09:30 range shows which side the overnight session already chose. When the open is in the top or bottom third and the opening range then breaks the same way on a trending (ADX) day, the overnight side is the one the day's money follows. Who loses: opening-range faders and traders who fight the side the overnight session set.",
+   "evidence": "Vault, conti-three-rules-plain.md, as taught on the build days 2021-09..2025-06 (these contain Jan/May/Sep 2022-25). 10:00 reading: 380 trades, 54.7% wins at avg win/loss 1.28 (break-even 43.9%, so +10.8 points), PF 1.54. 10:30 reading: 358 trades, $484 a trade, PF 1.76. Heat-map average $144, 95.8% of boxes green. 2025 H1 was weak ($67 / $173 a trade). SEEN: the 10:00 micro version was read once on the unseen days 2025-07..2026-10: 120 trades, +$11.2k, PF 1.31, t 1.19, about 52% wins at RR 1.21 (about +6.8 points). Never run in this hunt.",
+   "est_trades_per_day": 0.35,
+   "new_block_needed": false,
+   "not_a_rerun_because": "onr_orb was never run in this hunt (ideas 1-26). It is the only rule on file whose side comes from the overnight range's thirds, which none of the hunt's ORB/VWAP-gated rules use. Main = adx_min, not k (k only scales its own stop). Earliest 10:30 = the rule as taught; the unseen read used 10:00.",
+   "seen": true,
+   "keeps": 2,
+   "mean_score": 5.7,
+   "judges": [
+    {
+     "lens": "prior",
+     "id": "i27_nq_onrorb_15",
+     "score": 7,
+     "keep": true,
+     "reason": "The strongest prior on the list. It is an outside rule (Conti) taken as taught, not mined. Its day-type logic is clear: the open's place in the overnight range plus a same-side opening-range break, so overnight acceptance leads to an open-drive day. Build days gave PF 1.54-1.76 with 95.8% of heat-map boxes green, and it kept about half its edge (+6.8 pts) on one unseen read. Its side selection is not used by any of ideas 1-26, and it pays through clock exits, the trend-day structure the hm60 15:58 exits reward. Caveats: SEEN (the 10:00 version was read 2025-07+; build days include the 2022-25 test months); the 2R cap and the narrow ATR/fixed-point cells will dilute the average box; about 110 test trades is borderline.",
+     "fix": "Re-run the onr_orb code check first; it earlier failed with trades outside the window. Keep earliest 10:30 as written and do not swap to the read 10:00 version. Expect adx_min 25 to fall under 100 test trades. Note in the pre-reg that the taught 15:30 exit becomes 15:58."
+    },
+    {
+     "lens": "feasibility",
+     "id": "i27_nq_onrorb_15",
+     "score": 7,
+     "keep": true,
+     "reason": "Valid in blocks.txt (onr_orb is 15m and nyam only; its pass runs 09:30-15:30 and flattens at 15:30). As taught it made 358 trades at 10:30 with ADX 20, about 0.38 a day, or roughly 110 on the ~294 test days. The adx_min 25 box will likely drop under 100. SEEN.",
+     "fix": "Use adx_min 10/15/20 so every box clears 100 test trades. The 25 box is about 0.3 a day."
+    },
+    {
+     "lens": "risk",
+     "id": "i27_nq_onrorb_15",
+     "score": 3,
+     "keep": false,
+     "reason": "Seen. Its 10:00 twin was read on 2025-07+ (Sep25/Jan26/May26 test months), and that read came out positive. The 10:30 entry trades the same days on the same side, and Amendment A puts legs whose test months were already read OUT. Otherwise clean: settings as taught, 2 filters, names who loses.",
+     "fix": "No small fix on these months. Either take it only as an owner-approved 'seen' leg (like idea 1), or judge it on months nobody has read (2026-10 on)."
+    }
+   ]
+  },
+  {
+   "id": "i31_es_rvbrk_15",
+   "key": "es_rvbrk_15",
+   "family": "rvol_break",
+   "market": "ES",
+   "bars": [
+    "15"
+   ],
+   "sessions": [
+    "nyam",
+    "mid",
+    "pm"
+   ],
+   "main": {
+    "m": [
+     1.25,
+     1.5,
+     2
+    ]
+   },
+   "fixed": {
+    "n": 20
+   },
+   "max_tr": 3,
+   "dir": "both",
+   "reason": "A break of the recent range on far more volume than that clock window usually trades is new participation (institutional or news flow), not noise, and it carries. Who loses: range traders who fade the break.",
+   "evidence": "In-sample, this hunt: rvol_break 15m on NQ was the broadest pocket of 74 stores. All 180 boxes averaged +5.4 points over break-even, 87% of boxes positive, wide exits +8.3, +6.5 over same-exit random entries; mid +9.5, pm +7.2, nyam -1.0; long and short both about +8; 2022-25 all positive, 2026 -2.2. Its daily P&L correlates 0.1-0.4 with the other breakout legs. Weak points: few trades (m 2/3 too thin, hence m 1.25-2.0 here) and block t only 1.34. ES: never run. The ES cost baseline is about -2 points of win rate (c1f ES pool).",
+   "est_trades_per_day": 0.6,
+   "new_block_needed": false,
+   "not_a_rerun_because": "Idea 17 ran rvol_break on NQ only. ES is a new market and the m values are new (1.25 is new; 3.0 dropped for trade count).",
+   "seen": false,
+   "keeps": 2,
+   "mean_score": 5,
+   "judges": [
+    {
+     "lens": "prior",
+     "id": "i31_es_rvbrk_15",
+     "score": 4,
+     "keep": false,
+     "reason": "It borrows the best NQ in-sample pocket (+5.4 pts over break-even across all boxes), but that pocket has a block t of only 1.34 and nyam is negative. On ES, take off the roughly 2-pt cost and the expected edge is about +3, under the needed ~5. Theory also cuts against it for a hedging-heavy index: high-volume moves tend to reverse (Campbell-Grossman-Wang). NQ-to-ES ports have failed locally.",
+     "fix": "Run it only as a twin, unchanged, if NQ rvol_break's mechanism is accepted; do not count it as independent evidence."
+    },
+    {
+     "lens": "feasibility",
+     "id": "i31_es_rvbrk_15",
+     "score": 6,
+     "keep": true,
+     "reason": "Valid settings. NQ 15m in-sample at m 2.0 traded only 0.22-0.29 a day (~65-85 test trades), so the m=2 box cannot qualify. It will also correlate with the ES orb_confirm and fvg_oside legs (all ES with-the-day trades).",
+     "fix": "m 1.0/1.25/1.5 (NQ 15m m 1.5 = 0.54-0.76 a day)."
+    },
+    {
+     "lens": "risk",
+     "id": "i31_es_rvbrk_15",
+     "score": 5,
+     "keep": true,
+     "reason": "Clean build: 1 filter (relative volume), a plain m main, names who loses, never run on ES. The NQ 15m store it cites has no test-month read. Risk: two NQ rvol_break stores (5m, 5m n40) had their test months read, all reads so far failed, and ES is 0.9 correlated. ES costs take about 2 points of win rate.",
+     "fix": "Disclose that the NQ 5m and 5m-n40 rvol_break reads are spent, and count this as the family's 5th store in LUCK."
+    }
+   ]
+  },
+  {
+   "id": "i31_gc_rvbrk_15",
+   "key": "gc_rvbrk_15",
+   "family": "rvol_break",
+   "market": "GC",
+   "bars": [
+    "15"
+   ],
+   "sessions": [
+    "nyam",
+    "mid",
+    "pm"
+   ],
+   "main": {
+    "m": [
+     1.25,
+     1.5,
+     2
+    ]
+   },
+   "fixed": {
+    "n": 20
+   },
+   "max_tr": 3,
+   "dir": "both",
+   "reason": "In US hours gold's volume surges with macro and real-rate flow. A range break on unusual volume for that clock time is that flow arriving. Who loses: COMEX range faders. It is uncorrelated with the equity legs.",
+   "evidence": "Transfers the NQ rvol_break 15m in-sample pocket (+5.4 all boxes, +8.3 wide). GC in this hunt: families beat the GC random pool by 3-6 points, but the cost baseline is about -1.7, so absolute edges are only +0.8 to +2.9 (fvg_oside GC dead at -0.28, first_bar_mom GC -3.6). The vault calls intraday GC trend rules dead. The 2024-26 gold bull market is a drift confound (check same-side random). Never run.",
+   "est_trades_per_day": 0.5,
+   "new_block_needed": false,
+   "not_a_rerun_because": "No GC volume-breakout rule has run in any route; idea 17 was NQ only.",
+   "seen": false,
+   "keeps": 2,
+   "mean_score": 5,
+   "judges": [
+    {
+     "lens": "prior",
+     "id": "i31_gc_rvbrk_15",
+     "score": 3,
+     "keep": false,
+     "reason": "GC volume surges in US hours are macro news, which gives some reason to expect continuation. But GC families in this hunt are all at +0.8 pts or less after costs, the vault calls intraday GC trend rules dead, and 2024-26 gold drift is a confound. The only GC mechanism that beat random was the release-day bracket, which is a different trade.",
+     "fix": ""
+    },
+    {
+     "lens": "feasibility",
+     "id": "i31_gc_rvbrk_15",
+     "score": 6,
+     "keep": true,
+     "reason": "Valid settings and independent of the equity legs. The same problem: m=2 on 15m is likely about 0.25 a day, under 100 test trades.",
+     "fix": "m 1.0/1.25/1.5."
+    },
+    {
+     "lens": "risk",
+     "id": "i31_gc_rvbrk_15",
+     "score": 6,
+     "keep": true,
+     "reason": "No GC volume-break rule has been read in any route. It has 1 filter, a plain main, names who loses, and its correlation with the equity reads is low. The main risk is the 2024-26 gold-trend drift, not overfitting.",
+     "fix": "Require the same-side random check (C3 per side) so drift is not counted as edge."
+    }
+   ]
+  },
+  {
+   "id": "i27_es_onrorb_15",
+   "key": "es_onrorb_15",
+   "family": "onr_orb",
+   "market": "ES",
+   "bars": [
+    "15"
+   ],
+   "sessions": [
+    "nyam"
+   ],
+   "main": {
+    "adx_min": [
+     15,
+     20,
+     25
+    ]
+   },
+   "fixed": {
+    "k": 0.3,
+    "earliest": "10:30",
+    "ov_from": "01:00"
+   },
+   "max_tr": 1,
+   "dir": "both",
+   "reason": "The same overnight-thirds bias on ES. The overnight session prices the macro news first, and an open at its extreme plus a same-side opening-range break on a trending day is the cash session agreeing. Who loses: cash-open faders of the overnight side.",
+   "evidence": "No ES read anywhere (onr_orb 'never tried on ES/GC', vault report). Support comes only from the NQ build-day numbers (PF 1.54-1.76, 95.8% of boxes green) and the Quant-Portfolio ES ORB tile (681 trades, 48% at about 1.26 RR, so about +3.7 points, PF 1.16; its lockbox from 2025-12 is seen). Against it: ES single-market rules lose nearly everywhere in Homebase, and ES costs are about 2 points of win rate (in-sample ES random baseline -2.0).",
+   "est_trades_per_day": 0.35,
+   "new_block_needed": false,
+   "not_a_rerun_because": "A new market for a family this hunt never ran. No ES ORB-on-overnight-bias rule has ever been run or read.",
+   "seen": false,
+   "keeps": 2,
+   "mean_score": 4.7,
+   "judges": [
+    {
+     "lens": "prior",
+     "id": "i27_es_onrorb_15",
+     "score": 4,
+     "keep": false,
+     "reason": "The overnight-bias mechanism is not NQ-specific, so this port is more defensible than most. But there is no ES evidence. No ES store in this hunt averages more than +2.5 pts over break-even, ES costs take about 2 pts, and ES days move almost the same way as NQ days, so this would mostly repeat the NQ leg rather than add a new edge.",
+     "fix": "Run it only as a twin of the same rule, unchanged, after i27_nq clears its in-sample selection; never tune it on ES."
+    },
+    {
+     "lens": "feasibility",
+     "id": "i27_es_onrorb_15",
+     "score": 5,
+     "keep": true,
+     "reason": "Valid, and the count should match NQ (~0.35 a day). It is not an independent leg: it uses the same overnight-thirds bias on the same days, so its trades mostly fire the same direction as the NQ leg. ES costs also eat about 2 points.",
+     "fix": "Keep it as an alternative to the NQ leg, not as a second leg next to it in the portfolio."
+    },
+    {
+     "lens": "risk",
+     "id": "i27_es_onrorb_15",
+     "score": 5,
+     "keep": true,
+     "reason": "Never run on ES. Settings come as taught, not tuned. It has 2 filters (overnight third plus ADX), a plain ADX main and names who loses. Risk: the NQ twin's positive unseen read covers 3 of the 14 test months on a market about 0.9 correlated, and adx 25 may fall under 0.35 trades a day.",
+     "fix": "Pre-register two things: mark Sep25/Jan26/May26 as proxy-seen, and also report the pass on the 11 test months Jan22-May25 alone."
+    }
+   ]
+  },
+  {
+   "id": "i27_gc_onrorb_15",
+   "key": "gc_onrorb_15",
+   "family": "onr_orb",
+   "market": "GC",
+   "bars": [
+    "15"
+   ],
+   "sessions": [
+    "nyam"
+   ],
+   "main": {
+    "adx_min": [
+     15,
+     20,
+     25
+    ]
+   },
+   "fixed": {
+    "k": 0.3,
+    "earliest": "10:30",
+    "ov_from": "01:00"
+   },
+   "max_tr": 1,
+   "dir": "both",
+   "reason": "Gold's price discovery happens in Asia and London. When the COMEX open sits at the top or bottom of that overnight range and the opening range breaks the same way on a trending day, US flow is joining the overseas side. Who loses: COMEX-open traders fading London's side. It is a leg independent of the equity legs.",
+   "evidence": "No GC read anywhere. Prior is weak: every GC card lost at the raw heat map in Homebase, and the Quant-Portfolio GC ORB (563 trades, 51.3%, PF 1.16) proved not robust (2024 PF 1.02, its edge all 2025-26 gold trend). In-sample in this hunt, GC families beat their random pool by 3-6 points but the GC cost baseline is about -1.7. Its value is that GC's daily P&L correlates about 0.1 with the NQ legs.",
+   "est_trades_per_day": 0.35,
+   "new_block_needed": false,
+   "not_a_rerun_because": "A new market for a family this hunt never ran. Ideas 22-25 ran GC with other families (fvg_oside, first_bar_mom, vwap_touch, orb_vwap_pb, jj_fair), none of which uses the overnight-range bias.",
+   "seen": false,
+   "keeps": 2,
+   "mean_score": 4.7,
+   "judges": [
+    {
+     "lens": "prior",
+     "id": "i27_gc_onrorb_15",
+     "score": 2,
+     "keep": false,
+     "reason": "The reason names gold's COMEX open, but the rule's open and opening range are the 09:30 equity open, not gold's 08:20 open, so the mechanism does not match the code. Every GC store in this hunt averages +0.8 pts or less, the vault calls intraday GC trend rules dead, and the gold-bull drift confounds any result.",
+     "fix": "No small fix: a GC version needs an 08:20 open and its own opening-range window, which is a new block."
+    },
+    {
+     "lens": "feasibility",
+     "id": "i27_gc_onrorb_15",
+     "score": 6,
+     "keep": true,
+     "reason": "Valid (GC is allowed, 15m, nyam) at about 0.35 a day, and it is independent of the equity legs. But the rule fixes the open at 09:30 ET, not the 08:20 COMEX open the reason describes. The prior is weak.",
+     "fix": "Reword the reason to the 09:30 equity open, which is what the code reads, or drop the COMEX-open claim."
+    },
+    {
+     "lens": "risk",
+     "id": "i27_gc_onrorb_15",
+     "score": 6,
+     "keep": true,
+     "reason": "Cleanest of the onr_orb three. GC was never read, settings are as taught, it has 2 filters and its correlation with the NQ reads is low. One flaw: the reason talks about the 'COMEX open' (08:20), but the rule uses the 09:30 equity open and the 01:00-09:30 range.",
+     "fix": "Reword the reason to the 09:30 US equity open, or say plainly that the reason is about 09:30, not the COMEX 08:20 open."
+    }
+   ]
+  },
+  {
+   "id": "i28_nq_daymove_15",
+   "key": "nq_daymove_15",
+   "family": "day_move",
+   "market": "NQ",
+   "bars": [
+    "15"
+   ],
+   "sessions": [
+    "pm"
+   ],
+   "main": {
+    "k": [
+     0.15,
+     0.25,
+     0.35
+    ]
+   },
+   "fixed": {
+    "at": "15:00",
+    "ref": "rth"
+   },
+   "max_tr": 1,
+   "dir": "both",
+   "reason": "Late-day momentum. On a day that has already moved a lot by 15:00, leveraged-ETF rebalancing, short-gamma dealer hedges and market-on-close imbalances must trade WITH the day's move into the close (Gao et al. 2018; Baltussen et al. 2021). Who loses: afternoon faders who sell the day's rally or buy its sell-off between 15:00 and 15:58.",
+   "evidence": "Vault 2026-10-13-65pct and 2026-10-14-four-windows. Read 1 (move vs prior close): build 406 trades, 62.1%, PF 1.28. Unseen 138 trades, 59.4%, RR ~0.82 (break-even 54.9%, so +4.5 points), PF 1.20, both halves and both sides positive. Read 2 (move vs 09:30 open >= 0.25 ADR): unseen 188 trades, 58.0%, +4.8 points, but longs -$681 and 2025-H2 -$1,977. The edge sits at 14:40-15:05 entries; 15:10+ loses; the 15:30 last-half-hour version is dead in both projects. Its random gate was never run. SEEN: the unseen reads cover Sep 2025 / Jan 2026 / May 2026.",
+   "est_trades_per_day": 0.45,
+   "new_block_needed": true,
+   "new_block_spec": "New bar-based entry family `day_move` (engine/families/daymove.py, registered by join_blocks() the way noise.py is; FEATURES=(); TFS 5/15/30; sessions nyam/mid/pm).\n\nSettings:\n- k: float 0.05..3, default 0.25 (the main setting).\n- at: 'HH:MM', default '15:00'.\n- ref: rth | pclose, default rth.\n- max_tr: default 1.\n\nRule:\n1. ref: rth = the open of the first 1-minute bar at or after 09:30 ET. If that bar starts more than 5 minutes late, there is no trade that day. pclose = the prior daily close.\n2. A = Template.datr: Wilder daily ATR(14) of the daily bars BEFORE the trade date, the same source noise_band and gap use. Fewer than 15 prior days: no trade.\n3. Signal: ONLY at the close of the tf bar whose nominal close time equals `at`. A missing bar means no trade. move = close - ref. If move >= k\u00b7A, market long; if move <= -k\u00b7A, market short. The order fills at the next bar's open.\n4. One trade a day. No structure level, so it gets the 40 hm60 cells (ATR(14) of the idea's bars x 0.5/1/1.5/2 and fixed points). Held to stop, target or the Template's 15:58 flat.\n5. One unit takes both sides: a single market order whose side is the sign of the move. Nothing ever rests on both sides.\n6. `at` must be inside the session pass and at least 5 minutes before its end, else the card is refused.\n\nNo look-ahead: it reads only bars closed by `at` and prior days' daily bars.\n\nTests:\n- close(15:00) = ref + 0.3A with k 0.25 gives one long at the next open; with k 0.35 there is no trade.\n- A late 09:30 bar gives no trade.\n- On 15m bars only the bar closing at 15:00 can signal.\n- A mirror day gives a short.\n\nNo-code fallback (weaker): noise_band, anchor rth, sessions [pm], bars 15, fixed w_start '14:55', w_end '15:05', with k as main. It needs two cards (dir long, dir short): each holds about half the trades, and it adds a VWAP-side condition.",
+   "not_a_rerun_because": "No hunt spec trades a fixed 15:00 decision. Idea 9's noise_band (5m NY, max_tr 1) fires at the first band break, mostly in the morning. Idea 20 volspike_pm is a volume breakout. The vault's 15:00 rule was a Lab draft, never run on the 3:1 blocks or with hm60 exits.",
+   "seen": true,
+   "keeps": 2,
+   "mean_score": 4.7,
+   "judges": [
+    {
+     "lens": "prior",
+     "id": "i28_nq_daymove_15",
+     "score": 5,
+     "keep": true,
+     "reason": "New to the hunt: a pure late-day trend-day continuation trade, backed by the literature (Gao 2018, Baltussen 2021), and the only afternoon rule that held an unseen read (+4.5 pts). Against it: the vault says the 15:00 pocket 'looks partly luck' because 15:30 entries lose, the opposite of the published last-half-hour effect. The 15:00 time was picked from a 13:00-16:00 scan, and the rule was read three times on unseen days with two later locks failing (longs, H2-2025). Heavily SEEN on Sep 2025, Jan 2026 and May 2026.",
+     "fix": "Build the real day_move block, not the noise_band proxy. Keep at=15:00 and ref as written, with no further window search. Run the same-side random gate, and pre-register that 3 of the 15 test months are seen."
+    },
+    {
+     "lens": "feasibility",
+     "id": "i28_nq_daymove_15",
+     "score": 7,
+     "keep": true,
+     "reason": "The new block is small and safe from look-ahead. It reuses Template.datr and the noise.py join_blocks pattern, and pm is 13:30-15:58, so 15:00 fits. A vault reading gave about 0.59 a day, so about 0.4+ a day gives 100+ test trades. Trading at 15:00 spreads the portfolio's trades across the day. The no-code fallback fails the count: two one-sided noise_band cards at about 0.22 a day each. SEEN.",
+     "fix": "Copy onr.py's fam_filter so the pass list is only the one that holds `at`. Otherwise nyam and mid passes could also evaluate the signal."
+    },
+    {
+     "lens": "risk",
+     "id": "i28_nq_daymove_15",
+     "score": 2,
+     "keep": false,
+     "reason": "Seen, and the evidence is cherry-picked. The mechanism was read at least twice on 2025-07+. The read that failed is left out: nq_pm_1500_quiet (move since 09:30 at 15:00, the same ref=rth idea) FAILED unseen on 2026-10-14, with longs losing. The 15:00 time came from a build-day time scan that the vault itself calls 'partly luck' (14:30 weaker, 15:30 loses).",
+     "fix": "No small fix. Its test months Sep25/Jan26/May26 are spent for this question."
+    }
+   ]
+  },
+  {
+   "id": "i32_es_fvgos_30",
+   "key": "es_fvgos_30",
+   "family": "fvg_oside",
+   "market": "ES",
+   "bars": [
+    "30"
+   ],
+   "sessions": [
+    "nyam"
+   ],
+   "main": {
+    "min_gap": [
+     0,
+     0.1,
+     0.25
+    ]
+   },
+   "fixed": {
+    "mode": "touch",
+    "pick": "newest",
+    "atr1": 3
+   },
+   "max_tr": 20,
+   "dir": "both",
+   "reason": "Above the 09:30 open, the newest up gap is unfilled demand of the side in control, and the first return to it is bought (mirror below the open). Who loses: traders who fade the day's side into a fresh imbalance.",
+   "evidence": "In-sample, this hunt: ES fvg_oside 15m (idea 22) had 100% of 180 boxes positive, +2.50 points over break-even, +6.3 over ES random, recent (2024-10+) +6.1, c7 100%. But block t 1.17, c8 0%, only 40% of boxes survive the +1 tick ES stress, and it is regime-driven (2024 -1.4, 2025 +7.6, 2026 +9.5). 30m bars give bigger gaps and wider stops, so the $25 tick is a smaller share of R. The mechanism is heavily read on NQ (walk-forwards; lost May-Aug 2026), so the NQ side is seen; ES has not been.",
+   "est_trades_per_day": 0.8,
+   "new_block_needed": false,
+   "not_a_rerun_because": "Idea 22 ran ES on 15m only. 30m is a new bar size (a new rule under Amendment A), chosen from in-sample cost structure.",
+   "seen": false,
+   "keeps": 2,
+   "mean_score": 4.7,
+   "judges": [
+    {
+     "lens": "prior",
+     "id": "i32_es_fvgos_30",
+     "score": 3,
+     "keep": false,
+     "reason": "The ES 15m store had no chosen version: +2.5 pts, block t 1.17, 40% of boxes survive the tick stress, and the edge comes from the 2025-26 regime only. The NQ twin lost after mid-2025, with all three walk-forwards failed. The FVG 'unfilled demand' story is a retail construct. A 30m bar is a cost-driven fork of an in-sample failure.",
+     "fix": ""
+    },
+    {
+     "lens": "feasibility",
+     "id": "i32_es_fvgos_30",
+     "score": 6,
+     "keep": true,
+     "reason": "Valid (fvg_oside allows 30m; entries 09:30-15:00). Gap candles must start at or after 09:30, so the first 30m gap comes at 11:00, with only about 8 setups a day. Expect about 0.4-0.8 a day, against 1.05-1.6 on ES 15m; min_gap 0.25 is the risky box. atr1=3 sets the own stop from the 1-minute ATR, so the 'wider stop on 30m' claim only holds in the ATR and fixed-point cells. It correlates with the ES orb and rvol legs.",
+     "fix": "Set atr1 0 (middle-candle stop) so the own-stop cells also scale with 30m bars, as the reason claims."
+    },
+    {
+     "lens": "risk",
+     "id": "i32_es_fvgos_30",
+     "score": 5,
+     "keep": true,
+     "reason": "The ES 15m store had no chosen box and was never read. 1 filter (open side) and a plain min_gap main. Risks: 30m is a rescue fork of a store that failed C2/C8 in-sample, and the NQ side of this mechanism is seen. Those NQ reads were negative (walk-forwards lost after Jun 2025, incl. May 2026), so there is no positive selection bias.",
+     "fix": "Log it in LUCK as a rescue fork of the failed 15m store, and mark Sep25/Jan26/May26 as proxy-seen through the NQ walk-forwards."
+    }
+   ]
+  },
+  {
+   "id": "i34_gc_pb_15",
+   "key": "gc_pb_15",
+   "family": "jj_fair",
+   "market": "GC",
+   "bars": [
+    "15"
+   ],
+   "sessions": [
+    "nyam"
+   ],
+   "main": {
+    "vwap_slope": [
+     15,
+     30,
+     60
+    ]
+   },
+   "fixed": {
+    "entry": "mom",
+    "fair": "vwap",
+    "min_room": 0,
+    "max_loss": 99,
+    "end": "15:00",
+    "wick": "off",
+    "pullback": "on",
+    "cont": "off"
+   },
+   "max_tr": 20,
+   "dir": "both",
+   "reason": "In a gold trend held by a sloping VWAP, the pullback to VWAP and the push away from it is the trend's side adding at fair value. Who loses: counter-trend gold faders at the session's average price. Low correlation with the equity legs.",
+   "evidence": "In-sample, this hunt: GC jj_fair 5m (idea 21): all boxes +0.82 over break-even, wide +2.88, recent +5.8, c7 84%, +4.3 over GC random; mid +7.9, pm -1.3; short +4.3 vs long +1.4. But c8 0%, block t 1.0, and years swing (2023 -6.6). Daily P&L correlates about 0.1 with the NQ legs. jj_fair on NQ is seen (idea 1); GC is not.",
+   "est_trades_per_day": 0.8,
+   "new_block_needed": false,
+   "not_a_rerun_because": "Idea 21 ran GC jj_fair on 5m only. 15m is a new bar size, motivated by the in-sample 15m > 5m structure.",
+   "seen": false,
+   "keeps": 2,
+   "mean_score": 4.7,
+   "judges": [
+    {
+     "lens": "prior",
+     "id": "i34_gc_pb_15",
+     "score": 2,
+     "keep": false,
+     "reason": "The dead VWAP-pullback / JJ fair-price mechanism. GC jj_fair on 5m averages +0.8 pts with block t 1.0, years swing (2023 -6.6) and no chosen version. The JJ rule failed broadly in the vault. A 15m bar is a fork of an in-sample failure.",
+     "fix": ""
+    },
+    {
+     "lens": "feasibility",
+     "id": "i34_gc_pb_15",
+     "score": 7,
+     "keep": true,
+     "reason": "Every jj_fair setting is valid (end 15:00, vwap_slope 0-120, max_loss 99). GC 5m traded 0.75-1.7 a day; 15m should keep about 0.55-1.1 (NQ 15m vs 5m dropped about 25-35%). Daily P&L correlates about 0.1 with the equity legs: a true diversifier."
+    },
+    {
+     "lens": "risk",
+     "id": "i34_gc_pb_15",
+     "score": 5,
+     "keep": true,
+     "reason": "The GC 5m store was never read and GC is barely correlated with the seen NQ jj_fair. 2 filters (VWAP slope plus pullback); the other fixed knobs are off. Risks: 15m is a rescue fork of a store that failed C1/C8 (block t 1.0, c8 0%), jj_fair has been mined for 180+ versions on NQ, and the evidence quotes the wide, recent and mid subsets.",
+     "fix": "Quote the all-box average (+0.82), not the subsets, and count it in LUCK as a rescue fork."
+    }
+   ]
+  },
+  {
+   "id": "i33_es_orbcl_15",
+   "key": "es_orbcl_15",
+   "family": "orb_confirm",
+   "market": "ES",
+   "bars": [
+    "15"
+   ],
+   "sessions": [
+    "nyam",
+    "mid",
+    "pm"
+   ],
+   "main": {
+    "or_min": [
+     "15",
+     "30",
+     "60"
+    ]
+   },
+   "fixed": {
+    "gate": "vwap_dev",
+    "g_lvl": 0,
+    "g_side": "with"
+   },
+   "max_tr": 1,
+   "dir": "long",
+   "reason": "An opening-range break up, on the side of the day's VWAP, is the day choosing its side with the volume-weighted buyers in profit. Who loses: opening-range faders and early shorts. Long-only, because index drift and dealer flow favour up-breaks.",
+   "evidence": "In-sample, this hunt: NQ orb_confirm long 5m (idea 7) was the most consistent pocket. All boxes +3.64 over break-even; wide +5.77, c1 95%, c8 90%, block t 2.76; every year (2022 +7.9 .. 2026 +4.1) and every session positive; about 5 points over random long entries. The short twin is weaker. Quant-Portfolio orb_ES tile (09:30-10:00 range, 15m close beyond, stop at the other side, 2R): 681 trades, 48% at RR ~1.26 (about +3.7 points), PF 1.16. Its lockbox from 2025-12 is seen; Homebase es_or_long was profitable in only 38.9% of boxes at stage 1. Needs the same-side random check.",
+   "est_trades_per_day": 0.9,
+   "new_block_needed": false,
+   "not_a_rerun_because": "Idea 7 ran NQ only (its store is spent). ES is a new market and 15m a new bar, chosen from in-sample consistency and the Quant ES tile. This is not a test-month-driven fork: no ES test month has been read for this rule.",
+   "seen": false,
+   "keeps": 1,
+   "mean_score": 4.7,
+   "judges": [
+    {
+     "lens": "prior",
+     "id": "i33_es_orbcl_15",
+     "score": 4,
+     "keep": false,
+     "reason": "It ports NQ's most consistent pocket (orb_confirm long, +3.6 pts, block t 2.76), but the ES evidence is weak or negative. Homebase es_or_long was profitable in only 38.9% of boxes, ES orb_vwap_pb in this hunt is +0.07, and the Quant tile's +3.7 has a seen lockbox. Opening-range breaks are weaker on the S&P than on the Nasdaq. Long-only on ES during an up-drift period mostly bets on drift.",
+     "fix": "Only with a same-side random gate, and only as the twin of the NQ mechanism. No small change lifts the prior."
+    },
+    {
+     "lens": "feasibility",
+     "id": "i33_es_orbcl_15",
+     "score": 7,
+     "keep": true,
+     "reason": "Valid (orb_confirm allows 15m, dir long, gate vwap_dev with). NQ 5m long made 1.1-1.6 a day at one per session pass, so ES 15m should reach about 0.9+, well above 100 test trades. It overlaps the ES rvol_break and fvg_oside legs on trend-up days."
+    },
+    {
+     "lens": "risk",
+     "id": "i33_es_orbcl_15",
+     "score": 3,
+     "keep": false,
+     "reason": "A port of vh_i7_orbc_long_5, whose test months were read and failed. Amendment E records that it made money in 2022-23 and lost from 2024-09 on. ES is a 0.9-correlated re-ask of that spent question. Long-only on an index in a bull sample is a drift confound, the Quant lockbox is seen, and Homebase es_or_long was green in only 38.9% of boxes.",
+     "fix": "No small fix on these months. Judge it only on months from 2026-10 on."
+    }
+   ]
+  },
+  {
+   "id": "i30_nq_touchgx_15",
+   "key": "nq_touchgx_15",
+   "family": "avwap_touch",
+   "market": "NQ",
+   "bars": [
+    "15"
+   ],
+   "sessions": [
+    "nyam",
+    "mid",
+    "pm"
+   ],
+   "main": {
+    "away": [
+     80,
+     160,
+     240
+    ]
+   },
+   "fixed": {
+    "line": "rth",
+    "also": "globex",
+    "near": 3
+   },
+   "max_tr": 3,
+   "dir": "both",
+   "reason": "After a run away from the day's VWAP, the first return to it, with the 09:30 VWAP and the Globex-day VWAP on the same side, meets the execution algorithms and bigger positions benchmarked to both lines. They defend the line. Who loses: traders who chased the run, and faders who sell the first test of a two-anchor trend.",
+   "evidence": "In-sample, this hunt (is_hm.json; cells.npz split). touch_gx 5m (idea 11): wide-exit boxes +2.91 points over break-even, recent (2024-10+) +4.4, c7 78%; but 2023 -2.95 and block t 1.70. vwap_touch us 15m: wide +2.98, recent +4.4, c7 75%. Daily P&L correlates only 0.1-0.3 with the breakout cluster: one of the few diversifiers. Inside NQ families, 15m beats 5m almost everywhere (donchian 4.3 > 2.4, rvol_break 8.3 > 3.4). No vault read of this rule.",
+   "est_trades_per_day": 1,
+   "new_block_needed": false,
+   "not_a_rerun_because": "Idea 11's touch_gx ran only on 5m bars (specs/vh_i11_touch_gx_5_ny). The 15m bar size is a new rule under Amendment A, chosen from in-sample bar-size structure, not from any test month.",
+   "seen": false,
+   "keeps": 1,
+   "mean_score": 4,
+   "judges": [
+    {
+     "lens": "prior",
+     "id": "i30_nq_touchgx_15",
+     "score": 2,
+     "keep": false,
+     "reason": "The dead VWAP-touch mechanism of ideas 1-11 on a new bar size. Idea 11's all-box average is only +0.4 pts over break-even, and touch_us at 15m is +1.0. The +2.9 quoted is a wide-exit subset, and the hunt judges the average of all boxes. It is a bar-size fork of a store that did not pass.",
+     "fix": ""
+    },
+    {
+     "lens": "feasibility",
+     "id": "i30_nq_touchgx_15",
+     "score": 7,
+     "keep": true,
+     "reason": "No code needed; the settings are idea 11's spec on 15m. In-sample, the related 15m/5m stores trade about 0.6-1.6 a day at away 80-240. It overlaps idea 5 (touch_us 15m) and idea 11 heavily, since it fills the same limit orders at the 09:30 VWAP. Even so, it is one of the few pullback diversifiers next to the breakout cluster."
+    },
+    {
+     "lens": "risk",
+     "id": "i30_nq_touchgx_15",
+     "score": 3,
+     "keep": false,
+     "reason": "Its 5m twin vh_i11_touch_gx_5 was picked and its test months were read (it has a test-month folder; 0 of 21 passed). The candidate does not say this. A 15m version on the same market, months and touches re-asks a spent question (Amendment E). It also cites only the wide-box and recent subsets (block t 1.70, 2023 -2.95).",
+     "fix": "No small fix on these months. Judge it only on months from 2026-10 on."
+    }
+   ]
+  },
+  {
+   "id": "i28_es_daymove_15",
+   "key": "es_daymove_15",
+   "family": "day_move",
+   "market": "ES",
+   "bars": [
+    "15"
+   ],
+   "sessions": [
+    "pm"
+   ],
+   "main": {
+    "k": [
+     0.15,
+     0.25,
+     0.35
+    ]
+   },
+   "fixed": {
+    "at": "15:00",
+    "ref": "rth"
+   },
+   "max_tr": 1,
+   "dir": "both",
+   "reason": "The same late-day hedging and rebalancing flow, on ES. The literature's market is the S&P (SPY / ES), and MOC and leveraged-ETF flow is index-wide. Who loses: afternoon faders of the day's move on ES.",
+   "evidence": "Literature: Gao-Han-Li-Zhou 2018 (SPY), Baltussen et al. 2021 (60+ futures, stronger when dealers are short gamma), Zarattini-Aziz-Barbon 2024 (SPY noise band, Sharpe 1.33). Local, build days only: the ES quiet-day 15:00 follow won 64.0%, PF 1.47 against random 54.2%; never read unseen. Risks: the ES last-30-minute (15:30) version is dead locally (12/12 cells; strongest effect a reversal, t -2.97); ES costs take about 4x more of each R than NQ; the plain version (no quiet day) was never measured on ES.",
+   "est_trades_per_day": 0.45,
+   "new_block_needed": true,
+   "new_block_spec": "Same `day_move` family as i28_nq_daymove_15 (one block serves both). No-code fallback: noise_band, ES, pm, 15m, w_start '14:55' / w_end '15:05', long and short cards.",
+   "not_a_rerun_because": "Never run on ES in any route. The hunt's ES noise_band (idea 18) is 30m over the whole NY day with a first-break trigger, not a 15:00 decision.",
+   "seen": false,
+   "keeps": 1,
+   "mean_score": 3.7,
+   "judges": [
+    {
+     "lens": "prior",
+     "id": "i28_es_daymove_15",
+     "score": 3,
+     "keep": false,
+     "reason": "ES is the literature's market, but the local ES evidence points the other way where it matters. The ES last half hour is a reversal (t -2.97), and this trade is held from 15:00 to 15:58 through that window. The only ES support is a quiet-day read on build days, never checked out of sample. ES costs per R are high, and the leg would trade the same days as its NQ twin.",
+     "fix": "No fix inside hm60, because the rule would need to be flat by about 15:30."
+    },
+    {
+     "lens": "feasibility",
+     "id": "i28_es_daymove_15",
+     "score": 5,
+     "keep": true,
+     "reason": "Same block, and the count is fine. Its daily P&L will nearly copy the NQ day_move leg: same days, same sign. The ES last-half-hour version is dead locally, and ES costs are 4x NQ per R.",
+     "fix": "Use it as the alternative if the NQ store is weak in-sample, not as a second leg."
+    },
+    {
+     "lens": "risk",
+     "id": "i28_es_daymove_15",
+     "score": 3,
+     "keep": false,
+     "reason": "The evidence is misreported. The vault (2026-10-14 four-windows) says the all-days 15:00 follow did NOT carry to ES on build days (PF 1.04); only the quiet-day version did. So 'plain version never measured on ES' is wrong and the prior is about null. The NQ twin's positive unseen read also covers the same test months on a correlated market.",
+     "fix": "Correct the evidence. Run it only as the quiet-day version (that adds the 2nd filter) with Sep25/Jan26/May26 marked proxy-seen, or drop it."
+    }
+   ]
+  },
+  {
+   "id": "i29_nq_sweepq_5",
+   "key": "nq_sweepq_5",
+   "family": "sweep_rev",
+   "market": "NQ",
+   "bars": [
+    "5"
+   ],
+   "sessions": [
+    "nyam",
+    "mid",
+    "pm"
+   ],
+   "main": {
+    "levels": [
+     "pd",
+     "on",
+     "both"
+    ]
+   },
+   "fixed": {
+    "days": "quiet",
+    "gate": "vwap_dev",
+    "g_lvl": 0,
+    "g_side": "with"
+   },
+   "max_tr": 2,
+   "dir": "both",
+   "reason": "After a quiet (compressed) prior day, buy and sell stops pile up just beyond the prior-day and overnight highs and lows. A bar that runs them and closes back inside, on the session's VWAP side, is a stop run nobody followed. Who loses: breakout traders whose stop entries sit beyond the obvious level on a day with no expansion. They are trapped and must exit into the reversal.",
+   "evidence": "Vault 2026-10-13-nq-prior-session-sweep-vwap-quiet-day-passes-unseen. Rule: pd sweep, 09:30 VWAP side, prior range <= its 20-day median, 2 ATR(5m) stop. Build: 176 trades, 73.9% at 0.5R, PF 1.37. Unseen (pre-registered, passed every line): 61 trades, 73.8%, RR ~0.52 (break-even ~66%, so ~+8 points), PF 1.45; at 0.75R 65.6% (~+9 points); both halves and both sides positive; survives 2 ticks. This is the only level fade on file that passed. Problem: 0.19 a day, below 100 test trades, which is why ON levels are added here. Without the quiet day, level fades sit about at break-even (pdsweep 5m 2ATR 0.5R: 69.3%, ~+2.9 points before costs; NY liq sweep levels all is dead). About 215 looks were made on the family. SEEN: the 'pd' value is that read rule.",
+   "est_trades_per_day": 0.35,
+   "new_block_needed": true,
+   "new_block_spec": "Add day rules `quiet` and `busy` to flexind.DAY_RULES (the open layer's `days`).\n\n- quiet: the range (high - low) of the last daily bar BEFORE the trade date is <= the median of the ranges of the 20 daily bars before that one.\n- busy: the same range is > that median.\n- Daily bars: the engine's Globex daily bars, engine/cache/daily_<ROOT>_bt.json, the same source Template.datr reads.\n- Fewer than 21 prior daily bars: neither rule matches, so no trade.\n\nday_ok needs the market root: pass it from FlexMods.trades_on (the family's root), so a day outside the rule is not run at all, as `days` already works.\n\nNo look-ahead: only completed prior daily bars are read.\n\nThe lane's random pool (c1f-*) is shared and covers all days. hmread's C3 must draw its random entries on the same quiet-day set; otherwise report C3 as not like-for-like.\n\nTests: a synthetic daily series where day t-1's range is just under, equal to and just over the 20-day median gives quiet / quiet / busy; with 20 prior bars there is no trade.\n\nPlumbing caveat (existing code, not new): the vwap_dev gate reads the pass VWAP, which resets at 11:00 and 13:30. In mid/pm it is therefore not the 09:30 VWAP the vault rule used. Either accept this, or run sessions [nyam] only (lower count).",
+   "not_a_rerun_because": "The hunt ran no level-sweep fade (sweep_rev, liq and sfp are all unused in ideas 1-26) and no day-regime rule. The 'on' and 'both' values are new rules. The vault rule was a Lab draft with its own exits, never run on the 3:1 blocks.",
+   "seen": true,
+   "keeps": 1,
+   "mean_score": 3.7,
+   "judges": [
+    {
+     "lens": "prior",
+     "id": "i29_nq_sweepq_5",
+     "score": 4,
+     "keep": false,
+     "reason": "The mechanism (a stop run nobody follows) is truly new to the hunt, but the prior is weak. Without the quiet-day filter, level fades sit at break-even, and that filter was found after about 215 looks. The one pass is 61 SEEN trades at t 1.2-1.3. The 'on' and 'both' values extend overnight, Asia and London sweep rules that died (the Asia one was look-ahead). In mid and pm the gate's VWAP is not the 09:30 VWAP. And compression usually comes before expansion (NR7), which argues against fading breaks on the day after a quiet one.",
+     "fix": "No small fix. Running nyam only with 'pd' restores the rule but is entirely seen and stays under 100 test trades."
+    },
+    {
+     "lens": "feasibility",
+     "id": "i29_nq_sweepq_5",
+     "score": 5,
+     "keep": true,
+     "reason": "sweep_rev, levels and the vwap_dev gate are valid. The quiet-day condition already exists as blocks.day_vol (the `volatility low` filter), but hmwf refuses any filter on the 3:1 months, so a `days` rule needs plumbing to the root. The 'pd' value is about 0.19-0.25 a day (~60-75 test trades), so a third of the boxes can never qualify. The VWAP resets at 11:00 and 13:30 in mid and pm. SEEN on pd.",
+     "fix": "Build `quiet` as a thin `days` rule that calls the existing blocks.day_vol(rows, iso) == 'lo', with no new definition. Expect only the 'on' and 'both' boxes to reach 100 trades."
+    },
+    {
+     "lens": "risk",
+     "id": "i29_nq_sweepq_5",
+     "score": 2,
+     "keep": false,
+     "reason": "The 'pd' value is the exact rule already read unseen. The quiet-day filter came out of about 215 looks at the family, and the read rested on n=61 at t 1.2. With quiet day plus the VWAP gate it sits at the filter limit, and the mid/pm VWAP resets, so it is not the read rule anyway. The 'pd/on/both' main includes the seen rule.",
+     "fix": "Drop 'pd' and 'both'. A quiet-day sweep fade can only be judged on months from 2026-10 on (Amendment E)."
+    }
+   ]
+  },
+  {
+   "id": "i31_nq_rvbrk_30",
+   "key": "nq_rvbrk_30",
+   "family": "rvol_break",
+   "market": "NQ",
+   "bars": [
+    "30"
+   ],
+   "sessions": [
+    "nyam",
+    "mid",
+    "pm"
+   ],
+   "main": {
+    "m": [
+     1.25,
+     1.5,
+     2
+    ]
+   },
+   "fixed": {
+    "n": 10
+   },
+   "max_tr": 3,
+   "dir": "both",
+   "reason": "The same volume-confirmed break on slower bars: a 30m close beyond the last 5 hours' range on unusual volume marks a trend day, and the edge in this hunt is trend-day continuation into 15:58. Who loses: range faders and the side caught on the wrong side of the day's range.",
+   "evidence": "In-sample structure, this hunt. Edge rises with bar size inside nearly every NQ family (rvol_break wide 15m +8.3 vs 5m +3.4; 15m > 5m > 1m overall), and edge correlates 0.66 with the share of 15:58 exits. NQ 30m was never tested. n=10 because indicator bars restart at 00:00 ET (10 x 30m = from 05:00), so the channel exists in the morning.",
+   "est_trades_per_day": 0.4,
+   "new_block_needed": false,
+   "not_a_rerun_because": "New bar size, new n and new m values. Idea 17 ran 5m and 15m only. Its daily P&L will correlate with the 15m store, which may already have been read, so judge it as a new rule, not a confirmation.",
+   "seen": false,
+   "keeps": 0,
+   "mean_score": 3.3,
+   "judges": [
+    {
+     "lens": "prior",
+     "id": "i31_nq_rvbrk_30",
+     "score": 3,
+     "keep": false,
+     "reason": "No new reason: the same NQ mechanism as idea 17, whose 15m store already had chosen versions graded with nothing passing. A 30m fork is a second look at one mechanism, and its daily P&L will track the 15m store. The 'edge rises with bar size' argument is in-sample structure, not a new prior.",
+     "fix": "If run anyway, count it with idea 17 as one mechanism, not as a new leg."
+    },
+    {
+     "lens": "feasibility",
+     "id": "i31_nq_rvbrk_30",
+     "score": 4,
+     "keep": false,
+     "reason": "Valid, but on 30m bars m 2 will be well under 0.2 a day and m 1.5 only marginal (NQ 15m m 1.5 is already 0.54-0.76). The trades are mostly idea 17's 15m breaks on slower bars, so it adds count but not independence.",
+     "fix": "Only as a substitute for idea 17's 15m store, with m 1.0/1.25/1.5. Not an extra leg."
+    },
+    {
+     "lens": "risk",
+     "id": "i31_nq_rvbrk_30",
+     "score": 3,
+     "keep": false,
+     "reason": "This would be the 4th NQ rvol_break store on the same test months. The 5m and 5m-n40 stores were already read and all reads failed, and 30m breakouts largely overlap the same trend days. It is a bar-size fork on spent months, not an independent rule.",
+     "fix": "Drop it. The only NQ rvol_break version still unread is the existing 15m store, and only if it passes C1-C9 as it stands."
+    }
+   ]
+  }
+ ],
+ "portfolio_note": "The 13 candidates come from 8 mechanism classes, so the legs are not one bet:\n- overnight-bias ORB (onr_orb on NQ, ES, GC);\n- 15:00 late-day momentum (new day_move block on NQ and ES);\n- quiet-day stop-run fade at levels (sweep_rev plus a new quiet day rule);\n- two-anchor VWAP pullback limit (avwap_touch 15m);\n- volume breakout (rvol_break on ES 15m, GC 15m and NQ 30m);\n- open-side FVG pullback (ES 30m);\n- VWAP-side opening-range break, long only (ES 15m);\n- GC VWAP pullback (jj_fair 15m).\n\nTrades: each leg makes about 0.35-1.0 a day. If all 13 passed that is about 8 a day. At past pass rates expect 0-3 legs, so the portfolio still needs more batches.\n\nLowest correlation with the morning NQ breakout cluster: day_move (a different clock, 15:00-15:58), sweep_q (a fade), touch_gx_15, and the GC legs.\n\nSeen (earlier reads overlap this hunt's test months): nq_onrorb_15 (its 10:00 reading was read unseen 2025-07..2026-10), nq_daymove_15, nq_sweepq_5 (the pd value).\n\nTwo pieces of new code are needed:\n1. The `day_move` family.\n2. The `quiet`/`busy` day rules. hmread's C3 should then draw its random entries on the same quiet days.\n\nNo-code fallbacks:\n- for day_move: noise_band pm 15m with w_start 14:55 / w_end 15:05, as a long card and a short card;\n- for the sweep: drop days quiet. Expect about break-even then.\n\nPlumbing to check before running:\n(1) onr_orb flattens at 15:30 and stretches one nyam pass, but the random pool holds to 15:58. Its old code check failed on trades outside the window: re-run check_spec first.\n(2) The vwap_dev gate resets at every pass, so in mid and pm it is an 11:00 / 13:30 VWAP. This affects sweepq and es_orbcl.\n(3) NQ 30m has no c1f random pool yet; the first run builds it.\n(4) Idea 19 (GC 03:00 candle, tod_drift us_short / eve_long, Asia break) and idea 20 (holy grail, volspike pm) have pre-registered specs but no store in runs_wf. Idea 18's stores are missing from is_hm.csv / SELECTION_HM.md. Running them costs no new registration.\n\nLeft out on purpose:\n- both-sided GC release brackets (banned);\n- the 03:00 London candle (its edge needed 3R; hm60 caps targets at 2R; night is dead in-sample);\n- the ES/NQ rv z-exit (an exit outside hm60);\n- the 09:30 30-minute candle (its entries already failed an unseen read);\n- big_print and ddiv (no direction on build days);\n- Level-2 and filter blocks (refused on the 3:1 route).\n\nHonest prior: the in-sample median box sits 1-5 points under the bar. Prior build-day evidence says trend rules are weakest in Jan/May/Sep, so the breakout-class candidates here (rvol_break, orbcl, onr_orb) carry that risk.",
+ "research_summaries": [
+  {
+   "key": "vault",
+   "summary": "I read the trading findings in 50-Permanent/Findings (93 notes; I skipped the forbidden 2026-10-21 hunt note), the strategy, idea and audit notes in 30-Projects/Onyx-Trading (including burned-data-ledger) and all of 30-Projects/Quant-Portfolio. I did not open relval-rv-fade-block-2026-10-21, this hunt's own block note.\n\n**The short answer:** nothing on file clears this hunt's whole bar. No rule shows win rate \u2265 break-even + 3 points out of sample, \u2265100 test trades, beats 95 % of random entries, and keeps both halves positive.\n\n**Rules that passed an unseen read or held every year, and their problems:**\n- Overnight-bias ORB (Conti): about +6.8 points over break-even unseen, but about 0.4 trades a day. Its money comes from the 15:30 clock exit, not a bracket.\n- Prior-day sweep fade with VWAP side and a quiet prior day: about +8 points, but about 0.2 trades a day, so roughly 55 test trades.\n- Noise band / vault break (long only): +3.5 to +5.5 points, but the 3:1 walk-forward beat only 89.5 % of random entries.\n- 03:00 London candle: lives only in a 3R box, and hm60 targets stop at 2R.\n- 15:00 day-move follow: +4.5 to +4.8 points, but longs and the second half of 2025 lost.\n- FVG on the open's side (fvg_oside, already in this hunt): walk-forward passed all four lines, then lost $13.5k in May-Aug 2026.\n- 15-minute candle break with no cap: walk-forward picks at +4.5 points, but its one unseen read failed.\n- AM 15-minute FVG gap: +3.7 points at 1.2 a day, but PF 1.16.\n- From the older Quant-Portfolio work: an ES/NQ ratio-reversion rule traded on the ES leg with a z-score exit (about 1.8 a day, PF 1.5, positive every year), the g8 NQ trend-aligned EMA pullback, and the NQ 5-minute ORB.\n\n**Five patterns:**\n1. Almost everything that works is NQ, New York hours, going with the move, and leans long. ES and GC lost nearly everywhere in Homebase.\n2. Edges found on build days (to mid-2025) usually held in the second half of 2025 and failed in 2026.\n3. Fades of VWAP and levels in cash hours lose. Sweep fades work only with filters or in thin hours.\n4. Wide stops beat tight ones. Win rate at a fixed target is mostly the exit's shape.\n5. Several real-looking edges sit in the exit, not the entry: VWAP persistence, the ratio z-score exit, the Conti 15:30 clock exits, holds to the close. These will likely vanish under the fixed hm60 brackets.\n\n**Caveats:**\n- About 31 walk-forwards had read the blind test months (Sep 2025, Jan 2026, May 2026) before the 2026-10-20 hunt.\n- All build-day evidence (to June 2025) contains the Jan/May/Sep months of 2022-2025.\n- Older programs used Jan/May/Sep 2022-26 as their in-sample months (absorption, footprint).\n\n**Ideas still untested:**\n- The batch-5 tick and Level-2 blocks. They were never run, and Level-2 history covers only the test days.\n- VIX 1-day change and the gap in ATR units as outside regime filters. They held 4/4 years on the VWAP flip.\n- The ES leg of the relative-value rule with a z-score exit.\n- Fading into the close after big moves.\n- The ES quiet-day 15:00 follow.\n- The Sunday 18:00 open.\n\nThe disp-break shortlist's stored test-month results (research/edge-library/taught/SHORTLIST_disp_break_2026-10-20.md) live outside the vault, and I did not read them."
+  },
+  {
+   "key": "literature",
+   "summary": "I checked the literature against the hunt's ideas 1-26 and the vault's earlier findings. I ran no backtests and opened no test-month files.\n\nThe pass bar needs at least 100 test trades. The test months are Jan, May and Sep of 2022-2026, 15 months or about 315 trading days, so a leg must trade at least about 0.32 times a day. That rules out most well-documented calendar and event effects as legs: the run-up before FOMC, turn of the month, options-expiry pinning, month-end pension rebalancing and leveraged-ETF big-move days. They can still be used as day filters, and the `days` rules for fomc, month_end, month_start and opex already exist.\n\nSeveral other effects have weakened on their own:\n- **The run-up before FOMC** has been gone since about 2015 (Kurov, Wolfe and Gilbert 2021).\n- **Last-half-hour momentum** stopped predicting out-of-sample in Rosa (2022). It also failed on our own ES and NQ data from 2021-08 to 2024-12 (12 of 12 versions lost money).\n- **The overnight rise around the 02:00-03:00 European open** has averaged close to zero since 2021, according to its own authors (Liberty Street, 2026).\n- **Gap fades** failed their earlier unseen read (\"seen\").\n\nOthers need data the blocks do not have: options-dealer gamma, the closing-auction order imbalance, VIX, or ZN/DXY as partners.\n\nSeveral are already covered by ideas 1-26: volatility-scaled and opening-range breakouts (7, 9, 12, 17, 18, 23, 25), NQ/ES relative value (26), and gold's time-of-day swings (19).\n\n**What is left:**\n1. **Promising, but partly \"seen\": NQ late-day follow at 15:00.** Follow the move since 09:30 when it is at least 0.5x the prior day's range, and be flat by 15:58. On the build days it won 62-63% at 0.75R against a break-even of 57.1%, at about 0.45-0.5 trades a day (t about 3). That is the published intraday-momentum mechanism, moved to 15:00. The 15:30 version lost on our data. It is RESEARCH_IDEAS #5 and was never put into the hunt's specs. A proxy is `noise_band` with a 14:40/15:00-15:05 window, long and short cards, on 15m bars.\n2. **Near-miss: NQ long at the 02:00 European open.** It won 61% at 0.75R on the build days, about 1 trade a day, t 1.8. Against it: the authors say the effect is gone since 2021, ES failed the same rule, and the build years were a bull market. It can be built with `tod_drift` long in asia and a `w_flat` of 09:25. It must pass the same-side random check.\n3. **Untested: GC (and NQ) follow the 08:30 release candle on release days.** This is the one-sided version of the GC release bracket, which is banned because it rests orders on both sides. It can be built with `open_candle` or `orb_close` and `days` rel0830, at about 0.3-0.4 trades a day. It is \"seen\": the GC NFP/CPI bracket was read on 2025-01 to 2026-09 and passed. The risk is that gold does most of its reacting within about 90 seconds, which a follow entry misses.\n\nEverything else reviewed is dead for this bar, or low-prior with no block to build it from.\n\nThe one real data gap: none of the 2023-2026 0DTE / dealer-gamma research can be tested without options open-interest data."
+  },
+  {
+   "key": "blocks",
+   "summary": "Map of what can still be built for the hunt (read-only; no runs; no test-month files opened).\n\nBIG CONSTRAINT: every FILTER block is refused on the 3:1 route. blueprint/hmwf.py _spec lines 66-69 refuse any `filters` (\"a filter is not run on the 3:1 months yet\") and refuse Level 2. The f_* keys are reserved in run_idea._reserved, so they can't be slipped in under `fixed` either. That closes all 130 filter sides: smt, book/depth/ahead/wall/stack/micro/iceberg/pulled/qdepl, delta/cumdelta/sweep/bigorder/absorb/exhaust/stoprun/fpstack/press/tspeed/deltadiv, volatility high/low, news yes/no, pdz/ote/htf/level/swept and the rest. No hunt spec used a filter. The only no-code levers are the open layer under `fixed`:\n- `gate`: 17 kinds; the hunt used only vwap_dev and adx, so atr_rank, bbw_rank, er, rsi, zscore, macd and the others are unused.\n- `days`: 28 rules (news, nonews, rel0830, rel1000, tier1, fomc, opex, month_end, weekdays\u2026); never used.\n- `w_start` / `w_end` / `w_flat`: used once (GC Asia break).\n- `rel_dir`: never used.\n\nENTRY FAMILIES: 28 of 63 used, 35 unused.\n- Banned (both sides): orb, ib, ib_n, ib_touch, lon_break, straddle, squeeze, win_bracket.\n- Dead on vault evidence: va_reclaim, va_break, ifvg, sfp, pinbar, liq/sweep_rev without a quiet-day rule, open_fade, mid_fade, gap, eve_fair, disp_oside, fvg_odir, rsi2, tema_slope, ema_ribbon, hurst_ac_break, vwap_adx, win_candle and candle930 at 09:30, orb_close, vault_break.\n- Untested and buildable: onr_orb, big_print, ddiv, pullback, open_fvg.\n\nBEST BETS WITHOUT CODE:\n1. onr_orb, 15m nyam, NQ, plus ES and GC as new markets. Not seen. Build: $484 a trade, PF 1.76; 95.8% of map boxes green.\n2. ES 14:55-15:05 day-move follow, using noise_band as a proxy. Untested on ES; the NQ version held an earlier unseen read.\n3. Seen near-misses from RESEARCH_IDEAS that the hunt never ran: NQ pm first bar 15m (+3.0 pts on an older walk-forward), NQ 15m displacement 09:45-11:00, NQ 03:00 candle, NQ 08:30 candle, NQ noise_band globex mid long. All are \"seen\" and fall under Amendment A's \"old legs OUT\" unless their settings make them a new rule.\n\nCODE UNLOCKS, RANKED:\n1. Let one filter run on hmwf, with a matching random pool. This opens the quiet-prior-day rule (`volatility low`; the pd-sweep + VWAP + quiet day rule passed an earlier unseen read), stoprun/exhaust confirmation on level fades, and smt. A smaller route for the quiet day: add `quiet` / `busy` to flexind.DAY_RULES from cache/daily_*_bt.json.\n2. Level 2 on the 3:1 months, plus a pre-open book+flow \"agree day\" rule for NQ 09:30 direction. In-sample p\u22480.01. Vendor L2 runs 2021-09-22 to 2026-07-07, which covers every 3:1 month.\n3. A `day_move` block for the exact 15:00 rule.\n4. A spread-z exit for rv_fade. The vault's ES/NQ edge used one (PF 1.51); hm60's fixed stop and target can't express it.\n\nPLUMBING FOUND:\n(a) Ideas 19 (GC 03:00 candle, GC tod_drift us_short / eve_long, GC Asia break) and 20 (holy grail, volspike pm) have specs but NO in-sample store in runs_wf. Your brief says they ran; they did not. Idea 18 has stores but is not in is_hm.csv / SELECTION_HM.md.\n(b) 1m, 15m and night specs of ideas 3, 4, 8, 9, 13, 14, 15 never ran. They were probably held back by the stage rule (idea average \u2264 0).\n(c) The vwap_dev gate reads the session VWAP. It resets at every pass (l2sim.py 2007-2010), so in mid/pm it is an 11:00 / 13:30 VWAP, not the 09:30 one. This affects idea 6 and any new gate spec.\n(d) first_bar_mom gives no trades in asia/eve: the ON group is empty (540 versions).\n(e) candle930 med_m and vol_m+sec, and orb_close vwap on/first, read only up to 2025-06-30, so they cannot run the 3:1 months after that.\n(f) ib/ib_n fade and gap fill use their own target (tgt_r unused), so hm60's targets collapse into duplicate boxes. candle930 entry=break is a both-sided bracket.\n(g) onr_orb runs one nyam pass stretched to 15:30; its old code check failed on trades outside the window, and the random pool may cover nyam only.\n\nFREQUENCY: in-sample, the median box sits 1-5 points under break-even in 70 of 74 tabled stores. The best are rvol_break 15m NY at +1.8 and orb_confirm long 5m at +0.5. Every credible leg here is 0.3-1.0 trades a day, so 5-10 a day needs about 8-15 passing legs.\n\nNOT CHECKED: whether each proposed spec passes run_idea.check_spec; the pipeline verdicts of the pullback, open_fvg and sfp cards; CALENDAR.md (skipped because it reads Jan / May / Sep)."
+  },
+  {
+   "key": "insample",
+   "summary": "13,080 in-sample versions over 74 stores. No test-month file was opened (GRADES/LUCK/PICKS/STATUS/advance_state/lock.json/oos all skipped); the in-sample is/ trade files and the c1f random pools were read for side, session, year, exit and correlation splits. Main facts:\n\n1) The only broad edge lives on NQ in New York on slow bars, entries on the VWAP side or breakout side, held with wide stops to a 2R cap or to 15:58. Across ALL NQ NY families, wide-exit boxes average about +2pp over break-even, against about -0.7 for random entries. Edge correlates 0.66 with the share of trades exiting at 15:58: it is trend-day continuation.\n\n2) Exit shape is structural in all three markets. Small stops are dead: ATR 0.5, 15pt NQ, own x0.5. Wider is always better: own x1.5-2 / ATR 2 / 60pt with 1.5-2R targets add +1 to +2.7pp against the pocket mean. The cause is part cost and part hold-to-close.\n\n3) Bar size and timing: 15m > 5m > 1m inside nearly every NQ family (30m untested). nyam and mid entries are better than pm. Long is better than short. 2023 was the weak year.\n\n4) Night (LDN/ON) is dead for every family. VWAP reversion and flips are dead. Fast or high-frequency entries are dead. first_bar_mom is dead everywhere. ES and GC beat their random pools by 3-6pp, but their cost baseline is about -2pp, so absolute edges are only +0.8 to +2.9.\n\n5) Top broad pockets, wide-exit edge with trades/day:\n- rvol_break 15m: +8.3 (0.35/day; thin; new block)\n- orb_confirm long 5m: +5.8 (1.4/day; c8 90%; every year positive; but idea 7 is already graded and spent)\n- win_break 15m: +4.9\n- donchian 15m VWAP-gated: +4.3 at 2.05/day (flat across n; best breadth x frequency)\n- orb_vwap_pb 1m/5m/15m: +3.1 to +3.9 (low correlation)\n- noise_long: +3.8 (fading)\n- rvol_break 5m: +3.4 to +3.75\n- ADX vwap pull: +3.2 (block t 3.1 but fading)\n- displace 15m: +2.9\n- candle_sweep 15m: +2.4 at 4.9/day\n- VWAP / globex-AVWAP touch: +3.0 (low correlation)\n- ES fvg_oside 15m: +2.9 (100% of boxes positive, but recent-regime driven and cost-fragile)\n- GC jj_fair 5m: +2.9 (low correlation, unstable by year)\n\nMost sit at +2 to +4pp, below a safe margin for a test-month bar of +3. The breakout cluster's legs correlate 0.4-0.7 on daily P&L, so stacking them adds trades, not independent edge. Prior build-day evidence (CALENDAR.md) says these trend rules are weakest in Jan/May/Sep, the fixed test months.\n\nUntested ideas grounded in this structure: NQ 30m versions of donchian / rvol_break / ORB; ES and GC versions of donchian-VWAP, rvol_break and orb_confirm with own or widest stops and 2R.\n\nNot checked: per-box session mix, so the random baseline used the NY-group pool. 'Own' stops were compared with the ATR random cell of the same multiplier. Several families flagged seen=true had their 2025-07+ days read in older routes, so their recent in-sample numbers are not fresh evidence."
+  }
+ ]
+}

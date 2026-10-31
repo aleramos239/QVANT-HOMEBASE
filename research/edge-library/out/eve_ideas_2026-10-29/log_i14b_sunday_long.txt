@@ -1,0 +1,48 @@
+3:1 IN-SAMPLE TABLE of i14b_sunday_long: 40 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  off_min5_atr0p5-r0p5          -     -         0         0     -    -  
+   2  off_min5_atr0p5-r0p75         -     -         0         0     -    -  
+   3  off_min5_atr0p5-r1            -     -         0         0     -    -  
+   4  off_min5_atr0p5-r1p5          -     -         0         0     -    -  
+   5  off_min5_atr0p5-r2            -     -         0         0     -    -  
+   6  off_min5_atr1-r0p5            -     -         0         0     -    -  
+   7  off_min5_atr1-r0p75           -     -         0         0     -    -  
+   8  off_min5_atr1-r1              -     -         0         0     -    -  
+   9  off_min5_atr1-r1p5            -     -         0         0     -    -  
+  10  off_min5_atr1-r2              -     -         0         0     -    -  
+  11  off_min5_atr1p5-r0p5          -     -         0         0     -    -  
+  12  off_min5_atr1p5-r0p75         -     -         0         0     -    -  
+  13  off_min5_atr1p5-r1            -     -         0         0     -    -  
+  14  off_min5_atr1p5-r1p5          -     -         0         0     -    -  
+  15  off_min5_atr1p5-r2            -     -         0         0     -    -  
+  16  off_min5_atr2-r0p5            -     -         0         0     -    -  
+  17  off_min5_atr2-r0p75           -     -         0         0     -    -  
+  18  off_min5_atr2-r1              -     -         0         0     -    -  
+  19  off_min5_atr2-r1p5            -     -         0         0     -    -  
+  20  off_min5_atr2-r2              -     -         0         0     -    -  
+  21  off_min5_pts15-r0p5           -     -         0         0     -    -  
+  22  off_min5_pts15-r0p75          -     -         0         0     -    -  
+  23  off_min5_pts15-r1             -     -         0         0     -    -  
+  24  off_min5_pts15-r1p5           -     -         0         0     -    -  
+  25  off_min5_pts15-r2             -     -         0         0     -    -  
+  26  off_min5_pts25-r0p5           -     -         0         0     -    -  
+  27  off_min5_pts25-r0p75          -     -         0         0     -    -  
+  28  off_min5_pts25-r1             -     -         0         0     -    -  
+  29  off_min5_pts25-r1p5           -     -         0         0     -    -  
+  30  off_min5_pts25-r2             -     -         0         0     -    -  
+  31  off_min5_pts40-r0p5           -     -         0         0     -    -  
+  32  off_min5_pts40-r0p75          -     -         0         0     -    -  
+  33  off_min5_pts40-r1             -     -         0         0     -    -  
+  34  off_min5_pts40-r1p5           -     -         0         0     -    -  
+  35  off_min5_pts40-r2             -     -         0         0     -    -  
+  36  off_min5_pts60-r0p5           -     -         0         0     -    -  
+  37  off_min5_pts60-r0p75          -     -         0         0     -    -  
+  38  off_min5_pts60-r1             -     -         0         0     -    -  
+  39  off_min5_pts60-r1p5           -     -         0         0     -    -  
+  40  off_min5_pts60-r2             -     -         0         0     -    -  
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+REAL OR LUCK (the only lines that block; PF, Sharpe, drawdown and avg trade are shown, never block):
+  [FAIL] boxes        0 of 40 boxes made money in-sample (need 60%): the average of the boxes, not the best
+  [ .. ] picked box   not picked yet: the owner picks a box, then the other lines are read
+NEXT: The owner picks a box by its number: bp.py wf pick i14b_sunday_long <n> (blueprint_wf_pick).

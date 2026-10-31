@@ -1,0 +1,195 @@
+diff --git a/research/edge-library/blueprint/taught_wf.py b/research/edge-library/blueprint/taught_wf.py
+index 5b7be0c4..e1107570 100644
+--- a/research/edge-library/blueprint/taught_wf.py
++++ b/research/edge-library/blueprint/taught_wf.py
+@@ -21,6 +21,7 @@ import numpy as np
+ import judge as J
+ import l2sim as S
+ import library as LB
++import run_idea as RI
+ 
+ from . import api
+ from . import pipe_gates as G
+@@ -61,6 +62,17 @@ def _test_days(market: str, today: dt.date) -> list:
+     return [d for d in cal if d[:7] < today.isoformat()[:7]]       # whole months only: the month under way is not a test month
+ 
+ 
++def _run_cells(cls, cells: list, sessions: list, *a, **kw) -> list:
++    """run_many of whole cells, one instance per session pass as `taught run` stored them (run_idea.cell_specs): one merged result a cell."""
++    specs, cut = [], [0]
++    for inp in cells:
++        specs += RI.cell_specs({"spec": (cls, inp)}, sessions)
++        cut.append(len(specs))
++    res = S.run_many(specs, *a, **kw)
++    return [{"trades": [t for r in res[i:j] for t in r["trades"]], "skipped_by_error": sum(r["skipped_by_error"] for r in res[i:j])}
++            for i, j in zip(cut, cut[1:])]
++
++
+ def _save_test(base, test: dict) -> None:
+     np.savez(base / "wf" / "test_cells.npz", **{f"{c}|{k}": v for c, x in test.items() for k, v in x.items()})
+ 
+@@ -89,7 +101,7 @@ def each(name: str, root=None, workers=None) -> dict:
+         days = [d for d in _test_days(market, dt.date.fromisoformat(cl["utc"][:10])) if cl["days"][0] <= d <= cl["days"][1]]
+         RUN.may_start()
+         n = max(1, min(int(workers or 6), S.MAX_WORKERS))
+-        res = S.run_many([(TA._blocks().WRAPPED[umeta["family"]], ins[c]) for c in ids], S._date(days[0]), S._date(days[-1]), days=days, root=market, workers=n,
++        res = _run_cells(TA._blocks().WRAPPED[umeta["family"]], [ins[c] for c in ids], plan["sessions"], S._date(days[0]), S._date(days[-1]), days=days, root=market, workers=n,
+                          allow_holdout=S.ALLOW_BT, **RUN._engine(RUN._kw(umeta["family"], umeta.get("filter"))))
+         if any(r["skipped_by_error"] for r in res):
+             raise J.Refuse(f"{name}: sessions of the test days were dropped by a strategy error")
+@@ -147,7 +159,7 @@ def run(name: str, root=None, workers=None, who: str = "owner in chat") -> dict:
+     RUN.may_start()
+     # ---- the code is the code of the store: the centre cell again on the build days (taught lab's check)
+     bdays = [d.isoformat() for d in S.sessions(*S.period(RUN.PERIOD), market, allow_holdout=RUN.PERIOD)]
+-    again = S.run_many([(cls, ins[centre])], period=RUN.PERIOD, days=bdays, root=market, workers=n, **ueng)[0]
++    again = _run_cells(cls, [ins[centre]], plan["sessions"], period=RUN.PERIOD, days=bdays, root=market, workers=n, **ueng)[0]
+     got, want = _arrays(again["trades"]), build[centre]
+     if again["skipped_by_error"] or len(got["net"]) != len(want["net"]) or abs(float(got["net"].sum() - want["net"].sum())) >= 0.01:
+         raise J.Refuse(f"{name} {centre}: run again on the build days it has {len(got['net']):,} trades and ${got['net'].sum():,.0f} where its store has "
+@@ -160,7 +172,7 @@ def run(name: str, root=None, workers=None, who: str = "owner in chat") -> dict:
+     TA._write(base / "wf" / "claim.json", {"utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "who": who, "days": [days[0], days[-1]],
+                                            "cells": ids, "code": TA._code(plan["family"])})
+     a, b = S._date(days[0]), S._date(days[-1])
+-    res = S.run_many([(cls, ins[c]) for c in ids], a, b, days=days, root=market, workers=n, allow_holdout=S.ALLOW_BT, **ueng)
++    res = _run_cells(cls, [ins[c] for c in ids], plan["sessions"], a, b, days=days, root=market, workers=n, allow_holdout=S.ALLOW_BT, **ueng)
+     if any(r["skipped_by_error"] for r in res):
+         raise J.Refuse(f"{name}: sessions of the test days were dropped by a strategy error: nothing is judged (the claim stays on file)")
+     test = {c: _arrays(r["trades"]) for c, r in zip(ids, res)}
+diff --git a/research/edge-library/engine/families/candle_sweep.py b/research/edge-library/engine/families/candle_sweep.py
+index 312c2685..cbf83489 100644
+--- a/research/edge-library/engine/families/candle_sweep.py
++++ b/research/edge-library/engine/families/candle_sweep.py
+@@ -37,6 +37,8 @@ THE RULE (fixed here, before any run):
+     = with (off, the default): the open of the first 1-minute bar at or after 09:30 ET against the close of the last 1-minute bar
+     before 10:00 sets the day's side -- up = longs only, down = shorts only, equal or no bar = no trade. It is known from the decision
+     at or after 10:00 on, so an earlier decision (the 09:45 close) never trades with it; it never changes later in the day.
++  * BODY_X (the owner, 2026-10-20: "the candle body is 2x bigger than the previous candle's body"). `body_x` = x > 0 (0 = off, the
++    default: every run before it is unchanged): THIS bar's body |close - open| must be at least x times the PREVIOUS bar's body.
+   * BOTH. A bar that swept both sides and qualifies both ways (it closed back inside both) is no trade.
+   * ORDER. A market order placed at that close: it fills at the next bar's open (the first print after the 85 ms placement latency).
+     Its structure level is THIS bar's extreme: its low for a long, its high for a short ("stop at the candle extreme"): stop_mode 'struct'
+@@ -94,7 +96,10 @@ def session_closes(root: str, iso: str):
+     """The 1-hour closes of one whole session (18:00 ET of its evening before to 17:00), from its tape; None = no tape."""
+     key = (root, iso)
+     if key not in _CLOSES:
+-        t, d = S.load_tape(iso, root, allow_holdout=S.ALLOW_BP), S._date(iso)     # build days only (as orb830): a test-day read refuses
++        d = S._date(iso)
++        # a PAST session's seal by its own date: build switch up to 2025-06-30, test switch after (so a test-day run can read the
++        # build days before it; a build run never reaches a test date because prior_closes only reads days before today)
++        t = S.load_tape(iso, root, allow_holdout=S.ALLOW_BP if d <= S.BP_BUILD[1] else S.ALLOW_BT)
+         _CLOSES[key] = None if t is None or not len(t.ts) else \
+             hour_closes(t.ts, t.px, S.et_ns(d - dt.timedelta(days=1), "18:00"), S.et_ns(d, "17:00"))
+     return _CLOSES[key]
+@@ -105,6 +110,8 @@ def prior_closes(st, need: int):
+     out, n = [], 0
+     if st.day not in st.ROLLS:
+         for r in reversed(st.dl[-LOOK:]):
++            if S._date(r["date"]) >= S._date(st.day):
++                raise S.LookAheadError(f"candle_sweep: prior session {r['date']} is not before {st.day}")
+             got = session_closes(st._cx.root, r["date"])
+             if got is not None:
+                 out.append(got)
+@@ -124,7 +131,7 @@ def ema_last(closes, n: int):
+     return e
+ 
+ 
+-def signal(po, ph, pl, pc, o, h, l, c, back, turn="off", mode="sweep"):
++def signal(po, ph, pl, pc, o, h, l, c, back, turn="off", mode="sweep", body_x=0.0):
+     """+1 long / -1 short / 0: THIS bar (o, h, l, c) against the PREVIOUS bar (po, ph, pl, pc) (module docstring, THE RULE, MODE, TURN)."""
+     if mode == "break":                             # a close beyond the previous bar's wick: with it
+         long, short = c > ph, c < pl
+@@ -136,14 +143,16 @@ def signal(po, ph, pl, pc, o, h, l, c, back, turn="off", mode="sweep"):
+         long, short = long and pc < po and c > o, short and pc > po and c < o
+     elif turn == "same":                            # both bars the trade's colour
+         long, short = long and pc > po and c > o, short and pc < po and c < o
++    if body_x and abs(c - o) < body_x * abs(pc - po):   # this body at least body_x x the previous body
++        return 0
+     return 0 if long == short else (1 if long else -1)
+ 
+ 
+ class CandleSweep(Template):
+     """candle_sweep (module docstring). go = +1 / -1 / 0: the signal of the bar (or candle) that has just closed; sx = its (low, high,
+     close); with `candle`: cd = the day's candles [slot, o, h, l, c], mi = the 1-minute bars already in them, done = the candles judged."""
+-    DEFAULTS = {"mode": "sweep", "back": "body", "ema1h": 0, "candle": 0, "turn": "off", "dir930": "off", "max_tr": 20}
+-    SCHEMA = {"mode": ("choice", ("sweep", "break")), "back": ("choice", BACKS), "ema1h": ("int", 0, 500), "candle": ("int", 0, 60), "turn": ("choice", ("off", "on", "same")), "dir930": ("choice", ("off", "with")),
++    DEFAULTS = {"mode": "sweep", "back": "body", "ema1h": 0, "candle": 0, "turn": "off", "dir930": "off", "body_x": 0.0, "max_tr": 20}
++    SCHEMA = {"mode": ("choice", ("sweep", "break")), "back": ("choice", BACKS), "ema1h": ("int", 0, 500), "candle": ("int", 0, 60), "turn": ("choice", ("off", "on", "same")), "dir930": ("choice", ("off", "with")), "body_x": ("float", 0.0, 10.0),
+               "max_tr": ("int", 1, 20)}
+     SCREEN_TFS = ("1", "5", "15", "30")
+     FEATURES = ()
+@@ -166,7 +175,7 @@ class CandleSweep(Template):
+         if self.nb < 2:
+             return
+         O, H, L, C = self.O, self.H, self.L, self.C
+-        self.go = signal(O[-2], H[-2], L[-2], C[-2], O[-1], H[-1], L[-1], C[-1], self.p["back"], self.p["turn"], self.p["mode"])
++        self.go = signal(O[-2], H[-2], L[-2], C[-2], O[-1], H[-1], L[-1], C[-1], self.p["back"], self.p["turn"], self.p["mode"], self.p["body_x"])
+         self.sx = (L[-1], H[-1], C[-1])
+ 
+     def _candles(self):
+@@ -188,7 +197,7 @@ class CandleSweep(Template):
+             self.done = j
+             if j >= 2:
+                 (_, po, ph, pl, pc), (_, o, h, l, c) = cd[j - 2], cd[j - 1]
+-                self.go = signal(po, ph, pl, pc, o, h, l, c, self.p["back"], self.p["turn"], self.p["mode"])
++                self.go = signal(po, ph, pl, pc, o, h, l, c, self.p["back"], self.p["turn"], self.p["mode"], self.p["body_x"])
+                 self.sx = (l, h, c)
+ 
+     def ema1h(self, ctx):
+diff --git a/research/edge-library/engine/tests/conftest.py b/research/edge-library/engine/tests/conftest.py
+index 6b39b63b..63270eae 100644
+--- a/research/edge-library/engine/tests/conftest.py
++++ b/research/edge-library/engine/tests/conftest.py
+@@ -15,7 +15,7 @@ import pytest
+ sys.dont_write_bytecode = True
+ L = Path(__file__).resolve().parent.parent          # the engine directory
+ W = L.parent                                         # the edge-library root (library.py, run_menus.py)
+-REPO = Path.home() / "ramos-quant-homebase"
++REPO = W.parent.parent                               # this checkout (a worktree tests its own homebase/, not ~/ramos-quant-homebase)
+ for p in (str(W), str(L), str(REPO)):
+     if p not in sys.path:
+         sys.path.insert(0, p)
+diff --git a/research/edge-library/engine/tests/test_candle_sweep.py b/research/edge-library/engine/tests/test_candle_sweep.py
+index 8b08217d..e0b69e2c 100644
+--- a/research/edge-library/engine/tests/test_candle_sweep.py
++++ b/research/edge-library/engine/tests/test_candle_sweep.py
+@@ -248,6 +248,16 @@ def test_break_signals_equal_the_written_rule_on_random_days(tf, sess):
+     assert n > 0
+ 
+ 
++def test_body_x_needs_this_body_at_least_x_times_the_previous_body():
++    brk = {"mode": "break"}
++    up = {**GREEN, "09:35": m(PX, 15014.0, 15003.0, 15013.0), "09:44": m(15013.0, 15014.0, 15012.5, 15013.0)}   # body 13 vs GREEN's 12
++    assert signals({**brk, "body_x": 1.0}, day(up)) == [(sec(9, 45), "long")]
++    assert signals({**brk, "body_x": 2.0}, day(up)) == []
++    assert CS.signal(100, 110, 99, 105, 105, 116, 104, 115, "body", mode="break", body_x=2.0) == 1     # 10 >= 2 x 5
++    assert CS.signal(100, 110, 99, 105, 105, 116, 104, 114, "body", mode="break", body_x=2.0) == 0     # 9 < 10
++    assert CS.signal(100, 110, 90, 95, 95, 96, 80, 85, "body", mode="break", body_x=2.0) == -1         # short: 10 >= 2 x 5
++
++
+ # ---- (iv a) turn: the previous candle one colour, the sweeping candle the other -----------------------------------------------------
+ 
+ def red_long(c):
+@@ -437,6 +447,7 @@ def test_the_settings_and_their_limits():
+     assert sc["back"] == ("choice", ("range", "body", "far")) and sc["max_tr"] == ("int", 1, 20) and sc["ema1h"] == ("int", 0, 500)
+     assert sc["dir930"] == ("choice", ("off", "with")) and d["dir930"] == "off"
+     assert sc["mode"] == ("choice", ("sweep", "break")) and d["mode"] == "sweep"
++    assert sc["body_x"] == ("float", 0.0, 10.0) and d["body_x"] == 0.0
+     assert sc["candle"] == ("int", 0, 60) and sc["turn"] == ("choice", ("off", "on", "same")) and d["turn"] == "off"
+     for bad in ({"back": "wick"}, {"back": 1}, {"max_tr": 0}, {"max_tr": 21}, {"dir": "up"}, {"ema1h": -1}, {"ema1h": 501}, {"ema1h": 1.5},
+                 {"candle": -1}, {"candle": 61}, {"candle": 3}, {"candle": 3, "tf": "5"}):
+@@ -483,3 +494,15 @@ def test_real_build_days_hold_the_window_one_position_and_the_flat_time():
+             last[t["date"]] = t["exit_ms"]
+             total += 1
+     assert total > 0
++
++
++def test_past_session_seal_by_its_own_date(monkeypatch):
++    """A past session's 1-hour closes open with the build switch up to 2025-06-30 and the test switch after (hunt 2026-10-20:
++    the 3:1 walk-forward's test days read the build days before them)."""
++    seen = []
++    monkeypatch.setattr(S, "load_tape", lambda iso, root, allow_holdout=False: seen.append((iso, allow_holdout)))
++    CS._CLOSES.clear()
++    CS.session_closes("NQ", "2025-06-30")
++    CS.session_closes("NQ", "2025-07-01")
++    assert seen == [("2025-06-30", S.ALLOW_BP), ("2025-07-01", S.ALLOW_BT)]
++    CS._CLOSES.clear()

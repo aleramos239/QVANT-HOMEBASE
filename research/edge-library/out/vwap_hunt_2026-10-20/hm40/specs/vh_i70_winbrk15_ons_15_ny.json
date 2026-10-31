@@ -1,0 +1,34 @@
+{
+ "name": "vh_i70_winbrk15_ons_15_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 70: The same entry, taken only on the side the 09:30 open's third of the overnight range gives (onr_side_study: +1.4 points in-sample). Who loses: the side trapped against the overnight session's choice.",
+ "family": "win_break",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "r_end": [
+   "09:45",
+   "10:00",
+   "10:30"
+  ]
+ },
+ "fixed": {
+  "r_start": "09:30",
+  "entry": "market",
+  "mode": "follow",
+  "wait": "0",
+  "gate": "onr_side",
+  "g_side": "with"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

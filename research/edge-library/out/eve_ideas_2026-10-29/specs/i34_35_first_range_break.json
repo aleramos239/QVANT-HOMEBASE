@@ -1,0 +1,31 @@
+{
+ "name": "i34_35_first_range_break",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: follow the first break of the first 15, 30 or 45 minutes",
+ "family": "win_break",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "r_end": [
+   "18:15",
+   "18:30",
+   "18:45"
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "r_start": "18:00",
+  "mode": "follow"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

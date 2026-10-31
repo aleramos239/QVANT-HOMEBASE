@@ -1308,7 +1308,7 @@ test('a group page: the combined figures, the prop rows that fit its kind, and t
   assert.deepEqual(ev.figs.rows[0], { k: 'Net', build: '+$200', unseen: '+$500' });
   assert.deepEqual(ev.prop.rows.map((r) => r.k), ['Passes the eval', 'Busts the eval', 'Days to pass'], 'an eval group leads with the eval odds');
   assert.equal(ev.prop.title, 'Prop sim · LucidPro 50K');
-  assert.deepEqual(ev.days.rows.map((r) => r.k), ['Days traded', 'Best day', 'Worst day', 'Days 2+ traded']);
+  assert.deepEqual(ev.days.rows.map((r) => r.k), ['Days traded', 'Best day', 'Worst day']);
   assert.equal(ev.curve.total, 500);
   assert.deepEqual(ev.members.map((m) => [m.label, m.build, m.unseen, m.state]), [['NQ A', '+$500', '+$700', ''], ['NQ C', '+$10', '—', 'Running the 3:1 walk-forward…']]);
   assert.deepEqual(ev.leftOut.map((x) => [x.label, x.why]), [['NQ C', 'no unseen-days run yet'], ['nq930', 'built in: it has no unseen-days run to add']]);
@@ -1346,14 +1346,39 @@ test('a 3:1 group page (owner 2026-10-25): In-sample, Test months and Both colum
     build: side(300, ['2022-01-03', '2022-01-04'], [100, 300]), unseen: side(200, ['2022-04-04', '2022-04-05'], [250, 200]),
     both: side(500, ['2022-01-03', '2022-01-04', '2022-04-04', '2022-04-05'], [100, 300, 550, 500]), prop: { build: null, unseen: null, both: null } };
   const p = D.groupPage({ id: 'g4', name: 'apex 300k', kind: 'together', members: ['lab_a'] }, res);
-  assert.deepEqual(p.figs.head, ['In-sample', 'Test months', 'Both']);
-  assert.deepEqual(p.prop.head, ['In-sample', 'Test months', 'Both']);
-  assert.equal(p.days.title, '3:1 test months: days traded');
-  assert.deepEqual([p.figs.rows[0].build, p.figs.rows[0].unseen, p.figs.rows[0].both], ['+$300', '+$200', '+$500']);
+  assert.equal(p.figs.head, null);
+  assert.deepEqual(p.figs.rows[0], { k: 'Net', v: '+$500' });
+  assert.deepEqual(p.prop.head, ['In-sample', 'Test months', 'Both'], 'no Both prop run: the columns');
+  assert.equal(p.days.title, 'Full sample: days traded');
   assert.equal(p.curve.title, '3:1 in-sample / 3:1 test months, after costs');
   assert.equal(p.curve.label, 'Test months (dark) · In-sample (light) · Both (dashed)');
   assert.ok(Array.isArray(p.curve.build) && Array.isArray(p.curve.both) && p.curve.vals.length > 0);
   assert.deepEqual(D.groupPage({ id: 'g1', name: 'old', kind: 'together', members: [] }, { ...res, walkforward: false }).figs.head, ['Build days', 'Test days']);
+});
+
+test('a 3:1 group page with its full sample (Both) shows that one column only, in the figures, the days and the prop sim (owner 2026-10-30)', () => {
+  const side = (net, n) => ({ net, trades: 2, win_rate: 50, profit_factor: 1.2, max_drawdown: -100, days: n, best_day: n * 10, worst_day: -n, together_days: n - 1,
+    rr: 2, rr_label: '1:2.00', sharpe: 1.5, curve: { days: ['2022-01-03', '2022-02-28'], vals: [100, net] } });
+  const head = { account: 'LucidPro 50K', eval_pass_p: 0.4, bust_p: 0.6, median_days_to_pass: 5, funded_payout_p: 0.3, funded_expected_cheque: 500 };
+  const res = { walkforward: true, members: [], left_out: [], build: side(300, 2), unseen: side(200, 3), both: side(500, 5),
+    prop: { build: head, unseen: head, both: { ...head, eval_pass_p: 0.45 } } };
+  const p = D.groupPage({ id: 'g4', name: 'apex', kind: 'together', members: ['lab_a'] }, res);
+  assert.equal(p.figs.head, null);
+  assert.equal(p.figs.full, true);
+  assert.deepEqual(p.figs.rows[0], { k: 'Net', v: '+$500' });
+  assert.deepEqual(p.figs.rows.map((r) => r.k), ['Net', 'Win rate', 'Trades', 'Trades a week', 'Profit factor', 'Realized RR', 'Sharpe', 'Deepest drawdown',
+    'Days traded', 'Best day', 'Worst day'], 'one Full sample block: no Days 2+ traded');
+  assert.deepEqual(p.figs.rows.slice(5, 7), [{ k: 'Realized RR', v: '1:2.00' }, { k: 'Sharpe', v: '1.50' }]);
+  assert.equal(p.figs.rows[3].v, '0.2', '2 trades over the 57 days of the curve = 8.1 weeks');
+  assert.equal(p.figs.rows[8].v, '5');
+  assert.equal(p.membersFull, true);
+  assert.equal(D.groupPage({ id: 'g4', name: 'apex', kind: 'together', members: ['lab_a'] }, { ...res, members: [{ strategy: 'lab_a', label: 'A', state: 'done', build: { net: 300 }, unseen: { net: 200 } }, { strategy: 'lab_b', label: 'B', state: 'pending', build: null, unseen: null }] }).members.map((m) => m.full).join(), '+$500,—');
+  assert.equal(p.prop.head, null);
+  assert.equal(p.prop.title, 'Prop sim · LucidPro 50K · full sample');
+  assert.deepEqual(p.prop.rows[0], { k: 'Passes the eval', v: '45%' });
+  // no Both from the server (an older chart service): the columns as before
+  const old = D.groupPage({ id: 'g4', name: 'apex', kind: 'together', members: [] }, { ...res, both: null, prop: { build: head, unseen: head } });
+  assert.deepEqual([old.figs.head, old.prop.head], [['In-sample', 'Test months', 'Both'], ['In-sample', 'Test months', 'Both']]);
 });
 
 test('a group page before its first answer says so, and a hostile name or sentence is escaped', () => {

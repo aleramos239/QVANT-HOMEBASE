@@ -1,0 +1,202 @@
+2026-10-21T11:55:34+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers)
+2026-10-21T11:55:34+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers): days 1-60 of 883 (180 instances)
+2026-10-21T11:55:47+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers): days 61-120 of 883 (180 instances)
+2026-10-21T11:55:59+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers): days 121-180 of 883 (180 instances)
+2026-10-21T11:56:13+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers): days 181-240 of 883 (180 instances)
+2026-10-21T11:56:27+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers): days 241-300 of 883 (180 instances)
+2026-10-21T11:56:40+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers): days 301-360 of 883 (180 instances)
+2026-10-21T11:56:54+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers): days 361-420 of 883 (180 instances)
+2026-10-21T11:57:08+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers): days 421-480 of 883 (180 instances)
+2026-10-21T11:57:22+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers): days 481-540 of 883 (180 instances)
+2026-10-21T11:57:36+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers): days 541-600 of 883 (180 instances)
+2026-10-21T11:57:50+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers): days 601-660 of 883 (180 instances)
+2026-10-21T11:58:04+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers): days 661-720 of 883 (180 instances)
+2026-10-21T11:58:17+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers): days 721-780 of 883 (180 instances)
+2026-10-21T11:58:31+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers): days 781-840 of 883 (180 instances)
+2026-10-21T11:58:44+00:00 idea vh_i20_holy_grail_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i20_holy_grail_5_ny-NQ-tf5/is; 3 workers): days 841-883 of 883 (180 instances)
+2026-10-21T11:58:53+00:00 wf_is vh_i20_holy_grail_5_ny-NQ-tf5/is: 180 cells, 147,369 trades, 198.64 s of tape (wall 199 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i20_holy_grail_5_ny: 180 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  g_lvl25_pts15-r0p5            69%   68%     880     2,740  1.03   100%
+   2  g_lvl20_pts60-r0p5            68%   67%    1123    32,238  1.08   100%
+   3  g_lvl25_pts25-r0p5            68%   67%     871     6,486  1.05    90%
+   4  g_lvl20_pts25-r0p5            68%   67%    1243     5,093  1.03    90%
+   5  g_lvl25_atr0p5-r0p5           68%   69%     883    -4,242  0.95   100%
+   6  g_lvl20_atr1-r0p5             68%   68%    1248     2,163  1.01    90%
+   7  g_lvl25_atr1-r0p5             68%   68%     877    -3,398  0.98    70%
+   8  g_lvl20_pts40-r0p5            67%   67%    1209     5,079  1.02   100%
+   9  g_lvl30_atr1-r0p5             67%   68%     548    -3,752  0.96    60%
+  10  g_lvl20_atr2-r0p5             67%   68%    1198    -9,697  0.98    80%
+  11  g_lvl25_own0p5-r0p5           67%   67%     881       141  1.00   100%
+  12  g_lvl20_pts15-r0p5            67%   68%    1253    -5,637  0.96    90%
+  13  g_lvl25_pts40-r0p5            67%   67%     836    -2,829  0.99    70%
+  14  g_lvl20_atr0p5-r0p5           67%   70%    1254   -13,906  0.88    90%
+  15  g_lvl30_pts40-r0p5            67%   67%     519    -2,996  0.98    70%
+  16  g_lvl25_atr2-r0p5             67%   68%     830   -22,565  0.93    20%
+  17  g_lvl25_pts60-r0p5            67%   67%     775    -5,670  0.98    90%
+  18  g_lvl20_atr1p5-r0p5           67%   67%    1227    -1,738  0.99   100%
+  19  g_lvl30_pts60-r0p5            66%   67%     480    -4,565  0.98    90%
+  20  g_lvl25_atr1p5-r0p5           66%   67%     859    -8,976  0.96    70%
+  21  g_lvl20_own0p5-r0p5           66%   68%    1251   -10,774  0.94   100%
+  22  g_lvl20_own1-r0p5             66%   67%    1224   -14,301  0.96    40%
+  23  g_lvl30_atr0p5-r0p5           66%   70%     549    -8,046  0.85    60%
+  24  g_lvl20_own2-r0p5             66%   67%    1065   -24,735  0.96    30%
+  25  g_lvl25_own1-r0p5             66%   68%     851   -19,389  0.92     0%
+  26  g_lvl30_pts15-r0p5            66%   68%     549    -5,471  0.91    70%
+  27  g_lvl30_pts25-r0p5            66%   67%     541    -7,429  0.92    30%
+  28  g_lvl30_own0p5-r0p5           65%   65%     549       919  1.01   100%
+  29  g_lvl25_own2-r0p5             65%   67%     741   -33,364  0.92     0%
+  30  g_lvl30_atr2-r0p5             65%   68%     513   -21,242  0.89     0%
+  31  g_lvl20_own1p5-r0p5           65%   66%    1142   -29,568  0.94    20%
+  32  g_lvl30_atr1p5-r0p5           65%   66%     532   -11,228  0.92    40%
+  33  g_lvl30_own2-r0p5             64%   66%     477   -14,848  0.94    10%
+  34  g_lvl25_own1p5-r0p5           64%   67%     788   -33,997  0.90     0%
+  35  g_lvl30_own1-r0p5             64%   65%     540    -5,575  0.96    40%
+  36  g_lvl30_own1p5-r0p5           63%   65%     504   -18,341  0.91    10%
+  37  g_lvl25_pts25-r0p75           59%   58%     859    10,474  1.06   100%
+  38  g_lvl25_atr1-r0p75            59%   58%     870     3,325  1.02   100%
+  39  g_lvl20_pts25-r0p75           59%   58%    1232     8,882  1.03    90%
+  40  g_lvl25_pts15-r0p75           59%   58%     880     1,315  1.01   100%
+  41  g_lvl30_pts25-r0p75           58%   58%     532       997  1.01    90%
+  42  g_lvl20_pts60-r0p75           58%   57%    1063     9,243  1.02   100%
+  43  g_lvl20_atr2-r0p75            58%   58%    1164   -12,886  0.98    50%
+  44  g_lvl20_atr1-r0p75            58%   58%    1239    -1,266  1.00    90%
+  45  g_lvl20_pts40-r0p75           58%   58%    1170    -1,155  1.00    80%
+  46  g_lvl30_pts60-r0p75           57%   57%     456      -404  1.00   100%
+  47  g_lvl30_atr1-r0p75            57%   58%     542    -4,778  0.96    90%
+  48  g_lvl20_atr1p5-r0p75          57%   58%    1209   -13,351  0.97    70%
+  49  g_lvl25_own2-r0p75            57%   58%     692   -15,413  0.97    30%
+  50  g_lvl25_own0p5-r0p75          57%   59%     880    -9,580  0.94    70%
+  51  g_lvl20_own1-r0p75            57%   57%    1200    -2,120  0.99    90%
+  52  g_lvl20_pts15-r0p75           57%   58%    1252   -11,938  0.93    70%
+  53  g_lvl25_pts40-r0p75           57%   58%     807   -12,293  0.96    50%
+  54  g_lvl20_own2-r0p75            56%   58%     992   -37,278  0.94    10%
+  55  g_lvl25_atr0p5-r0p75          56%   59%     883   -10,592  0.90    50%
+  56  g_lvl25_atr2-r0p75            56%   59%     798   -40,527  0.89     0%
+  57  g_lvl25_own1p5-r0p75          56%   58%     754   -25,766  0.93    10%
+  58  g_lvl25_atr1p5-r0p75          56%   59%     838   -31,017  0.90    10%
+  59  g_lvl20_own1p5-r0p75          56%   57%    1092   -34,163  0.94    10%
+  60  g_lvl25_pts60-r0p75           56%   57%     735   -23,790  0.94    40%
+  61  g_lvl20_own0p5-r0p75          56%   59%    1251   -26,809  0.88     0%
+  62  g_lvl30_pts15-r0p75           56%   58%     549    -7,576  0.90    30%
+  63  g_lvl30_own1p5-r0p75          56%   55%     485     6,850  1.03   100%
+  64  g_lvl30_own0p5-r0p75          55%   56%     548    -3,287  0.96   100%
+  65  g_lvl30_atr2-r0p75            55%   59%     488   -29,792  0.88     0%
+  66  g_lvl25_own1-r0p75            55%   58%     834   -27,286  0.91     0%
+  67  g_lvl30_pts40-r0p75           55%   58%     503   -16,392  0.91    10%
+  68  g_lvl20_atr0p5-r0p75          55%   59%    1254   -21,941  0.85    10%
+  69  g_lvl30_atr1p5-r0p75          55%   58%     515   -22,635  0.88    10%
+  70  g_lvl30_own2-r0p75            54%   55%     446   -10,479  0.96    20%
+  71  g_lvl30_atr0p5-r0p75          54%   59%     549   -11,681  0.83     0%
+  72  g_lvl30_own1-r0p75            54%   55%     529    -8,481  0.95    40%
+  73  g_lvl25_pts15-r1              52%   51%     878     6,133  1.05   100%
+  74  g_lvl25_pts25-r1              51%   51%     850     5,295  1.03    80%
+  75  g_lvl20_pts25-r1              51%   51%    1226     5,776  1.02    80%
+  76  g_lvl20_own1-r1               51%   51%    1180    -4,470  0.99    90%
+  77  g_lvl25_atr1-r1               51%   52%     864    -9,101  0.96    80%
+  78  g_lvl20_pts15-r1              51%   51%    1251    -2,719  0.99   100%
+  79  g_lvl20_pts40-r1              51%   51%    1140     3,495  1.01    90%
+  80  g_lvl20_atr1-r1               51%   51%    1233    -6,042  0.98    90%
+  81  g_lvl20_own2-r1               50%   51%     950   -16,470  0.98    50%
+  82  g_lvl25_own2-r1               50%   51%     663   -20,302  0.96    30%
+  83  g_lvl20_pts60-r1              50%   50%    1015    -5,485  0.99    70%
+  84  g_lvl30_pts40-r1              50%   50%     489    -2,906  0.99    70%
+  85  g_lvl25_pts40-r1              50%   50%     786    -6,259  0.98    70%
+  86  g_lvl30_atr1-r1               50%   52%     534   -12,121  0.92    20%
+  87  g_lvl30_pts25-r1              50%   51%     530    -3,585  0.97    70%
+  88  g_lvl25_own1p5-r1             50%   51%     728   -20,832  0.95    20%
+  89  g_lvl20_atr1p5-r1             50%   51%    1194   -18,421  0.96    50%
+  90  g_lvl30_pts15-r1              50%   51%     546    -4,879  0.94    90%
+  91  g_lvl30_pts60-r1              50%   50%     434    -9,606  0.96    60%
+  92  g_lvl20_atr2-r1               49%   51%    1132   -35,653  0.94    30%
+  93  g_lvl30_atr2-r1               49%   51%     471   -10,864  0.96    50%
+  94  g_lvl30_own1-r1               49%   49%     524     4,689  1.02   100%
+  95  g_lvl30_own2-r1               49%   49%     429     6,314  1.02    90%
+  96  g_lvl25_own0p5-r1             49%   52%     879   -23,121  0.88     0%
+  97  g_lvl25_own1-r1               49%   51%     821   -30,094  0.91     0%
+  98  g_lvl25_atr2-r1               49%   51%     773   -35,297  0.92    10%
+  99  g_lvl20_own1p5-r1             49%   51%    1054   -47,496  0.93    10%
+ 100  g_lvl25_atr0p5-r1             49%   52%     881   -13,109  0.89    60%
+ 101  g_lvl25_atr1p5-r1             49%   51%     821   -35,644  0.90    10%
+ 102  g_lvl30_own1p5-r1             49%   48%     468       523  1.00    90%
+ 103  g_lvl25_pts60-r1              48%   51%     699   -40,006  0.91    20%
+ 104  g_lvl30_atr1p5-r1             48%   51%     502   -24,753  0.88    10%
+ 105  g_lvl30_own0p5-r1             48%   50%     548    -5,697  0.95    90%
+ 106  g_lvl30_atr0p5-r1             48%   52%     549   -11,916  0.85     0%
+ 107  g_lvl20_atr0p5-r1             48%   52%    1254   -28,366  0.84     0%
+ 108  g_lvl20_own0p5-r1             47%   52%    1251   -45,984  0.83     0%
+ 109  g_lvl25_own2-r1p5             43%   44%     638    -3,292  0.99    30%
+ 110  g_lvl20_own2-r1p5             43%   43%     904     1,774  1.00    40%
+ 111  g_lvl30_own1p5-r1p5           42%   40%     447    21,427  1.08   100%
+ 112  g_lvl20_own1-r1p5             42%   42%    1140    -2,335  1.00    90%
+ 113  g_lvl25_pts15-r1p5            42%   41%     874     3,709  1.02   100%
+ 114  g_lvl30_own2-r1p5             41%   41%     410     1,860  1.01    40%
+ 115  g_lvl25_own1p5-r1p5           41%   42%     697   -20,353  0.96    50%
+ 116  g_lvl20_own1p5-r1p5           41%   41%    1009    -1,946  1.00   100%
+ 117  g_lvl20_pts40-r1p5            41%   41%    1090     6,690  1.01    80%
+ 118  g_lvl30_pts25-r1p5            41%   41%     514     1,359  1.01    80%
+ 119  g_lvl20_pts25-r1p5            41%   41%    1195      -365  1.00    80%
+ 120  g_lvl25_own1-r1p5             41%   42%     791   -18,709  0.95    30%
+ 121  g_lvl25_pts25-r1p5            40%   41%     830    -1,465  0.99    80%
+ 122  g_lvl20_atr1-r1p5             40%   41%    1219   -14,481  0.96    60%
+ 123  g_lvl20_atr2-r1p5             40%   42%    1080   -30,835  0.95    20%
+ 124  g_lvl25_atr1-r1p5             40%   42%     845   -15,490  0.94    40%
+ 125  g_lvl25_atr0p5-r1p5           40%   42%     878   -12,292  0.92    90%
+ 126  g_lvl20_pts15-r1p5            40%   41%    1248    -8,557  0.96    90%
+ 127  g_lvl25_atr2-r1p5             40%   42%     740   -31,150  0.93    10%
+ 128  g_lvl30_pts60-r1p5            40%   41%     405   -15,430  0.95    20%
+ 129  g_lvl30_atr2-r1p5             40%   41%     451   -12,289  0.96    20%
+ 130  g_lvl20_pts60-r1p5            40%   41%     951   -42,139  0.94    20%
+ 131  g_lvl20_atr1p5-r1p5           40%   41%    1168   -35,287  0.94    50%
+ 132  g_lvl25_pts40-r1p5            39%   41%     749   -20,396  0.94    20%
+ 133  g_lvl30_atr1-r1p5             39%   42%     520   -20,370  0.88     0%
+ 134  g_lvl30_own1-r1p5             39%   39%     506       316  1.00    90%
+ 135  g_lvl30_pts15-r1p5            39%   41%     542    -8,313  0.92    70%
+ 136  g_lvl25_pts60-r1p5            39%   41%     658   -47,252  0.90    10%
+ 137  g_lvl20_own2-r2               39%   39%     885   -22,500  0.97    20%
+ 138  g_lvl30_atr1p5-r1p5           39%   41%     489   -24,216  0.90    20%
+ 139  g_lvl25_atr1p5-r1p5           39%   41%     800   -43,855  0.89    20%
+ 140  g_lvl30_atr0p5-r1p5           38%   42%     547   -14,788  0.84    10%
+ 141  g_lvl30_pts40-r1p5            38%   41%     471   -21,909  0.91     0%
+ 142  g_lvl25_own2-r2               38%   40%     623   -32,517  0.94     0%
+ 143  g_lvl20_atr0p5-r1p5           38%   42%    1252   -30,648  0.85    20%
+ 144  g_lvl30_own0p5-r1p5           38%   41%     544   -14,281  0.89    10%
+ 145  g_lvl25_own0p5-r1p5           38%   42%     872   -35,578  0.84     0%
+ 146  g_lvl30_own1p5-r2             37%   35%     437    29,457  1.10   100%
+ 147  g_lvl20_own0p5-r1p5           37%   42%    1241   -55,454  0.83     0%
+ 148  g_lvl25_own1p5-r2             37%   37%     685    -5,255  0.99    50%
+ 149  g_lvl20_own1p5-r2             36%   36%     983       938  1.00    80%
+ 150  g_lvl30_own2-r2               36%   37%     396   -21,684  0.93     0%
+ 151  g_lvl30_pts60-r2              36%   36%     399    -4,836  0.98    30%
+ 152  g_lvl20_pts60-r2              36%   36%     929    -5,811  0.99    60%
+ 153  g_lvl30_own1-r2               35%   33%     493    26,183  1.11   100%
+ 154  g_lvl25_own1-r2               35%   36%     773    -6,072  0.99    70%
+ 155  g_lvl25_pts60-r2              35%   36%     643   -18,682  0.96    20%
+ 156  g_lvl20_own1-r2               35%   35%    1117    -5,033  0.99    70%
+ 157  g_lvl20_atr2-r2               34%   35%    1047   -25,938  0.96    20%
+ 158  g_lvl25_atr2-r2               34%   36%     719   -27,001  0.95    10%
+ 159  g_lvl30_atr2-r2               34%   35%     442   -13,508  0.96    10%
+ 160  g_lvl20_pts25-r2              34%   34%    1174     2,319  1.01    90%
+ 161  g_lvl20_pts40-r2              34%   34%    1054    -9,136  0.98    70%
+ 162  g_lvl30_atr1p5-r2             33%   35%     478   -11,722  0.95    20%
+ 163  g_lvl20_atr1p5-r2             33%   35%    1143   -38,177  0.94    20%
+ 164  g_lvl25_pts15-r2              33%   34%     865    -8,805  0.95    90%
+ 165  g_lvl25_atr1-r2               33%   35%     835   -20,920  0.93    30%
+ 166  g_lvl25_atr0p5-r2             33%   36%     875   -17,115  0.89    50%
+ 167  g_lvl20_atr1-r2               33%   34%    1204   -25,246  0.94    30%
+ 168  g_lvl30_own0p5-r2             33%   33%     543      -977  0.99   100%
+ 169  g_lvl25_pts25-r2              33%   34%     814   -15,661  0.94    40%
+ 170  g_lvl25_pts40-r2              33%   34%     726   -26,334  0.93    10%
+ 171  g_lvl20_pts15-r2              33%   34%    1241   -18,339  0.93    80%
+ 172  g_lvl25_atr1p5-r2             33%   35%     784   -43,541  0.90    10%
+ 173  g_lvl30_pts25-r2              32%   34%     504   -13,551  0.92    10%
+ 174  g_lvl30_pts40-r2              32%   34%     455   -20,795  0.92    10%
+ 175  g_lvl30_atr1-r2               32%   35%     513   -25,757  0.87     0%
+ 176  g_lvl20_own0p5-r2             32%   35%    1233   -41,577  0.88    10%
+ 177  g_lvl30_atr0p5-r2             32%   36%     543   -18,482  0.82    10%
+ 178  g_lvl20_atr0p5-r2             32%   35%    1249   -32,511  0.86    30%
+ 179  g_lvl25_own0p5-r2             32%   35%     866   -32,514  0.87     0%
+ 180  g_lvl30_pts15-r2              31%   34%     537   -14,973  0.87    20%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i20_holy_grail_5_ny <n> (blueprint_wf_pick).

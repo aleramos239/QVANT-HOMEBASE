@@ -1,0 +1,8 @@
+{"utc": "2026-10-21T19:05:00+00:00", "date": "2026-10-21", "kind": "order", "t": "15:05:00", "text": "Sell limit 29,946.00, stop 30,006.00, target 29,826.00", "refused": "Limit entries are not built yet."}
+{"utc": "2026-10-21T19:25:28+00:00", "date": "2026-10-21", "kind": "trade", "side": "short", "qty": 1, "entry_t": "15:06:55", "entry_px": 29946.0, "exit_t": "15:25:28", "exit_px": 30006.25, "reason": "sl", "net": -1209.0}
+{"utc": "2026-10-21T19:30:00+00:00", "date": "2026-10-21", "kind": "order", "t": "15:30:00", "text": "Buy limit 29,948.00, stop 29,888.00, target 30,068.00", "refused": "Limit entries are not built yet."}
+{"utc": "2026-10-21T19:35:00+00:00", "date": "2026-10-21", "kind": "order", "t": "15:35:00", "text": "Cancel", "refused": null}
+{"utc": "2026-10-21T19:35:00+00:00", "date": "2026-10-21", "kind": "order", "t": "15:35:00", "text": "Buy limit 29,948.50, stop 29,888.50, target 30,068.50", "refused": "Limit entries are not built yet."}
+{"utc": "2026-10-21T19:40:00+00:00", "date": "2026-10-21", "kind": "order", "t": "15:40:00", "text": "Cancel", "refused": null}
+{"utc": "2026-10-21T19:58:00+00:00", "date": "2026-10-21", "kind": "order", "t": "15:58:00", "text": "Flatten (time)", "refused": null}
+{"utc": "2026-10-21T21:35:07+00:00", "date": "2026-10-21", "kind": "match", "ok": true, "text": "Matched the backtest: 1 of 1 trade."}

@@ -1,0 +1,34 @@
+{
+ "name": "nq_b073_rvol_break",
+ "version": 1,
+ "card": {
+  "why": "Breakout idea #73 of the owner's 100 list (2026-10-28): range break on relative volume, because the stops of the traders on the other side of the break feed the move.",
+  "loser": "Traders on the wrong side of the break whose stops get hit.",
+  "home": {
+   "market": "NQ",
+   "session": "nyam",
+   "bar": "5"
+  },
+  "neighbors": [
+   "NQ nyam 15"
+  ],
+  "main_setting": "m",
+  "sides": "both",
+  "sides_why": "A break can go either way, one rule.",
+  "loses_when": "Chop days where the break reverses at once."
+ },
+ "run": {
+  "exits": "hm60",
+  "family": "rvol_break",
+  "params": {
+   "m": [
+    1.5,
+    2.0,
+    3.0
+   ]
+  },
+  "limits": {
+   "max_tr": 1
+  }
+ }
+}

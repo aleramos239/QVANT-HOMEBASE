@@ -1,0 +1,29 @@
+{
+ "name": "vh_i54_sweeprev_15_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 54: An untried engine family on the hunt's own route (hm60, 3:1 in-sample, wide exits judged broadly). Who loses: as the family's own rationale.",
+ "family": "sweep_rev",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "levels": [
+   "both",
+   "on",
+   "pd"
+  ]
+ },
+ "fixed": {},
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

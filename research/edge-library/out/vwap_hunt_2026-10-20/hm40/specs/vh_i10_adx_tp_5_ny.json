@@ -1,0 +1,35 @@
+{
+ "name": "vh_i10_adx_tp_5_ny",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 10: VWAP rules only when the market trends (ADX): the line holds when the trend is strong. Who loses: as the rule.",
+ "family": "vwap_trend_pull",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "g_lvl": [
+   20.0,
+   25.0,
+   30.0
+  ]
+ },
+ "fixed": {
+  "x": 0.1,
+  "max_loss": 2,
+  "gate": "adx",
+  "g_n": 14,
+  "g_side": "with"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 4,
+  "dir": "both"
+ }
+}
