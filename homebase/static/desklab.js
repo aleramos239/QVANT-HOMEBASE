@@ -445,35 +445,41 @@
     var prop = !wait && isObj(res.prop) ? res.prop : {};
     var pb = isObj(prop.build) ? prop.build : null, pu = isObj(prop.unseen) ? prop.unseen : null, pbo = isObj(prop.both) ? prop.both : null;
     var members = !wait && Array.isArray(res.members) ? res.members : [];
-    var account = text((pu || pb || {}).account);
+    var account = text((pu || pb || pbo || {}).account);
     var cb = summaryCells(b), cu = summaryCells(u), cbo = summaryCells(bo), pcb = propCells(pb), pcu = propCells(pu), pcbo = propCells(pbo);
     var want = kind === "eval" ? [0, 1, 2] : kind === "funded" ? [3, 4] : [0, 1, 2, 3, 4];
-    var days = u ? [
-      { k: "Days traded", v: String(num(u.days) === null ? DASH : u.days) },
-      { k: "Best day", v: usd(u.best_day) },
-      { k: "Worst day", v: usd(u.worst_day) },
-      { k: "Days 2+ traded", v: num(u.together_days) === null ? DASH : String(u.together_days) },
+    // the owner, 2026-10-30: a 3:1 group shows its full sample (Both) only, in one column; an older chart service without Both keeps the columns
+    var fullFigs = !!(wf && bo), fullProp = !!(wf && pbo), d = fullFigs ? bo : u;
+    var days = d ? [
+      { k: "Days traded", v: String(num(d.days) === null ? DASH : d.days) },
+      { k: "Best day", v: usd(d.best_day) },
+      { k: "Worst day", v: usd(d.worst_day) },
+      { k: "Days 2+ traded", v: num(d.together_days) === null ? DASH : String(d.together_days) },
     ] : [];
     var note = wait ? RES_WAIT : count === 0 ? EMPTY_GROUP : NO_GROUP_RUNS;
     return {
       title: text(g.name), kind: kindLabel(kind), kindNote: kindOf(kind).note, note: GROUP_NOTE + groupLate(members),
       lead: count + (count === 1 ? " strategy" : " strategies") + " · " + kindLabel(kind),
       empty: count === 0,
-      figs: { head: heads(w31, wf),
-        rows: b || u ? GROUP_FIG_ROWS.map(function (k, i) { var r = { k: k, build: cb[i], unseen: cu[i] }; if (wf) r.both = cbo[i]; return r; }) : [], note: note },
-      days: { title: w31 ? "3:1 test months: days traded" : OLD_RECORD + ": days traded", rows: days },
+      figs: { head: fullFigs ? null : heads(w31, wf), full: fullFigs,
+        rows: fullFigs ? GROUP_FIG_ROWS.map(function (k, i) { return { k: k, v: cbo[i] }; })
+          : b || u ? GROUP_FIG_ROWS.map(function (k, i) { var r = { k: k, build: cb[i], unseen: cu[i] }; if (wf) r.both = cbo[i]; return r; }) : [], note: note },
+      days: { title: fullFigs ? FULL_SAMPLE + ": days traded" : w31 ? "3:1 test months: days traded" : OLD_RECORD + ": days traded", rows: days },
       prop: {
-        title: "Prop sim" + (account ? " · " + account : ""),
-        head: heads(w31, wf),
-        rows: pb || pu ? want.map(function (i) { var r = { k: PROP_ROWS[i], build: pcb[i], unseen: pcu[i] }; if (wf) r.both = pcbo[i]; return r; }) : [],
+        title: "Prop sim" + (account ? " · " + account : "") + (fullProp ? " · " + FULL_SAMPLE.toLowerCase() : ""),
+        head: fullProp ? null : heads(w31, wf), full: fullProp,
+        rows: fullProp ? want.map(function (i) { return { k: PROP_ROWS[i], v: pcbo[i] }; })
+          : pb || pu ? want.map(function (i) { var r = { k: PROP_ROWS[i], build: pcb[i], unseen: pcu[i] }; if (wf) r.both = pcbo[i]; return r; }) : [],
         note: wait ? RES_WAIT : NO_PROP_GROUP,
       },
       curve: u ? curve({ walkforward: wf, curve: u.curve, curve_build: b && b.curve }) : null,
+      membersFull: wf,      // the members' list shows the full sample only (owner 2026-10-30)
       members: members.map(function (m) {
         var mm = isObj(m) ? m : {};
         var ub = isObj(mm.build) ? mm.build : null, uu = isObj(mm.unseen) ? mm.unseen : null;
         return { strategy: text(mm.strategy), label: text(mm.label) || groupLabelOf(mm.strategy, members),
-          build: ub ? usd(ub.net) : DASH, unseen: uu ? usd(uu.net) : DASH, state: memberState(mm) };
+          build: ub ? usd(ub.net) : DASH, unseen: uu ? usd(uu.net) : DASH, state: memberState(mm),
+          full: wf && ub && uu && num(ub.net) !== null && num(uu.net) !== null ? usd(num(ub.net) + num(uu.net)) : DASH };      // net adds: in-sample + test months
       }),
       leftOut: !wait && Array.isArray(res.left_out) ? res.left_out.map(function (x) {
         return { strategy: text(x && x.strategy), label: groupLabelOf(x && x.strategy, members), why: text(x && x.why) };
