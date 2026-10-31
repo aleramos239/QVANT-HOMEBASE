@@ -169,7 +169,8 @@ def test_payloads_reach_on_event_and_heartbeats_do_not(monkeypatch):
         beats = [d for p, d in t4.got[0] if p == "heartbeat"]
         assert beats[0]["timestamp"] > 1_700_000_000_000                # ms since the epoch
     asyncio.run(go())
-    assert got == [("accountUpdate", {"accountId": "A1", "balance": 50000.0}),
+    assert got == [("loginResponse", {}),                                # the successful login answer (result 0)
+                   ("accountUpdate", {"accountId": "A1", "balance": 50000.0}),
                    ("orderUpdate", {"uniqueId": "U1", "status": proto.WORKING})]
 
 
@@ -440,3 +441,22 @@ def test_no_credential_reaches_the_log(capsys, caplog):
     assert "logged in" in text
     for secret in (USER, PW):
         assert secret not in text
+
+
+def test_a_successful_login_answer_reaches_on_event_before_on_up():
+    """The adapter picks its account from loginResponse.accounts: the answer is forwarded before on_up runs."""
+    seen = []
+
+    async def on_up():
+        seen.append(("on_up", None))
+
+    async def go():
+        t4 = T4(answer=lambda n: {"sessionId": "S1", "accounts": [{"accountId": "A1", "accountName": "Main"}]})
+        async with t4.serving() as srv:
+            sock = AtrSocket(make_session(), lambda p, d: seen.append((p, d)), url=url_of(srv), on_up=on_up)
+            await sock.start()
+            await until(lambda: ("on_up", None) in seen)
+            await sock.stop()
+    asyncio.run(go())
+    assert seen[:2] == [("loginResponse", {"sessionId": "S1", "accounts": [{"accountId": "A1", "accountName": "Main"}]}),
+                        ("on_up", None)]

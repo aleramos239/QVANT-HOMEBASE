@@ -182,6 +182,10 @@ class AtrSocket:
             if s.budget is not None:
                 s.budget.login_result(s.key, None if r == proto.LOGIN_OK else f"T4 login result {r}")
             if r == proto.LOGIN_OK:
+                try:
+                    self.on_event(name, data)           # the adapters read loginResponse.accounts (no credential in it)
+                except Exception as e:  # noqa: BLE001
+                    self._log(f"event handler error: {type(e).__name__}: {e}")
                 return
             if r == proto.LOGGED_IN_ELSEWHERE:
                 raise _Taken()
