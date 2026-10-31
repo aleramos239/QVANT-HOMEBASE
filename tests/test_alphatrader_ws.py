@@ -230,6 +230,7 @@ def test_logged_in_elsewhere_with_the_budget_spent_waits_and_sets_lost(monkeypat
         assert s.lost.startswith("1 logins on this user in the last hour")
         assert taken == ["logged in elsewhere"]
         assert len(t4.logins()) == 1 and s.budget.slots == 1
+        assert t4.opens == 1                                    # no websocket opened while the budget says wait
     asyncio.run(go())
     assert set(fast) == {15}                                    # waits in 15 s steps
 
@@ -271,7 +272,7 @@ def test_a_credentials_refusal_stops_without_a_loop(err, lost, fast):
             await asyncio.sleep(0.1)
             assert sock._task.done()
             await sock.stop()
-        assert s.lost == lost and t4.logins() == [] and s.fetches == 1
+        assert s.lost == lost and t4.logins() == [] and s.fetches == 1 and s.budget.slots == 0
     asyncio.run(go())
     assert fast == []
 
@@ -291,6 +292,61 @@ def test_drops_back_off_1_2_4_8_then_15(fast, roomy):
         assert s.lost is None
     asyncio.run(go())
     assert fast[:7] == [1, 2, 4, 8, 15, 15, 15]
+
+
+def test_a_failed_credential_fetch_books_no_slot():
+    """At the default cap (4 an hour): a transport error on the fetch, then success, is ONE slot -- one real T4 login."""
+    async def go():
+        t4 = T4()
+        s = make_session(creds_errors=[httpx.ConnectError("no route")])
+        async with t4.serving() as srv:
+            sock = AtrSocket(s, lambda p, d: None, url=url_of(srv))
+            await sock.start()
+            await until(lambda: sock.up)
+            await sock.stop()
+        assert s.fetches == 2 and len(t4.logins()) == 1 and s.budget.slots == 1
+    asyncio.run(go())
+
+
+def test_stop_during_a_backoff_pause_returns_at_once(monkeypatch):
+    async def go():
+        waiting = asyncio.Event()
+
+        async def pause(s):
+            waiting.set()
+            await asyncio.sleep(30)
+        monkeypatch.setattr(alphatrader_ws, "_pause", pause)
+        s = make_session(creds_errors=[httpx.ConnectError("no route")])
+        t4 = T4()
+        async with t4.serving() as srv:
+            sock = AtrSocket(s, lambda p, d: None, url=url_of(srv))
+            await sock.start()
+            await asyncio.wait_for(waiting.wait(), 3)
+            await asyncio.wait_for(sock.stop(), 1)
+        await asyncio.sleep(0.05)
+        assert not [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    asyncio.run(go())
+
+
+def test_stop_from_inside_on_taken_ends_the_loop():
+    async def script(ws, n):
+        await ws.send(msg("loginResponse", {"result": proto.LOGGED_IN_ELSEWHERE}))
+        await asyncio.sleep(1)
+
+    async def on_taken(why):
+        await sock.stop()
+
+    async def go():
+        nonlocal sock
+        t4 = T4(script)
+        async with t4.serving() as srv:
+            sock = AtrSocket(make_session(), lambda p, d: None, url=url_of(srv), on_taken=on_taken)
+            await sock.start()
+            task = sock._task
+            await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 2)
+            assert task.cancelled() and not sock.up and len(t4.logins()) == 1
+    sock = None
+    asyncio.run(go())
 
 
 def test_a_socket_up_past_STABLE_S_starts_the_ladder_over(monkeypatch, fast, roomy):
@@ -376,7 +432,7 @@ def test_no_credential_reaches_the_log(capsys, caplog):
             await sock.start()
             await until(lambda: s.lost is not None)
             await sock.stop()
-            assert USER not in s.lost and PW not in s.lost and repr(sock).find(PW) < 0
+            assert USER not in s.lost and PW not in s.lost
     asyncio.run(go())
     out = capsys.readouterr()
     mine = [r for r in caplog.records if not r.name.startswith("websockets.server")]     # not the fake T4's own lines

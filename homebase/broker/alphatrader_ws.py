@@ -1,7 +1,7 @@
 """AlphaTrader's T4 trading socket: binary protobuf frames (`alphatrader_proto`), one message per frame.
 
-Each connect, under `session.lock`: book a budget slot, fetch fresh T4 credentials, send `loginRequest`, wait for its answer and
-report it to the budget. On success: `accountSubscribe`, then `up`. Heartbeat every HEARTBEAT_S; SILENT_S with nothing received
+Each connect: a budget pre-check (no websocket while it says wait), then under `session.lock`: fetch fresh T4 credentials, book a
+budget slot, send `loginRequest`, wait for its answer and report it to the budget. On success: `accountSubscribe`, then `up`. Heartbeat every HEARTBEAT_S; SILENT_S with nothing received
 closes and reconnects. A drop reconnects on the RECONNECT_S ladder (back to its start after STABLE_S up). T4 ending the session
 for another login (`loginResponse` 6, or 7 once up) calls `on_taken` and logs in again at once, through the budget. A refused
 login (1/9/18, 24 = a code, or a refused credential fetch) stops the socket with its words in `session.lost`, no retry loop.
@@ -78,7 +78,8 @@ class AtrSocket:
         task, self._task = self._task, None
         if task is not None:
             task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
+            if task is not asyncio.current_task():     # called from on_up / on_taken: the cancel ends the loop at its next await
+                await asyncio.gather(task, return_exceptions=True)
         self.up = False
 
     async def send(self, payload: str, data: dict) -> None:
@@ -129,6 +130,9 @@ class AtrSocket:
 
     async def _connected(self) -> None:
         """One socket's life, until it drops (returns) or T4 ends it (raises)."""
+        s = self.session
+        if s.budget is not None and (why := s.budget.blocked(s.key)):
+            raise LoginDeferred(why)                    # no bare T4 connect while the budget says wait
         parts = urlsplit(self.url)
         self._log(f"connecting → {parts.netloc}{parts.path}")
         async with websockets.connect(self.url, origin=HEADERS["Origin"], user_agent_header=HEADERS["User-Agent"],
@@ -165,8 +169,8 @@ class AtrSocket:
     async def _login(self, ws) -> None:
         s = self.session
         async with s.lock:
-            await s.t4_login_slot()
             c = await s.t4_creds()
+            await s.t4_login_slot()                     # booked after the fetch: a slot is one real T4 login
             await ws.send(proto.client("loginRequest", {"firm": c.firm, "username": c.username, "password": c.password,
                                                         "appName": c.app_name, "appLicense": c.app_license,
                                                         "priceFormat": 0}))
