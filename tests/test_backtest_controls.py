@@ -283,6 +283,30 @@ def test_breakeven_moves_the_stop_one_tick_into_profit_once_the_price_has_run():
     assert (t.exit_price, t.sl) == (99.75, 99.75)
 
 
+def test_breakeven_by_the_target_fires_at_the_fraction_of_the_way_there():
+    rows = [("09:29:59", 100.0), ("09:30:05", 100.0), ("09:31", 104.0), ("09:32", 101.0), ("09:33", 100.25), ("09:34", 100.0),
+            ("09:40", 95.0)]
+    t, = go(rows, {"09:30:00": long_at(sl=95.0, tp=108.0)}, {"be_after_tp": 0.5}).trades      # halfway = 104, as be_after_pts 4
+    assert (t.exit_reason, t.exit_price, t.sl) == ("sl", 100.25, 100.25)
+    t, = go(rows, {"09:30:00": long_at(sl=95.0, tp=108.0)}, {"be_after_tp": 0.75}).trades     # 106 never printed: the old stop
+    assert (t.exit_price, t.sl) == (95.0, 95.0)
+    t, = go(rows, {"09:30:00": long_at(sl=95.0)}, {"be_after_tp": 0.5}).trades                # no target: nothing to measure
+    assert (t.exit_price, t.sl) == (95.0, 95.0)
+    short = [("09:29:59", 100.0), ("09:30:05", 100.0), ("09:31", 96.0), ("09:32", 99.75), ("09:33", 101.0)]
+    t, = go(short, {"09:30:00": short_at(sl=105.0, tp=92.0)}, {"be_after_tp": 0.5}).trades
+    assert (t.exit_price, t.sl) == (99.75, 99.75)
+
+
+def test_breakeven_by_the_target_parses_and_cannot_join_points():
+    assert parse({"be_after_tp": 0.5}) == {"be_after_tp": 0.5}
+    assert parse({"be_after_tp": 0.5, "be_offset_ticks": 3}) == {"be_after_tp": 0.5, "be_offset_ticks": 3}
+    assert parse({"be_offset_ticks": 3}) == {}
+    with pytest.raises(ValueError):
+        parse({"be_after_tp": 1.5})
+    with pytest.raises(ValueError):
+        parse({"be_after_tp": 0.5, "be_after_pts": 4})
+
+
 def test_breakeven_never_loosens_a_tighter_stop():
     rows = [("09:29:59", 100.0), ("09:30:05", 100.0), ("09:31", 104.0), ("09:32", 101.0), ("09:33", 99.0)]
     t, = go(rows, {"09:30:00": long_at(sl=101.0)}, {"be_after_pts": 4}).trades

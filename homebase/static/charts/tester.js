@@ -122,7 +122,7 @@ const CONTROLS = {
   target_mode: ['choice', 'own', ['own', 'fixed', 'atr', 'rr', 'none']], target_pts: ['float', 0, 0, 5000], target_atr: ['float', 0, 0, 50],
   target_rr: ['float', 0, 0, 50],
   // the Exit lab's exits (the owner, 2026-10-18): breakeven, a tick trailing stop, a close through a line
-  be_after_pts: ['float', 0, 0, 5000], be_offset_ticks: ['int', 1, 0, 100], trail_pts: ['float', 0, 0, 5000], trail_after_pts: ['float', 0, 0, 5000],
+  be_after_pts: ['float', 0, 0, 5000], be_after_tp: ['float', 0, 0, 1], be_offset_ticks: ['int', 1, 0, 100], trail_pts: ['float', 0, 0, 5000], trail_after_pts: ['float', 0, 0, 5000],
   exit_line: ['choice', '', ['', 'vwap', 'vwap_rth', 'ema20', 'ema50']], exit_line_min: ['choice', 5, [1, 5, 15]],
   bar_minutes: ['choice', 0, [0, 1, 5, 15]],
   atr_minutes: ['choice', 5, [0, 1, 5, 15]], atr_period: ['int', 14, 2, 200],     // atr_minutes 0 = the strategy's own bar
@@ -151,7 +151,7 @@ function controlsClean(raw) {
   if (o.stop_mode !== 'atr' && o.target_mode !== 'atr' && !o.own_floor) { delete o.atr_minutes; delete o.atr_period; }
   // a number another field switches on means nothing without it (controls.py parse: the same rules, the same request)
   if (o.stop_mode !== 'candle') delete o.stop_candle_ticks;
-  if (!o.be_after_pts) delete o.be_offset_ticks;
+  if (!o.be_after_pts && !o.be_after_tp) delete o.be_offset_ticks;
   if (!o.trail_pts) delete o.trail_after_pts;
   if (!o.exit_line) delete o.exit_line_min;
   return o;
@@ -189,11 +189,11 @@ const CTL_LABELS = {
   day_loss: 'Daily loss ($)', day_profit: 'Daily profit ($)', cooldown_min: 'Cool off after a loss (min)', max_hold_min: 'Close after (min held)',
   stop: 'Stop', stop_own_mult: 'Own stop (x)', own_floor: 'Own stop floor (0.25 x ATR)', stop_mode: 'Stop type', stop_pts: 'Stop (points)', stop_atr: 'Stop (x ATR)', target_mode: 'Target type', target_pts: 'Target (points)',
   target_atr: 'Target (x ATR)', target_rr: 'Target (x stop)', bar_minutes: 'Signal bar (min)', atr_minutes: 'ATR bars (min)', atr_period: 'ATR length',
-  stop_candle_ticks: 'Candle stop buffer (ticks)', be_after_pts: 'Breakeven after (points)', be_offset_ticks: 'Breakeven + (ticks)',
+  stop_candle_ticks: 'Candle stop buffer (ticks)', be_after_pts: 'Breakeven after (points)', be_after_tp: 'Breakeven after (x target)', be_offset_ticks: 'Breakeven + (ticks)',
   trail_pts: 'Trailing stop (points)', trail_after_pts: 'Trail after (points)', exit_line: 'Exit on close through', exit_line_min: 'Exit line bars (min)',
 };
 /* The run settings a heat-map may vary, in the order a person thinks of them. Signal bar only when the strategy offers sizes. */
-const CTL_AXIS_ORDER = ['stop_pts', 'stop_atr', 'stop_own_mult', 'target_pts', 'target_atr', 'target_rr', 'be_after_pts', 'trail_pts', 'trail_after_pts',
+const CTL_AXIS_ORDER = ['stop_pts', 'stop_atr', 'stop_own_mult', 'target_pts', 'target_atr', 'target_rr', 'be_after_pts', 'be_after_tp', 'trail_pts', 'trail_after_pts',
   'stop_candle_ticks', 'exit_line', 'be_offset_ticks', 'exit_line_min', 'stop_wins', 'stop_losses', 'max_trades',
   'max_consec_losses', 'entry_from', 'entry_to', 'flat_at', 'direction', 'bar_minutes', 'day_loss', 'day_profit', 'cooldown_min',
   'max_hold_min', 'stop_mode', 'target_mode', 'atr_minutes', 'atr_period'];

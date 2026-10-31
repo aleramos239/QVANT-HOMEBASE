@@ -2222,11 +2222,11 @@ const HEAT_SUGGEST = { 'ctl.stop_pts': '10, 15, 20, 25', 'ctl.stop_atr': '1, 1.5
   'ctl.entry_from': '09:35, 10:00, 10:30', 'ctl.entry_to': '10:30, 11:30, 12:00', 'ctl.flat_at': '11:30, 15:55', 'ctl.direction': 'both, long, short',
   'ctl.day_loss': '0, 500, 1000', 'ctl.day_profit': '0, 1000, 2000', 'ctl.cooldown_min': '0, 5, 15, 30', 'ctl.max_hold_min': '0, 15, 30, 60',
   'ctl.stop_mode': 'own, fixed, atr, candle', 'ctl.target_mode': 'own, fixed, rr', 'ctl.atr_minutes': '1, 5, 15', 'ctl.atr_period': '7, 14, 21',
-  'ctl.be_after_pts': '0, 5, 10, 15, 20', 'ctl.trail_pts': '0, 5, 10, 15, 20', 'ctl.trail_after_pts': '0, 5, 10', 'ctl.stop_candle_ticks': '0, 2, 4, 8',
+  'ctl.be_after_pts': '0, 5, 10, 15, 20', 'ctl.be_after_tp': '0, 0.25, 0.5, 0.75', 'ctl.trail_pts': '0, 5, 10, 15, 20', 'ctl.trail_after_pts': '0, 5, 10', 'ctl.stop_candle_ticks': '0, 2, 4, 8',
   'ctl.exit_line': 'off, vwap, vwap_rth, ema20, ema50', 'ctl.be_offset_ticks': '0, 1, 4', 'ctl.exit_line_min': '1, 5, 15' };
 const HEAT_ZERO = { 'ctl.stop_pts': 'the strategy\'s own stop', 'ctl.stop_atr': 'the strategy\'s own stop', 'ctl.target_pts': 'the strategy\'s own target',
   'ctl.target_atr': 'the strategy\'s own target', 'ctl.target_rr': 'the strategy\'s own target', 'ctl.bar_minutes': 'the strategy\'s own bar',
-  'ctl.be_after_pts': 'no breakeven', 'ctl.trail_pts': 'no trailing stop', 'ctl.trail_after_pts': 'trail from the fill' };
+  'ctl.be_after_pts': 'no breakeven', 'ctl.be_after_tp': 'no breakeven', 'ctl.trail_pts': 'no trailing stop', 'ctl.trail_after_pts': 'trail from the fill' };
 /* The Exit lab (the owner, 2026-10-18): the heat map set up to try exits on this strategy's own entries -- breakeven x a trailing
    stop, and its own stop vs the signal candle's. 0 / own = the strategy as it is. Run it on the build days. */
 const EXIT_LAB = [['ctl.be_after_pts', '0, 5, 10, 15, 20'], ['ctl.trail_pts', '0, 5, 10, 15, 20'], ['ctl.stop_mode', 'own, candle']];
@@ -3068,6 +3068,7 @@ function rulesHtml(f, meta) {
       ${tgtMode === 'fixed' ? num('target_pts', 'Target (points)', 'Distance from the fill', 0.25) : tgtMode === 'atr' ? num('target_atr', 'Target (× ATR)', 'Multiple of the ATR at the entry', 0.1) : tgtMode === 'rr' ? num('target_rr', 'Target (× stop)', 'Multiple of the stop distance', 0.25) : ''}
       <div class="sep"></div>
       ${num('be_after_pts', 'Breakeven after (points)', 'Once the trade is this far in profit, the stop moves to the fill + 1 tick (never looser)', 0.25)}
+      ${num('be_after_tp', 'Breakeven after (× target)', 'Once the trade has gone this fraction of the way to the target (0.5 = halfway), the stop moves to the fill + 1 tick. Use instead of points; needs a target', 0.05)}
       ${num('be_offset_ticks', 'Breakeven + (ticks)', 'How far into profit the breakeven stop sits (used with Breakeven after)', 1).replace('placeholder="off"', 'placeholder="1"')}
       ${num('trail_pts', 'Trailing stop (points)', 'The stop follows the best price since the fill by this much, tick by tick, only tighter', 0.25)}
       ${num('trail_after_pts', 'Trail after (points)', 'Start trailing once the trade is this far in profit (empty: from the fill; used with Trailing stop)', 0.25).replace('placeholder="off"', 'placeholder="0"')}

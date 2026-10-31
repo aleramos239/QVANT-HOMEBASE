@@ -80,7 +80,7 @@ _CONTROLS = {
     "max_hold_min, stop_mode (own|fixed|atr|candle|none) with stop_pts or stop_atr (candle: past the last closed "
     "signal candle by stop_candle_ticks), target_mode (own|fixed|atr|rr|none) with target_pts / target_atr / target_rr, "
     "atr_minutes (1|5|15), atr_period; exits: be_after_pts (breakeven: stop to the fill + be_offset_ticks, default 1, "
-    "once that far in profit), trail_pts (tick trailing stop; trail_after_pts to start it later), exit_line "
+    "once that far in profit; or be_after_tp 0-1: once that fraction of the way to the target, 0.5 = halfway), trail_pts (tick trailing stop; trail_after_pts to start it later), exit_line "
     "(vwap|vwap_rth|ema20|ema50: out when an exit_line_min bar closes back through it).",
     "additionalProperties": True}
 _INPUTS = {"type": "object", "description": "Strategy inputs by key (see list_strategies / read_strategy); "

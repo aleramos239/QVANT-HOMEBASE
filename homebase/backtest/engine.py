@@ -414,6 +414,8 @@ class _Sim:
         c = self.ctl
         if c.be_after_pts:
             pos.be = self.touch(pos, "be", pos.entry_px + pos.side * c.be_after_pts, k)
+        elif c.be_after_tp and pos.tp is not None:
+            pos.be = self.touch(pos, "be", pos.entry_px + c.be_after_tp * (pos.tp.price - pos.entry_px), k)
         if c.trail_pts:
             if c.trail_after_pts:
                 pos.trail = self.touch(pos, "trail", pos.entry_px + pos.side * c.trail_after_pts, k)

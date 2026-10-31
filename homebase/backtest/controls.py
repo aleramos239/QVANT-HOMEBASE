@@ -23,6 +23,9 @@ they are part of the request, so a run's bundle shows what was set.
   target_mode             own | fixed (target_pts) | atr (target_atr x ATR) | rr (target_rr x the stop distance) | none.
   be_after_pts / be_offset_ticks   breakeven: once a print reaches the fill + be_after_pts in profit, the stop goes to
                           the fill + be_offset_ticks (default 1 tick into profit); never looser, never at or past the price.
+  be_after_tp             breakeven by the target instead of points: once a print has gone this fraction of the way from the
+                          fill to the target (0.5 = halfway), the stop goes to the fill + be_offset_ticks. Needs a target
+                          (no target: nothing triggers). Not together with be_after_pts.
   trail_pts / trail_after_pts       a tick trailing stop: the stop follows the best print since the fill by trail_pts,
                           only tighter; from the fill, or once a print is trail_after_pts in profit.
   exit_line / exit_line_min         close when an exit_line_min bar CLOSES back through the line -- vwap (from the tape's
@@ -78,6 +81,7 @@ SPEC: dict[str, tuple] = {
     "target_rr": ("float", 0.0, 0.0, 50.0),
     "stop_candle_ticks": ("int", 0, 0, 200),
     "be_after_pts": ("float", 0.0, 0.0, 5000.0),
+    "be_after_tp": ("float", 0.0, 0.0, 1.0),
     "be_offset_ticks": ("int", 1, 0, 100),
     "trail_pts": ("float", 0.0, 0.0, 5000.0),
     "trail_after_pts": ("float", 0.0, 0.0, 5000.0),
@@ -132,7 +136,7 @@ LABELS = {
     "cooldown_min": "Cool off after a loss (min)", "max_hold_min": "Close after (min held)",
     "stop_mode": "Stop type", "stop_own_mult": "Own stop (x)", "own_floor": "Own stop floor (0.25 x ATR)", "stop_pts": "Stop (points)", "stop_atr": "Stop (x ATR)",
     "target_mode": "Target type", "target_pts": "Target (points)", "target_atr": "Target (x ATR)",
-    "target_rr": "Target (x stop)", "stop_candle_ticks": "Candle stop buffer (ticks)", "be_after_pts": "Breakeven after (points)",
+    "target_rr": "Target (x stop)", "stop_candle_ticks": "Candle stop buffer (ticks)", "be_after_pts": "Breakeven after (points)", "be_after_tp": "Breakeven after (x target)",
     "be_offset_ticks": "Breakeven + (ticks)", "trail_pts": "Trailing stop (points)", "trail_after_pts": "Trail after (points)",
     "exit_line": "Exit on close through", "exit_line_min": "Exit line bars (min)", "bar_minutes": "Signal bar (min)", "atr_minutes": "ATR bars (min)",
     "atr_period": "ATR length",
@@ -180,13 +184,15 @@ def parse(raw) -> dict:
         else:
             out.pop(num, None)
     # a number another field switches on means nothing without it (the same rules always make the same request)
-    for num, on in (("stop_candle_ticks", out.get("stop_mode") == "candle"), ("be_offset_ticks", bool(out.get("be_after_pts"))),
+    for num, on in (("stop_candle_ticks", out.get("stop_mode") == "candle"), ("be_offset_ticks", bool(out.get("be_after_pts") or out.get("be_after_tp"))),
                     ("trail_after_pts", bool(out.get("trail_pts"))), ("exit_line_min", bool(out.get("exit_line")))):
         if not on:
             out.pop(num, None)
     if not out.get("own_floor") and not any(out.get(m) == n for m, n in ATR_USERS):
         out.pop("atr_minutes", None)
         out.pop("atr_period", None)
+    if out.get("be_after_pts") and out.get("be_after_tp"):
+        raise ValueError("controls: breakeven is set in points or as a fraction of the target, not both")
     if out.get("entry_from") and out.get("entry_to") and out["entry_from"] >= out["entry_to"]:
         raise ValueError("controls: the entry window ends before it starts")
     if out.get("flat_at") and out.get("entry_from") and out["flat_at"] <= out["entry_from"]:
@@ -219,6 +225,7 @@ class Controls:
     target_rr: float = 0.0
     stop_candle_ticks: int = 0
     be_after_pts: float = 0.0
+    be_after_tp: float = 0.0
     be_offset_ticks: int = 1
     trail_pts: float = 0.0
     trail_after_pts: float = 0.0
