@@ -187,6 +187,8 @@ class AlphaTraderAdapter(BrokerAdapter):
         self._seen_order: deque = deque(maxlen=_SEEN_FILL_CAP)
         self._trades_seeded = False                     # the first snapshot's trades are history: remembered, not reported
         self._snap = False                              # a snapshot is being applied
+        self._snap_filled: dict[str, int] = {}          # uniqueId -> filled, as cached before the snapshot
+        self._gaps: list[dict] = []                     # this snapshot's rows whose fills rose with no trades[] to report
         self._out: deque = deque(maxlen=1000)           # FillEvents waiting for the callback, oldest first
         self._pump: Optional[asyncio.Task] = None
         self._resync: Optional[asyncio.Task] = None     # the wait before asking for the snapshots again
@@ -307,11 +309,23 @@ class AlphaTraderAdapter(BrokerAdapter):
             for u in data.get("updates", []):
                 for kind, d in u.items():
                     self._apply(kind, d)
+            if data.get("historical") and not self._snap:   # unconfirmed what it marks: on record for the spike
+                self._journal("atr_historical_seen", rows=len(data.get("updates", [])))
         elif name in _ORDER_KEYS:
             row = self._on_order(name, data)
             self._answer(name, data, row)
-            for t in [data] if name == "orderUpdateTrade" else data.get("trades", []) if name == "orderUpdate" else []:
-                self._fill(t, data, row)
+            if name == "orderUpdateTrade":
+                self._fill(data, data, row, data.get("totalFillVolume", 0))
+            elif name == "orderUpdate":
+                total = 0                               # unconfirmed: trades[] holds the order's trades, oldest first
+                for t in data.get("trades", []):
+                    total += int(t.get("volume", 0))
+                    self._fill(t, data, row, total)
+                old = self._snap_filled.get(row["uniqueId"], 0) if row is not None else 0
+                if self._snap and self._trades_seeded and row is not None and not data.get("trades") \
+                        and row["filled"] > old:        # filled while away, with no trade to report: on record
+                    self._gaps.append({"uniqueId": row["uniqueId"], "market": row["marketId"], "old": old,
+                                       "new": row["filled"]})
             self._notify("order", data)
             if row is not None:
                 self._recheck(row["marketId"])
@@ -335,6 +349,7 @@ class AlphaTraderAdapter(BrokerAdapter):
     def _on_snapshot(self, data: dict) -> None:
         """The account's whole book: positions replaced, the orders reseeded while unknown, then known."""
         self._pos, self._dirty = {}, set()
+        self._snap_filled, self._gaps = {u: o["filled"] for u, o in self._orders.items()}, []
         if not self._orders_ok:
             self._orders = {}
         self._snap = True
@@ -350,6 +365,9 @@ class AlphaTraderAdapter(BrokerAdapter):
         for mid in list(self._no_stop):
             self._recheck(mid)
         self._notify("sync", {})
+        for g in self._gaps:                            # journaled once the book is applied: a failing journal loses nothing
+            self._journal("atr_fill_gap", **g)
+        self._gaps, self._snap_filled = [], {}
         # a flatten close the whole book does not hold (and no submit still waits on) never reached T4: it no longer blocks
         for c, m in list(self._closes.items()):
             if self._by_cid(c) is not None or c in self._waits:
@@ -404,12 +422,17 @@ class AlphaTraderAdapter(BrokerAdapter):
             await _resubscribe(self.session)
 
     # ------------------------------------------------------------ fills and the no-stop guard
-    def _fill(self, t: dict, msg: dict, row: Optional[dict]) -> None:
-        """One trade (an orderUpdateTrade, or one entry of orderUpdate.trades) -> one FillEvent, once per
-        (uniqueId, sequenceOrder) or exchangeTradeId. Ours or not (Alpha's own close, a hand trade): reported the same."""
-        uid, xid = msg.get("uniqueId", ""), t.get("exchangeTradeId", "")
+    def _fill(self, t: dict, msg: dict, row: Optional[dict], total: int) -> None:
+        """One trade (an orderUpdateTrade, or one entry of orderUpdate.trades) -> one FillEvent, once. Its keys, all per
+        order: its sequenceOrder, its exchangeTradeId (one exchange match can fill two orders; the sim's "0" is no id),
+        and with neither, the order's filled total after it (`total`, which rises with each fill). Ours or not (Alpha's
+        own close, a hand trade): reported the same."""
+        uid, xid = msg.get("uniqueId", ""), str(t.get("exchangeTradeId", ""))
         mid = msg.get("marketId", "") or (row or {}).get("marketId", "")
-        keys = ([("seq", uid, t.get("sequenceOrder", 0))] if uid else []) + ([("x", xid)] if xid else [])
+        xid = "" if xid in ("", "0") else xid
+        keys = ([("seq", uid, t["sequenceOrder"])] if "sequenceOrder" in t else []) + ([("x", uid, xid)] if xid else [])
+        if not keys and uid:
+            keys = [("tfv", uid, total)]
         new = not any(k in self._seen for k in keys)
         for k in keys:                                  # every key: a later message carrying only the other one is the same
             self._mark_seen(k)
@@ -417,14 +440,14 @@ class AlphaTraderAdapter(BrokerAdapter):
             return
         side = SIDE_WORDS.get((row or {}).get("buySell") or t.get("buySell"), "")
         qty, raw = int(t.get("volume", 0)), {"uniqueId": uid, "marketId": mid, **t}
-        if not side or qty <= 0:                        # a missed fill is worse than one without a side: reported anyway
-            log.warning("alphatrader %s: fill %s unreadable (side %r, qty %d)", self.account_id, uid, side, qty)
-            self.journal("atr_fill_unreadable", uniqueId=uid, market=mid, side=side, qty=qty)
         known = self._pos_ok and mid in self._pos and mid not in self._dirty
         self._out.append(FillEvent(account_id=self.account_id, symbol=self._root_of_market(mid) or mid, side=side,
                                    qty=qty, price=_price(t.get("price")),
                                    position_after=self._pos[mid][1] if known else None, ts=time.time(), raw=raw,
                                    seen=time.perf_counter()))
+        if not side or qty <= 0:                        # a missed fill is worse than one without a side: reported anyway
+            log.warning("alphatrader %s: fill %s unreadable (side %r, qty %d)", self.account_id, uid, side, qty)
+            self._journal("atr_fill_unreadable", uniqueId=uid, market=mid, side=side, qty=qty)
         self._notify("fill", raw)
         if mid:
             self._touched.add(mid)
@@ -434,6 +457,12 @@ class AlphaTraderAdapter(BrokerAdapter):
                 except RuntimeError:
                     pass
         self._kick()
+
+    def _journal(self, event: str, **kw) -> None:
+        try:
+            self.journal(event, **kw)
+        except Exception as e:  # noqa: BLE001 -- a journal failure never stops the reader or loses a fill
+            log.warning("alphatrader %s: journal failed (%s)", self.account_id, type(e).__name__)
 
     def _mark_seen(self, key) -> None:
         if key in self._seen:
@@ -981,8 +1010,5 @@ def _session_taken(session: AtrSession):
         log.warning("alphatrader %s: T4 session taken (%s), %d time(s)", session.key, why, session.taken)
         for a in list(session.adapters):               # the book is stale until the next login's snapshot
             a._pos_ok = a._orders_ok = False
-            try:
-                a.journal("atr_session_taken", account=a.account_id, count=session.taken, why=why)
-            except Exception as e:  # noqa: BLE001 -- one account's journal must not stop the others'
-                log.warning("alphatrader %s: journal failed (%s)", a.account_id, type(e).__name__)
+            a._journal("atr_session_taken", account=a.account_id, count=session.taken, why=why)
     return taken

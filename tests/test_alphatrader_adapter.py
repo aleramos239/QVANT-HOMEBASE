@@ -1213,3 +1213,92 @@ def test_session_taken_journals_logs_in_again_once_and_replays_the_gap_fill_once
         assert a.positions_known and a.orders_known and await a.get_net_position("NQ") == 0
         assert "S1" not in a._orders                                  # the order cache was reseeded while unknown
     asyncio.run(go())
+
+
+# ------------------------------------------------------------------ Task 6 fix round 1
+async def watching():
+    a, sock = await ready()
+    got, lines, on_fill = watch(a)
+    await a.observe_fills(on_fill)
+    return a, sock, got, lines
+
+
+def test_one_exchange_match_filling_two_orders_gives_two_fills():
+    async def go():
+        a, sock, got, _ = await watching()
+        sock.push("orderUpdateTrade", trade("U1", xid="M77"))
+        sock.push("orderUpdateTrade", trade("U2", ESZ26, xid="M77"))
+        await settle()
+        assert [(e.raw["uniqueId"], e.symbol) for e in got] == [("U1", "NQ"), ("U2", "ES")]
+    asyncio.run(go())
+
+
+def test_the_sims_zero_trade_id_is_no_id():
+    async def go():
+        a, sock, got, _ = await watching()
+        sock.push("orderUpdateTrade", trade("U3", seq=1, xid="0", filled=1))
+        sock.push("orderUpdateTrade", trade("U3", seq=2, xid="0", filled=2))
+        await settle()
+        assert [e.raw["sequenceOrder"] for e in got] == [1, 2]
+    asyncio.run(go())
+
+
+def test_a_trade_with_no_sequence_or_id_seen_through_both_messages_is_one_fill():
+    async def go():
+        a, sock, got, _ = await watching()
+        bare = lambda n: {"uniqueId": "U4", "accountId": "A1", "marketId": NQZ26, "volume": 1,   # noqa: E731
+                          "totalFillVolume": n, "exchangeTradeId": "0", "price": {"value": f"2000{n}"}}
+        order = lambda n: {"uniqueId": "U4", "accountId": "A1", "marketId": NQZ26, "status": proto.WORKING,   # noqa: E731
+                           "buySell": proto.BUY, "currentVolume": 2, "totalFillVolume": n,
+                           "trades": [{"volume": 1, "exchangeTradeId": "0"}] * n}
+        sock.push("orderUpdate", order(0))                           # the order is known (its side) before it fills
+        for n in (1, 2):                                           # each fill through orderUpdateTrade, then orderUpdate
+            sock.push("orderUpdateTrade", bare(n))
+            sock.push("orderUpdate", order(n))
+        await settle()
+        assert [(e.side, e.qty, e.price) for e in got] == [("Buy", 1, 20001.0), ("Buy", 1, 20002.0)]
+    asyncio.run(go())
+
+
+def test_a_historical_batch_outside_a_snapshot_is_journaled_with_its_row_count():
+    async def go():
+        a, sock, _, lines = await watching()
+        multi = {"accountId": "A1", "marketId": NQZ26, "historical": True,
+                 "updates": [working("H1", NQZ26), working("H2", NQZ26)]}
+        sock.push("orderUpdateMulti", multi)
+        sock.push("accountSnapshot", snapshot("A1", {"orderUpdateMulti": multi}))     # inside a snapshot: not journaled
+        assert lines == [("atr_historical_seen", {"rows": 2})] and "H1" in a._orders
+    asyncio.run(go())
+
+
+def test_a_snapshot_row_whose_fills_rose_with_no_trades_is_journaled_as_a_gap():
+    async def go():
+        part = lambda n: {"orderUpdate": {"uniqueId": "U1", "accountId": "A1", "marketId": NQZ26,   # noqa: E731
+                                          "status": proto.WORKING if n < 3 else proto.FINISHED, "buySell": proto.BUY,
+                                          "priceType": proto.LIMIT, "currentVolume": 3, "totalFillVolume": n}}
+        a, sock = await ready(part(1))                               # the first snapshot is history: no gap
+        _, lines, _ = watch(a)
+        await sock.on_taken("logged in elsewhere")
+        await sock.on_up()
+        lines.clear()
+        sock.push("accountSnapshot", snapshot("A1", part(3), done("U2", vol=2),
+                                              done("U5", trades=[{"sequenceOrder": 1, "volume": 1}])))
+        assert lines == [("atr_fill_gap", {"uniqueId": "U1", "market": NQZ26, "old": 1, "new": 3}),
+                         ("atr_fill_gap", {"uniqueId": "U2", "market": NQZ26, "old": 0, "new": 2})]
+        sock.push("accountSnapshot", snapshot("A1", part(3), done("U2", vol=2)))     # nothing rose: nothing more
+        assert len(lines) == 2
+    asyncio.run(go())
+
+
+def test_a_raising_journal_never_loses_a_fill():
+    async def go():
+        a, sock, got, _ = await watching()
+
+        def boom(event, **kw):
+            raise RuntimeError("journal down")
+        a.journal = boom
+        sock.push("orderUpdateTrade", trade("Z1"))                   # no side anywhere: journaled, and the journal raises
+        sock.push("orderUpdateTrade", trade("Z2"))
+        await settle()
+        assert [e.raw["uniqueId"] for e in got] == ["Z1", "Z2"]
+    asyncio.run(go())
