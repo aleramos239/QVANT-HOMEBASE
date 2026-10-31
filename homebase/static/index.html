@@ -654,6 +654,9 @@
       <div class="opt" id="optVest" onclick="wizBroker('vest')"><span class="glyph">Ve</span>
         <span><span class="t">Vest</span><br><span class="sub">Your wallet signs in</span></span>
         <span class="spacer"></span><span class="radio"></span></div>
+      <div class="opt" id="optTsx" onclick="wizBroker('tsx')"><span class="glyph">Tx</span>
+        <span><span class="t">TopstepX</span><br><span class="sub">Username &amp; password</span></span>
+        <span class="spacer"></span><span class="radio"></span></div>
       <div class="opt" id="optPaper" onclick="wizPaper()"><span class="glyph">Pa</span>
         <span><span class="t">Add paper account</span><br><span class="sub">Simulated fills on live prices — never sent to a broker</span></span>
         <span class="spacer"></span><span class="radio"></span></div>
@@ -669,7 +672,7 @@
     </div>
 
     <div id="wstep2" style="display:none">
-      <h2>Log in to Tradovate <span id="envTag2"></span></h2>
+      <h2><span id="wBroker2">Log in to Tradovate</span> <span id="envTag2"></span></h2>
       <p class="sub">Your login is saved securely on this Mac (so you never
         retype it) and only used to place your orders.</p>
       <div class="slabel">SAVED LOGINS</div>
@@ -691,6 +694,8 @@
             </button>
           </div></div>
       </div>
+      <div class="field" id="cCodeRow" style="display:none"><label>Code from TopstepX</label>
+        <input id="cCode" autocomplete="off" spellcheck="false" inputmode="numeric"></div>
       <div class="row-btns">
         <button class="btn btn-outline" onclick="wizGoto(1)">&larr; Back</button>
         <button class="btn btn-default" id="cGo" onclick="doConnect()">Find my accounts</button>
@@ -984,7 +989,7 @@
 <script src="/static/desk/strategy.js?v=14"></script>
 <script src="/static/desk/labdesk.js?v=14"></script>
 <script src="/static/desk/demo.js?v=2"></script>
-<script src="/static/desk/book.js?v=11"></script>
+<script src="/static/desk/book.js?v=13"></script>
 <script src="/static/desk/acctset.js?v=4"></script>
 <script src="/static/desk/settings.js?v=8"></script>
 <script src="/static/desk/popups.js?v=7"></script>

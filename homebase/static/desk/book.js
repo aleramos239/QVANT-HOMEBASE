@@ -241,19 +241,22 @@ let WIZ = {saved: null, key: null, accounts: [], picks: new Set(), env: "demo", 
 function openConnect() {
   wizBroker("tv"); wizGoto(1); showOverlay("connectOverlay");
 }
-/* Step 1's broker choice. Vest is a wallet login that lists its demo and funded accounts together, so the Demo/Live
-   switch is hidden for it (WIZ.env "vest" is what its saved logins carry) and comes back for Tradovate. */
+/* Step 1's broker choice. Vest and TopstepX list all their accounts under one login, so the Demo/Live switch is
+   hidden for them (WIZ.env "vest" / "tsx" is what their saved logins carry) and comes back for Tradovate. */
 function wizBroker(b) {
-  WIZ.broker = b === "vest" ? "vest" : "tv";
+  WIZ.broker = b === "vest" ? "vest" : b === "tsx" ? "tsx" : "tv";
   $("#optTv").classList.toggle("sel", WIZ.broker === "tv");
   $("#optVest").classList.toggle("sel", WIZ.broker === "vest");
-  setEnv(WIZ.broker === "vest" ? "vest" : "demo");
+  $("#optTsx").classList.toggle("sel", WIZ.broker === "tsx");
+  $("#wBroker2").textContent = WIZ.broker === "tsx" ? "Log in to TopstepX" : "Log in to Tradovate";
+  if (WIZ.broker !== "tsx") $("#cCodeRow").style.display = "none";
+  setEnv(WIZ.broker === "tv" ? "demo" : WIZ.broker);
   if (WIZ.broker === "vest") vestWarm();
 }
 function setEnv(env) {
   if (WIZ.env !== env) WIZ.saved = null;          // saved logins are per env
   WIZ.env = env;
-  $("#envSeg").style.display = env === "vest" ? "none" : "";
+  $("#envSeg").style.display = env === "vest" || env === "tsx" ? "none" : "";
   $("#envDemo").classList.toggle("sel", env === "demo");
   $("#envLive").classList.toggle("sel", env === "live");
   $("#envDemo").setAttribute("aria-pressed", String(env === "demo"));
@@ -261,6 +264,8 @@ function setEnv(env) {
   const n = $("#envNote");
   n.textContent = env === "vest"
     ? "A Vest login lists its demo and funded accounts together. A funded account is never ticked for you."
+    : env === "tsx"
+    ? "A TopstepX login lists every account under it. Nothing trades until you assign it to a strategy."
     : env === "live"
     ? "LIVE — real money. Orders on a live account are real. It won't trade until you assign it to a strategy."
     : "Demo is the safe default.";
@@ -278,6 +283,7 @@ async function wizNext1() {
 function closeConnect() {
   hideOverlay("connectOverlay");
   const p = $("#cPass"); if (p) p.value = "";
+  $("#cCode").value = ""; $("#cCodeRow").style.display = "none";      // a one-time code is never kept
   VW.typed = null; VW.addr = null;
   if (VSIGNIN) window.close();          // the sign-in window the app opened: Done / Esc closes it
 }
@@ -304,7 +310,7 @@ async function loadLogins() {
   box.innerHTML = d.logins.map(l => `
     <div class="opt ${WIZ.saved === l.key ? "sel" : ""}" data-login="${esc(l.key)}" onclick="pickLogin(${jsArg(l.key)})">
       <span><span class="t">${esc(l.label)}</span><br>
-      <span class="sub">${esc(l.env === "vest" ? "wallet" : l.env)}${l.in_use ? " · connected now" : ""}</span></span>
+      <span class="sub">${esc(l.env === "vest" ? "wallet" : l.env === "tsx" ? "TopstepX" : l.env)}${l.in_use ? " · connected now" : ""}</span></span>
       <span class="spacer"></span>
       <button class="x" onclick="event.stopPropagation();delLogin(${jsArg(l.key)})" title="Forget this login"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#ic-trash"/></svg></button>
       <span class="radio"></span>
@@ -313,6 +319,7 @@ async function loadLogins() {
 }
 function pickLogin(key) {
   WIZ.saved = key;
+  $("#cCode").value = "";               // a one-time code belongs to the login it was sent for
   if (WIZ.broker === "vest") { vestSay(""); loadLoginsPaint(); vestPaint(); return; }
   $("#newLoginFields").style.display = key === null ? "" : "none";
   $("#optNew").classList.toggle("sel", key === null);
@@ -342,10 +349,19 @@ async function doConnect() {
   if (WIZ.broker === "vest") return vestGo();
   const btn = $("#cGo"); btn.disabled = true; btn.textContent = "Connecting…";
   try {
-    const body = WIZ.saved ? {saved_key: WIZ.saved}
+    const codeRow = $("#cCodeRow"), code = $("#cCode").value.trim();
+    const withCode = WIZ.broker === "tsx" && code && codeRow.style.display !== "none" ? {code} : {};   // TopstepX's one-time code
+    const body = WIZ.saved ? {saved_key: WIZ.saved, ...withCode}
+      : WIZ.broker === "tsx" ? {broker: "tsx", username: $("#cUser").value, password: $("#cPass").value, ...withCode}
       : {username: $("#cUser").value, password: $("#cPass").value, env: WIZ.env};
-    const r = await post("/api/connect", body);
-    if (r.ok) wizAccepted(r);
+    let r;
+    try { r = await post("/api/connect", body); }
+    finally { if (code) $("#cCode").value = ""; }          // good for one try, even when the post fails
+    if (r.ok) { codeRow.style.display = "none"; wizAccepted(r); }
+    else if (r.needs_code) {
+      codeRow.style.display = ""; $("#cCode").focus();
+      toast("TopstepX sent you a code — type it in", 6000);
+    }
     else toast("Connect failed — " + (r.error || r.detail || "unknown"), 6000);
   } finally { btn.disabled = false; btn.textContent = "Find my accounts"; refresh(); }
 }
@@ -453,6 +469,8 @@ const wizOnDesk = (a) => a.on_desk !== undefined ? !!a.on_desk
 /* A Vest row's kind in words (Demo / Eval / Funded / Primary); a Tradovate row has none. */
 const vestKind = (a) => WIZ.broker !== "vest" ? "" : ({demo: "Demo", eval: "Eval", funded: "Funded", primary: "Primary"}[a.kind]
   || (a.demo === undefined ? "" : a.demo ? "Demo" : "Funded"));
+/* A TopstepX row (it carries `practice`): practice or funded, from the listed row itself. */
+const tsxKind = (a) => a.practice === undefined ? "" : a.practice ? "practice" : "funded";
 const wizAddable = () => WIZ.accounts.filter(a => !wizOnDesk(a));
 function renderAcctList() {
   const el = $("#acctList");
@@ -466,7 +484,7 @@ function renderAcctList() {
       <input type="checkbox" ${added ? "disabled" : ""} ${!added && WIZ.picks.has(a.name) ? "checked" : ""}
              onchange="wizTick(${jsArg(a.name)}, this.checked)">
       <span><span class="t">${esc(a.name)}</span><br>
-      <span class="sub">${added ? "already added" : vestKind(a) || (a.active === false ? "inactive" : "active")}</span></span>
+      <span class="sub">${added ? "already added" : vestKind(a) || tsxKind(a) || (a.active === false ? "inactive" : "active")}</span></span>
     </label>`;
   }).join("");
   el.innerHTML = `<label class="copt all ${wizAddable().length ? "" : "disabled"}">
