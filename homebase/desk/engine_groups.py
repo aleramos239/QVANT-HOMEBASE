@@ -7,13 +7,20 @@ the turn on, so two trades may be open at once but only on separate accounts. Ne
 while a short is open or working on another (the owner: "we can trade multiple accounts at once but we can [not]
 enter long and short on another"; Apex: no hedging across accounts): such an entry is skipped and the turn does not
 move. With `risk_usd` set, every member's order is sized to that many dollars at its own stop (labdesk._group_size),
-never above `max_minis` full contracts' worth (labdesk.GROUP_NO_SIZE when not one contract fits).
+never above `max_minis` full contracts' worth (labdesk.GROUP_NO_SIZE when not one contract fits). `risk_by` {member: dollars}
+gives a member its own risk instead (owner, 2026-10-30); a member not in it keeps `risk_usd` (member_risk).
+
+`mode` (owner, 2026-10-30: "cycle trades per account, make all the accounts share all the trades, or have an strategy per
+account"): "cycle" (the take-turns pointer above, the default), "share" (every booked account of the group takes every
+trade) or "split" (each member trades only its own account, `assign` {member: account}; a member with no account there
+never trades). The hedge block covers the group's accounts in every mode.
 
 Off by default. Kept in <state>/groups.json (atomic, NOT per day: the turn carries to the next day). Only Lab
 strategies; a strategy is in one group at most. A member's accounts must still be booked to it on the Desk: an account
 of the group the member is not booked on is simply not in its turn."""
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import sys
@@ -26,12 +33,20 @@ from .engine_lab import GROUP_HEDGE, LAB, LAB_BAD_ORDER, LAB_PREFIX
 
 GROUP_NONE = "No account of its group could take this trade."
 GROUP_UNBOOKED = "It is not booked on any account of its group."
+GROUP_NO_OWN = "Its own account in its group cannot take this trade (none chosen, not booked there, or that account sits out)."
 GROUP_ID_RE = re.compile(r"[a-z0-9][a-z0-9_-]{0,39}")
 MAX_GROUPS = 12
 MAX_NAME = 40
 RISK_MOST = 100_000.0
 MINIS_MOST = 100
+MODES = ("cycle", "share", "split")
 MINIS_DEFAULT = 17             # Apex 300K PA: half size (17 minis = 170 micros) until the account is past +$7,600
+
+
+def member_risk(g: dict, name: str) -> float:
+    """The dollars at risk a trade for `name` in group `g`: its own `risk_by` amount, else the group's `risk_usd` (0 = each
+    strategy's own size)."""
+    return float((g.get("risk_by") or {}).get(name) or g.get("risk_usd") or 0.0)
 
 
 class GroupError(ValueError):
@@ -70,7 +85,14 @@ class GroupMixin:
                                         "members": [m for m in g.get("members") or [] if isinstance(m, str)],
                                         "accounts": [a for a in g.get("accounts") or [] if isinstance(a, str)],
                                         "risk_usd": float(g.get("risk_usd") or 0.0),
+                                        # a bad amount is left out (that member takes the cycle's risk), never the group
+                                        "risk_by": {m: float(v) for m, v in (g.get("risk_by") if isinstance(g.get("risk_by"), dict) else {}).items()
+                                                    if m in (g.get("members") or []) and not isinstance(v, bool)
+                                                    and isinstance(v, (int, float)) and 0 < v <= RISK_MOST},
                                         "max_minis": int(g.get("max_minis") or MINIS_DEFAULT),
+                                        "mode": g.get("mode") if g.get("mode") in MODES else "cycle",
+                                        "assign": {m: a for m, a in (g.get("assign") if isinstance(g.get("assign"), dict) else {}).items()
+                                                   if m in (g.get("members") or []) and a in (g.get("accounts") or [])},
                                         "on": g.get("on") is True,
                                         "last": g.get("last") if isinstance(g.get("last"), str) else None}
             except Exception as e:  # noqa: BLE001
@@ -100,17 +122,20 @@ class GroupMixin:
         a member is only ever traded on the group's accounts, so those bookings never trade (said on the page)."""
         out = {}
         for gid, g in self.groups.items():
-            outside = {m: [r["account"] for r in assignments(self.cfg, m) if r["account"] not in g["accounts"]]
+            split = g.get("mode") == "split"            # one account each: every other booking of a member never trades
+            outside = {m: [r["account"] for r in assignments(self.cfg, m)
+                           if (r["account"] != g["assign"].get(m) if split else r["account"] not in g["accounts"])]
                        for m in g["members"]}
             out[gid] = {**{k: v for k, v in g.items() if k != "last"},
-                        "next": (self.group_turn(g) or [None])[0] if g["on"] else None,
+                        "next": (self.group_turn(g) or [None])[0] if g["on"] and g.get("mode", "cycle") == "cycle" else None,
                         "outside": {m: a for m, a in outside.items() if a}}
         return out
 
-    def group_open_sides(self, g: dict, symbol: str) -> set:
+    def group_open_sides(self, g: dict, symbol: str, same: tuple = ()) -> set:
         """"Buy" / "Sell" of every trade in `symbol`'s market that is open, or whose entry is working, on any of the
         group's accounts today -- the desk's own rounds (any strategy, member or not) and, where the adapter keeps
-        one, the broker's cached positions. A working entry whose side cannot be read counts as both."""
+        one, the broker's cached positions. A working entry whose side cannot be read counts as both. `same` = (strategy,
+        its entry's ids): that very entry, sent to another account of a "share" group, is not a hedge of itself."""
         today = self._today()
 
         def broker(a: str):
@@ -127,6 +152,9 @@ class GroupMixin:
             if s.date != today and not unsure:
                 continue
             if so is not None and market_of(so.symbol) != market:
+                continue
+            if same and lab and s.strategy == same[0] and s.date == today and not s.entry_side \
+                    and set((self._lab_x(s).get("iid") or {}).values()) == set(same[1]):
                 continue
             went_in = (s.entry_qty or s.qty or 0) if s.entry_side else 0
             if s.entry_side and (s.exit_qty or 0) < went_in:
@@ -147,8 +175,9 @@ class GroupMixin:
                     sides.add("Buy" if p["net"] > 0 else "Sell")
         return sides
 
-    def group_hedged(self, g: dict, symbol: str, legs: list) -> bool:
-        return _opposite(self.group_open_sides(g, symbol), {leg.side for leg in legs})
+    def group_hedged(self, g: dict, symbol: str, legs: list, name: str = "") -> bool:
+        same = (name, [leg.iid for leg in legs]) if name and g.get("mode") == "share" else ()
+        return _opposite(self.group_open_sides(g, symbol, same), {leg.side for leg in legs})
 
     def hedge_refusal(self, name: str, account: str, symbol: str, legs: list) -> Optional[str]:
         """GROUP_HEDGE when an entry of `name` on `account` would be opposite to a trade open on an account of an ON group
@@ -156,7 +185,7 @@ class GroupMixin:
         trading one of its accounts, may not hedge it either). Asked with no await before a round is written."""
         grp = self.group_of(name)
         gs = [grp[1]] if grp is not None else [g for g in self.groups.values() if g["on"] and account in g["accounts"]]
-        return GROUP_HEDGE if any(self.group_hedged(g, symbol, legs) for g in gs) else None
+        return GROUP_HEDGE if any(self.group_hedged(g, symbol, legs, name if grp is not None else "") for g in gs) else None
 
     # --- the switch and the settings ----------------------------------------------------------------------------
     def set_group(self, gid: str, body: dict) -> dict:
@@ -170,7 +199,10 @@ class GroupMixin:
         members = body.get("members", old.get("members", []))
         accounts = body.get("accounts", old.get("accounts", []))
         risk = body.get("risk_usd", old.get("risk_usd", 0.0))
+        risk_by = body.get("risk_by", old.get("risk_by", {}))
         minis = body.get("max_minis", old.get("max_minis", MINIS_DEFAULT))
+        mode = body.get("mode", old.get("mode", "cycle"))
+        assign = body["assign"] if "assign" in body else {m: a for m, a in old.get("assign", {}).items() if a in accounts}
         on = body.get("on", old.get("on", False))
         if not isinstance(name, str) or not name.strip() or len(name) > MAX_NAME:
             raise GroupError(f"A name of 1 to {MAX_NAME} characters.")
@@ -195,15 +227,27 @@ class GroupMixin:
                     raise GroupError(f"{a} is already in the group {g['name']}.")
         if isinstance(risk, bool) or not isinstance(risk, (int, float)) or not 0 <= risk <= RISK_MOST:
             raise GroupError(f"Risk per trade: a dollar amount from 0 to {RISK_MOST:,.0f} (0 = each strategy's own size).")
+        if not isinstance(risk_by, dict) or not all(isinstance(m, str) and not isinstance(v, bool) and isinstance(v, (int, float))
+                                                    and 0 <= v <= RISK_MOST for m, v in risk_by.items()):
+            raise GroupError(f"Risk per strategy: a dollar amount from 0 to {RISK_MOST:,.0f} each (0 = the cycle's risk).")
+        # a strategy that left the group takes its own risk with it; 0 = the cycle's risk
+        risk_by = {m: float(v) for m, v in risk_by.items() if m in members and v > 0}
         if isinstance(minis, bool) or not isinstance(minis, int) or not 1 <= minis <= MINIS_MOST:
             raise GroupError(f"Most per trade: 1 to {MINIS_MOST} full contracts.")
+        if mode not in MODES:
+            raise GroupError("Mode: cycle, share or split.")
+        if not isinstance(assign, dict) or not all(isinstance(m, str) and isinstance(a, str) for m, a in assign.items()):
+            raise GroupError("Account per strategy: one account for each strategy.")
+        if any(a not in accounts for m, a in assign.items() if m in members):
+            raise GroupError("A strategy's own account must be one of the group's ticked accounts.")
+        assign = {m: a for m, a in assign.items() if m in members}      # a strategy that left the group takes its account with it
         if not isinstance(on, bool):
             raise GroupError("on must be true or false.")
         if on and (not members or not accounts):
             raise GroupError("A group needs a strategy and an account before it can go on.")
         had = self.groups.get(gid)
         self.groups[gid] = {"name": name.strip(), "members": members, "accounts": accounts, "risk_usd": float(risk),
-                            "max_minis": minis, "on": on,
+                            "risk_by": risk_by, "max_minis": minis, "mode": mode, "assign": assign, "on": on,
                             "last": old.get("last") if old.get("last") in accounts else None}
         try:
             self._save_groups()
@@ -214,7 +258,7 @@ class GroupMixin:
                 self.groups[gid] = had
             raise
         self.journal("group_set", group=gid, **{k: v for k, v in self.groups[gid].items() if k != "last"})
-        if on:                                       # each member's own Take turns goes on with the cycle (owner 2026-10-25):
+        if on and mode == "cycle":                   # each member's own Take turns goes on with the cycle (owner 2026-10-25):
             for m in members:                        # its page says so, and with the cycle off later it still takes one
                 # account a trade instead of every account at once. Only when the cycle goes on or the member joins it: a
                 # Take turns the owner switched off later is left as he set it
@@ -247,10 +291,12 @@ class GroupMixin:
     # --- an entry ---------------------------------------------------------------------------------------------
     async def _group_enter(self, grp: tuple, name: str, cfg, legs: list, sizes: dict, max_rounds: int,
                            source: str, t0: float) -> dict:
-        """lab_enter for a member of an ON group: the first account of the group, in turn, that opens a round takes
-        it (one that sits out passes the turn on). An entry opposite to a trade open on any of the group's accounts
-        is refused whole: no account is asked and the turn stays."""
+        """lab_enter for a member of an ON group. "cycle": the first account of the group, in turn, that opens a round
+        takes it (one that sits out passes the turn on); "share": every booked account of the group; "split": only the
+        member's own account. An entry opposite to a trade open on any of the group's accounts is refused whole: no
+        account is asked and the turn stays."""
         gid, g = grp
+        mode = g.get("mode", "cycle")
 
         def hedge() -> dict:
             self.journal("group_hedge_skipped", group=gid, strategy=name, sides=sorted({x.side for x in legs}),
@@ -258,12 +304,23 @@ class GroupMixin:
             return {"armed": bool(self.cfg.armed), "reason": GROUP_HEDGE,
                     "accounts": {a: {"ok": False, "round": None, "reason": GROUP_HEDGE} for a in sizes}}
 
-        if self.group_hedged(g, cfg.symbol, legs):
+        if self.group_hedged(g, cfg.symbol, legs, name):
             return hedge()
-        if not any(a in sizes for a in g["accounts"]):     # booked only outside the cycle: said, never silent (2026-10-26)
-            self.journal("group_skipped", group=gid, strategy=name, reason=GROUP_UNBOOKED, accounts={})
-            return {"armed": bool(self.cfg.armed), "reason": GROUP_UNBOOKED,
-                    "accounts": {a: {"ok": False, "round": None, "reason": GROUP_UNBOOKED} for a in sizes}}
+        mine = [g["assign"][name]] if mode == "split" and g.get("assign", {}).get(name) in sizes \
+            else [] if mode == "split" else [a for a in g["accounts"] if a in sizes]
+        if not mine:                                 # booked only outside the cycle: said, never silent (2026-10-26)
+            why = GROUP_NO_OWN if mode == "split" else GROUP_UNBOOKED
+            self.journal("group_skipped", group=gid, strategy=name, reason=why, accounts={})
+            return {"armed": bool(self.cfg.armed), "reason": why,
+                    "accounts": {a: {"ok": False, "round": None, "reason": why} for a in sizes}}
+        if mode != "cycle":                          # share: every account at once; split: its one account
+            outs = await asyncio.gather(*(self._lab_enter_one(name, a, sizes[a], legs, max_rounds, source, t0) for a in mine),
+                                        return_exceptions=True)
+            tried = {a: (o if isinstance(o, dict) else {"ok": False, "round": None, "reason": LAB_BAD_ORDER}) for a, o in zip(mine, outs)}
+            if not any(r.get("round") is not None for r in tried.values()):
+                self.journal("group_skipped", group=gid, strategy=name, reason=GROUP_NONE,
+                             accounts={a: r.get("reason") for a, r in tried.items()})
+            return {"armed": bool(self.cfg.armed), "accounts": tried}
         tried = {}
         for a in (a for a in self.group_turn(g) if a in sizes):
             try:
