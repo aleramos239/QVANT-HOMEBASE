@@ -102,12 +102,15 @@ def _net_of(row: dict) -> int:
     return int(row.get(POS_BUYS_FIELD, 0)) - int(row.get(POS_SELLS_FIELD, 0))
 
 
-def _pos_root(v) -> str:
-    """A position row's root: "NQ", "NQZ26", "CME_Eq NQ" or "XCME_Eq NQ (Z26)" all read NQ; "" when no traded root is in it."""
-    for tok in str(v or "").upper().replace("(", " ").split():
-        if root_of(tok) in EXCHANGE:
-            return root_of(tok)
-    return ""
+def _pos_root(contract, market) -> str:
+    """A position row's root: "NQ", "NQZ26", "CME_Eq NQ" or "XCME_Eq NQ (Z26)" all read NQ; a plain root we do not trade
+    (a hand-opened "CL") reads as itself; "" = unreadable (empty, or not a root at all)."""
+    for v in (contract, market):
+        for tok in str(v or "").upper().replace("(", " ").split():
+            if root_of(tok) in EXCHANGE:
+                return root_of(tok)
+    c = root_of(str(contract or "").strip().upper())
+    return c if re.fullmatch(r"[A-Z][A-Z0-9]{0,5}", c) else ""
 
 
 async def _resubscribe(s: AtrSession) -> None:
@@ -251,7 +254,7 @@ class AlphaTraderAdapter(BrokerAdapter):
     def _apply(self, name: str, data: dict) -> None:
         if name == "accountPosition":
             mid = data.get("marketId", "")
-            self._pos[mid] = (_pos_root(data.get(POS_ROOT_FIELD)) or _pos_root(mid), _net_of(data))
+            self._pos[mid] = (_pos_root(data.get(POS_ROOT_FIELD), mid), _net_of(data))
             self._dirty.discard(mid)
             if not self._dirty:
                 self._resynced = False                  # the dirty episode is over
@@ -379,7 +382,7 @@ class AlphaTraderAdapter(BrokerAdapter):
         root = root_of(str(symbol or "").strip().upper())
         if root not in EXCHANGE:
             raise ValueError(f"alphatrader: unknown market {symbol!r}")
-        if not self.positions_known or any(n and r not in EXCHANGE for r, n in self._pos.values()):
+        if not self.positions_known or any(n and not r for r, n in self._pos.values()):
             raise RuntimeError("position unknown")      # a held row whose root we cannot read could be this market
         return sum(n for r, n in self._pos.values() if r == root)
 

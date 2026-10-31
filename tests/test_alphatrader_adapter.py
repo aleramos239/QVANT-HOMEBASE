@@ -243,12 +243,15 @@ async def seeded(s, name="AF-50K-1", *rows):
     return a
 
 
-def test_a_position_root_in_another_form_counts_and_an_unreadable_one_reads_unknown():
+def test_a_position_root_in_another_form_counts_an_untraded_root_is_its_own_and_an_unreadable_one_reads_unknown():
     async def go():
         s = session()
         a = await seeded(s, "AF-50K-1", pos("A1", NQZ26, "NQZ26", buys=1), pos("A1", NQH27, "CME_Eq NQ", buys=1),
                          pos("A1", ESZ26, "", sells=1))         # no contractId: the market id names it
         assert await a.get_net_position("NQ") == 2 and await a.get_net_position("ES") == -1
+        s.socket.push("accountPosition", pos("A1", "XCME_C CL (Z26)", "CL", buys=1))   # a hand-opened market we do not trade
+        assert await a.get_net_position("NQ") == 2                   # is just another market
+        assert (await a.get_metrics())["open_positions"][-1] == {"symbol": "CL", "net": 1}
         s.socket.push("accountPosition", pos("A1", "T4-123", "", buys=1))     # a held row we cannot read
         with pytest.raises(RuntimeError, match="position unknown"):
             await a.get_net_position("NQ")                       # it could be NQ: never read past it
