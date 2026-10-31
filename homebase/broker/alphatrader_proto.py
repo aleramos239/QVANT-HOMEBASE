@@ -237,10 +237,11 @@ def server(buf):
     return "", {}
 
 
-def price(x, tick):
-    """A common.Price rounded to the tick, written with the tick's decimals."""
+def price(x, tick, rounding=ROUND_HALF_UP):
+    """A common.Price rounded to the tick (nearest, or `rounding`: decimal.ROUND_FLOOR / ROUND_CEILING), written with
+    the tick's decimals."""
     t = Decimal(repr(tick))
-    n = (Decimal(repr(x)) / t).to_integral_value(ROUND_HALF_UP)
+    n = (Decimal(repr(x)) / t).to_integral_value(rounding)
     return {"value": f"{n * t:.{max(0, -t.as_tuple().exponent)}f}"}
 
 

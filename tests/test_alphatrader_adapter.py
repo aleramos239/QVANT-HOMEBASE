@@ -370,10 +370,11 @@ def pulls(sock):
 
 
 def t4(acct="A1", refuse=(), after=None):
-    """A T4 stand-in: a submit is answered per order (an entry WORKING, a leg HELD, a MARKET close FINISHED and its market's
-    position set to `after[marketId]` (flat by default)); a refused market answers orderUpdateFailed with no uniqueId; a
-    pull is answered FINISHED."""
+    """A T4 stand-in: a submit is answered per order (an entry WORKING, a leg HELD, a MARKET close FINISHED fully filled
+    and its market's position set to the next of `after[marketId]` (a list of (buys, sells); flat when used up)); a
+    refused market answers orderUpdateFailed with no uniqueId; a pull is answered FINISHED."""
     n = iter(range(1, 1000))
+    after = {m: list(v) for m, v in (after or {}).items()}
 
     def reply(payload, d):
         out = []
@@ -388,9 +389,11 @@ def t4(acct="A1", refuse=(), after=None):
                 status = proto.HELD if o.get("activationType") else proto.FINISHED if close else proto.WORKING
                 out.append(("orderUpdate", {"uniqueId": f"U{next(n)}", "accountId": acct, "marketId": d["marketId"],
                                             "status": status, "buySell": o["buySell"], "priceType": o.get("priceType", 0),
-                                            "currentVolume": o.get("volume", 0), "tagClOrdId": o["ClOrdId"]}))
+                                            "currentVolume": o.get("volume", 0), "tagClOrdId": o["ClOrdId"],
+                                            "totalFillVolume": o.get("volume", 0) if close else 0}))
                 if close:
-                    buys, sells = (after or {}).get(d["marketId"], (0, 0))
+                    left = after.get(d["marketId"], [])
+                    buys, sells = left.pop(0) if left else (0, 0)
                     out.append(("accountPosition", pos(acct, d["marketId"], "", buys=buys, sells=sells)))
         elif payload == "orderPull":
             out += [("orderUpdateStatus", {"uniqueId": p["uniqueId"], "accountId": acct, "marketId": d["marketId"],
@@ -557,6 +560,8 @@ def test_flatten_reads_positions_first_closes_each_month_then_pulls_only_closed_
         kinds = [k for k, _ in sock.sent]
         assert kinds.index("orderPull") > max(i for i, k in enumerate(kinds) if k == "orderSubmit")   # close first
         assert await a.get_net_position("NQ") == 0 and await a.get_net_position("ES") == 1
+        assert r.raw["net_before"] == 1 and r.raw["flattened"] == 2          # the root's net, as the desk reads it
+        assert r.raw["market"] == {"ok": True, "order_id": "U1", "error": None}
     asyncio.run(go())
 
 
@@ -572,7 +577,9 @@ def test_a_refused_close_on_one_month_still_pulls_the_other_months_orders():
     asyncio.run(go())
 
 
-def test_flatten_refuses_while_positions_are_unknown():
+def test_flatten_refuses_while_positions_are_unknown(monkeypatch):
+    monkeypatch.setattr(alphatrader, "ORDER_WAIT_S", 0.05)
+
     async def go():
         s = session(ROWS)
         a = adapter(s)
@@ -583,7 +590,7 @@ def test_flatten_refuses_while_positions_are_unknown():
         s.socket.push("orderUpdateTrade", {"uniqueId": "U9", "accountId": "A1", "marketId": NQZ26, "totalFillVolume": 1})
         r = await a.flatten_symbol("NQ")                             # a fill whose position has not landed
         assert not r.ok and "unknown" in r.error
-        assert [k for k, _ in s.socket.sent] == []
+        assert [k for k, _ in s.socket.sent] == ["accountSubscribe"]   # only the snapshots asked for again: no order
     asyncio.run(go())
 
 
@@ -642,16 +649,166 @@ def test_flatten_closes_again_only_when_the_net_flipped_sign(monkeypatch):
 
     async def go():
         a, sock = await ready({"accountPosition": pos("A1", NQZ26, "NQ", buys=2)})
-        sock.reply = t4(after={NQZ26: (0, 1)})                       # the bracket's stop filled too: short 1
+        sock.reply = t4(after={NQZ26: [(0, 1)]})                     # the bracket's stop filled too: short 1
         r = await a.flatten_symbol("NQ")
         assert [(s["orders"][0]["buySell"], s["orders"][0]["volume"]) for s in subs(sock)] == \
             [(proto.SELL, 2), (proto.BUY, 1)]
         assert r.ok, r.error
 
         a, sock = await ready({"accountPosition": pos("A1", NQZ26, "NQ", buys=2)})
-        sock.reply = t4(after={NQZ26: (2, 0)})                       # the close has not filled yet
+        sock.reply = t4(after={NQZ26: [(2, 0)]})                     # filled, yet the position still reads +2
         r = await a.flatten_symbol("NQ")
         assert len(subs(sock)) == 1 and not r.ok and "not sent again" in r.error
+    asyncio.run(go())
+
+
+def test_a_close_not_filled_in_the_wait_keeps_the_stop_and_blocks_a_second_close(monkeypatch):
+    monkeypatch.setattr(alphatrader, "ORDER_WAIT_S", 0.05)
+
+    async def go():
+        a, sock = await ready({"accountPosition": pos("A1", NQZ26, "NQ", buys=2)}, working("U10", NQZ26))
+        sock.reply = lambda p, d: [("orderUpdate", {"uniqueId": "U1", "accountId": "A1", "marketId": NQZ26,
+                                                    "status": proto.WORKING, "tagClOrdId": d["orders"][0]["ClOrdId"],
+                                                    "currentVolume": 2, "buySell": proto.SELL})]
+        r = await a.flatten_symbol("NQ")
+        assert not r.ok and "not filled" in r.error and pulls(sock) == []          # the stop stays
+        assert r.raw["market"]["ok"] and r.raw["market"]["order_id"] == "U1" and r.raw["flattened"] == 0
+        r = await a.flatten_symbol("NQ")                             # the first close may still fill: never a second
+        assert not r.ok and "still working" in r.error and len(subs(sock)) == 1
+        sock.push("orderUpdate", {"uniqueId": "U1", "accountId": "A1", "marketId": NQZ26, "status": proto.FINISHED,
+                                  "totalFillVolume": 2})
+        sock.push("accountPosition", pos("A1", NQZ26, "NQ"))
+        sock.reply = t4()
+        r = await a.flatten_symbol("NQ")                             # done and flat: the stop is pulled now
+        assert r.ok, r.error
+        assert len(subs(sock)) == 1 and pulls(sock) == [(NQZ26, "U10")]
+    asyncio.run(go())
+
+
+def test_a_close_finished_with_no_fill_keeps_the_stop(monkeypatch):
+    monkeypatch.setattr(alphatrader, "ORDER_WAIT_S", 0.05)
+
+    async def go():
+        a, sock = await ready({"accountPosition": pos("A1", NQZ26, "NQ", buys=1)}, working("U10", NQZ26))
+        sock.reply = lambda p, d: [("orderUpdate", {"uniqueId": "U1", "accountId": "A1", "marketId": NQZ26,
+                                                    "status": proto.FINISHED, "tagClOrdId": d["orders"][0]["ClOrdId"]})]
+        r = await a.flatten_symbol("NQ")
+        assert not r.ok and "0 of 1 filled" in r.error and pulls(sock) == []
+        assert await a.get_order_status("U1") == "Canceled"
+    asyncio.run(go())
+
+
+def test_the_stop_filling_before_the_close_ends_flat_with_one_re_close(monkeypatch):
+    monkeypatch.setattr(alphatrader, "ORDER_WAIT_S", 0.5)
+
+    async def go():
+        a, sock = await ready({"accountPosition": pos("A1", NQZ26, "NQ", buys=2)},
+                              working("U10", NQZ26), working("U11", NQZ26, proto.HELD, ptype=proto.LIMIT))
+        answer = t4(after={NQZ26: [(0, 2)]})
+
+        def reply(p, d):                                             # the stop fills first: flat, then our close: short 2
+            first = [("orderUpdate", {"uniqueId": "U10", "accountId": "A1", "marketId": NQZ26, "status": proto.FINISHED,
+                                      "totalFillVolume": 2}),
+                     ("accountPosition", pos("A1", NQZ26, "NQ"))] if len(subs(sock)) == 1 else []
+            return first + answer(p, d)
+        sock.reply = reply
+        r = await a.flatten_symbol("NQ")
+        assert r.ok, r.error
+        assert [(s["orders"][0]["buySell"], s["orders"][0]["volume"]) for s in subs(sock)] == \
+            [(proto.SELL, 2), (proto.BUY, 2)]
+        assert pulls(sock) == [(NQZ26, "U11")] and await a.get_net_position("NQ") == 0
+    asyncio.run(go())
+
+
+def test_two_flattens_at_once_send_one_close():
+    async def go():
+        a, sock = await ready({"accountPosition": pos("A1", NQZ26, "NQ", buys=2)})
+        r1, r2 = await asyncio.gather(a.flatten_symbol("NQ"), a.flatten_all())
+        assert r1.ok and r2.ok and len(subs(sock)) == 1
+        assert r2.raw["flattened"] == 0 and "market" not in r2.raw   # the second found nothing held
+    asyncio.run(go())
+
+
+def test_flatten_waits_for_a_just_filled_market_to_settle(monkeypatch):
+    monkeypatch.setattr(alphatrader, "ORDER_WAIT_S", 0.5)
+
+    async def go():
+        a, sock = await ready({"accountPosition": pos("A1", NQZ26, "NQ", buys=1)})
+        sock.push("orderUpdateTrade", {"uniqueId": "U9", "accountId": "A1", "marketId": NQZ26, "totalFillVolume": 1})
+        asyncio.get_running_loop().call_later(0.02, sock.push, "accountPosition", pos("A1", NQZ26, "NQ", buys=2))
+        r = await a.flatten_symbol("NQ")
+        assert r.ok, r.error
+        assert [(s["orders"][0]["buySell"], s["orders"][0]["volume"]) for s in subs(sock)] == [(proto.SELL, 2)]
+    asyncio.run(go())
+
+
+def test_a_socket_closing_during_the_send_is_outcome_unknown_and_a_late_reject_is_journaled():
+    async def go():
+        a, sock = await ready(working("U10", NQZ26))
+        seen = []
+        a.journal = lambda kind, **kw: seen.append((kind, kw))
+        sent = []
+
+        async def lost(payload, data):
+            sent.append(data)
+            raise ConnectionError("closed mid-send")
+        sock.send = lost
+        r = await a.place_order(OrderRequest("NQZ26", "Buy", 1, "Limit", price=20000))
+        assert not r.ok and r.raw["outcome_unknown"] is True and "may have gone out" in r.error
+        r = await a.cancel_order_by_id("U10")
+        assert not r.ok and r.raw["outcome_unknown"] is True and r.order_id == "U10"
+        assert len(sent) == 2                                        # tried once each, never again
+        cid = sent[0]["orders"][0]["ClOrdId"]
+        sock.push("orderUpdateFailed", {"accountId": "A1", "marketId": NQZ26, "status": proto.REJECTED,
+                                        "statusDetail": "market closed", "tagClOrdId": cid})
+        assert [k for k, kw in seen if kw.get("clOrdId") == cid] == ["atr_order_send_lost", "atr_order_late_answer"]
+    asyncio.run(go())
+
+
+def test_order_status_reads_the_desk_words_from_the_cache():
+    async def go():
+        a, sock = await ready(working("U10", NQZ26), working("U11", NQZ26, proto.HELD),
+                              working("U12", NQZ26, proto.REJECTED))
+        sock.push("orderUpdate", {"uniqueId": "U13", "accountId": "A1", "marketId": NQZ26, "status": proto.FINISHED,
+                                  "totalFillVolume": 2})
+        sock.push("orderUpdate", {"uniqueId": "U14", "accountId": "A1", "marketId": NQZ26, "status": proto.FINISHED})
+        words = {u: await a.get_order_status(u) for u in ("U10", "U11", "U12", "U13", "U14", "U404")}
+        assert words == {"U10": "Working", "U11": "Suspended", "U12": "Rejected", "U13": "Filled", "U14": "Canceled",
+                         "U404": None}
+        assert await a.get_order_state("U13") == {"status": "Filled", "filled_qty": 2}
+        assert await a.get_order_state("U10") == {"status": "Working", "filled_qty": None}
+        sock.up = False                                              # not known: never a guess
+        assert await a.get_order_state("U13") == {"status": None, "filled_qty": None}
+    asyncio.run(go())
+
+
+def test_bad_prices_and_quantities_are_refused_and_nothing_is_sent():
+    async def go():
+        a, sock = await ready()
+        for req in (OrderRequest("NQZ26", "Buy", 1, "Limit", price=float("nan")),
+                    OrderRequest("NQZ26", "Buy", 1, "Limit", price=float("inf")),
+                    OrderRequest("NQZ26", "Buy", 1, "Limit", price=0),
+                    OrderRequest("NQZ26", "Buy", 1, "Limit", price=20000, stop_price=-5),
+                    OrderRequest("NQZ26", "Buy", 1, "Limit", price="20000")):
+            r = await a.place_order(req)
+            assert not r.ok and "bad price" in r.error, req
+        for qty in (0, -1, 1.5, True, "1"):
+            r = await a.place_order(OrderRequest("NQZ26", "Buy", qty, "Limit", price=20000))
+            assert not r.ok and "whole number" in r.error, qty
+        assert sock.sent == []
+    asyncio.run(go())
+
+
+def test_the_stop_rounds_away_from_the_entry_and_the_target_to_the_nearest_tick():
+    async def go():
+        a, sock = await ready()
+        assert (await a.place_bracket(OrderRequest("NQZ26", "Buy", 1, "Limit", price=20000, stop_price=19990.24,
+                                                   tp_price=20020.13))).ok
+        assert (await a.place_bracket(OrderRequest("NQZ26", "Sell", 1, "Limit", price=20000, stop_price=20010.01,
+                                                   tp_price=19980.12))).ok
+        (_, btp, bsl), (_, stp, ssl) = (s["orders"] for s in subs(sock))
+        assert (bsl["stopPrice"], btp["limitPrice"]) == ({"value": "19990.00"}, {"value": "20020.25"})
+        assert (ssl["stopPrice"], stp["limitPrice"]) == ({"value": "20010.25"}, {"value": "19980.00"})
     asyncio.run(go())
 
 
