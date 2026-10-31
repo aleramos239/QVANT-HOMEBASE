@@ -20,7 +20,9 @@ import logging
 import math
 import numbers
 import re
+import time
 import uuid
+from collections import deque
 from decimal import ROUND_CEILING, ROUND_FLOOR
 from typing import Optional
 
@@ -29,7 +31,7 @@ from ..contracts import root_of
 from . import alphatrader_proto as proto
 from .alphatrader_auth import AtrSession
 from .alphatrader_ws import AtrSocket
-from .base import AccountNotOnLogin, BrokerAdapter, FillCallback, OrderRequest, OrderResult
+from .base import AccountNotOnLogin, BrokerAdapter, FillCallback, FillEvent, OrderRequest, OrderResult
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +70,8 @@ SEND_LOST = "alphatrader: the socket closed during the send: it may have gone ou
 STATUS_WORDS = {proto.WORKING: "Working", proto.HELD: "Suspended", proto.REJECTED: "Rejected"}
 FLATTEN_TAG = "homebase:flatten"
 _ORDER_CAP = 5000
+_SEEN_FILL_CAP = 20000
+SIDE_WORDS = {proto.BUY: "Buy", proto.SELL: "Sell"}
 # T4 order message -> {cache key: its field}. proto3 leaves defaults off the wire, so every field a message carries is set
 # (a missing one is its default), and the fields a message does not carry are kept from the earlier messages.
 _ORDER_KEYS = {
@@ -176,7 +180,15 @@ class AlphaTraderAdapter(BrokerAdapter):
         self._orders: dict[str, dict] = {}              # uniqueId -> fields (see _ORDER_KEYS), THIS account only
         self._orders_ok = False
         self._balance: Optional[float] = None
-        self._no_stop: set = set()                      # marketIds holding a position with no working stop seen (Task 6)
+        self._no_stop: set = set()                      # marketIds holding a position with no working stop seen
+        self._touched: set = set()                      # marketIds filled since the last stop check
+        self._guard: Optional[asyncio.Task] = None      # the stop check after fills
+        self._seen: set = set()                         # fill keys already reported (or in the first snapshot's history)
+        self._seen_order: deque = deque(maxlen=_SEEN_FILL_CAP)
+        self._trades_seeded = False                     # the first snapshot's trades are history: remembered, not reported
+        self._snap = False                              # a snapshot is being applied
+        self._out: deque = deque(maxlen=1000)           # FillEvents waiting for the callback, oldest first
+        self._pump: Optional[asyncio.Task] = None
         self._resync: Optional[asyncio.Task] = None     # the wait before asking for the snapshots again
         self._resynced = False                          # this dirty episode already asked once
         self._waits: dict[str, asyncio.Future] = {}     # a sent ClOrdId, or "pull:<uniqueId>" -> its T4 answer
@@ -248,6 +260,9 @@ class AlphaTraderAdapter(BrokerAdapter):
         """Leaves the login: the socket stops with its last adapter, the session is never closed here."""
         self._connected = False
         self._pos_ok = self._orders_ok = False          # off the socket: whatever it sends next is missed
+        for t in (self._guard, self._resync):
+            if t is not None:
+                t.cancel()
         s = self.session
         if self in s.adapters:
             s.adapters.remove(self)
@@ -263,7 +278,8 @@ class AlphaTraderAdapter(BrokerAdapter):
             self._pick()
 
     async def observe_fills(self, on_fill: FillCallback) -> None:
-        self._on_fill = on_fill                         # delivery: Task 6
+        self._on_fill = on_fill
+        self._kick()                                    # fills that came before the callback was set
 
     # ------------------------------------------------------------ the socket's events
     def _on_event(self, name: str, data: dict) -> None:
@@ -282,6 +298,8 @@ class AlphaTraderAdapter(BrokerAdapter):
             self._dirty.discard(mid)
             if not self._dirty:
                 self._resynced = False                  # the dirty episode is over
+            self._notify("position", data)
+            self._recheck(mid)
         elif name == "accountUpdate":
             if "balance" in data:                       # a status-only update carries no balance
                 self._balance = data["balance"]
@@ -290,7 +308,13 @@ class AlphaTraderAdapter(BrokerAdapter):
                 for kind, d in u.items():
                     self._apply(kind, d)
         elif name in _ORDER_KEYS:
-            self._answer(name, data, self._on_order(name, data))
+            row = self._on_order(name, data)
+            self._answer(name, data, row)
+            for t in [data] if name == "orderUpdateTrade" else data.get("trades", []) if name == "orderUpdate" else []:
+                self._fill(t, data, row)
+            self._notify("order", data)
+            if row is not None:
+                self._recheck(row["marketId"])
 
     def _answer(self, name: str, data: dict, row: Optional[dict]) -> None:
         """Wake whoever waits on this order message: a submit by its ClOrdId (an orderUpdateFailed may come before any
@@ -313,11 +337,19 @@ class AlphaTraderAdapter(BrokerAdapter):
         self._pos, self._dirty = {}, set()
         if not self._orders_ok:
             self._orders = {}
-        for m in data.get("messages", []):
-            for name, d in m.items():
-                self._apply(name, d)
+        self._snap = True
+        try:
+            for m in data.get("messages", []):
+                for name, d in m.items():
+                    self._apply(name, d)
+        finally:
+            self._snap = False
+        self._trades_seeded = True
         self._dirty, self._resynced = set(), False      # the snapshot's positions come after its trades
         self._pos_ok = self._orders_ok = True
+        for mid in list(self._no_stop):
+            self._recheck(mid)
+        self._notify("sync", {})
         # a flatten close the whole book does not hold (and no submit still waits on) never reached T4: it no longer blocks
         for c, m in list(self._closes.items()):
             if self._by_cid(c) is not None or c in self._waits:
@@ -370,6 +402,106 @@ class AlphaTraderAdapter(BrokerAdapter):
         if (self._dirty or not self._pos_ok) and not self._resynced:
             self._resynced = True
             await _resubscribe(self.session)
+
+    # ------------------------------------------------------------ fills and the no-stop guard
+    def _fill(self, t: dict, msg: dict, row: Optional[dict]) -> None:
+        """One trade (an orderUpdateTrade, or one entry of orderUpdate.trades) -> one FillEvent, once per
+        (uniqueId, sequenceOrder) or exchangeTradeId. Ours or not (Alpha's own close, a hand trade): reported the same."""
+        uid, xid = msg.get("uniqueId", ""), t.get("exchangeTradeId", "")
+        mid = msg.get("marketId", "") or (row or {}).get("marketId", "")
+        keys = ([("seq", uid, t.get("sequenceOrder", 0))] if uid else []) + ([("x", xid)] if xid else [])
+        new = not any(k in self._seen for k in keys)
+        for k in keys:                                  # every key: a later message carrying only the other one is the same
+            self._mark_seen(k)
+        if not new or (self._snap and not self._trades_seeded):
+            return
+        side = SIDE_WORDS.get((row or {}).get("buySell") or t.get("buySell"), "")
+        qty, raw = int(t.get("volume", 0)), {"uniqueId": uid, "marketId": mid, **t}
+        if not side or qty <= 0:                        # a missed fill is worse than one without a side: reported anyway
+            log.warning("alphatrader %s: fill %s unreadable (side %r, qty %d)", self.account_id, uid, side, qty)
+            self.journal("atr_fill_unreadable", uniqueId=uid, market=mid, side=side, qty=qty)
+        known = self._pos_ok and mid in self._pos and mid not in self._dirty
+        self._out.append(FillEvent(account_id=self.account_id, symbol=self._root_of_market(mid) or mid, side=side,
+                                   qty=qty, price=_price(t.get("price")),
+                                   position_after=self._pos[mid][1] if known else None, ts=time.time(), raw=raw,
+                                   seen=time.perf_counter()))
+        self._notify("fill", raw)
+        if mid:
+            self._touched.add(mid)
+            if self._guard is None or self._guard.done():
+                try:
+                    self._guard = asyncio.get_running_loop().create_task(self._stop_guard())
+                except RuntimeError:
+                    pass
+        self._kick()
+
+    def _mark_seen(self, key) -> None:
+        if key in self._seen:
+            return
+        if len(self._seen_order) == self._seen_order.maxlen:
+            self._seen.discard(self._seen_order[0])
+        self._seen_order.append(key)
+        self._seen.add(key)
+
+    def _kick(self) -> None:
+        """Deliver the queued fills, oldest first, one at a time, off the socket's reader."""
+        if self._on_fill is None or not self._out or (self._pump is not None and not self._pump.done()):
+            return
+        try:
+            self._pump = asyncio.get_running_loop().create_task(self._drain())
+        except RuntimeError:
+            pass
+
+    async def _drain(self) -> None:
+        while self._out and self._on_fill is not None:
+            ev = self._out.popleft()
+            try:
+                await self._on_fill(ev)
+            except Exception as e:  # noqa: BLE001 -- one failing callback must not stop the fills behind it
+                log.warning("alphatrader %s: fill callback failed (%s)", self.account_id, type(e).__name__)
+
+    def _has_stop(self, mid: str, net: int) -> bool:
+        """Working or held STOP_MARKETs on the other side covering |net|."""
+        side = proto.SELL if net > 0 else proto.BUY
+        # unconfirmed: a held bracket stop sent with volume 0 reads its size in currentVolume once the entry fills
+        return sum(o["volume"] - o["filled"] for o in self._orders.values()
+                   if o["marketId"] == mid and o["status"] in _LIVE and o["priceType"] == proto.STOP_MARKET
+                   and o["buySell"] == side) >= abs(net)
+
+    def _recheck(self, mid: str) -> None:
+        """A flagged market whose stop showed up (or that went flat) is cleared. Only the guard flags."""
+        if mid not in self._no_stop or self._snap or not self._pos_ok or mid in self._dirty:
+            return
+        net = self._pos.get(mid, ("", 0))[1]
+        if not net or (self.orders_known and self._has_stop(mid, net)):
+            self._no_stop.discard(mid)
+
+    async def _stop_guard(self) -> None:
+        """After fills, STOP_GRACE_S on: each filled market still held must show a stop covering its net. Waits (never
+        acts) while the orders or the market's position are unknown. Never raises."""
+        while self._touched:
+            await _pause(STOP_GRACE_S)
+            mids, self._touched = self._touched, set()
+            for mid in sorted(mids):
+                if not (self.orders_known and self._pos_ok and mid not in self._dirty):
+                    self._touched.add(mid)              # unknown: look again after another grace
+                    continue
+                try:
+                    await self._check_stop(mid)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("alphatrader %s: stop check failed (%s)", self.account_id, type(e).__name__)
+
+    async def _check_stop(self, mid: str) -> None:
+        root, net = self._pos.get(mid, ("", 0))
+        if not net or self._has_stop(mid, net):
+            self._no_stop.discard(mid)
+            return
+        self._no_stop.add(mid)
+        log.warning("alphatrader %s: no working stop seen on %s (net %d)", self.account_id, mid, net)
+        self.journal("atr_no_stop_seen", market=mid, root=root, net=net)
+        if ATR_FLATTEN_IF_NO_STOP:
+            r = await self.flatten_symbol(root or mid)
+            self.journal("atr_no_stop_flatten", market=mid, root=root, ok=r.ok, error=r.error)
 
     # ------------------------------------------------------------ accounts and markets
     def list_accounts(self) -> list[dict]:
@@ -840,9 +972,17 @@ def _fan_up(session: AtrSession):
 
 
 def _session_taken(session: AtrSession):
-    """The login's handler for 'T4 ended this session for another login'. Task 6 counts and journals it; the socket logs in
-    again by itself (through the budget) and the next snapshot reseeds the caches."""
+    """The login's handler for 'T4 ended this session for another login': counted, journaled per account, and shown on
+    the card (session.lost) until the socket is back. The socket logs in again by itself (through the budget); the next
+    snapshot reseeds the caches and replays the fills missed meanwhile, once."""
     async def taken(why: str) -> None:
+        session.taken += 1
+        session.lost = f"T4 session taken ({why}): logging in again"
+        log.warning("alphatrader %s: T4 session taken (%s), %d time(s)", session.key, why, session.taken)
         for a in list(session.adapters):               # the book is stale until the next login's snapshot
             a._pos_ok = a._orders_ok = False
+            try:
+                a.journal("atr_session_taken", account=a.account_id, count=session.taken, why=why)
+            except Exception as e:  # noqa: BLE001 -- one account's journal must not stop the others'
+                log.warning("alphatrader %s: journal failed (%s)", a.account_id, type(e).__name__)
     return taken

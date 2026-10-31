@@ -1001,3 +1001,215 @@ def test_flatten_all_closes_every_market_held_even_one_we_do_not_trade():
             sorted([(NQZ26, proto.BUY, 3), (cl, proto.SELL, 1)])
         assert pulls(sock) == [(ESZ26, "U10")]
     asyncio.run(go())
+
+
+# ------------------------------------------------------------------ fills, the no-stop guard, a taken session (Task 6)
+def watch(a):
+    """(the FillEvents delivered, the journal lines) of an adapter."""
+    got, lines = [], []
+
+    async def on_fill(ev):
+        got.append(ev)
+    a.journal = lambda ev, **kw: lines.append((ev, kw))
+    return got, lines, on_fill
+
+
+async def settle(n=10):
+    for _ in range(n):
+        await asyncio.sleep(0)
+
+
+def trade(uid, market=NQZ26, seq=1, vol=1, px="20000.25", xid="", filled=None, acct="A1"):
+    d = {"uniqueId": uid, "accountId": acct, "marketId": market, "volume": vol, "price": {"value": px},
+         "sequenceOrder": seq, "totalFillVolume": vol if filled is None else filled}
+    if xid:
+        d["exchangeTradeId"] = xid
+    return d
+
+
+def done(uid, market=NQZ26, side=proto.BUY, vol=1, trades=(), ptype=proto.MARKET, acct="A1"):
+    return {"orderUpdate": {"uniqueId": uid, "accountId": acct, "marketId": market, "status": proto.FINISHED,
+                            "buySell": side, "priceType": ptype, "currentVolume": vol, "totalFillVolume": vol,
+                            "trades": [dict(t) for t in trades]}}
+
+
+def test_a_trade_becomes_one_FillEvent_and_a_repeat_or_snapshot_replay_is_ignored():
+    async def go():
+        old = done("U0", trades=[{"sequenceOrder": 1, "volume": 2, "price": {"value": "19950"}}], vol=2)
+        a, sock = await ready(old, working("U1", NQZ26, side=proto.BUY, ptype=proto.LIMIT))
+        got, lines, on_fill = watch(a)
+        seen = []
+        a.add_listener(lambda et, ent: seen.append(et))
+        await a.observe_fills(on_fill)
+        await settle()
+        assert got == []                                             # the first snapshot's trades are history
+        sock.push("orderUpdateTrade", trade("U1", xid="X1"))
+        await settle()
+        assert [(e.account_id, e.symbol, e.side, e.qty, e.price, e.position_after) for e in got] == \
+            [("d1", "NQ", "Buy", 1, 20000.25, None)]                 # its position has not landed: None
+        assert got[0].raw["exchangeTradeId"] == "X1" and got[0].raw["uniqueId"] == "U1"
+        sock.push("orderUpdateTrade", trade("U1", xid="X1"))         # the same trade again
+        sock.push("orderUpdate", {"uniqueId": "U1", "accountId": "A1", "marketId": NQZ26, "status": proto.FINISHED,
+                                  "buySell": proto.BUY, "totalFillVolume": 1,
+                                  "trades": [{"sequenceOrder": 1, "volume": 1, "exchangeTradeId": "X1"}]})
+        sock.push("accountPosition", pos("A1", NQZ26, "NQ", buys=1))
+        sock.push("accountSnapshot", snapshot("A1", old, done("U1", trades=[{"sequenceOrder": 1, "volume": 1}]),
+                                              {"accountPosition": pos("A1", NQZ26, "NQ", buys=1)}))
+        await settle()
+        assert len(got) == 1
+        assert {"order", "position", "fill", "sync"} <= set(seen) and seen.count("fill") == 1
+        assert not [ev for ev, _ in lines if ev == "atr_fill_unreadable"]
+    asyncio.run(go())
+
+
+def test_another_accounts_trade_is_ignored():
+    async def go():
+        a, sock = await ready()
+        got, _, on_fill = watch(a)
+        await a.observe_fills(on_fill)
+        sock.push("orderUpdateTrade", trade("U5", acct="A2"))
+        sock.push("orderUpdate", done("U6", acct="A2", trades=[{"sequenceOrder": 1, "volume": 1}])["orderUpdate"])
+        await settle()
+        assert got == [] and a.positions_known
+    asyncio.run(go())
+
+
+def test_an_outside_fill_is_reported():
+    async def go():
+        a, sock = await ready()
+        got, lines, on_fill = watch(a)
+        await a.observe_fills(on_fill)
+        # Alpha's own close (no tag, no ClOrdId of ours): two trades on one order
+        sock.push("orderUpdate", done("ALPHA9", ESZ26, proto.SELL, 2, trades=[
+            {"sequenceOrder": 1, "volume": 1, "price": {"value": "6000.5"}},
+            {"sequenceOrder": 2, "volume": 1, "price": {"value": "6000.25"}}])["orderUpdate"])
+        await settle()
+        assert [(e.symbol, e.side, e.qty, e.price) for e in got] == [("ES", "Sell", 1, 6000.5), ("ES", "Sell", 1, 6000.25)]
+        # a trade of an order the cache never saw, with no side anywhere: still reported, side "", on record
+        sock.push("orderUpdateTrade", trade("Z1", px="20001"))
+        await settle()
+        assert (got[-1].side, got[-1].qty, got[-1].raw["uniqueId"]) == ("", 1, "Z1")
+        assert [kw["uniqueId"] for ev, kw in lines if ev == "atr_fill_unreadable"] == ["Z1"]
+    asyncio.run(go())
+
+
+async def filled_long(a, sock, n=1, market=NQZ26, root="NQ"):
+    """An entry fills `n` and its position lands (the entry's id: E1 on NQ, E2 on ES)."""
+    uid = "E1" if market == NQZ26 else "E2"
+    sock.push("orderUpdate", done(uid, market, proto.BUY, n, trades=[{"sequenceOrder": 1, "volume": n}])["orderUpdate"])
+    sock.push("accountPosition", pos("A1", market, root, buys=n))
+
+
+def test_no_stop_after_grace_journals_and_does_not_flatten_while_the_switch_is_off():
+    async def go():
+        a, sock = await ready()
+        _, lines, _ = watch(a)
+        await filled_long(a, sock)
+        await settle()
+        assert ("atr_no_stop_seen", {"market": NQZ26, "root": "NQ", "net": 1}) in lines
+        assert a._no_stop == {NQZ26} and (await a.get_metrics())["no_stop"] == ["NQ"]
+        assert sock.sent == [] and not [ev for ev, _ in lines if ev == "atr_no_stop_flatten"]
+    asyncio.run(go())
+
+
+def test_with_the_switch_on_a_market_with_no_stop_is_flattened(monkeypatch):
+    monkeypatch.setattr(alphatrader, "ATR_FLATTEN_IF_NO_STOP", True)
+
+    async def go():
+        a, sock = await ready()
+        _, lines, _ = watch(a)
+        await filled_long(a, sock)
+        for _ in range(50):
+            await asyncio.sleep(0)
+            if any(ev == "atr_no_stop_flatten" for ev, _ in lines):
+                break
+        assert [(s["marketId"], s["orders"][0]["buySell"], s["orders"][0]["volume"]) for s in subs(sock)] == \
+            [(NQZ26, proto.SELL, 1)]
+        assert ("atr_no_stop_flatten", {"market": NQZ26, "root": "NQ", "ok": True, "error": None}) in lines
+    asyncio.run(go())
+
+
+def test_a_late_stop_clears_the_no_stop_flag():
+    async def go():
+        a, sock = await ready()
+        _, lines, _ = watch(a)
+        await filled_long(a, sock)
+        await settle()
+        assert a._no_stop == {NQZ26}
+        sock.push("orderUpdate", working("S1", NQZ26, proto.HELD)["orderUpdate"])     # a sell stop of 1
+        assert a._no_stop == set() and (await a.get_metrics())["no_stop"] == []
+        # a stop already working when the grace ends: nothing flagged
+        await filled_long(a, sock, market=ESZ26, root="ES")
+        sock.push("orderUpdate", working("S2", ESZ26)["orderUpdate"])
+        await settle()
+        assert a._no_stop == set() and sum(ev == "atr_no_stop_seen" for ev, _ in lines) == 1
+    asyncio.run(go())
+
+
+def test_no_stop_check_waits_while_orders_are_unknown():
+    async def go():
+        a, sock = await ready()
+        _, lines, _ = watch(a)
+        await filled_long(a, sock)
+        await sock.on_up()                                           # a reconnect: nothing known until the snapshot
+        await settle()
+        assert a._no_stop == set() and lines == [] and not a._guard.done()
+        sock.push("accountSnapshot", snapshot("A1", done("E1", trades=[{"sequenceOrder": 1, "volume": 1}]),
+                                              {"accountPosition": pos("A1", NQZ26, "NQ", buys=1)}))
+        await settle()
+        assert a._no_stop == {NQZ26} and [ev for ev, _ in lines] == ["atr_no_stop_seen"]
+        await filled_long(a, sock, market=ESZ26, root="ES")          # waiting again, then the adapter closes
+        await sock.on_up()
+        await settle()
+        guard = a._guard
+        assert not guard.done()
+        await a.close()
+        await settle()
+        assert guard.cancelled()
+    asyncio.run(go())
+
+
+def test_a_stop_smaller_than_the_position_counts_as_no_stop():
+    async def go():
+        a, sock = await ready()
+        _, lines, _ = watch(a)
+        sock.push("orderUpdate", working("S1", NQZ26)["orderUpdate"])                 # a sell stop of 1
+        sock.push("orderUpdate", working("S2", NQZ26, side=proto.BUY)["orderUpdate"])  # the wrong side: not a stop for it
+        await filled_long(a, sock, n=2)
+        await settle()
+        assert ("atr_no_stop_seen", {"market": NQZ26, "root": "NQ", "net": 2}) in lines and a._no_stop == {NQZ26}
+        sock.push("orderUpdate", working("S3", NQZ26)["orderUpdate"])                 # a second sell stop of 1: covered
+        assert a._no_stop == set()
+    asyncio.run(go())
+
+
+def test_session_taken_journals_logs_in_again_once_and_replays_the_gap_fill_once():
+    async def go():
+        stop = working("S1", NQZ26, proto.HELD)
+        a, sock = await ready({"accountPosition": pos("A1", NQZ26, "NQ", buys=1)}, stop)
+        b = adapter(sock.session, "AF-50K-2", "d2")
+        await b.connect()
+        sock.push("accountSnapshot", snapshot("A2"))
+        got, lines, on_fill = watch(a)
+        _, b_lines, _ = watch(b)
+        await a.observe_fills(on_fill)
+        sock.sent.clear()
+        s = sock.session
+        await sock.on_taken("logged in elsewhere")                   # the owner opened AlphaTrader in a browser
+        assert s.taken == 1 and ("atr_session_taken", {"account": "d1", "count": 1, "why": "logged in elsewhere"}) in lines
+        assert ("atr_session_taken", {"account": "d2", "count": 1, "why": "logged in elsewhere"}) in b_lines
+        assert not a.positions_known and not a.orders_known
+        m = await a.get_metrics()
+        assert "session taken 1x" in m["notice"] and "logged in elsewhere" in m["notice"]
+        assert sock.starts == 2 and sock.sent == []                  # the adapter logs in nothing itself: the socket does
+        s.lost = None                                                # the socket logged in again (through the budget)
+        await sock.on_up()
+        gap = done("U7", side=proto.SELL, trades=[{"sequenceOrder": 1, "volume": 1, "price": {"value": "19980"}}])
+        book = snapshot("A1", gap, {"accountPosition": pos("A1", NQZ26, "NQ")})
+        sock.push("accountSnapshot", book)
+        sock.push("accountSnapshot", book)                           # a repeated snapshot replays nothing more
+        await settle()
+        assert [(e.side, e.qty, e.price) for e in got] == [("Sell", 1, 19980.0)]
+        assert a.positions_known and a.orders_known and await a.get_net_position("NQ") == 0
+        assert "S1" not in a._orders                                  # the order cache was reseeded while unknown
+    asyncio.run(go())
