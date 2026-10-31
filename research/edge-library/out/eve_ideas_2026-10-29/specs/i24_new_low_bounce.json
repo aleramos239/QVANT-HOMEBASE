@@ -1,0 +1,33 @@
+{
+ "name": "i24_new_low_bounce",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: buy the bounce after a 20-day low",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "off_min": [
+   5,
+   30,
+   60
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "newext",
+  "which": "lo",
+  "n_d": 20,
+  "mode": "follow"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

@@ -1,0 +1,32 @@
+{
+ "name": "vh_i13_reclaim_5_ny",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 13: A reclaim of the day's average on real volume is the other side giving up. Who loses: the side that defended the VWAP and is now offside.",
+ "family": "avwap_flip",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "vol_m": [
+   1.0,
+   1.5,
+   2.0
+  ]
+ },
+ "fixed": {
+  "line": "rth",
+  "hold": 1
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

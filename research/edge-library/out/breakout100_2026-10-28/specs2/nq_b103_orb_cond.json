@@ -1,0 +1,34 @@
+{
+ "name": "nq_b103_orb_cond",
+ "version": 1,
+ "card": {
+  "why": "Breakout idea #103 (new family, owner's 100 list, 2026-10-28): 30-minute opening range break on a coiled or gap-out day, because the stops of the traders on the other side of the break feed the move.",
+  "loser": "Traders on the wrong side of the break whose stops get hit.",
+  "home": {
+   "market": "NQ",
+   "session": "nyam",
+   "bar": "5"
+  },
+  "neighbors": [
+   "NQ nyam 15"
+  ],
+  "main_setting": "cond",
+  "sides": "both",
+  "sides_why": "A break can go either way, one rule.",
+  "loses_when": "Chop days where the break reverses at once."
+ },
+ "run": {
+  "exits": "hm60",
+  "family": "orb_cond",
+  "params": {
+   "cond": [
+    "inside",
+    "nr7",
+    "gapout"
+   ]
+  },
+  "limits": {
+   "max_tr": 1
+  }
+ }
+}

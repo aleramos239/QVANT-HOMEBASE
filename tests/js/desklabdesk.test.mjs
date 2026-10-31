@@ -1050,7 +1050,7 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=49"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=50"><\/script>/);
   assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=5"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
@@ -1754,7 +1754,7 @@ test('1.19: a piece with no data is left out: no answer, no turn, the cycle off,
 test('a family folds its variants by their short names, the rest follow; the cycle is its own section; the family page sets them side by side', () => {
   const t = groupDesk({});
   vm.runInContext(`DESKFAM = {families: [{id: "f1", name: "NQ ORB", members: ["lab_nq_orb"], short: {lab_nq_orb: "1.5R"}}], ok: true};
-    DESKRES = {nq_orb: {build: {net: 4000, trades: 210}, unseen: {net: -150, trades: 70}}};`, t.ctx);
+    DESKRES = {nq_orb: {build: {net: 4000, trades: 210}, unseen: {net: -150, trades: 70}, both: {net: 3850, trades: 280}}};`, t.ctx);
   const side = t.side();
   assert.match(side, /<span>NQ ORB<\/span>/, 'the family is a folding header');
   assert.match(side, /<b>1\.5R<\/b>/, 'its variant shows by its short name');
@@ -1764,7 +1764,7 @@ test('a family folds its variants by their short names, the rest follow; the cyc
   assert.equal((side.match(/setView\('strat','lab_nq_orb'\)/g) || []).length, 1, 'a variant in a family and a cycle shows once');
   const page = vm.runInContext('familyView("f1")', t.ctx);
   assert.match(page, /<h1 class="sd-title">NQ ORB<\/h1>/);
-  assert.match(page, />1\.5R · <span class="dim">[^<]+<\/span><\/span>\s*<span class="t dim">\+\$4,000 · 210 tr<\/span><span class="t">−\$150 · 70 tr<\/span>/);
+  assert.match(page, />1\.5R · <span class="dim">[^<]+<\/span><\/span>\s*<span class="t">\+\$3,850 · 280 tr<\/span>/);
   assert.match(page, /<span class="t dim">1<\/span><\/div>/, 'booked on one account');
   assert.match(vm.runInContext('familyView("f9")', t.ctx), /not there any more/);
 });

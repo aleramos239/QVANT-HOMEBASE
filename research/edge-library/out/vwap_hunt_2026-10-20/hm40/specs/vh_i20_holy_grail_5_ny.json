@@ -1,0 +1,32 @@
+{
+ "name": "vh_i20_holy_grail_5_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 20: The first pullback to the EMA(20) in a strong trend (ADX) is bought by the trend's side (Raschke's holy grail). Who loses: the counter-trend faders.",
+ "family": "ema_pullback",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "g_lvl": [
+   20.0,
+   25.0,
+   30.0
+  ]
+ },
+ "fixed": {
+  "n": 20,
+  "gate": "adx",
+  "g_n": 14,
+  "g_side": "with"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 2,
+  "dir": "both"
+ }
+}

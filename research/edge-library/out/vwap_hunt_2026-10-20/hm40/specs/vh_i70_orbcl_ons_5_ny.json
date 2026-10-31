@@ -1,0 +1,32 @@
+{
+ "name": "vh_i70_orbcl_ons_5_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 70: The same entry, taken only on the side the 09:30 open's third of the overnight range gives (onr_side_study: +1.4 points in-sample). Who loses: the side trapped against the overnight session's choice.",
+ "family": "orb_confirm",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "or_min": [
+   "15",
+   "30",
+   "60"
+  ]
+ },
+ "fixed": {
+  "gate": "onr_side",
+  "g_side": "with"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "long"
+ }
+}

@@ -1,0 +1,35 @@
+{
+ "name": "vh_i16_emax_side_5_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 16: When a fast average crosses a slow one the recent flow has turned; with volume behind it the turn is participation, not drift. Who loses: the side still positioned for the old direction.",
+ "family": "ma_x",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "fast_n": [
+   5,
+   9,
+   13
+  ]
+ },
+ "fixed": {
+  "fast": "ema",
+  "slow": "ema",
+  "slow_n": 21,
+  "side": "vwap",
+  "swing": 3
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

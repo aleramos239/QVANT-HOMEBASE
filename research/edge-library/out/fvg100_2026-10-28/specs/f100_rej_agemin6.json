@@ -1,0 +1,30 @@
+{
+ "name": "f100_rej_agemin6",
+ "reason": "A fair value gap marks one-sided urgency that price tends to return to, so this tests: rejection entry, gap at least 6 bars old",
+ "family": "fvg_lab",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "min_gap": [
+   0.1,
+   0.25,
+   0.5
+  ]
+ },
+ "fixed": {
+  "mode": "rej",
+  "agemin": 6
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

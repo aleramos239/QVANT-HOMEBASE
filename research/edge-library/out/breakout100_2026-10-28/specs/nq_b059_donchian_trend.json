@@ -1,0 +1,39 @@
+{
+ "name": "nq_b059_donchian_trend",
+ "version": 1,
+ "card": {
+  "why": "Breakout idea #59 of the owner's 100 list (2026-10-28): Donchian break with the 50 EMA, because the stops of the traders on the other side of the break feed the move.",
+  "loser": "Traders on the wrong side of the break whose stops get hit.",
+  "home": {
+   "market": "NQ",
+   "session": "nyam",
+   "bar": "15"
+  },
+  "neighbors": [
+   "NQ nyam 5"
+  ],
+  "main_setting": "n",
+  "sides": "both",
+  "sides_why": "A break can go either way, one rule.",
+  "loses_when": "Chop days where the break reverses at once."
+ },
+ "run": {
+  "exits": "hm60",
+  "family": "donchian",
+  "params": {
+   "n": [
+    10,
+    20,
+    40
+   ]
+  },
+  "fixed": {
+   "gate": "price_ema",
+   "g_n": 50,
+   "g_side": "with"
+  },
+  "limits": {
+   "max_tr": 1
+  }
+ }
+}

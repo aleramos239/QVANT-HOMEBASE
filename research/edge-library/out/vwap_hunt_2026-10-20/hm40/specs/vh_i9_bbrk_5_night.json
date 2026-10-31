@@ -1,0 +1,33 @@
+{
+ "name": "vh_i9_bbrk_5_night",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 9: A close beyond the VWAP band is one side taking control (the momentum twin of the fade). Who loses: the faders of the band.",
+ "family": "ind_signal",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "asia",
+  "london",
+  "eve"
+ ],
+ "params": {
+  "lvl": [
+   1.0,
+   1.5,
+   2.0
+  ]
+ },
+ "fixed": {
+  "ind": "vwap_dev",
+  "mode": "follow",
+  "edge": "enter"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

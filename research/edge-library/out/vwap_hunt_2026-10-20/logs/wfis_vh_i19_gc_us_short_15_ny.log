@@ -1,0 +1,142 @@
+2026-10-21T11:50:19+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers)
+2026-10-21T11:50:19+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers): days 1-60 of 881 (120 instances)
+2026-10-21T11:50:27+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers): days 61-120 of 881 (120 instances)
+2026-10-21T11:50:34+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers): days 121-180 of 881 (120 instances)
+2026-10-21T11:50:41+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers): days 181-240 of 881 (120 instances)
+2026-10-21T11:50:48+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers): days 241-300 of 881 (120 instances)
+2026-10-21T11:50:56+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers): days 301-360 of 881 (120 instances)
+2026-10-21T11:51:04+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers): days 361-420 of 881 (120 instances)
+2026-10-21T11:51:11+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers): days 421-480 of 881 (120 instances)
+2026-10-21T11:51:19+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers): days 481-540 of 881 (120 instances)
+2026-10-21T11:51:27+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers): days 541-600 of 881 (120 instances)
+2026-10-21T11:51:35+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers): days 601-660 of 881 (120 instances)
+2026-10-21T11:51:43+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers): days 661-720 of 881 (120 instances)
+2026-10-21T11:51:50+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers): days 721-780 of 881 (120 instances)
+2026-10-21T11:51:58+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers): days 781-840 of 881 (120 instances)
+2026-10-21T11:52:06+00:00 idea vh_i19_gc_us_short_15_ny, 3:1 in-sample: pass 1 of 1, GC 15-minute bars (vh_i19_gc_us_short_15_ny-GC-tf15/is; 3 workers): days 841-881 of 881 (120 instances)
+2026-10-21T11:52:11+00:00 wf_is vh_i19_gc_us_short_15_ny-GC-tf15/is: 120 cells, 104,280 trades, 111.86 s of tape (wall 112 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i19_gc_us_short_15_ny: 120 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  off_min0_pts4-r0p5            65%   68%     869   -14,676  0.88   100%
+   2  off_min0_atr1p5-r0p5          65%   65%     869    -6,566  0.97    80%
+   3  off_min0_atr1-r0p5            64%   67%     869   -15,916  0.90    70%
+   4  off_min30_atr1-r0p5           64%   66%     869    -9,766  0.94    80%
+   5  off_min0_pts2p5-r0p5          64%   68%     869   -16,346  0.81    90%
+   6  off_min30_pts4-r0p5           63%   68%     869   -22,036  0.83    70%
+   7  off_min0_atr0p5-r0p5          63%   66%     869    -8,906  0.88   100%
+   8  off_min0_atr2-r0p5            63%   63%     869       354  1.00    80%
+   9  off_min15_atr1-r0p5           63%   65%     869   -19,216  0.88    50%
+  10  off_min30_pts2p5-r0p5         63%   69%     869   -20,186  0.77    60%
+  11  off_min0_pts6p5-r0p5          62%   65%     869   -28,266  0.86    60%
+  12  off_min30_atr1p5-r0p5         61%   64%     869   -20,376  0.91    70%
+  13  off_min15_pts4-r0p5           61%   68%     869   -34,276  0.75     0%
+  14  off_min15_pts6p5-r0p5         61%   65%     869   -29,736  0.85    40%
+  15  off_min15_atr1p5-r0p5         61%   66%     869   -51,116  0.80    10%
+  16  off_min15_pts2p5-r0p5         60%   68%     869   -27,076  0.70    10%
+  17  off_min30_pts6p5-r0p5         60%   64%     869   -29,516  0.85    40%
+  18  off_min30_atr0p5-r0p5         60%   68%     869   -30,396  0.69    10%
+  19  off_min15_atr0p5-r0p5         60%   67%     869   -22,636  0.75    50%
+  20  off_min15_atr2-r0p5           59%   62%     869   -30,376  0.89    50%
+  21  off_min0_pts10-r0p5           59%   61%     869   -23,496  0.91    50%
+  22  off_min30_atr2-r0p5           59%   61%     869   -25,756  0.91    60%
+  23  off_min15_pts10-r0p5          56%   59%     869   -29,896  0.88    10%
+  24  off_min0_atr1-r0p75           56%   57%     869    -8,756  0.95    80%
+  25  off_min0_pts2p5-r0p75         55%   59%     869   -13,796  0.87   100%
+  26  off_min30_pts10-r0p5          55%   60%     869   -45,776  0.82    10%
+  27  off_min0_atr0p5-r0p75         55%   56%     869    -6,356  0.93   100%
+  28  off_min0_pts6p5-r0p75         55%   56%     869   -13,636  0.94    70%
+  29  off_min0_pts4-r0p75           55%   58%     869   -20,006  0.87    70%
+  30  off_min0_atr1p5-r0p75         54%   55%     869    -9,536  0.97    60%
+  31  off_min30_atr1-r0p75          54%   57%     869   -23,456  0.89    40%
+  32  off_min30_pts2p5-r0p75        54%   59%     869   -18,836  0.82    90%
+  33  off_min30_pts4-r0p75          54%   58%     869   -26,346  0.84    50%
+  34  off_min15_atr1-r0p75          53%   57%     869   -29,616  0.86    10%
+  35  off_min0_atr2-r0p75           53%   54%     869   -14,246  0.96    60%
+  36  off_min15_pts4-r0p75          53%   58%     869   -30,776  0.81    20%
+  37  off_min30_atr0p5-r0p75        53%   59%     869   -24,196  0.79    50%
+  38  off_min15_atr0p5-r0p75        52%   57%     869   -17,426  0.84    70%
+  39  off_min15_pts2p5-r0p75        52%   59%     869   -25,246  0.77    20%
+  40  off_min15_atr1p5-r0p75        52%   55%     869   -35,166  0.88    40%
+  41  off_min30_pts6p5-r0p75        52%   56%     869   -32,826  0.86    20%
+  42  off_min30_atr1p5-r0p75        52%   55%     869   -29,766  0.89    50%
+  43  off_min0_pts10-r0p75          52%   54%     869   -24,316  0.92    40%
+  44  off_min15_pts6p5-r0p75        51%   55%     869   -35,976  0.85    10%
+  45  off_min30_pts10-r0p75         50%   54%     869   -38,416  0.86    10%
+  46  off_min30_atr2-r0p75          50%   54%     869   -43,546  0.87    20%
+  47  off_min15_pts10-r0p75         50%   52%     869   -26,936  0.91    30%
+  48  off_min15_atr2-r0p75          50%   52%     869   -29,186  0.91    50%
+  49  off_min0_pts4-r1              49%   51%     869   -14,036  0.92    90%
+  50  off_min0_atr1-r1              49%   49%     869    -4,996  0.98    90%
+  51  off_min0_atr2-r1              49%   47%     869    22,574  1.07    90%
+  52  off_min0_pts6p5-r1            49%   50%     869   -16,446  0.93    70%
+  53  off_min0_atr0p5-r1            49%   49%     869    -3,576  0.97   100%
+  54  off_min0_pts10-r1             48%   50%     869   -21,156  0.93    60%
+  55  off_min30_pts6p5-r1           48%   52%     869   -29,336  0.88    10%
+  56  off_min15_pts2p5-r1           48%   52%     869   -16,846  0.86    80%
+  57  off_min30_atr1-r1             48%   51%     869   -23,856  0.90    40%
+  58  off_min30_pts2p5-r1           48%   52%     869   -17,596  0.85    70%
+  59  off_min30_pts4-r1             48%   51%     869   -23,816  0.87    50%
+  60  off_min0_pts2p5-r1            48%   52%     869   -19,196  0.84    60%
+  61  off_min0_atr1p5-r1            47%   48%     869   -13,126  0.96    60%
+  62  off_min30_atr2-r1             47%   48%     869   -16,796  0.95    70%
+  63  off_min30_pts10-r1            47%   51%     869   -40,316  0.86    20%
+  64  off_min15_atr1-r1             47%   50%     869   -23,126  0.90    40%
+  65  off_min15_atr0p5-r1           47%   49%     869    -9,706  0.92    90%
+  66  off_min15_pts10-r1            47%   49%     869   -30,256  0.90    40%
+  67  off_min30_atr1p5-r1           46%   50%     869   -37,466  0.88    20%
+  68  off_min15_pts4-r1             46%   51%     869   -31,986  0.83    20%
+  69  off_min15_pts6p5-r1           46%   49%     869   -34,366  0.87    10%
+  70  off_min15_atr2-r1             46%   47%     869   -19,126  0.95    70%
+  71  off_min30_atr0p5-r1           45%   51%     869   -26,926  0.80    30%
+  72  off_min0_pts10-r1p5           45%   47%     869   -20,566  0.94    50%
+  73  off_min15_atr1p5-r1           45%   48%     869   -36,906  0.89    20%
+  74  off_min30_pts10-r1p5          45%   48%     869   -39,116  0.87    20%
+  75  off_min30_atr2-r1p5           45%   47%     869   -27,716  0.92    50%
+  76  off_min15_pts10-r1p5          44%   46%     869   -22,076  0.93    50%
+  77  off_min30_atr2-r2             44%   47%     869   -37,326  0.89    50%
+  78  off_min0_pts10-r2             44%   45%     869   -17,556  0.95    50%
+  79  off_min30_pts10-r2            44%   48%     869   -45,066  0.86     0%
+  80  off_min30_pts6p5-r1p5         44%   47%     869   -29,586  0.89    40%
+  81  off_min0_pts6p5-r1p5          43%   45%     869   -11,296  0.96    80%
+  82  off_min0_atr2-r1p5            43%   43%     869     7,744  1.02    90%
+  83  off_min15_pts10-r2            43%   46%     869   -33,786  0.90    10%
+  84  off_min30_atr1p5-r1p5         43%   43%     869    -6,386  0.98    90%
+  85  off_min15_atr2-r1p5           42%   44%     869   -28,516  0.92    50%
+  86  off_min0_atr2-r2              42%   42%     869      -326  1.00    80%
+  87  off_min30_pts4-r1p5           42%   44%     869   -16,716  0.91    70%
+  88  off_min30_pts6p5-r2           42%   44%     869   -28,196  0.90    30%
+  89  off_min15_atr2-r2             42%   43%     869   -28,536  0.92    50%
+  90  off_min30_atr1p5-r2           41%   43%     869   -19,426  0.94    60%
+  91  off_min0_pts4-r1p5            41%   42%     869    -9,096  0.95    80%
+  92  off_min15_pts6p5-r1p5         41%   45%     869   -42,506  0.85    20%
+  93  off_min0_atr1p5-r1p5          41%   40%     869    10,074  1.03    90%
+  94  off_min0_pts6p5-r2            41%   42%     869   -20,816  0.93    40%
+  95  off_min30_pts2p5-r1p5         40%   42%     869   -10,946  0.92   100%
+  96  off_min30_atr1-r1p5           40%   42%     869   -24,496  0.91    20%
+  97  off_min15_pts6p5-r2           40%   43%     869   -36,036  0.87    20%
+  98  off_min15_atr1p5-r1p5         39%   42%     869   -30,646  0.91    30%
+  99  off_min0_atr0p5-r1p5          39%   39%     869     1,574  1.01   100%
+ 100  off_min0_pts2p5-r1p5          39%   42%     869   -16,406  0.88    50%
+ 101  off_min0_atr1-r1p5            39%   41%     869   -24,006  0.91    20%
+ 102  off_min15_pts4-r1p5           38%   42%     869   -29,996  0.86     0%
+ 103  off_min30_pts4-r2             38%   40%     869   -16,676  0.92    60%
+ 104  off_min0_atr1p5-r2            38%   38%     869     2,894  1.01    90%
+ 105  off_min15_atr0p5-r1p5         38%   39%     869    -7,486  0.95   100%
+ 106  off_min15_atr1-r1p5           38%   39%     869   -16,786  0.94    30%
+ 107  off_min15_atr1p5-r2           38%   40%     869   -41,836  0.88    20%
+ 108  off_min15_pts2p5-r1p5         38%   42%     869   -24,266  0.83    40%
+ 109  off_min30_atr1-r2             37%   37%     869    -1,466  0.99    70%
+ 110  off_min0_pts4-r2              36%   38%     869   -14,686  0.93    70%
+ 111  off_min30_atr0p5-r1p5         35%   43%     869   -45,726  0.72     0%
+ 112  off_min0_atr1-r2              34%   35%     869    -1,326  1.00    70%
+ 113  off_min15_pts4-r2             34%   38%     869   -36,006  0.84     0%
+ 114  off_min30_pts2p5-r2           34%   36%     869   -13,416  0.91    60%
+ 115  off_min0_atr0p5-r2            34%   32%     869    11,484  1.08   100%
+ 116  off_min0_pts2p5-r2            34%   35%     869    -9,936  0.93    90%
+ 117  off_min15_atr1-r2             33%   35%     869   -21,396  0.93    30%
+ 118  off_min15_atr0p5-r2           33%   33%     869     1,254  1.01   100%
+ 119  off_min15_pts2p5-r2           32%   36%     869   -22,976  0.85    20%
+ 120  off_min30_atr0p5-r2           29%   36%     869   -49,506  0.72     0%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i19_gc_us_short_15_ny <n> (blueprint_wf_pick).

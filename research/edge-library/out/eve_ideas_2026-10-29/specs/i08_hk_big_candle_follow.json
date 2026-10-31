@@ -1,0 +1,31 @@
+{
+ "name": "i08_hk_big_candle_follow",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: follow a large 21:30 candle",
+ "family": "win_candle",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "k": [
+   1.5,
+   2.0,
+   2.5
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "start": "21:30",
+  "mode": "follow"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

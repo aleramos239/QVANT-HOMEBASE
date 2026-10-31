@@ -1,0 +1,27 @@
+{
+ "name": "vh_i19_gc_eve_long_30_eve",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 19: Gold's Asian hours buy what US hours sold (the mirror of gc_us_short). Who loses: evening gold sellers.",
+ "family": "tod_drift",
+ "markets": [
+  "GC"
+ ],
+ "bar_sizes": [
+  "30"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "off_min": [
+   60,
+   120,
+   180
+  ]
+ },
+ "fixed": {},
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "long"
+ }
+}

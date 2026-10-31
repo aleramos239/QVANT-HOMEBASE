@@ -1,0 +1,37 @@
+{
+ "name": "nq_b033_on_bracket",
+ "version": 1,
+ "card": {
+  "why": "Breakout idea #33 of the owner's 100 list (2026-10-28): overnight range break, because the stops of the traders on the other side of the break feed the move.",
+  "loser": "Traders on the wrong side of the break whose stops get hit.",
+  "home": {
+   "market": "NQ",
+   "session": "nyam",
+   "bar": "5"
+  },
+  "neighbors": [
+   "NQ nyam 15"
+  ],
+  "main_setting": "r_start",
+  "sides": "both",
+  "sides_why": "A break can go either way, one rule.",
+  "loses_when": "Chop days where the break reverses at once."
+ },
+ "run": {
+  "exits": "hm60",
+  "family": "win_bracket",
+  "params": {
+   "r_start": [
+    "00:00",
+    "01:00",
+    "03:00"
+   ]
+  },
+  "fixed": {
+   "r_end": "09:30"
+  },
+  "limits": {
+   "max_tr": 1
+  }
+ }
+}

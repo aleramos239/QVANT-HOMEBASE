@@ -1,0 +1,3 @@
+wf run job 20261028T233854-ac534c is running: idea f100_t0_odir_15, 3:1 in-sample: pass 2 of 2, NQ 15-minute bars (c1f-NQ-tf15/is-2026-08; 12 workers): days 721-780 of 947 (2800 instances)
+NEXT: bp.py job 20261028T233854-ac534c --wait=<seconds> picks the wait back up.
+$PY bp.py wf run out/fvg100_2026-10-28/specs/f100_t0_odir_15.json --no-worse   0.61s user 0.51s system 0% cpu 15:00.15 total

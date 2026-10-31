@@ -1,0 +1,31 @@
+{
+ "name": "vh_i18_es_noise_short_30_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 18: As es_noise_long, the short side.",
+ "family": "noise_band",
+ "markets": [
+  "ES"
+ ],
+ "bar_sizes": [
+  "30"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "k": [
+   0.25,
+   0.35,
+   0.5
+  ]
+ },
+ "fixed": {
+  "anchor": "rth"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "short"
+ }
+}

@@ -1,0 +1,34 @@
+{
+ "name": "nq_b032_lon_break",
+ "version": 1,
+ "card": {
+  "why": "Breakout idea #32 of the owner's 100 list (2026-10-28): London range break at the open, because the stops of the traders on the other side of the break feed the move.",
+  "loser": "Traders on the wrong side of the break whose stops get hit.",
+  "home": {
+   "market": "NQ",
+   "session": "nyam",
+   "bar": "5"
+  },
+  "neighbors": [
+   "NQ nyam 15"
+  ],
+  "main_setting": "min_rng_atr",
+  "sides": "both",
+  "sides_why": "A break can go either way, one rule.",
+  "loses_when": "Chop days where the break reverses at once."
+ },
+ "run": {
+  "exits": "hm60",
+  "family": "lon_break",
+  "params": {
+   "min_rng_atr": [
+    0.0,
+    1.0,
+    2.0
+   ]
+  },
+  "limits": {
+   "max_tr": 1
+  }
+ }
+}

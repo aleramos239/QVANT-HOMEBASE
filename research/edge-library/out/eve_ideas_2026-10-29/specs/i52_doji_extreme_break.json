@@ -1,0 +1,30 @@
+{
+ "name": "i52_doji_extreme_break",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: break of either side of a doji at the evening extreme",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "dj": [
+   0.1,
+   0.2
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "doji",
+  "ttl": 3
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

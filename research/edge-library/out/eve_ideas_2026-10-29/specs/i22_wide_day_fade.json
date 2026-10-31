@@ -1,0 +1,33 @@
+{
+ "name": "i22_wide_day_fade",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: fade the first evening move after a wide day",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "off_min": [
+   15,
+   30,
+   60
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "first_move",
+  "rg": "wide",
+  "rq": 1.5,
+  "mode": "fade"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

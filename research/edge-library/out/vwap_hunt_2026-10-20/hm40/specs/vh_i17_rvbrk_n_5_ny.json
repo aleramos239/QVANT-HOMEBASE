@@ -1,0 +1,31 @@
+{
+ "name": "vh_i17_rvbrk_n_5_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 17: A breakout on far more volume than this time of day usually trades is new participation and carries. Who loses: the range traders fading it.",
+ "family": "rvol_break",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "n": [
+   10,
+   20,
+   40
+  ]
+ },
+ "fixed": {
+  "m": 2.0
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

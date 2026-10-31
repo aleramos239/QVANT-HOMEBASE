@@ -1,0 +1,32 @@
+{
+ "name": "i17_close_loc_fade",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: the same close-location rule, faded",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "off_min": [
+   5,
+   30,
+   60
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "loc10",
+  "q": 0.9,
+  "mode": "fade"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

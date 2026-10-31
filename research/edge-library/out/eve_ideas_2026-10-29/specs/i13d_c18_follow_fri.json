@@ -1,0 +1,30 @@
+{
+ "name": "i13d_c18_follow_fri",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: follow the 18:00 candle, Thursday night",
+ "family": "win_candle",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "k": [
+   0.0
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "start": "18:00",
+  "mode": "follow",
+  "days": "fri"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

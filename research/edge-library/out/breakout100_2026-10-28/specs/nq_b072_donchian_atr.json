@@ -1,0 +1,39 @@
+{
+ "name": "nq_b072_donchian_atr",
+ "version": 1,
+ "card": {
+  "why": "Breakout idea #72 of the owner's 100 list (2026-10-28): Donchian break in expanding range, because the stops of the traders on the other side of the break feed the move.",
+  "loser": "Traders on the wrong side of the break whose stops get hit.",
+  "home": {
+   "market": "NQ",
+   "session": "nyam",
+   "bar": "5"
+  },
+  "neighbors": [
+   "NQ nyam 15"
+  ],
+  "main_setting": "n",
+  "sides": "both",
+  "sides_why": "A break can go either way, one rule.",
+  "loses_when": "Chop days where the break reverses at once."
+ },
+ "run": {
+  "exits": "hm60",
+  "family": "donchian",
+  "params": {
+   "n": [
+    10,
+    20,
+    40
+   ]
+  },
+  "fixed": {
+   "gate": "atr_rank",
+   "g_lvl": 0.5,
+   "g_side": "with"
+  },
+  "limits": {
+   "max_tr": 1
+  }
+ }
+}

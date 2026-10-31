@@ -104,7 +104,7 @@ async function familyPost(action, body) {
 function famVariant(sid) {
   const s = ST && ST.strategies && ST.strategies[sid], name = sid.indexOf("lab_") === 0 ? sid.slice(4) : sid;
   const res = DESKRES[name] || {}, side = (b) => b && b.net != null ? `${usdS(b.net)} · ${b.trades} tr` : "—";
-  const v = {sid, short: famShort(sid), build: side(res.build), unseen: side(res.unseen)};
+  const v = {sid, short: famShort(sid), full: side(res.both)};      // the full sample only (owner 2026-10-30)
   if (s) {
     const book = (ST.book && ST.book[sid]) || [], sh = s.cfg.kind === "lab" ? labSafe(() => labShadowNet(sid, s), null) : null;
     v.state = stratState(sid, s);
@@ -121,13 +121,13 @@ function familyView(id) {
   const rows = vs.filter(Boolean).map(v => `<div class="feed-row" role="button" tabindex="0" title="${esc(v.label)} · ${esc(v.state)}" onclick="openGroupMember(${jsArg(v.sid)})"
       onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openGroupMember(${jsArg(v.sid)})}">
       <span class="h">${esc(v.short || v.label)} · <span class="dim">${esc(v.state)}</span></span>
-      <span class="t dim">${esc(v.build)}</span><span class="t">${esc(v.unseen)}</span>
+      <span class="t">${esc(v.full)}</span>
       <span class="t net">${v.today == null ? "—" : esc(usdS(v.today))}</span><span class="t dim">${v.accts || "none"}</span></div>`);
   return `<button class="back" onclick="setView('today')">‹ Today</button>
     <div class="sd-top"><div><h1 class="sd-title">${esc(f.name)}</h1><div class="sp mono">${rows.length} variant${rows.length === 1 ? "" : "s"}</div></div></div>
     <div class="sd-note">A family only puts these rows together. Each variant keeps its own switch, accounts and settings, and trades on its own.</div>
     ${rows.length ? `<div class="sec"><h2>Variants</h2><div class="agroup feed static fam-table">
-      <div class="feed-row"><span class="h dim">Variant</span><span class="t dim">In-sample</span><span class="t dim">Test months</span><span class="t dim">Today</span><span class="t dim">Accounts</span></div>
+      <div class="feed-row"><span class="h dim">Variant</span><span class="t dim">Full sample</span><span class="t dim">Today</span><span class="t dim">Accounts</span></div>
       ${rows.join("")}</div></div>` : `<div class="eq-empty">No variants yet. Add them in Manage.</div>`}
     ${gone.length ? `<div class="sec"><h2>Not on the Desk any more</h2><div class="agroup feed static">${gone.map(g => `<div class="feed-row"><span class="h">${esc(g)}</span></div>`).join("")}</div></div>` : ""}
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openGroupMgr()">Manage</button>
@@ -156,13 +156,14 @@ function groupView(id) {
   const cell = (x) => `<div class="v mono">${esc(x)}</div>`;
   const f = (k, vals, head) => `<div class="${head ? "f fh" : "f"}"><div class="k">${esc(k)}</div>${vals.map(cell).join("")}</div>`;
   const note = (t) => `<div class="labres-note">${esc(t)}</div>`;
-  const two = (b) => b.rows.length ? f("", b.head, true) + b.rows.map(r => f(r.k, "both" in r ? [r.build, r.unseen, r.both] : [r.build, r.unseen])).join("") : note(b.note);
+  const two = (b) => !b.rows.length ? note(b.note) : b.head ? f("", b.head, true) + b.rows.map(r => f(r.k, "both" in r ? [r.build, r.unseen, r.both] : [r.build, r.unseen])).join("")
+    : b.rows.map(r => f(r.k, [r.v])).join("");      // the full sample (Both) only: one column, no head (owner 2026-10-30)
   const three = (b) => b.head && b.head.length === 3 ? " three" : "";
   const days = p.days.rows.length ? p.days.rows.map(r => f(r.k, [r.v])).join("") : note(p.figs.note);
   const members = p.members.map(m => `<div class="feed-row" role="button" tabindex="0" onclick="openGroupMember(${jsArg(m.strategy)})"
       onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openGroupMember(${jsArg(m.strategy)})}">
       <span class="h">${esc(m.label)}${m.state ? ` · <span class="dim">${esc(m.state)}</span>` : ""}</span>
-      <span class="t dim">${esc(m.build)}</span><span class="t net">${esc(m.unseen)}</span></div>`);
+      ${p.membersFull ? "" : `<span class="t dim">${esc(m.build)}</span>`}<span class="t net">${esc(p.membersFull ? m.full : m.unseen)}</span></div>`);
   const out = p.leftOut.map(x => `<div class="feed-row"><span class="h">${esc(x.label)}</span><span class="t dim">${esc(x.why)}</span></div>`);
   const curve = p.curve ? `<div class="sec"><h2>${esc(p.curve.title)}</h2>${eqPlot(p.curve.vals, p.curve.label, p.curve.total, p.curve.aria, p.curve.ends, p.curve.days, p.curve.notes, p.curve.build, p.curve.both)}</div>` : "";
   return `<button class="back" onclick="setView('today')">‹ Today</button>
@@ -172,12 +173,12 @@ function groupView(id) {
     ${actBtn("g:" + g.id)}
     ${p.empty ? `<div class="eq-empty">${esc(DeskLab.EMPTY_GROUP)}</div>` : ""}
     ${curve}
-    <div class="figs labres-prop grp-figs${three(p.figs)}" data-h="Combined, after costs">${two(p.figs)}</div>
+    <div class="figs labres-prop${p.figs.full ? "" : " grp-figs"}${three(p.figs)}" data-h="Combined, after costs">${two(p.figs)}</div>
     <div class="labres" data-for="${esc(g.id)}">
-      <div class="sec"><h2>${esc(p.days.title)}</h2><div class="figs labres-unseen" data-h="${esc(p.days.title)}">${days}</div></div>
+      <div class="sec"><h2>${esc(p.days.title)}</h2><div class="figs labres-unseen${p.figs.full ? " full" : ""}" data-h="${esc(p.days.title)}">${days}</div></div>
       <div class="sec"><h2>${esc(p.prop.title)}</h2><div class="figs labres-prop${three(p.prop)}" data-h="${esc(p.prop.title)}">${two(p.prop)}</div></div></div>
     ${members.length ? `<div class="sec"><h2>Strategies</h2><div class="agroup feed static">
-      <div class="feed-row"><span class="h dim">Strategy</span><span class="t dim">Build</span><span class="t dim">Unseen</span></div>${members.join("")}</div></div>` : ""}
+      <div class="feed-row"><span class="h dim">Strategy</span>${p.membersFull ? `<span class="t dim">Full sample</span>` : `<span class="t dim">Build</span><span class="t dim">Unseen</span>`}</div>${members.join("")}</div></div>` : ""}
     ${out.length ? `<div class="sec"><h2>Left out of the sum</h2><div class="agroup feed static">${out.join("")}</div></div>` : ""}
     ${labSafe(() => cycleHtml(g), "")}
     ${labSafe(() => groupTodayHtml(g), "")}

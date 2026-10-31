@@ -1,0 +1,202 @@
+2026-10-22T02:33:27+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers)
+2026-10-22T02:33:27+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers): days 1-60 of 883 (180 instances)
+2026-10-22T02:34:04+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers): days 61-120 of 883 (180 instances)
+2026-10-22T02:34:37+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers): days 121-180 of 883 (180 instances)
+2026-10-22T02:35:29+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers): days 181-240 of 883 (180 instances)
+2026-10-22T02:36:18+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers): days 241-300 of 883 (180 instances)
+2026-10-22T02:37:17+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers): days 301-360 of 883 (180 instances)
+2026-10-22T02:38:15+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers): days 361-420 of 883 (180 instances)
+2026-10-22T02:39:10+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers): days 421-480 of 883 (180 instances)
+2026-10-22T02:39:58+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers): days 481-540 of 883 (180 instances)
+2026-10-22T02:40:41+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers): days 541-600 of 883 (180 instances)
+2026-10-22T02:41:27+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers): days 601-660 of 883 (180 instances)
+2026-10-22T02:41:57+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers): days 661-720 of 883 (180 instances)
+2026-10-22T02:42:26+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers): days 721-780 of 883 (180 instances)
+2026-10-22T02:42:57+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers): days 781-840 of 883 (180 instances)
+2026-10-22T02:43:27+00:00 idea vh_i41_c930_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i41_c930_15_ny-NQ-tf15/is; 2 workers): days 841-883 of 883 (180 instances)
+2026-10-22T02:43:47+00:00 wf_is vh_i41_c930_15_ny-NQ-tf15/is: 180 cells, 91,140 trades, 619.44 s of tape (wall 620 s, 2 workers)
+3:1 IN-SAMPLE TABLE of vh_i41_c930_15_ny: 180 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  body_r0p7_atr1p5-r0p5         74%   68%     225    18,545  1.33   100%
+   2  body_r0p7_pts40-r0p5          72%   67%     225    14,385  1.29   100%
+   3  body_r0p7_own1-r0p5           72%   68%     225    23,055  1.18   100%
+   4  body_r0p7_atr1-r0p5           72%   67%     225     8,985  1.23   100%
+   5  body_r0p7_atr2-r0p5           72%   69%     225    12,790  1.16   100%
+   6  body_r0p7_own0p5-r0p5         72%   69%     225     9,195  1.14   100%
+   7  body_r0p7_pts60-r0p5          72%   67%     225    18,575  1.24   100%
+   8  body_r0p5_own1-r0p5           71%   67%     421    42,616  1.20   100%
+   9  body_r0p5_atr1p5-r0p5         71%   68%     421    20,101  1.17   100%
+  10  body_r0p5_pts40-r0p5          71%   67%     421    19,681  1.20   100%
+  11  body_r0p5_atr2-r0p5           71%   67%     421    30,476  1.20   100%
+  12  body_r0p5_pts60-r0p5          71%   67%     421    28,751  1.19   100%
+  13  body_r0_pts40-r0p5            70%   67%     873    33,148  1.16   100%
+  14  body_r0p7_pts25-r0p5          70%   67%     225     4,725  1.14   100%
+  15  body_r0p7_own1p5-r0p5         70%   65%     225    39,535  1.23   100%
+  16  body_r0_own1-r0p5             70%   67%     873    43,863  1.12   100%
+  17  body_r0p5_own0p5-r0p5         70%   68%     421    11,696  1.10   100%
+  18  body_r0p5_own1p5-r0p5         70%   66%     421    60,151  1.20   100%
+  19  body_r0_atr1p5-r0p5           69%   68%     873    18,108  1.07   100%
+  20  body_r0p5_atr1-r0p5           69%   67%     421     8,561  1.10   100%
+  21  body_r0_pts25-r0p5            69%   67%     873     9,943  1.07   100%
+  22  body_r0_atr2-r0p5             69%   68%     873    16,708  1.05    90%
+  23  body_r0_own1p5-r0p5           69%   66%     873    66,348  1.12   100%
+  24  body_r0p5_pts25-r0p5          69%   67%     421     3,846  1.06   100%
+  25  body_r0_atr1-r0p5             68%   67%     873    11,258  1.06    90%
+  26  body_r0_pts60-r0p5            68%   67%     873    24,068  1.07   100%
+  27  body_r0p7_pts15-r0p5          68%   68%     225       525  1.02   100%
+  28  body_r0p7_atr0p5-r0p5         68%   69%     225    -1,475  0.94    60%
+  29  body_r0p5_atr0p5-r0p5         67%   68%     421    -1,714  0.96    80%
+  30  body_r0p5_own2-r0p5           67%   63%     421    74,731  1.20   100%
+  31  body_r0_own0p5-r0p5           67%   67%     873    -2,612  0.99    80%
+  32  body_r0p7_own2-r0p5           67%   62%     225    47,205  1.23   100%
+  33  body_r0_pts15-r0p5            67%   68%     873    -5,667  0.94    70%
+  34  body_r0_own2-r0p5             66%   63%     873    89,913  1.14   100%
+  35  body_r0_atr0p5-r0p5           66%   68%     873    -7,142  0.93    40%
+  36  body_r0p7_atr1-r0p75          64%   58%     225    14,750  1.29   100%
+  37  body_r0p5_pts15-r0p5          64%   68%     421    -7,339  0.84    10%
+  38  body_r0p7_pts60-r0p75         64%   58%     225    30,290  1.31   100%
+  39  body_r0p7_own1-r0p75          64%   59%     225    34,485  1.22   100%
+  40  body_r0p7_atr1p5-r0p75        63%   59%     225    14,940  1.19   100%
+  41  body_r0p7_atr2-r0p75          63%   59%     225    18,390  1.17   100%
+  42  body_r0p5_own1-r0p75          63%   59%     421    51,836  1.19   100%
+  43  body_r0p7_pts40-r0p75         63%   58%     225    16,075  1.24   100%
+  44  body_r0p5_pts60-r0p75         62%   57%     421    42,376  1.22   100%
+  45  body_r0p7_own1p5-r0p75        62%   56%     225    57,365  1.29   100%
+  46  body_r0p5_atr1-r0p75          62%   58%     421    19,301  1.19   100%
+  47  body_r0p7_own0p5-r0p75        61%   59%     225     8,000  1.09   100%
+  48  body_r0p5_own1p5-r0p75        61%   56%     421    92,861  1.25   100%
+  49  body_r0p5_own2-r0p75          61%   54%     421   136,226  1.34   100%
+  50  body_r0_own1-r0p75            61%   58%     873    72,828  1.15   100%
+  51  body_r0p5_own0p5-r0p75        61%   58%     421    17,986  1.12   100%
+  52  body_r0p5_pts40-r0p75         61%   58%     421    20,361  1.15   100%
+  53  body_r0p7_own2-r0p75          61%   54%     225    72,815  1.33   100%
+  54  body_r0p5_atr1p5-r0p75        61%   59%     421    12,431  1.08    90%
+  55  body_r0p7_atr0p5-r0p75        60%   59%     225     1,390  1.05    90%
+  56  body_r0p7_pts25-r0p75         60%   58%     225     5,110  1.11   100%
+  57  body_r0p5_atr2-r0p75          60%   58%     421    19,391  1.09    90%
+  58  body_r0p5_pts25-r0p75         60%   58%     421     8,286  1.10   100%
+  59  body_r0_pts40-r0p75           60%   58%     873    27,738  1.10   100%
+  60  body_r0_atr1p5-r0p75          59%   59%     873    10,218  1.03    90%
+  61  body_r0_pts60-r0p75           59%   57%     873    33,768  1.08   100%
+  62  body_r0p7_pts15-r0p75         59%   58%     225       945  1.03   100%
+  63  body_r0p7_pts40-r1            59%   50%     225    31,435  1.42   100%
+  64  body_r0_atr2-r0p75            59%   58%     873    19,523  1.04    90%
+  65  body_r0_own1p5-r0p75          59%   56%     873    95,353  1.14   100%
+  66  body_r0_own2-r0p75            59%   54%     873   157,018  1.20   100%
+  67  body_r0p7_own1-r1             59%   52%     225    52,130  1.30   100%
+  68  body_r0p7_own1p5-r1           59%   51%     225    79,830  1.38   100%
+  69  body_r0_pts25-r0p75           59%   58%     873     5,053  1.03   100%
+  70  body_r0_atr1-r0p75            58%   58%     873     5,553  1.02    90%
+  71  body_r0p5_atr0p5-r0p75        58%   59%     421    -1,609  0.97    70%
+  72  body_r0_own0p5-r0p75          58%   58%     873     4,223  1.02    90%
+  73  body_r0_pts15-r0p75           58%   58%     873    -1,342  0.99    90%
+  74  body_r0p5_own1p5-r1           57%   50%     421   135,981  1.35   100%
+  75  body_r0p7_own2-r1             57%   50%     225    79,285  1.34   100%
+  76  body_r0p5_own1-r1             57%   51%     421    80,866  1.26   100%
+  77  body_r0p5_own2-r1             57%   50%     421   141,541  1.33   100%
+  78  body_r0p7_own0p5-r1           56%   51%     225    21,415  1.22   100%
+  79  body_r0p5_pts40-r1            56%   50%     421    39,456  1.26   100%
+  80  body_r0_atr0p5-r0p75          56%   59%     873   -13,182  0.89    10%
+  81  body_r0p7_atr1p5-r1           56%   51%     225    19,025  1.20   100%
+  82  body_r0p7_atr2-r1             56%   52%     225    20,100  1.16   100%
+  83  body_r0p5_pts15-r0p75         56%   58%     421    -5,644  0.90    40%
+  84  body_r0p7_own2-r1p5           56%   48%     225    81,380  1.34   100%
+  85  body_r0p7_own2-r2             56%   49%     225    77,785  1.32   100%
+  86  body_r0p7_atr1-r1             55%   51%     225    10,515  1.17   100%
+  87  body_r0p7_own1p5-r1p5         55%   46%     225    98,160  1.44   100%
+  88  body_r0p7_pts60-r1            55%   50%     225    23,225  1.19   100%
+  89  body_r0p5_own0p5-r1           55%   50%     421    31,126  1.18   100%
+  90  body_r0p5_own2-r1p5           55%   47%     421   160,536  1.36   100%
+  91  body_r0_own1-r1               54%   50%     873   104,728  1.20   100%
+  92  body_r0_own2-r1               54%   49%     873   207,843  1.25   100%
+  93  body_r0_pts40-r1              54%   51%     873    52,518  1.16   100%
+  94  body_r0p5_pts60-r1            54%   50%     421    38,531  1.17   100%
+  95  body_r0p5_atr2-r1             54%   51%     421    27,391  1.11   100%
+  96  body_r0p5_own2-r2             54%   47%     421   146,386  1.32   100%
+  97  body_r0p7_own1p5-r2           54%   45%     225    95,120  1.42   100%
+  98  body_r0p5_atr1-r1             54%   50%     421    17,416  1.14   100%
+  99  body_r0_own1p5-r1             53%   49%     873   140,703  1.19   100%
+ 100  body_r0_atr2-r1               53%   51%     873    53,148  1.10   100%
+ 101  body_r0p5_atr1p5-r1           53%   51%     421    12,916  1.07    90%
+ 102  body_r0p7_pts25-r1            52%   51%     225     4,015  1.07   100%
+ 103  body_r0_atr1p5-r1             52%   51%     873    24,798  1.06    90%
+ 104  body_r0p5_own1p5-r1p5         52%   44%     421   155,396  1.37   100%
+ 105  body_r0p5_pts25-r1            52%   51%     421     5,731  1.06   100%
+ 106  body_r0_own0p5-r1             52%   50%     873    21,348  1.07   100%
+ 107  body_r0p7_pts15-r1            52%   51%     225     1,230  1.04   100%
+ 108  body_r0_pts60-r1              52%   50%     873    30,398  1.06   100%
+ 109  body_r0p7_own1-r1p5           52%   44%     225    68,655  1.36   100%
+ 110  body_r0_pts25-r1              51%   51%     873     4,568  1.02   100%
+ 111  body_r0p7_atr0p5-r1           51%   52%     225    -1,035  0.97    90%
+ 112  body_r0_pts15-r1              51%   51%     873      -872  0.99    90%
+ 113  body_r0_atr1-r1               51%   51%     873    -3,247  0.99    60%
+ 114  body_r0p5_own1p5-r2           51%   42%     421   165,126  1.39   100%
+ 115  body_r0p5_atr0p5-r1           50%   51%     421    -1,894  0.97    90%
+ 116  body_r0p5_own1-r1p5           50%   42%     421   118,096  1.34   100%
+ 117  body_r0p5_pts15-r1            50%   51%     421    -3,759  0.94    70%
+ 118  body_r0_atr0p5-r1             49%   51%     873   -10,432  0.93    60%
+ 119  body_r0_own2-r1p5             49%   44%     873   205,403  1.23   100%
+ 120  body_r0p7_own1-r2             48%   40%     225    82,290  1.41   100%
+ 121  body_r0_own2-r2               48%   42%     873   227,903  1.25   100%
+ 122  body_r0_own1p5-r1p5           48%   42%     873   211,578  1.27   100%
+ 123  body_r0p7_atr1p5-r1p5         47%   42%     225    27,680  1.25   100%
+ 124  body_r0p7_atr2-r1p5           47%   43%     225    27,275  1.18   100%
+ 125  body_r0p7_pts60-r1p5          47%   41%     225    37,225  1.26   100%
+ 126  body_r0p7_atr1-r1p5           46%   41%     225    17,015  1.22   100%
+ 127  body_r0p7_own0p5-r1p5         46%   42%     225    22,190  1.19   100%
+ 128  body_r0p7_pts40-r1p5          46%   40%     225    26,170  1.27   100%
+ 129  body_r0p5_atr2-r1p5           46%   42%     421    55,311  1.19   100%
+ 130  body_r0p5_pts60-r1p5          46%   41%     421    54,271  1.20   100%
+ 131  body_r0p5_own1-r2             45%   38%     421   132,566  1.36   100%
+ 132  body_r0p5_pts40-r1p5          45%   41%     421    40,931  1.22   100%
+ 133  body_r0_own1-r1p5             45%   40%     873   134,353  1.21   100%
+ 134  body_r0p7_pts25-r1p5          44%   41%     225    10,925  1.17   100%
+ 135  body_r0p5_pts25-r1p5          44%   41%     421    20,321  1.17   100%
+ 136  body_r0_atr1p5-r1p5           44%   41%     873    73,753  1.16   100%
+ 137  body_r0_atr2-r1p5             44%   41%     873    98,378  1.16   100%
+ 138  body_r0p5_atr1p5-r1p5         44%   41%     421    30,416  1.13   100%
+ 139  body_r0p5_own0p5-r1p5         44%   41%     421    30,861  1.15   100%
+ 140  body_r0_pts40-r1p5            44%   41%     873    59,763  1.15   100%
+ 141  body_r0_own1p5-r2             44%   39%     873   191,743  1.23   100%
+ 142  body_r0p5_atr1-r1p5           44%   41%     421    18,136  1.12   100%
+ 143  body_r0p7_atr2-r2             44%   36%     225    57,310  1.36   100%
+ 144  body_r0p5_atr0p5-r1p5         43%   40%     421    10,046  1.13   100%
+ 145  body_r0_pts60-r1p5            43%   41%     873    57,793  1.10   100%
+ 146  body_r0_own0p5-r1p5           42%   40%     873    37,053  1.11   100%
+ 147  body_r0_pts25-r1p5            42%   41%     873    17,723  1.07   100%
+ 148  body_r0p7_atr0p5-r1p5         42%   42%     225      -215  0.99    90%
+ 149  body_r0p7_own0p5-r2           42%   35%     225    40,355  1.32   100%
+ 150  body_r0p7_pts15-r1p5          42%   41%     225     1,405  1.03   100%
+ 151  body_r0p7_pts60-r2            42%   36%     225    40,230  1.26   100%
+ 152  body_r0p7_pts40-r2            41%   34%     225    39,595  1.37   100%
+ 153  body_r0_pts15-r1p5            41%   41%     873     1,658  1.01   100%
+ 154  body_r0p5_atr2-r2             41%   35%     421    85,896  1.27   100%
+ 155  body_r0p5_pts15-r1p5          41%   41%     421       396  1.01   100%
+ 156  body_r0p5_pts60-r2            41%   36%     421    69,826  1.24   100%
+ 157  body_r0_atr1-r1p5             41%   41%     873     1,853  1.01    80%
+ 158  body_r0_own1-r2               41%   35%     873   181,533  1.27   100%
+ 159  body_r0p7_atr1-r2             41%   35%     225    24,840  1.30   100%
+ 160  body_r0p7_pts25-r2            41%   34%     225    23,885  1.35   100%
+ 161  body_r0_atr0p5-r1p5           40%   41%     873    -5,757  0.97    80%
+ 162  body_r0p5_pts25-r2            40%   34%     421    36,801  1.28   100%
+ 163  body_r0p5_own0p5-r2           39%   34%     421    58,786  1.26   100%
+ 164  body_r0p5_pts40-r2            39%   34%     421    51,976  1.25   100%
+ 165  body_r0p7_atr1p5-r2           39%   35%     225    20,480  1.16   100%
+ 166  body_r0_pts60-r2              39%   36%     873    81,883  1.13   100%
+ 167  body_r0_atr2-r2               38%   35%     873   117,588  1.18   100%
+ 168  body_r0_pts40-r2              38%   34%     873    83,293  1.19   100%
+ 169  body_r0p5_atr1-r2             38%   34%     421    28,366  1.17   100%
+ 170  body_r0p5_atr1p5-r2           38%   35%     421    37,226  1.15   100%
+ 171  body_r0_atr1p5-r2             37%   34%     873    86,393  1.17   100%
+ 172  body_r0_own0p5-r2             36%   33%     873    58,398  1.15   100%
+ 173  body_r0_pts25-r2              36%   34%     873    28,273  1.10   100%
+ 174  body_r0p5_atr0p5-r2           36%   34%     421     8,276  1.09   100%
+ 175  body_r0_atr1-r2               35%   34%     873    19,598  1.05    90%
+ 176  body_r0_pts15-r2              34%   34%     873    -1,387  0.99   100%
+ 177  body_r0p7_pts15-r2            34%   34%     225      -800  0.98   100%
+ 178  body_r0p5_pts15-r2            33%   34%     421    -2,629  0.97   100%
+ 179  body_r0p7_atr0p5-r2           33%   36%     225    -4,400  0.91    60%
+ 180  body_r0_atr0p5-r2             33%   34%     873    -8,542  0.95    80%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i41_c930_15_ny <n> (blueprint_wf_pick).

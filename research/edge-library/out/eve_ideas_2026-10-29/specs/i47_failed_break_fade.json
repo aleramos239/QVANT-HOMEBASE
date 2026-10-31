@@ -1,0 +1,29 @@
+{
+ "name": "i47_failed_break_fade",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: fade a failed 15m candle break",
+ "family": "candle_sweep",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "back": [
+   "range",
+   "body"
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "mode": "sweep"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

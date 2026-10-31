@@ -1,0 +1,125 @@
+2026-10-21T02:45:39+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers)
+2026-10-21T02:45:39+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 1-60 of 948 (27 instances)
+2026-10-21T02:45:48+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 61-120 of 948 (27 instances)
+2026-10-21T02:45:59+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 121-180 of 948 (27 instances)
+2026-10-21T02:46:10+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 181-240 of 948 (27 instances)
+2026-10-21T02:46:20+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 241-300 of 948 (27 instances)
+2026-10-21T02:46:31+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 301-360 of 948 (27 instances)
+2026-10-21T02:46:41+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 361-420 of 948 (27 instances)
+2026-10-21T02:46:51+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 421-480 of 948 (27 instances)
+2026-10-21T02:47:01+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 481-540 of 948 (27 instances)
+2026-10-21T02:47:11+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 541-600 of 948 (27 instances)
+2026-10-21T02:47:23+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 601-660 of 948 (27 instances)
+2026-10-21T02:47:36+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 661-720 of 948 (27 instances)
+2026-10-21T02:47:55+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 721-780 of 948 (27 instances)
+2026-10-21T02:48:12+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 781-840 of 948 (27 instances)
+2026-10-21T02:48:29+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 841-900 of 948 (27 instances)
+2026-10-21T02:48:46+00:00 taught vwap_i5_touch_us160_5_s40: pass 1 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40-NQ-tf5; 2 workers): days 901-948 of 948 (27 instances)
+2026-10-21T02:48:56+00:00 bp_build vwap_i5_touch_us160_5_s40-NQ-tf5: 9 cells, 15,579 trades, 197.69 s of tape (wall 198 s, 2 workers)
+2026-10-21T02:48:56+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers)
+2026-10-21T02:48:56+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 1-60 of 948 (270 instances)
+2026-10-21T02:50:19+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 61-120 of 948 (270 instances)
+2026-10-21T02:51:38+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 121-180 of 948 (270 instances)
+2026-10-21T02:52:55+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 181-240 of 948 (270 instances)
+2026-10-21T02:54:03+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 241-300 of 948 (270 instances)
+2026-10-21T02:55:14+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 301-360 of 948 (270 instances)
+2026-10-21T02:57:11+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 361-420 of 948 (270 instances)
+2026-10-21T02:58:20+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 421-480 of 948 (270 instances)
+2026-10-21T02:59:14+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 481-540 of 948 (270 instances)
+2026-10-21T02:59:54+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 541-600 of 948 (270 instances)
+2026-10-21T03:00:33+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 601-660 of 948 (270 instances)
+2026-10-21T03:01:17+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 661-720 of 948 (270 instances)
+2026-10-21T03:01:54+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 721-780 of 948 (270 instances)
+2026-10-21T03:02:31+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 781-840 of 948 (270 instances)
+2026-10-21T03:03:09+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 841-900 of 948 (270 instances)
+2026-10-21T03:03:53+00:00 taught vwap_i5_touch_us160_5_s40: pass 2 of 2, NQ 5-minute bars (vwap_i5_touch_us160_5_s40__ctl-NQ-tf5; 2 workers): days 901-948 of 948 (270 instances)
+2026-10-21T03:04:29+00:00 null_bp vwap_i5_touch_us160_5_s40__ctl-NQ-tf5: 90 cells, 610,153 trades, 929.02 s of tape (wall 932 s, 2 workers)
+vwap_i5_touch_us160_5_s40: vwap_touch (anchor us, away 160, near 3), both sides, 5-minute bars, stop 40 / target 60 points, up to 3 trades a session pass over 3 passes (nyam mid pm); the sheet leaves out 6 things the video says (listed below); verdict: 5-minute bars make $7 a trade on 1,738 trades and hold 3 of 10 lines (misses 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, P4.1); the neighbours average -$1 a trade.
+
+BUILD DAYS 2021-09-22 .. 2025-06-30 (948 session days), 1 contract after costs. The unseen days (2025-07-01 on) were not read.
+
+=== 5-MINUTE BARS ===
+
+                                                    the taught cell (stop 40 / target 60)  average of the 9 cells
+trades                                                                              1,738                   1,731
+net                                                                               $11,788                    $462
+win rate                                                                           41.7 %                  41.8 %
+average trade                                                                          $7                      $0
+profit factor                                                                        1.01                    1.00
+average win                                                                        $1,111                  $1,087
+average loss                                                                        -$783                   -$782
+average win / average loss                                                           1.42                    1.44
+worst drawdown, daily                                                             $43,213                 $52,582
+worst drawdown, open losses counted                                               $43,602                 $53,178
+Sharpe                                                                               0.15                   -0.03
+months won                                                                         52.2 %                  50.2 %
+best month, share of the profit                                                    11.1 %                  11.9 %
+longest run of losing days                                                              8                       9
+prop eval odds, 30 days (LucidPro 50K, no DLL)                                     26.3 %                  25.5 %
+prop payout odds (stress, "live is worse", beside)                         14.6 % (5.5 %)          14.1 % (5.7 %)
+prop eval odds, stress                                                             22.3 %                  20.6 %
+
+The neighbours (the 8 others): average trade -$1, they hold 2.0 of 10 lines on average (the taught cell holds 3).
+
+THE NINE CELLS: average trade (lines held)
+           target 45   target 60    target 75
+stop 30  -$21 (1/10)  -$5 (1/10)  -$14 (1/10)
+stop 40   -$8 (1/10)   $7 (3/10)   -$4 (2/10)
+stop 50    $6 (2/10)  $18 (3/10)   $26 (5/10)
+
+LINES on the taught cell (the pipeline's own functions and words)
+  P3.2 PASS average trade $7 (need above $0)
+  P3.3 PASS 1,738 trades (need 200)
+  P3.4 missed (a label, asks nothing) long $26,876, short -$15,088 (need both above $0)
+  P3.7 missed (a label, asks nothing) without its best 5 % of trades (87 of 1738) the box makes -$92,264 (need above $0)
+  P3.8 missed (a label, asks nothing) 24 of 46 months won, 52.17 % (need 70 % or more)
+  P3.9 missed (a label, asks nothing) best month 2021-10 is 11.1 % of the profit of the months won (need 10 % or less)
+  P3.10 held (a label, asks nothing) longest run of losing days: 8 (need 8 or fewer)
+  3.3 FAIL default variant: profit factor 1.01 over 1,738 trades (need 1.2 or more)
+  3.4 FAIL default variant: net $11,788 / worst drawdown $43,602 = 0.27, open losses counted (need 3 or more)
+  3.5 FAIL default variant: Sharpe 0.15 on 948 session days (need 1 or more)
+  3.6 FAIL default variant: worst drawdown $4,360 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)
+  3.7 FAIL default variant: makes money in 62.3 % of 1,000 reshuffled runs (need 80 % or more)
+  3.8 FAIL default variant: -$26,871 without its best 1 % of days (10 of 948 session days; they made $38,659 of $11,788; need above $0)
+  P4.1 FAIL the box's average trade is above $0 in 62.3 % of 1,000 reshuffled runs (need 75 % or more)
+  P4.2 PASS beats 97.52 % of the random-entry runs of the same box on try 1 (need above 95 % = 100 - 5 / 1 try)
+
+PER YEAR, then combined: the taught cell
+year      trades       net  avg trade     win    PF  drawdown
+2021*         89   $25,394       $285  55.1 %  1.83    $4,634
+2022         581  -$20,459       -$35  38.9 %  0.93   $27,830
+2023         331   -$9,684       -$29  40.5 %  0.94   $19,149
+2024         417   $29,467        $71  45.8 %  1.17   $13,351
+2025*        320  -$12,930       -$40  39.1 %  0.92   $19,027
+combined   1,738   $11,788         $7  41.7 %  1.01   $43,213
+
+PER YEAR, then combined: the average of the 9 cells
+year      trades       net  avg trade     win    PF  drawdown
+2021*         88   $22,493       $256  54.7 %  1.76    $3,848
+2022         580  -$25,353       -$44  38.9 %  0.91   $32,247
+2023         329  -$12,061       -$37  40.4 %  0.91   $23,073
+2024         416   $27,359        $66  46.1 %  1.16   $12,912
+2025*        319  -$11,975       -$38  39.3 %  0.92   $20,874
+combined   1,731      $462         $0  41.8 %  1.00   $52,582
+
+NOT RUN (the person who wrote the sheet)
+  - PRE-REGISTERED in out/vwap_hunt_2026-10-20/PREREG.md before any run; nothing tuned on a result.
+  - 1-MINUTE SHEETS run the New York passes only (machine time); 5 / 15-minute sheets every pass the family runs except pre (08:25-09:30), which the brief does not ask for.
+  - THE SESSION VWAP of the engine restarts at every pass start (09:30, 11:00, 13:30; 03:00 London; 00:00 Asia; 18:00 evening); 'rth' / 'us' anchors stay at 09:30 for the New York passes.
+  - THE CAP: 3 trades per session pass (several passes: a day can hold more, and a trade of one pass may still be open when the next pass enters).
+  - COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).
+  - THE TEST DAYS are read only by `bp.py taught wf` (the 3:1 block walk-forward, once), its output sent to a log unread until SELECTION.md is written.
+
+ALSO TRUE OF THE RUN (the lane)
+  - CAPPED PER SESSION PASS, NOT PER DAY: max_trades 3 counts inside each pass (3 passes: nyam, mid, pm), so a day can hold up to 9 trades; a family's own loss or trade count (none) counts inside one pass too.
+  - The passes are independent: a trade of one pass may still be open when another pass enters (one position at a time holds inside a pass only).
+  - Every trade is flat by 15:58 ET (13:13 on an equity half day); no entry in the last 5 minutes of a pass.
+  - Costs: $4.00 a round turn and 1 tick of slippage on market and stop fills, 1 contract (the engine's own).
+
+HONEST LIMITS
+  - One video's rule, read on the build days (2021-09-22 .. 2025-06-30): in-sample.
+  - The family's settings and the exits are the video's own: nothing was tuned, searched or picked.
+  - The neighbours are shown to see how fragile the rule is; they are not alternatives to choose from.
+  - The unseen days (2025-07-01 on) were not read: a person has to ask for that, and it is read once.
+  - The random entries are the pipeline's own (any bar of the session pass, matched by day and pass): they do not wait for the family's entry window.
+NEXT: This is the rule as taught, in-sample. The unseen days are read once, and only when a person asks for it.

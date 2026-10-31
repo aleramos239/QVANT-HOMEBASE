@@ -1,0 +1,31 @@
+{
+ "name": "i37_big_c18_fade",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: fade a large 18:00 candle at its close",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "k": [
+   0.05,
+   0.1,
+   0.15
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "c18",
+  "ent": "fade"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

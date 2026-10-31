@@ -1,0 +1,30 @@
+{
+ "name": "i25_inside_day_break",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: break of the prior range after an inside day",
+ "family": "pd_cond_bracket",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "off_min": [
+   0,
+   30,
+   60
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "cond": "inside"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

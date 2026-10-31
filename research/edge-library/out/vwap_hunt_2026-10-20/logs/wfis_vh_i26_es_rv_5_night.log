@@ -1,0 +1,142 @@
+2026-10-21T11:17:45+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers)
+2026-10-21T11:17:45+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers): days 1-60 of 883 (360 instances)
+2026-10-21T11:18:18+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers): days 61-120 of 883 (360 instances)
+2026-10-21T11:18:49+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers): days 121-180 of 883 (360 instances)
+2026-10-21T11:19:20+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers): days 181-240 of 883 (360 instances)
+2026-10-21T11:19:52+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers): days 241-300 of 883 (360 instances)
+2026-10-21T11:20:24+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers): days 301-360 of 883 (360 instances)
+2026-10-21T11:20:57+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers): days 361-420 of 883 (360 instances)
+2026-10-21T11:21:27+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers): days 421-480 of 883 (360 instances)
+2026-10-21T11:21:58+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers): days 481-540 of 883 (360 instances)
+2026-10-21T11:22:31+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers): days 541-600 of 883 (360 instances)
+2026-10-21T11:23:03+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers): days 601-660 of 883 (360 instances)
+2026-10-21T11:23:36+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers): days 661-720 of 883 (360 instances)
+2026-10-21T11:24:08+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers): days 721-780 of 883 (360 instances)
+2026-10-21T11:24:39+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers): days 781-840 of 883 (360 instances)
+2026-10-21T11:25:09+00:00 idea vh_i26_es_rv_5_night, 3:1 in-sample: pass 1 of 1, ES 5-minute bars (vh_i26_es_rv_5_night-ES-tf5/is; 3 workers): days 841-883 of 883 (360 instances)
+2026-10-21T11:25:31+00:00 wf_is vh_i26_es_rv_5_night-ES-tf5/is: 120 cells, 757,220 trades, 461.93 s of tape (wall 464 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i26_es_rv_5_night: 120 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  k2p5_pts15-r0p5               66%   67%    2994   -36,776  0.95   100%
+   2  k2_pts15-r0p5                 66%   67%    4410   -56,290  0.95   100%
+   3  k1p5_pts15-r0p5               65%   67%    4965  -133,385  0.90    70%
+   4  k2p5_pts10-r0p5               65%   68%    3405   -86,495  0.86    80%
+   5  k1p5_pts10-r0p5               64%   68%    6397  -163,176  0.86    80%
+   6  k2_pts10-r0p5                 64%   68%    5533  -145,332  0.86    80%
+   7  k1p5_pts6-r0p5                64%   68%    8230  -183,670  0.81    90%
+   8  k2p5_pts6-r0p5                64%   68%    3957   -89,728  0.80    90%
+   9  k2_pts6-r0p5                  63%   68%    7058  -177,144  0.79    60%
+  10  k1p5_pts4-r0p5                63%   69%    9322  -197,300  0.74   100%
+  11  k2p5_pts4-r0p5                61%   69%    4371  -107,909  0.70    70%
+  12  k2_pts4-r0p5                  61%   69%    8110  -203,352  0.70    70%
+  13  k2p5_atr2-r0p5                61%   68%    4400  -119,012  0.74    70%
+  14  k1p5_atr2-r0p5                61%   67%    9930  -213,582  0.78   100%
+  15  k2_atr2-r0p5                  61%   67%    8457  -198,253  0.77    90%
+  16  k1p5_atr1p5-r0p5              59%   67%   10280  -229,158  0.71   100%
+  17  k2p5_atr1p5-r0p5              59%   68%    4648  -129,042  0.67    20%
+  18  k2_atr1p5-r0p5                59%   67%    8971  -227,634  0.69    80%
+  19  k2_pts15-r0p75                56%   58%    3897   -76,338  0.94    80%
+  20  k2p5_pts15-r0p75              56%   58%    2767   -57,780  0.94    70%
+  21  k2p5_pts10-r0p75              56%   58%    3159   -69,748  0.90    90%
+  22  k2_pts10-r0p75                55%   58%    4894  -122,451  0.89    80%
+  23  k2p5_atr1-r0p5                55%   69%    4932  -128,916  0.57    90%
+  24  k1p5_pts10-r0p75              55%   58%    5606  -144,486  0.89    80%
+  25  k1p5_pts15-r0p75              55%   58%    4272  -143,338  0.90    30%
+  26  k2_atr1-r0p5                  55%   68%    9374  -234,421  0.58   100%
+  27  k1p5_pts6-r0p75               55%   59%    7533  -173,982  0.84   100%
+  28  k1p5_atr1-r0p5                54%   68%   10435  -275,890  0.56    90%
+  29  k2p5_pts6-r0p75               54%   59%    3735   -94,278  0.83    80%
+  30  k2_pts6-r0p75                 54%   59%    6467  -163,993  0.83    80%
+  31  k2p5_pts4-r0p75               53%   60%    4199   -99,658  0.77    90%
+  32  k1p5_pts4-r0p75               53%   60%    8852  -214,208  0.76    90%
+  33  k2p5_atr2-r0p75               53%   58%    4216  -113,139  0.79    80%
+  34  k1p5_atr2-r0p75               53%   58%    9478  -220,400  0.81   100%
+  35  k2_atr2-r0p75                 52%   58%    7953  -202,387  0.80    90%
+  36  k2_pts4-r0p75                 52%   60%    7679  -207,478  0.74    70%
+  37  k1p5_atr1p5-r0p75             51%   58%   10112  -227,923  0.76   100%
+  38  k2p5_atr1p5-r0p75             51%   59%    4528  -126,912  0.72    80%
+  39  k2_atr1p5-r0p75               51%   58%    8738  -215,452  0.75   100%
+  40  k2_pts15-r1                   50%   51%    3605   -63,070  0.95    90%
+  41  k2p5_pts10-r1                 49%   51%    2992   -59,818  0.92    90%
+  42  k2_pts10-r1                   49%   51%    4506   -98,712  0.92    90%
+  43  k1p5_pts10-r1                 49%   51%    5108  -116,582  0.91    90%
+  44  k2p5_pts15-r1                 49%   51%    2648   -93,117  0.91    40%
+  45  k1p5_pts15-r1                 48%   51%    3911  -138,144  0.91    40%
+  46  k2p5_atr1-r0p75               48%   59%    4861  -130,369  0.63   100%
+  47  k2p5_pts6-r1                  47%   52%    3597   -95,750  0.84    80%
+  48  k2_pts6-r1                    47%   52%    6038  -164,564  0.84    80%
+  49  k1p5_pts6-r1                  47%   52%    7022  -193,113  0.84    80%
+  50  k1p5_atr1-r0p75               47%   58%   10407  -264,766  0.64   100%
+  51  k2p5_atr2-r1                  47%   51%    4053   -95,137  0.84   100%
+  52  k2_atr1-r0p75                 47%   58%    9261  -244,744  0.63   100%
+  53  k2p5_pts4-r1                  46%   52%    4068  -104,022  0.78    90%
+  54  k1p5_pts4-r1                  46%   52%    8451  -217,254  0.78    90%
+  55  k1p5_atr2-r1                  46%   51%    8991  -218,789  0.83    90%
+  56  k2_atr2-r1                    46%   50%    7488  -179,077  0.83   100%
+  57  k2_pts4-r1                    46%   52%    7340  -204,822  0.76    70%
+  58  k1p5_atr1p5-r1                44%   51%    9914  -252,356  0.77   100%
+  59  k2p5_atr1p5-r1                44%   51%    4417  -127,718  0.75    80%
+  60  k2_atr1p5-r1                  44%   51%    8463  -221,540  0.77   100%
+  61  k2p5_atr0p5-r0p5              42%   70%    5186  -151,882  0.32    60%
+  62  k2_atr0p5-r0p5                42%   70%    9624  -275,358  0.32    70%
+  63  k2p5_atr1-r1                  42%   52%    4798  -133,267  0.66    90%
+  64  k1p5_atr0p5-r0p5              41%   69%   10490  -303,185  0.31    70%
+  65  k2_atr1-r1                    41%   51%    9170  -234,330  0.68   100%
+  66  k1p5_atr1-r1                  41%   51%   10364  -275,844  0.67   100%
+  67  k2_pts15-r1p5                 40%   41%    3322   -76,688  0.95    80%
+  68  k2_pts10-r1p5                 40%   41%    4064   -71,994  0.94   100%
+  69  k1p5_pts10-r1p5               39%   41%    4513  -100,752  0.93    90%
+  70  k2p5_pts15-r1p5               39%   41%    2560  -108,065  0.91     0%
+  71  k1p5_pts15-r1p5               39%   41%    3543  -156,110  0.90     0%
+  72  k2p5_pts10-r1p5               39%   41%    2825   -88,600  0.90    60%
+  73  k2_pts6-r1p5                  38%   42%    5478  -129,687  0.88    90%
+  74  k2p5_pts6-r1p5                38%   42%    3369   -82,076  0.88    90%
+  75  k1p5_pts6-r1p5                38%   42%    6309  -155,374  0.87    80%
+  76  k2p5_pts4-r1p5                37%   42%    3893   -95,672  0.82    90%
+  77  k1p5_pts4-r1p5                37%   42%    7839  -208,944  0.80    90%
+  78  k2p5_atr2-r1p5                37%   41%    3821  -105,322  0.84    50%
+  79  k2p5_atr0p5-r0p75             37%   60%    5163  -149,852  0.39    80%
+  80  k2_pts4-r1p5                  37%   42%    6833  -189,994  0.80    90%
+  81  k2_atr0p5-r0p75               37%   60%    9593  -273,960  0.39    80%
+  82  k2_atr2-r1p5                  37%   41%    6757  -174,716  0.85    60%
+  83  k1p5_atr2-r1p5                37%   41%    8073  -223,654  0.84    50%
+  84  k1p5_atr0p5-r0p75             36%   60%   10490  -306,122  0.38    80%
+  85  k2p5_atr1p5-r1p5              35%   41%    4230  -127,832  0.77    80%
+  86  k1p5_atr1p5-r1p5              35%   41%    9397  -277,100  0.77    80%
+  87  k2_atr1p5-r1p5                35%   41%    7926  -235,629  0.78    80%
+  88  k2_pts15-r2                   35%   36%    3201   -91,354  0.94    70%
+  89  k1p5_pts15-r2                 34%   36%    3410  -117,540  0.93    40%
+  90  k2p5_pts15-r2                 34%   36%    2516  -103,914  0.92    30%
+  91  k2_atr1-r1p5                  34%   41%    8977  -231,470  0.72   100%
+  92  k2p5_atr1-r1p5                34%   42%    4703  -131,924  0.70   100%
+  93  k1p5_atr1-r1p5                33%   41%   10250  -272,275  0.71   100%
+  94  k2p5_pts10-r2                 33%   35%    2762   -65,786  0.93    90%
+  95  k2_pts10-r2                   33%   35%    3845   -88,955  0.93    90%
+  96  k2p5_atr0p5-r1                33%   53%    5144  -150,664  0.43    80%
+  97  k2_pts6-r2                    32%   35%    5118  -106,972  0.90   100%
+  98  k2_atr0p5-r1                  32%   52%    9580  -273,320  0.44   100%
+  99  k1p5_pts10-r2                 32%   34%    4238  -139,027  0.91    60%
+ 100  k2p5_pts6-r2                  32%   35%    3240   -81,910  0.88    90%
+ 101  k1p5_pts6-r2                  32%   35%    5828  -149,624  0.88    80%
+ 102  k1p5_atr0p5-r1                32%   53%   10488  -308,577  0.42    80%
+ 103  k2p5_pts4-r2                  32%   35%    3743   -87,047  0.84   100%
+ 104  k2_pts4-r2                    31%   35%    6447  -168,426  0.82   100%
+ 105  k1p5_pts4-r2                  31%   35%    7374  -217,846  0.80    70%
+ 106  k2p5_atr2-r2                  31%   34%    3660  -104,052  0.85    90%
+ 107  k2_atr2-r2                    30%   34%    6210  -184,965  0.84    60%
+ 108  k1p5_atr2-r2                  30%   34%    7370  -239,768  0.83    40%
+ 109  k1p5_atr1p5-r2                30%   35%    8864  -254,606  0.80    70%
+ 110  k2p5_atr1p5-r2                30%   35%    4084  -133,461  0.78    30%
+ 111  k2_atr1p5-r2                  29%   35%    7486  -230,044  0.79    40%
+ 112  k2p5_atr1-r2                  28%   35%    4618  -122,097  0.74   100%
+ 113  k1p5_atr1-r2                  28%   35%   10078  -278,712  0.72   100%
+ 114  k2_atr1-r2                    28%   35%    8752  -239,596  0.73   100%
+ 115  k2p5_atr0p5-r1p5              26%   43%    5112  -152,486  0.48    80%
+ 116  k2_atr0p5-r1p5                26%   42%    9543  -278,860  0.48   100%
+ 117  k1p5_atr0p5-r1p5              26%   42%   10483  -306,232  0.48   100%
+ 118  k2p5_atr0p5-r2                22%   36%    5079  -149,916  0.51   100%
+ 119  k2_atr0p5-r2                  22%   35%    9513  -279,327  0.51   100%
+ 120  k1p5_atr0p5-r2                22%   35%   10469  -305,376  0.51   100%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i26_es_rv_5_night <n> (blueprint_wf_pick).

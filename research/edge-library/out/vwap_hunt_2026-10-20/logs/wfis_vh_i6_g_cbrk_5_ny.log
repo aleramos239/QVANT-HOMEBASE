@@ -1,0 +1,202 @@
+2026-10-21T06:01:49+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers)
+2026-10-21T06:01:49+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers): days 1-60 of 883 (540 instances)
+2026-10-21T06:02:33+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers): days 61-120 of 883 (540 instances)
+2026-10-21T06:03:20+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers): days 121-180 of 883 (540 instances)
+2026-10-21T06:04:06+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers): days 181-240 of 883 (540 instances)
+2026-10-21T06:04:55+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers): days 241-300 of 883 (540 instances)
+2026-10-21T06:05:41+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers): days 301-360 of 883 (540 instances)
+2026-10-21T06:06:28+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers): days 361-420 of 883 (540 instances)
+2026-10-21T06:07:15+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers): days 421-480 of 883 (540 instances)
+2026-10-21T06:08:03+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers): days 481-540 of 883 (540 instances)
+2026-10-21T06:08:50+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers): days 541-600 of 883 (540 instances)
+2026-10-21T06:09:36+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers): days 601-660 of 883 (540 instances)
+2026-10-21T06:10:24+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers): days 661-720 of 883 (540 instances)
+2026-10-21T06:11:15+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers): days 721-780 of 883 (540 instances)
+2026-10-21T06:12:08+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers): days 781-840 of 883 (540 instances)
+2026-10-21T06:12:59+00:00 idea vh_i6_g_cbrk_5_ny, 3:1 in-sample: pass 1 of 1, NQ 5-minute bars (vh_i6_g_cbrk_5_ny-NQ-tf5/is; 3 workers): days 841-883 of 883 (540 instances)
+2026-10-21T06:13:38+00:00 wf_is vh_i6_g_cbrk_5_ny-NQ-tf5/is: 180 cells, 1,270,527 trades, 702.91 s of tape (wall 707 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i6_g_cbrk_5_ny: 180 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  backrange_own1-r0p5           67%   67%    7789      -141  1.00   100%
+   2  backbody_own1-r0p5            67%   67%    7789      -141  1.00   100%
+   3  backfar_own1-r0p5             67%   67%    7789      -141  1.00   100%
+   4  backrange_atr2-r0p5           66%   67%    7465   -44,255  0.98    70%
+   5  backbody_atr2-r0p5            66%   67%    7465   -44,255  0.98    70%
+   6  backfar_atr2-r0p5             66%   67%    7465   -44,255  0.98    70%
+   7  backrange_own1p5-r0p5         66%   66%    7532    56,882  1.02   100%
+   8  backbody_own1p5-r0p5          66%   66%    7532    56,882  1.02   100%
+   9  backfar_own1p5-r0p5           66%   66%    7532    56,882  1.02   100%
+  10  backrange_pts25-r0p5          66%   67%    7829   -78,271  0.94    70%
+  11  backbody_pts25-r0p5           66%   67%    7829   -78,271  0.94    70%
+  12  backfar_pts25-r0p5            66%   67%    7829   -78,271  0.94    70%
+  13  backrange_pts40-r0p5          66%   67%    7567   -52,103  0.97    90%
+  14  backbody_pts40-r0p5           66%   67%    7567   -52,103  0.97    90%
+  15  backfar_pts40-r0p5            66%   67%    7567   -52,103  0.97    90%
+  16  backrange_atr1-r0p5           66%   67%    7853   -85,962  0.94    60%
+  17  backbody_atr1-r0p5            66%   67%    7853   -85,962  0.94    60%
+  18  backfar_atr1-r0p5             66%   67%    7853   -85,962  0.94    60%
+  19  backrange_pts15-r0p5          66%   68%    7853   -86,382  0.90    70%
+  20  backbody_pts15-r0p5           66%   68%    7853   -86,382  0.90    70%
+  21  backfar_pts15-r0p5            66%   68%    7853   -86,382  0.90    70%
+  22  backrange_pts60-r0p5          65%   65%    6804     7,399  1.00   100%
+  23  backbody_pts60-r0p5           65%   65%    6804     7,399  1.00   100%
+  24  backfar_pts60-r0p5            65%   65%    6804     7,399  1.00   100%
+  25  backrange_own2-r0p5           65%   65%    6966    56,061  1.02   100%
+  26  backbody_own2-r0p5            65%   65%    6966    56,061  1.02   100%
+  27  backfar_own2-r0p5             65%   65%    6966    56,061  1.02   100%
+  28  backrange_atr1p5-r0p5         65%   67%    7796  -196,429  0.91    10%
+  29  backbody_atr1p5-r0p5          65%   67%    7796  -196,429  0.91    10%
+  30  backfar_atr1p5-r0p5           65%   67%    7796  -196,429  0.91    10%
+  31  backrange_atr0p5-r0p5         65%   68%    7854   -84,021  0.89    70%
+  32  backbody_atr0p5-r0p5          65%   68%    7854   -84,021  0.89    70%
+  33  backfar_atr0p5-r0p5           65%   68%    7854   -84,021  0.89    70%
+  34  backrange_own0p5-r0p5         65%   67%    7854   -74,641  0.92    90%
+  35  backbody_own0p5-r0p5          65%   67%    7854   -74,641  0.92    90%
+  36  backfar_own0p5-r0p5           65%   67%    7854   -74,641  0.92    90%
+  37  backrange_own1-r0p75          57%   57%    7710    33,480  1.02   100%
+  38  backbody_own1-r0p75           57%   57%    7710    33,480  1.02   100%
+  39  backfar_own1-r0p75            57%   57%    7710    33,480  1.02   100%
+  40  backrange_pts25-r0p75         57%   58%    7777   -54,338  0.97    90%
+  41  backbody_pts25-r0p75          57%   58%    7777   -54,338  0.97    90%
+  42  backfar_pts25-r0p75           57%   58%    7777   -54,338  0.97    90%
+  43  backrange_own2-r0p75          57%   55%    6328   177,433  1.06   100%
+  44  backbody_own2-r0p75           57%   55%    6328   177,433  1.06   100%
+  45  backfar_own2-r0p75            57%   55%    6328   177,433  1.06   100%
+  46  backrange_atr2-r0p75          56%   57%    6965   -88,855  0.97    50%
+  47  backbody_atr2-r0p75           56%   57%    6965   -88,855  0.97    50%
+  48  backfar_atr2-r0p75            56%   57%    6965   -88,855  0.97    50%
+  49  backrange_pts40-r0p75         56%   57%    7255   -65,305  0.97    80%
+  50  backbody_pts40-r0p75          56%   57%    7255   -65,305  0.97    80%
+  51  backfar_pts40-r0p75           56%   57%    7255   -65,305  0.97    80%
+  52  backrange_own1p5-r0p75        56%   56%    7147    39,732  1.01   100%
+  53  backbody_own1p5-r0p75         56%   56%    7147    39,732  1.01   100%
+  54  backfar_own1p5-r0p75          56%   56%    7147    39,732  1.01   100%
+  55  backrange_atr1-r0p75          56%   58%    7849  -129,336  0.93    40%
+  56  backbody_atr1-r0p75           56%   58%    7849  -129,336  0.93    40%
+  57  backfar_atr1-r0p75            56%   58%    7849  -129,336  0.93    40%
+  58  backrange_atr1p5-r0p75        56%   57%    7656  -118,479  0.96    60%
+  59  backbody_atr1p5-r0p75         56%   57%    7656  -118,479  0.96    60%
+  60  backfar_atr1p5-r0p75          56%   57%    7656  -118,479  0.96    60%
+  61  backrange_pts15-r0p75         56%   58%    7853   -97,227  0.91    70%
+  62  backbody_pts15-r0p75          56%   58%    7853   -97,227  0.91    70%
+  63  backfar_pts15-r0p75           56%   58%    7853   -97,227  0.91    70%
+  64  backrange_pts60-r0p75         56%   56%    6197   -43,938  0.99    90%
+  65  backbody_pts60-r0p75          56%   56%    6197   -43,938  0.99    90%
+  66  backfar_pts60-r0p75           56%   56%    6197   -43,938  0.99    90%
+  67  backrange_atr0p5-r0p75        56%   58%    7853   -79,197  0.92    70%
+  68  backbody_atr0p5-r0p75         56%   58%    7853   -79,197  0.92    70%
+  69  backfar_atr0p5-r0p75          56%   58%    7853   -79,197  0.92    70%
+  70  backrange_own0p5-r0p75        56%   57%    7853   -72,592  0.94    80%
+  71  backbody_own0p5-r0p75         56%   57%    7853   -72,592  0.94    80%
+  72  backfar_own0p5-r0p75          56%   57%    7853   -72,592  0.94    80%
+  73  backrange_pts25-r1            50%   51%    7685   -37,800  0.98    90%
+  74  backbody_pts25-r1             50%   51%    7685   -37,800  0.98    90%
+  75  backfar_pts25-r1              50%   51%    7685   -37,800  0.98    90%
+  76  backrange_own1-r1             50%   50%    7571    25,941  1.01   100%
+  77  backbody_own1-r1              50%   50%    7571    25,941  1.01   100%
+  78  backfar_own1-r1               50%   50%    7571    25,941  1.01   100%
+  79  backrange_own2-r1             50%   49%    5815   183,660  1.06   100%
+  80  backbody_own2-r1              50%   49%    5815   183,660  1.06   100%
+  81  backfar_own2-r1               50%   49%    5815   183,660  1.06   100%
+  82  backrange_pts60-r1            50%   50%    5718   -45,652  0.99    70%
+  83  backbody_pts60-r1             50%   50%    5718   -45,652  0.99    70%
+  84  backfar_pts60-r1              50%   50%    5718   -45,652  0.99    70%
+  85  backrange_atr2-r1             50%   50%    6441   -61,074  0.98    60%
+  86  backbody_atr2-r1              50%   50%    6441   -61,074  0.98    60%
+  87  backfar_atr2-r1               50%   50%    6441   -61,074  0.98    60%
+  88  backrange_own1p5-r1           50%   49%    6757    35,887  1.01   100%
+  89  backbody_own1p5-r1            50%   49%    6757    35,887  1.01   100%
+  90  backfar_own1p5-r1             50%   49%    6757    35,887  1.01   100%
+  91  backrange_atr1-r1             50%   51%    7832   -90,368  0.96    90%
+  92  backbody_atr1-r1              50%   51%    7832   -90,368  0.96    90%
+  93  backfar_atr1-r1               50%   51%    7832   -90,368  0.96    90%
+  94  backrange_atr1p5-r1           50%   51%    7368  -109,267  0.96    60%
+  95  backbody_atr1p5-r1            50%   51%    7368  -109,267  0.96    60%
+  96  backfar_atr1p5-r1             50%   51%    7368  -109,267  0.96    60%
+  97  backrange_pts40-r1            50%   50%    6954   -61,306  0.98    80%
+  98  backbody_pts40-r1             50%   50%    6954   -61,306  0.98    80%
+  99  backfar_pts40-r1              50%   50%    6954   -61,306  0.98    80%
+ 100  backrange_pts15-r1            49%   51%    7846   -99,234  0.92    80%
+ 101  backbody_pts15-r1             49%   51%    7846   -99,234  0.92    80%
+ 102  backfar_pts15-r1              49%   51%    7846   -99,234  0.92    80%
+ 103  backrange_own0p5-r1           49%   50%    7848   -93,222  0.93    70%
+ 104  backbody_own0p5-r1            49%   50%    7848   -93,222  0.93    70%
+ 105  backfar_own0p5-r1             49%   50%    7848   -93,222  0.93    70%
+ 106  backrange_atr0p5-r1           49%   51%    7853  -101,922  0.91    60%
+ 107  backbody_atr0p5-r1            49%   51%    7853  -101,922  0.91    60%
+ 108  backfar_atr0p5-r1             49%   51%    7853  -101,922  0.91    60%
+ 109  backrange_atr2-r1p5           43%   43%    5678    72,783  1.02    80%
+ 110  backbody_atr2-r1p5            43%   43%    5678    72,783  1.02    80%
+ 111  backfar_atr2-r1p5             43%   43%    5678    72,783  1.02    80%
+ 112  backrange_pts60-r1p5          43%   43%    5008    15,373  1.00   100%
+ 113  backbody_pts60-r1p5           43%   43%    5008    15,373  1.00   100%
+ 114  backfar_pts60-r1p5            43%   43%    5008    15,373  1.00   100%
+ 115  backrange_own2-r1p5           43%   41%    5132   250,087  1.08   100%
+ 116  backbody_own2-r1p5            43%   41%    5132   250,087  1.08   100%
+ 117  backfar_own2-r1p5             43%   41%    5132   250,087  1.08   100%
+ 118  backrange_pts40-r1p5          41%   42%    6384   -58,606  0.98    60%
+ 119  backbody_pts40-r1p5           41%   42%    6384   -58,606  0.98    60%
+ 120  backfar_pts40-r1p5            41%   42%    6384   -58,606  0.98    60%
+ 121  backrange_own1p5-r1p5         41%   40%    6106    74,976  1.02   100%
+ 122  backbody_own1p5-r1p5          41%   40%    6106    74,976  1.02   100%
+ 123  backfar_own1p5-r1p5           41%   40%    6106    74,976  1.02   100%
+ 124  backrange_atr1p5-r1p5         41%   42%    6755  -124,720  0.96    80%
+ 125  backbody_atr1p5-r1p5          41%   42%    6755  -124,720  0.96    80%
+ 126  backfar_atr1p5-r1p5           41%   42%    6755  -124,720  0.96    80%
+ 127  backrange_own1-r1p5           41%   40%    7184    97,489  1.04   100%
+ 128  backbody_own1-r1p5            41%   40%    7184    97,489  1.04   100%
+ 129  backfar_own1-r1p5             41%   40%    7184    97,489  1.04   100%
+ 130  backrange_pts25-r1p5          40%   41%    7440   -51,830  0.98    90%
+ 131  backbody_pts25-r1p5           40%   41%    7440   -51,830  0.98    90%
+ 132  backfar_pts25-r1p5            40%   41%    7440   -51,830  0.98    90%
+ 133  backrange_pts60-r2            40%   39%    4649   165,454  1.05   100%
+ 134  backbody_pts60-r2             40%   39%    4649   165,454  1.05   100%
+ 135  backfar_pts60-r2              40%   39%    4649   165,454  1.05   100%
+ 136  backrange_own2-r2             40%   38%    4733   328,778  1.11   100%
+ 137  backbody_own2-r2              40%   38%    4733   328,778  1.11   100%
+ 138  backfar_own2-r2               40%   38%    4733   328,778  1.11   100%
+ 139  backrange_atr1-r1p5           40%   41%    7665  -134,655  0.95    70%
+ 140  backbody_atr1-r1p5            40%   41%    7665  -134,655  0.95    70%
+ 141  backfar_atr1-r1p5             40%   41%    7665  -134,655  0.95    70%
+ 142  backrange_atr2-r2             39%   39%    5204    79,274  1.02    80%
+ 143  backbody_atr2-r2              39%   39%    5204    79,274  1.02    80%
+ 144  backfar_atr2-r2               39%   39%    5204    79,274  1.02    80%
+ 145  backrange_pts15-r1p5          39%   41%    7822  -105,153  0.93    90%
+ 146  backbody_pts15-r1p5           39%   41%    7822  -105,153  0.93    90%
+ 147  backfar_pts15-r1p5            39%   41%    7822  -105,153  0.93    90%
+ 148  backrange_own0p5-r1p5         39%   40%    7834  -112,516  0.93    60%
+ 149  backbody_own0p5-r1p5          39%   40%    7834  -112,516  0.93    60%
+ 150  backfar_own0p5-r1p5           39%   40%    7834  -112,516  0.93    60%
+ 151  backrange_atr0p5-r1p5         38%   41%    7853  -147,322  0.89    50%
+ 152  backbody_atr0p5-r1p5          38%   41%    7853  -147,322  0.89    50%
+ 153  backfar_atr0p5-r1p5           38%   41%    7853  -147,322  0.89    50%
+ 154  backrange_own1p5-r2           37%   35%    5682   198,777  1.06   100%
+ 155  backbody_own1p5-r2            37%   35%    5682   198,777  1.06   100%
+ 156  backfar_own1p5-r2             37%   35%    5682   198,777  1.06   100%
+ 157  backrange_atr1p5-r2           36%   37%    6278   -33,922  0.99    80%
+ 158  backbody_atr1p5-r2            36%   37%    6278   -33,922  0.99    80%
+ 159  backfar_atr1p5-r2             36%   37%    6278   -33,922  0.99    80%
+ 160  backrange_pts40-r2            36%   37%    5943   -41,412  0.99    80%
+ 161  backbody_pts40-r2             36%   37%    5943   -41,412  0.99    80%
+ 162  backfar_pts40-r2              36%   37%    5943   -41,412  0.99    80%
+ 163  backrange_pts25-r2            34%   35%    7199   -47,326  0.98    90%
+ 164  backbody_pts25-r2             34%   35%    7199   -47,326  0.98    90%
+ 165  backfar_pts25-r2              34%   35%    7199   -47,326  0.98    90%
+ 166  backrange_own1-r2             34%   34%    6848    48,973  1.02   100%
+ 167  backbody_own1-r2              34%   34%    6848    48,973  1.02   100%
+ 168  backfar_own1-r2               34%   34%    6848    48,973  1.02   100%
+ 169  backrange_atr1-r2             33%   34%    7419  -137,171  0.95    80%
+ 170  backbody_atr1-r2              33%   34%    7419  -137,171  0.95    80%
+ 171  backfar_atr1-r2               33%   34%    7419  -137,171  0.95    80%
+ 172  backrange_own0p5-r2           32%   33%    7786   -81,234  0.95   100%
+ 173  backbody_own0p5-r2            32%   33%    7786   -81,234  0.95   100%
+ 174  backfar_own0p5-r2             32%   33%    7786   -81,234  0.95   100%
+ 175  backrange_pts15-r2            32%   34%    7762  -135,708  0.92    90%
+ 176  backbody_pts15-r2             32%   34%    7762  -135,708  0.92    90%
+ 177  backfar_pts15-r2              32%   34%    7762  -135,708  0.92    90%
+ 178  backrange_atr0p5-r2           32%   34%    7852  -144,308  0.90    70%
+ 179  backbody_atr0p5-r2            32%   34%    7852  -144,308  0.90    70%
+ 180  backfar_atr0p5-r2             32%   34%    7852  -144,308  0.90    70%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i6_g_cbrk_5_ny <n> (blueprint_wf_pick).

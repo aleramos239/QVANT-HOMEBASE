@@ -1,0 +1,68 @@
+3:1 IN-SAMPLE TABLE of i36_gap_candle_disagree: 60 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  modefollow_pts25-r0p5         66%   66%     409      -406  0.99    90%
+   2  modefollow_atr1p5-r0p5        64%   66%     409    -6,226  0.94    30%
+   3  modefollow_own2-r0p5          64%   64%     409       239  1.00    80%
+   4  modefollow_own0p5-r0p5        64%   67%     409    -4,986  0.85    40%
+   5  modefollow_pts15-r0p5         64%   68%     409    -8,211  0.82    10%
+   6  modefollow_atr1-r0p5          63%   65%     409    -8,221  0.90     0%
+   7  modefollow_own1-r0p5          63%   67%     409   -11,826  0.82     0%
+   8  modefollow_pts40-r0p5         63%   63%     409       134  1.00    80%
+   9  modefollow_atr2-r0p5          62%   63%     409    -2,521  0.98    60%
+  10  modefollow_atr0p5-r0p5        62%   67%     409    -8,776  0.81     0%
+  11  modefollow_own1p5-r0p5        62%   65%     409   -12,861  0.86     0%
+  12  modefollow_pts60-r0p5         59%   59%     409     1,379  1.01    60%
+  13  modefollow_pts25-r0p75        58%   56%     409     5,969  1.07   100%
+  14  modefollow_atr1p5-r0p75       56%   56%     409       869  1.01    90%
+  15  modefollow_atr2-r0p75         56%   56%     409     2,189  1.02    70%
+  16  modefollow_own2-r0p75         56%   56%     409       489  1.00    60%
+  17  modefollow_own1p5-r0p75       56%   55%     409     1,134  1.01    90%
+  18  modefollow_pts15-r0p75        56%   58%     409    -6,166  0.89    20%
+  19  modefollow_atr1-r0p75         55%   58%     409   -11,821  0.88     0%
+  20  modefollow_own0p5-r0p75       55%   56%     409    -2,776  0.93   100%
+  21  modefollow_atr0p5-r0p75       54%   57%     409    -4,756  0.91    50%
+  22  modefollow_atr2-r1            54%   51%     409    22,589  1.15   100%
+  23  modefollow_pts40-r0p75        54%   54%     409    -3,576  0.97    60%
+  24  modefollow_pts60-r0p75        53%   53%     409      -116  1.00    30%
+  25  modefollow_atr1p5-r1          53%   53%     409     2,874  1.02    90%
+  26  modefollow_own1-r0p75         53%   59%     409   -17,001  0.80     0%
+  27  modefollow_own2-r1            51%   50%     409     4,949  1.04    90%
+  28  modefollow_pts25-r1           51%   50%     409     4,034  1.04   100%
+  29  modefollow_pts60-r1           51%   51%     409    -1,036  0.99    30%
+  30  modefollow_own1p5-r1          50%   51%     409    -6,111  0.95    20%
+  31  modefollow_pts15-r1           50%   51%     409    -3,646  0.94    90%
+  32  modefollow_pts40-r1           49%   50%     409    -3,926  0.97    40%
+  33  modefollow_own1-r1            49%   52%     409    -9,191  0.90     0%
+  34  modefollow_pts60-r1p5         49%   47%     409    10,114  1.06    30%
+  35  modefollow_own0p5-r1          48%   50%     409    -2,041  0.96   100%
+  36  modefollow_atr1-r1            48%   51%     409   -13,846  0.88     0%
+  37  modefollow_atr2-r1p5          47%   46%     409     5,109  1.03    80%
+  38  modefollow_atr1p5-r1p5        47%   45%     409    10,524  1.07   100%
+  39  modefollow_pts60-r2           47%   47%     409    -1,771  0.99    30%
+  40  modefollow_atr0p5-r1          46%   49%     409    -6,801  0.89    10%
+  41  modefollow_pts40-r1p5         45%   47%     409    -6,006  0.96    50%
+  42  modefollow_own2-r1p5          44%   45%     409    -2,541  0.98    40%
+  43  modefollow_pts40-r2           44%   45%     409    -4,146  0.97    50%
+  44  modefollow_atr2-r2            44%   47%     409   -20,441  0.88    10%
+  45  modefollow_pts25-r1p5         44%   43%     409     4,209  1.04   100%
+  46  modefollow_atr1p5-r2          43%   43%     409    -1,576  0.99    70%
+  47  modefollow_pts15-r1p5         43%   42%     409     3,589  1.05   100%
+  48  modefollow_own1p5-r1p5        43%   42%     409     2,124  1.02    90%
+  49  modefollow_atr1-r1p5          42%   44%     409    -8,411  0.93    10%
+  50  modefollow_own2-r2            42%   42%     409      -346  1.00    50%
+  51  modefollow_own1-r1p5          40%   43%     409   -10,886  0.89    10%
+  52  modefollow_pts25-r2           40%   40%     409       159  1.00    90%
+  53  modefollow_atr1-r2            40%   39%     409     4,549  1.04   100%
+  54  modefollow_atr0p5-r1p5        38%   40%     409    -4,716  0.93    80%
+  55  modefollow_own1p5-r2          38%   39%     409    -6,846  0.95    30%
+  56  modefollow_pts15-r2           38%   36%     409     6,059  1.08   100%
+  57  modefollow_own0p5-r1p5        37%   39%     409    -4,181  0.93    80%
+  58  modefollow_own1-r2            37%   38%     409    -4,646  0.96    30%
+  59  modefollow_atr0p5-r2          33%   34%     409    -4,226  0.95   100%
+  60  modefollow_own0p5-r2          33%   34%     409    -3,041  0.95   100%
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+REAL OR LUCK (the only lines that block; PF, Sharpe, drawdown and avg trade are shown, never block):
+  [FAIL] boxes        21 of 60 boxes made money in-sample (need 60%): the average of the boxes, not the best
+  [ .. ] picked box   not picked yet: the owner picks a box, then the other lines are read
+NEXT: The owner picks a box by its number: bp.py wf pick i36_gap_candle_disagree <n> (blueprint_wf_pick).

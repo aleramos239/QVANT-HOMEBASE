@@ -1,0 +1,31 @@
+{
+ "name": "vh_i31_es_rvbrk_15_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 31: A break of the recent range on far more volume than that clock window usually trades is new participation and carries. Who loses: the range traders fading the break.",
+ "family": "rvol_break",
+ "markets": [
+  "ES"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "m": [
+   1.0,
+   1.25,
+   1.5
+  ]
+ },
+ "fixed": {
+  "n": 20
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

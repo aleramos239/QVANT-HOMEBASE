@@ -1,0 +1,27 @@
+{
+ "name": "vh_i61_squeeze_15_ny",
+ "reason": "Portfolio hunt on hm60 (owner 2026-10-20), idea 61: An untried engine family on the hunt's own route (hm60, 3:1 in-sample, wide exits judged broadly). Who loses: as the family's own rationale.",
+ "family": "squeeze",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "sq_type": [
+   "bbkc"
+  ]
+ },
+ "fixed": {},
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

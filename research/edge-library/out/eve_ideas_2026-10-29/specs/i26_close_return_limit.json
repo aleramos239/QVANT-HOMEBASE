@@ -1,0 +1,32 @@
+{
+ "name": "i26_close_return_limit",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: limit at the prior close after the evening moved away from it",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "k": [
+   0.15,
+   0.3,
+   0.5
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "away_lim",
+  "anchor": "pdc",
+  "ttl": 36
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

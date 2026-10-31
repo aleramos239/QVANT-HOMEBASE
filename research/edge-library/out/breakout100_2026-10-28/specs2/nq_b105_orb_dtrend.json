@@ -1,0 +1,34 @@
+{
+ "name": "nq_b105_orb_dtrend",
+ "version": 1,
+ "card": {
+  "why": "Breakout idea #105 (new family, owner's 100 list, 2026-10-28): 30-minute opening range break with the daily trend, because the stops of the traders on the other side of the break feed the move.",
+  "loser": "Traders on the wrong side of the break whose stops get hit.",
+  "home": {
+   "market": "NQ",
+   "session": "nyam",
+   "bar": "5"
+  },
+  "neighbors": [
+   "NQ nyam 15"
+  ],
+  "main_setting": "n_d",
+  "sides": "both",
+  "sides_why": "A break can go either way, one rule.",
+  "loses_when": "Chop days where the break reverses at once."
+ },
+ "run": {
+  "exits": "hm60",
+  "family": "orb_dtrend",
+  "params": {
+   "n_d": [
+    20,
+    50,
+    100
+   ]
+  },
+  "limits": {
+   "max_tr": 1
+  }
+ }
+}

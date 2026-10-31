@@ -1,0 +1,33 @@
+{
+ "name": "i12_sunday_gap_fade",
+ "reason": "Few traders are in the Asia evening, so a simple rule might hold; this tests: fade the Sunday weekend gap of 0.3 ATR or more",
+ "family": "eve_rule",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "off_min": [
+   5,
+   15,
+   30
+  ]
+ },
+ "fixed": {
+  "w_flat": "23:55",
+  "rule": "wkgap",
+  "mode": "fade",
+  "k": 0.3,
+  "dow": "0"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

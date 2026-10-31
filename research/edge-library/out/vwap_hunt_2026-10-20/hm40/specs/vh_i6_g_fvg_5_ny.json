@@ -1,0 +1,35 @@
+{
+ "name": "vh_i6_g_fvg_5_ny",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 6: An entry on the side of the session's average price rides its in-profit side. Who loses: the traders fading the session's volume side.",
+ "family": "fvg",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "min_gap": [
+   0.1,
+   0.25,
+   0.5
+  ]
+ },
+ "fixed": {
+  "mode": "touch",
+  "new_gap": "replace",
+  "gate": "vwap_dev",
+  "g_lvl": 0.0,
+  "g_side": "with"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

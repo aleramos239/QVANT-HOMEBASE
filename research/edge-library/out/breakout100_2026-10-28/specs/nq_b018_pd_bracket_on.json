@@ -1,0 +1,37 @@
+{
+ "name": "nq_b018_pd_bracket_on",
+ "version": 1,
+ "card": {
+  "why": "Breakout idea #18 of the owner's 100 list (2026-10-28): prior day and overnight levels break, because the stops of the traders on the other side of the break feed the move.",
+  "loser": "Traders on the wrong side of the break whose stops get hit.",
+  "home": {
+   "market": "NQ",
+   "session": "nyam",
+   "bar": "5"
+  },
+  "neighbors": [
+   "NQ nyam 15"
+  ],
+  "main_setting": "off_min",
+  "sides": "both",
+  "sides_why": "A break can go either way, one rule.",
+  "loses_when": "Chop days where the break reverses at once."
+ },
+ "run": {
+  "exits": "hm60",
+  "family": "pd_bracket_x",
+  "params": {
+   "off_min": [
+    0,
+    15,
+    30
+   ]
+  },
+  "fixed": {
+   "lvl": "pd_on"
+  },
+  "limits": {
+   "max_tr": 1
+  }
+ }
+}

@@ -1,0 +1,109 @@
+{
+ "engine": "l2sim-1 (port of tester tick-2)",
+ "fill_law": "tick replay (ofb_tick tape)",
+ "strategy": "press_trig.PressTrig",
+ "inputs": {
+  "tf": "5",
+  "sess": "globex",
+  "dir": "both",
+  "stop_mode": "atr",
+  "stop_val": 1.5,
+  "tgt_r": 2.0,
+  "trail_atr": 0.0,
+  "exit_bars": 0,
+  "max_tr": 20,
+  "f_trend": "off",
+  "f_vwap": "off",
+  "f_depth": "off",
+  "f_book": "off",
+  "x_book": "off",
+  "f_thin": "off",
+  "hold_to": "session",
+  "lvl": 25.0,
+  "t_end": "15:00",
+  "vw18": "with",
+  "ema": "with",
+  "ema_len": 21
+ },
+ "root": "NQ",
+ "point_value": 20.0,
+ "tick": 0.25,
+ "range": {
+  "start": "2021-10-01",
+  "end": "2026-08-31",
+  "holdout": true,
+  "period": "wf_is"
+ },
+ "segments": [
+  "eve",
+  "day"
+ ],
+ "qty": 1,
+ "commission": 4.0,
+ "slippage_ticks": 1.0,
+ "placement_ms": 85,
+ "strict_limit": false,
+ "stress": null,
+ "workers": 2,
+ "cells_in_pass": 1,
+ "days_subset": true,
+ "exec_guard": null,
+ "features": null,
+ "features_loader": null,
+ "id": "press_trig-NQ-tf5",
+ "coverage": {
+  "sessions": 947,
+  "used": 940,
+  "skipped": [
+   {
+    "date": "2021-12-01",
+    "reason": "missing 08:00\u201309:00 ET"
+   },
+   {
+    "date": "2022-06-21",
+    "reason": "missing 00:00\u201314:00 ET"
+   },
+   {
+    "date": "2022-08-05",
+    "reason": "missing 07:00\u201308:00 ET"
+   },
+   {
+    "date": "2023-04-07",
+    "reason": "missing 10:00\u201316:10 ET"
+   },
+   {
+    "date": "2025-07-04",
+    "reason": "missing 13:00\u201316:10 ET"
+   },
+   {
+    "date": "2025-11-28",
+    "reason": "missing 00:00\u201308:00 ET"
+   },
+   {
+    "date": "2026-04-03",
+    "reason": "missing 10:00\u201316:10 ET"
+   }
+  ],
+  "no_trade": [],
+  "skipped_by_error": 0
+ },
+ "unrealistic_winners": 0,
+ "both_sides_sessions": 0,
+ "eve_skipped": [
+  {
+   "date": "2022-06-21",
+   "reason": "eve missing 18:00\u201323:59 ET"
+  },
+  {
+   "date": "2022-10-11",
+   "reason": "eve missing 21:00\u201322:00 ET"
+  },
+  {
+   "date": "2025-11-28",
+   "reason": "eve missing 22:00\u201323:59 ET"
+  }
+ ],
+ "elapsed_s": 76.92,
+ "trades": 1175,
+ "net": -5905.0
+}

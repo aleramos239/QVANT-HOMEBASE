@@ -1,0 +1,33 @@
+{
+ "name": "vh_i6_g_donch_5_ny",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 6: An entry on the side of the session's average price rides its in-profit side. Who loses: the traders fading the session's volume side.",
+ "family": "donchian",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "n": [
+   10,
+   20,
+   40
+  ]
+ },
+ "fixed": {
+  "gate": "vwap_dev",
+  "g_lvl": 0.0,
+  "g_side": "with"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

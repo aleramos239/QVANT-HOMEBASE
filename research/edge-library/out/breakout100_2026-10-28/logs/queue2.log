@@ -1,0 +1,13 @@
+23:58:16 START nq_b101_pd_cond
+23:59:45 END nq_b101_pd_cond rc=0
+23:59:45 START nq_b102_nd_bracket
+00:01:53 END nq_b102_nd_bracket rc=0
+00:01:53 START nq_b103_orb_cond
+00:03:30 END nq_b103_orb_cond rc=0
+00:03:30 START nq_b104_on_narrow
+00:05:24 END nq_b104_on_narrow rc=0
+00:05:24 START nq_b105_orb_dtrend
+00:07:12 END nq_b105_orb_dtrend rc=0
+00:07:12 START nq_b106_atr_contract
+00:08:19 END nq_b106_atr_contract rc=0
+00:08:19 QUEUE2 DONE

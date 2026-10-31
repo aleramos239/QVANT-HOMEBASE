@@ -1,0 +1,37 @@
+{
+ "name": "nq_b087_w1500",
+ "version": 1,
+ "card": {
+  "why": "Breakout idea #87 of the owner's 100 list (2026-10-28): 15:00 range break, because the stops of the traders on the other side of the break feed the move.",
+  "loser": "Traders on the wrong side of the break whose stops get hit.",
+  "home": {
+   "market": "NQ",
+   "session": "pm",
+   "bar": "5"
+  },
+  "neighbors": [
+   "NQ pm 15"
+  ],
+  "main_setting": "r_end",
+  "sides": "both",
+  "sides_why": "A break can go either way, one rule.",
+  "loses_when": "Chop days where the break reverses at once."
+ },
+ "run": {
+  "exits": "hm60",
+  "family": "win_bracket",
+  "params": {
+   "r_end": [
+    "14:45",
+    "15:00",
+    "15:15"
+   ]
+  },
+  "fixed": {
+   "r_start": "14:30"
+  },
+  "limits": {
+   "max_tr": 1
+  }
+ }
+}

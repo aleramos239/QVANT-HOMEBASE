@@ -1,0 +1,29 @@
+{
+ "name": "f100_start0935",
+ "reason": "A fair value gap marks one-sided urgency that price tends to return to, so this tests: gaps from 09:35",
+ "family": "fvg_lab",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "min_gap": [
+   0.1,
+   0.25,
+   0.5
+  ]
+ },
+ "fixed": {
+  "start": "09:35"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}

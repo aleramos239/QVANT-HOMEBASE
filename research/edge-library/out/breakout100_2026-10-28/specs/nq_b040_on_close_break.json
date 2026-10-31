@@ -1,0 +1,38 @@
+{
+ "name": "nq_b040_on_close_break",
+ "version": 1,
+ "card": {
+  "why": "Breakout idea #40 of the owner's 100 list (2026-10-28): overnight range broken on a 15m close, because the stops of the traders on the other side of the break feed the move.",
+  "loser": "Traders on the wrong side of the break whose stops get hit.",
+  "home": {
+   "market": "NQ",
+   "session": "nyam",
+   "bar": "15"
+  },
+  "neighbors": [
+   "NQ nyam 5"
+  ],
+  "main_setting": "r_start",
+  "sides": "both",
+  "sides_why": "A break can go either way, one rule.",
+  "loses_when": "Chop days where the break reverses at once."
+ },
+ "run": {
+  "exits": "hm60",
+  "family": "win_break",
+  "params": {
+   "r_start": [
+    "00:00",
+    "01:00",
+    "03:00"
+   ]
+  },
+  "fixed": {
+   "r_end": "09:30",
+   "mode": "follow"
+  },
+  "limits": {
+   "max_tr": 1
+  }
+ }
+}

@@ -1,0 +1,143 @@
+2026-10-21T11:50:49+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers)
+2026-10-21T11:50:49+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers): days 1-60 of 881 (2920 instances)
+2026-10-21T11:53:56+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers): days 61-120 of 881 (2920 instances)
+2026-10-21T11:56:44+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers): days 121-180 of 881 (2920 instances)
+2026-10-21T11:59:42+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers): days 181-240 of 881 (2920 instances)
+2026-10-21T12:03:27+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers): days 241-300 of 881 (2920 instances)
+2026-10-21T12:08:55+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers): days 301-360 of 881 (2920 instances)
+2026-10-21T12:13:26+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers): days 361-420 of 881 (2920 instances)
+2026-10-21T12:17:24+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers): days 421-480 of 881 (2920 instances)
+2026-10-21T12:22:43+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers): days 481-540 of 881 (2920 instances)
+2026-10-21T12:27:04+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers): days 541-600 of 881 (2920 instances)
+2026-10-21T12:31:01+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers): days 601-660 of 881 (2920 instances)
+2026-10-21T12:35:49+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers): days 661-720 of 881 (2920 instances)
+2026-10-21T12:40:58+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers): days 721-780 of 881 (2920 instances)
+2026-10-21T12:45:11+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers): days 781-840 of 881 (2920 instances)
+2026-10-21T12:51:56+00:00 idea vh_i19_gc_eve_long_30_eve, 3:1 in-sample: pass 1 of 1, GC 30-minute bars (vh_i19_gc_eve_long_30_eve-GC-tf30/is + c1f-GC-tf30/is-2026-04; 3 workers): days 841-881 of 881 (2920 instances)
+2026-10-21T12:54:46+00:00 wf_is vh_i19_gc_eve_long_30_eve-GC-tf30/is: 120 cells, 69,520 trades, 3820.66 s of tape (wall 3837 s, 3 workers)
+2026-10-21T12:54:54+00:00 null_wf_is c1f-GC-tf30/is-2026-04: 400 cells, 3,376,218 trades, 3820.66 s of tape (wall 3837 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i19_gc_eve_long_30_eve: 120 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  off_min180_atr1-r0p5          63%   63%     869    -3,056  0.98   100%
+   2  off_min120_atr1p5-r0p5        62%   61%     869     1,464  1.01   100%
+   3  off_min120_atr1-r0p5          61%   63%     869   -10,646  0.93    90%
+   4  off_min120_atr2-r0p5          61%   60%     869    10,784  1.04   100%
+   5  off_min180_pts2p5-r0p5        60%   68%     869   -28,086  0.69     0%
+   6  off_min120_pts2p5-r0p5        60%   69%     869   -29,986  0.67     0%
+   7  off_min180_atr1p5-r0p5        59%   59%     869     3,174  1.02   100%
+   8  off_min120_pts4-r0p5          59%   65%     869   -30,906  0.76    10%
+   9  off_min180_pts4-r0p5          58%   64%     869   -29,086  0.76    20%
+  10  off_min180_atr0p5-r0p5        56%   62%     869   -19,406  0.80    80%
+  11  off_min180_atr2-r0p5          55%   57%     869   -20,326  0.92    70%
+  12  off_min120_atr0p5-r0p5        55%   67%     869   -40,916  0.61     0%
+  13  off_min120_pts6p5-r0p5        55%   61%     869   -38,856  0.78    20%
+  14  off_min180_pts6p5-r0p5        54%   59%     869   -34,316  0.79    30%
+  15  off_min120_pts10-r0p5         53%   56%     869   -26,316  0.87    80%
+  16  off_min120_atr1p5-r0p75       53%   51%     869    14,854  1.06   100%
+  17  off_min180_atr1-r0p75         53%   53%     869    -1,446  0.99    90%
+  18  off_min120_atr1-r0p75         52%   53%     869    -2,496  0.99    90%
+  19  off_min120_atr2-r0p75         52%   51%     869    18,924  1.07   100%
+  20  off_min180_pts10-r0p5         51%   55%     869   -30,006  0.85    70%
+  21  off_min180_pts2p5-r0p75       51%   58%     869   -28,296  0.74    10%
+  22  off_min120_pts10-r0p75        50%   52%     869   -10,866  0.95    90%
+  23  off_min120_pts4-r0p75         50%   56%     869   -36,726  0.76    10%
+  24  off_min120_pts2p5-r0p75       49%   58%     869   -34,116  0.70     0%
+  25  off_min120_pts6p5-r0p75       49%   54%     869   -29,546  0.85    50%
+  26  off_min180_pts4-r0p75         49%   56%     869   -31,546  0.78    10%
+  27  off_min180_atr1p5-r0p75       49%   50%     869    -8,956  0.96    90%
+  28  off_min180_atr0p5-r0p75       49%   54%     869   -19,616  0.83    70%
+  29  off_min120_pts10-r1           49%   49%     869    -6,346  0.97    90%
+  30  off_min120_atr2-r1            49%   47%     869    19,244  1.07    90%
+  31  off_min180_pts10-r0p75        48%   50%     869   -14,746  0.93    90%
+  32  off_min120_pts6p5-r1          48%   50%     869   -18,196  0.91    80%
+  33  off_min180_atr2-r0p75         47%   50%     869   -25,686  0.90    80%
+  34  off_min180_pts6p5-r0p75       47%   53%     869   -39,616  0.79    10%
+  35  off_min120_atr1p5-r1          47%   45%     869    16,974  1.07   100%
+  36  off_min180_pts10-r1           47%   47%     869    -4,506  0.98   100%
+  37  off_min120_atr0p5-r0p75       47%   55%     869   -33,896  0.72     0%
+  38  off_min120_pts10-r1p5         46%   47%     869   -11,386  0.95    60%
+  39  off_min120_atr1-r1            46%   46%     869     2,584  1.01   100%
+  40  off_min120_pts4-r1            46%   51%     869   -31,026  0.81    20%
+  41  off_min120_pts10-r2           46%   46%     869    -1,356  0.99    70%
+  42  off_min180_atr2-r1            45%   47%     869   -19,916  0.93    60%
+  43  off_min120_pts6p5-r1p5        45%   47%     869   -11,266  0.95    90%
+  44  off_min120_atr2-r1p5          45%   44%     869     9,664  1.03    80%
+  45  off_min180_pts6p5-r1          45%   49%     869   -30,746  0.85    20%
+  46  off_min180_atr1-r1            45%   47%     869   -15,766  0.93    80%
+  47  off_min180_pts10-r1p5         45%   46%     869    -8,036  0.97    80%
+  48  off_min180_atr1p5-r1          45%   46%     869   -15,476  0.94    70%
+  49  off_min120_pts2p5-r1          45%   52%     869   -31,156  0.75     0%
+  50  off_min180_pts2p5-r1          44%   52%     869   -30,436  0.74     0%
+  51  off_min180_atr0p5-r1          44%   45%     869    -6,526  0.95   100%
+  52  off_min180_pts4-r1            44%   51%     869   -39,796  0.76     0%
+  53  off_min120_atr2-r2            44%   43%     869    11,994  1.04    70%
+  54  off_min180_pts10-r2           44%   45%     869   -15,046  0.94    60%
+  55  off_min180_atr2-r1p5          44%   45%     869   -18,196  0.93    70%
+  56  off_min120_pts6p5-r2          43%   45%     869   -15,476  0.93    80%
+  57  off_min180_atr2-r2            43%   45%     869   -15,356  0.94    60%
+  58  off_min180_pts6p5-r1p5        43%   46%     869   -23,386  0.89    70%
+  59  off_min120_atr1p5-r1p5        43%   41%     869    16,184  1.06    90%
+  60  off_min120_pts4-r1p5          42%   45%     869   -23,096  0.87    70%
+  61  off_min180_atr1p5-r1p5        42%   42%     869       134  1.00    80%
+  62  off_min180_pts6p5-r2          41%   45%     869   -29,616  0.86    40%
+  63  off_min120_atr0p5-r1          41%   47%     869   -25,226  0.81    40%
+  64  off_min180_atr1p5-r2          41%   42%     869    -8,236  0.97    40%
+  65  off_min120_atr1p5-r2          40%   40%     869     5,604  1.02    80%
+  66  off_min120_pts4-r2            40%   43%     869   -19,296  0.89    30%
+  67  off_min180_pts4-r1p5          39%   45%     869   -36,676  0.79     0%
+  68  off_min120_atr1-r1p5          39%   37%     869    16,244  1.07   100%
+  69  off_min180_pts4-r2            38%   42%     869   -24,716  0.86    20%
+  70  off_min180_atr1-r1p5          38%   40%     869   -17,276  0.93    50%
+  71  off_min120_pts2p5-r1p5        38%   44%     869   -31,166  0.77    10%
+  72  off_min180_pts2p5-r1p5        38%   44%     869   -31,366  0.76    10%
+  73  off_min180_atr1-r2            36%   37%     869   -11,866  0.95    50%
+  74  off_min120_atr1-r2            35%   33%     869    16,354  1.07   100%
+  75  off_min180_atr0p5-r1p5        35%   36%     869    -7,016  0.95   100%
+  76  off_min120_pts2p5-r2          35%   40%     869   -28,396  0.80    30%
+  77  off_min180_pts2p5-r2          34%   40%     869   -29,456  0.79    20%
+  78  off_min120_atr0p5-r1p5        32%   36%     869   -23,056  0.85    40%
+  79  off_min180_atr0p5-r2          28%   29%     869   -11,176  0.93    90%
+  80  off_min120_atr0p5-r2          28%   31%     869   -23,396  0.86    40%
+  81  off_min60_atr0p5-r0p5         -     -         0         0     -    -  
+  82  off_min60_atr0p5-r0p75        -     -         0         0     -    -  
+  83  off_min60_atr0p5-r1           -     -         0         0     -    -  
+  84  off_min60_atr0p5-r1p5         -     -         0         0     -    -  
+  85  off_min60_atr0p5-r2           -     -         0         0     -    -  
+  86  off_min60_atr1-r0p5           -     -         0         0     -    -  
+  87  off_min60_atr1-r0p75          -     -         0         0     -    -  
+  88  off_min60_atr1-r1             -     -         0         0     -    -  
+  89  off_min60_atr1-r1p5           -     -         0         0     -    -  
+  90  off_min60_atr1-r2             -     -         0         0     -    -  
+  91  off_min60_atr1p5-r0p5         -     -         0         0     -    -  
+  92  off_min60_atr1p5-r0p75        -     -         0         0     -    -  
+  93  off_min60_atr1p5-r1           -     -         0         0     -    -  
+  94  off_min60_atr1p5-r1p5         -     -         0         0     -    -  
+  95  off_min60_atr1p5-r2           -     -         0         0     -    -  
+  96  off_min60_atr2-r0p5           -     -         0         0     -    -  
+  97  off_min60_atr2-r0p75          -     -         0         0     -    -  
+  98  off_min60_atr2-r1             -     -         0         0     -    -  
+  99  off_min60_atr2-r1p5           -     -         0         0     -    -  
+ 100  off_min60_atr2-r2             -     -         0         0     -    -  
+ 101  off_min60_pts2p5-r0p5         -     -         0         0     -    -  
+ 102  off_min60_pts2p5-r0p75        -     -         0         0     -    -  
+ 103  off_min60_pts2p5-r1           -     -         0         0     -    -  
+ 104  off_min60_pts2p5-r1p5         -     -         0         0     -    -  
+ 105  off_min60_pts2p5-r2           -     -         0         0     -    -  
+ 106  off_min60_pts4-r0p5           -     -         0         0     -    -  
+ 107  off_min60_pts4-r0p75          -     -         0         0     -    -  
+ 108  off_min60_pts4-r1             -     -         0         0     -    -  
+ 109  off_min60_pts4-r1p5           -     -         0         0     -    -  
+ 110  off_min60_pts4-r2             -     -         0         0     -    -  
+ 111  off_min60_pts6p5-r0p5         -     -         0         0     -    -  
+ 112  off_min60_pts6p5-r0p75        -     -         0         0     -    -  
+ 113  off_min60_pts6p5-r1           -     -         0         0     -    -  
+ 114  off_min60_pts6p5-r1p5         -     -         0         0     -    -  
+ 115  off_min60_pts6p5-r2           -     -         0         0     -    -  
+ 116  off_min60_pts10-r0p5          -     -         0         0     -    -  
+ 117  off_min60_pts10-r0p75         -     -         0         0     -    -  
+ 118  off_min60_pts10-r1            -     -         0         0     -    -  
+ 119  off_min60_pts10-r1p5          -     -         0         0     -    -  
+ 120  off_min60_pts10-r2            -     -         0         0     -    -  
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i19_gc_eve_long_30_eve <n> (blueprint_wf_pick).

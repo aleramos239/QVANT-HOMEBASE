@@ -1,0 +1,82 @@
+2026-10-22T04:48:00+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers)
+2026-10-22T04:48:00+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers): days 1-60 of 883 (180 instances)
+2026-10-22T04:48:09+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers): days 61-120 of 883 (180 instances)
+2026-10-22T04:48:17+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers): days 121-180 of 883 (180 instances)
+2026-10-22T04:48:26+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers): days 181-240 of 883 (180 instances)
+2026-10-22T04:48:34+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers): days 241-300 of 883 (180 instances)
+2026-10-22T04:48:43+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers): days 301-360 of 883 (180 instances)
+2026-10-22T04:48:51+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers): days 361-420 of 883 (180 instances)
+2026-10-22T04:49:00+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers): days 421-480 of 883 (180 instances)
+2026-10-22T04:49:09+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers): days 481-540 of 883 (180 instances)
+2026-10-22T04:49:18+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers): days 541-600 of 883 (180 instances)
+2026-10-22T04:49:27+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers): days 601-660 of 883 (180 instances)
+2026-10-22T04:49:36+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers): days 661-720 of 883 (180 instances)
+2026-10-22T04:49:45+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers): days 721-780 of 883 (180 instances)
+2026-10-22T04:49:54+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers): days 781-840 of 883 (180 instances)
+2026-10-22T04:50:04+00:00 idea vh_i61_squeeze_15_ny, 3:1 in-sample: pass 1 of 1, NQ 15-minute bars (vh_i61_squeeze_15_ny-NQ-tf15/is; 3 workers): days 841-883 of 883 (180 instances)
+2026-10-22T04:50:11+00:00 wf_is vh_i61_squeeze_15_ny-NQ-tf15/is: 60 cells, 12,209 trades, 130.18 s of tape (wall 130 s, 3 workers)
+3:1 IN-SAMPLE TABLE of vh_i61_squeeze_15_ny: 60 boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.
+   n  box                          win    b/e  trades       net    pf  beats random
+   1  sq_typebbkc_pts15-r0p5        72%   68%     306     4,961  1.18   100%
+   2  sq_typebbkc_pts25-r0p5        71%   67%     306     8,801  1.20   100%
+   3  sq_typebbkc_atr0p5-r0p5       71%   68%     306     4,801  1.13   100%
+   4  sq_typebbkc_pts60-r0p5        68%   64%     305    21,570  1.22   100%
+   5  sq_typebbkc_atr1p5-r0p5       68%   64%     306    15,741  1.16   100%
+   6  sq_typebbkc_pts40-r0p5        67%   66%     306     4,176  1.06   100%
+   7  sq_typebbkc_atr1-r0p5         67%   68%     306    -5,454  0.93    10%
+   8  sq_typebbkc_atr2-r0p5         67%   61%     305    31,525  1.28   100%
+   9  sq_typebbkc_atr1p5-r0p75      61%   57%     306    20,351  1.17   100%
+  10  sq_typebbkc_pts40-r0p75       60%   57%     306    14,576  1.16   100%
+  11  sq_typebbkc_pts25-r0p75       60%   58%     306     6,141  1.10   100%
+  12  sq_typebbkc_pts15-r0p75       60%   58%     306     2,376  1.06   100%
+  13  sq_typebbkc_atr2-r0p75        59%   54%     304    31,269  1.23   100%
+  14  sq_typebbkc_atr1-r0p75        59%   59%     306       -89  1.00   100%
+  15  sq_typebbkc_pts60-r0p75       59%   56%     304    14,839  1.12   100%
+  16  sq_typebbkc_atr0p5-r0p75      58%   60%     306    -2,939  0.94    70%
+  17  sq_typebbkc_pts25-r1          56%   51%     306    15,151  1.23   100%
+  18  sq_typebbkc_atr1p5-r1         55%   51%     305    19,790  1.15   100%
+  19  sq_typebbkc_atr1-r1           55%   53%     306     6,376  1.06   100%
+  20  sq_typebbkc_pts40-r1          55%   51%     306    16,401  1.16   100%
+  21  sq_typebbkc_pts60-r1          54%   51%     303    22,958  1.17   100%
+  22  sq_typebbkc_atr2-r1           54%   49%     303    37,303  1.25   100%
+  23  sq_typebbkc_pts15-r1          53%   51%     306     2,641  1.06   100%
+  24  sq_typebbkc_atr2-r1p5         50%   43%     303    52,103  1.32   100%
+  25  sq_typebbkc_pts60-r1p5        49%   45%     303    26,198  1.17   100%
+  26  sq_typebbkc_atr0p5-r1         49%   51%     306    -4,544  0.93    60%
+  27  sq_typebbkc_atr2-r2           49%   40%     303    70,578  1.42   100%
+  28  sq_typebbkc_atr1p5-r1p5       48%   44%     304    26,504  1.18   100%
+  29  sq_typebbkc_atr1-r1p5         47%   46%     306     7,916  1.06   100%
+  30  sq_typebbkc_pts25-r1p5        47%   43%     306    16,271  1.20   100%
+  31  sq_typebbkc_pts40-r1p5        47%   44%     305    17,120  1.14   100%
+  32  sq_typebbkc_pts60-r2          47%   42%     303    37,213  1.23   100%
+  33  sq_typebbkc_atr1p5-r2         45%   41%     304    31,009  1.19   100%
+  34  sq_typebbkc_pts40-r2          43%   40%     305    17,695  1.14   100%
+  35  sq_typebbkc_pts25-r2          42%   37%     306    20,706  1.23   100%
+  36  sq_typebbkc_atr1-r2           42%   40%     306    10,491  1.08   100%
+  37  sq_typebbkc_pts15-r1p5        42%   41%     306       471  1.01   100%
+  38  sq_typebbkc_atr0p5-r1p5       39%   41%     306    -5,269  0.93    70%
+  39  sq_typebbkc_atr0p5-r2         33%   37%     306   -13,014  0.84     0%
+  40  sq_typebbkc_pts15-r2          33%   35%     306    -5,859  0.91    70%
+  41  sq_typebbkc_own0p5-r0p5       -     -         0         0     -    -  
+  42  sq_typebbkc_own0p5-r0p75      -     -         0         0     -    -  
+  43  sq_typebbkc_own0p5-r1         -     -         0         0     -    -  
+  44  sq_typebbkc_own0p5-r1p5       -     -         0         0     -    -  
+  45  sq_typebbkc_own0p5-r2         -     -         0         0     -    -  
+  46  sq_typebbkc_own1-r0p5         -     -         0         0     -    -  
+  47  sq_typebbkc_own1-r0p75        -     -         0         0     -    -  
+  48  sq_typebbkc_own1-r1           -     -         0         0     -    -  
+  49  sq_typebbkc_own1-r1p5         -     -         0         0     -    -  
+  50  sq_typebbkc_own1-r2           -     -         0         0     -    -  
+  51  sq_typebbkc_own1p5-r0p5       -     -         0         0     -    -  
+  52  sq_typebbkc_own1p5-r0p75      -     -         0         0     -    -  
+  53  sq_typebbkc_own1p5-r1         -     -         0         0     -    -  
+  54  sq_typebbkc_own1p5-r1p5       -     -         0         0     -    -  
+  55  sq_typebbkc_own1p5-r2         -     -         0         0     -    -  
+  56  sq_typebbkc_own2-r0p5         -     -         0         0     -    -  
+  57  sq_typebbkc_own2-r0p75        -     -         0         0     -    -  
+  58  sq_typebbkc_own2-r1           -     -         0         0     -    -  
+  59  sq_typebbkc_own2-r1p5         -     -         0         0     -    -  
+  60  sq_typebbkc_own2-r2           -     -         0         0     -    -  
+NOT PICKED: the owner picks a box.
+TEST MONTHS: not run.
+NEXT: The owner picks a box by its number: bp.py wf pick vh_i61_squeeze_15_ny <n> (blueprint_wf_pick).

@@ -1,0 +1,32 @@
+{
+ "name": "vh_i14_flip_ldn_5_ny",
+ "reason": "VWAP hunt on hm40 (owner 2026-10-20), idea 14: The London session's average price carried into New York sets the side the European flow favours. Who loses: New York traders fighting it.",
+ "family": "avwap_flip",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "hold": [
+   1,
+   2,
+   3
+  ]
+ },
+ "fixed": {
+  "line": "rth",
+  "also": "london"
+ },
+ "exits": "hm60",
+ "limits": {
+  "max_tr": 3,
+  "dir": "both"
+ }
+}
