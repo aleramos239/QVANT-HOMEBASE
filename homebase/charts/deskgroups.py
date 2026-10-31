@@ -14,6 +14,7 @@ import tempfile
 import threading
 from pathlib import Path
 
+from ..backtest import walkforward
 from ..core.clock import utc_iso as stamp
 from ..core.num import float_or_none as _num
 from ..labrun import store
@@ -185,6 +186,7 @@ def merged(named: list[tuple[str, list[dict]]]) -> tuple[list[dict], list[str]]:
 def summarize(trades: list[dict], owners: list[str] | None = None) -> dict | None:
     """What a ledger made, after costs: {net, trades, win_rate, profit_factor, max_drawdown, days, worst_day, best_day,
     together_days (days two or more members traded; needs `owners`, one name per trade, in the ledger's order),
+    rr, rr_label, sharpe (the walk-forward's own stats: Sharpe on the traded days only; None for a ledger it cannot read),
     curve: {days, vals}}. None for an empty ledger. max_drawdown is a loss (negative), on closed trades."""
     if not trades:
         return None
@@ -201,6 +203,10 @@ def summarize(trades: list[dict], owners: list[str] | None = None) -> dict | Non
         cum += x
         peak = max(peak, cum)
         worst = min(worst, cum - peak)
+    try:
+        st = walkforward._stats(trades, [], 1.0)
+    except (KeyError, TypeError, ValueError):      # a trade row the report cannot read: no RR / Sharpe, the rest stays
+        st = {}
     days, run, vals = sorted(by_day), 0.0, []
     for d in days:
         run += by_day[d]
@@ -209,4 +215,5 @@ def summarize(trades: list[dict], owners: list[str] | None = None) -> dict | Non
             "profit_factor": round(wins / losses, 3) if losses > 0 else None, "max_drawdown": round(worst, 2),
             "days": len(days), "worst_day": round(min(by_day.values()), 2), "best_day": round(max(by_day.values()), 2),
             "together_days": sum(1 for d in days if len(who.get(d, ())) >= 2) if owners is not None else None,
+            "rr": st.get("rr"), "rr_label": st.get("rr_label"), "sharpe": st.get("sharpe"),
             "curve": {"days": days, "vals": vals}}

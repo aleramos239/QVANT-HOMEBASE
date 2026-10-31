@@ -325,13 +325,15 @@
           const res = $(':scope > .labres', vStrat);
           if (res) {
             const u = $('.labres-unseen', res), p = $('.labres-prop', res);
+            if (!u) unseenBox.replaceChildren();      // a group's one Full sample block has none: nothing stale from the last page
             if (u) { unseenH.textContent = u.classList.contains('full') ? u.dataset.h : researchWord(recordOf(grp, dl, name), !!$('.fh', u)); unseenBox.replaceChildren(u); }
             if (p) { propH.textContent = p.dataset.h || ''; propBox.replaceChildren(p); }
             unseenSec.dataset.for = res.dataset.for || '';
             res.remove();
           }
-          unseenSec.hidden = propSec.hidden = !name || unseenSec.dataset.for !== name;      // never one strategy's research under another
-          figsH.textContent = grp ? (figs && figs.dataset.h) || 'Combined' : l || dl ? 'Backtest' : 'Desk results';
+          unseenSec.hidden = propSec.hidden = !name || unseenSec.dataset.for !== name;
+          if (!unseenBox.childElementCount) unseenSec.hidden = true;      // never one strategy's research under another
+          figsH.textContent = grp ? (figsBox.querySelector('[data-h="Full sample"]') ? 'Full sample' : 'Combined') : l || dl ? 'Backtest' : 'Desk results';
           if (grp) setupGroup(grp); else if (l) setupLab(l); else if (dl) setupDeskLab(name, dl); else setup(name);
           tb.title(t ? t.textContent : 'Strategy', sd ? sd.textContent : '');
         } else if (v === 'activity') {

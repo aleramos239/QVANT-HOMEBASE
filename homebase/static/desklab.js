@@ -400,6 +400,11 @@
   var GROUP_NOTE = "Its results are its strategies' saved runs put together as one account's trades. The group trades only through its Account cycle (below), and only once that is switched on.";
   var GROUP_MISSING = "That group is not there any more.";
   var NO_GROUP_RUNS = "No saved run to put together yet.";
+  // a curve's first and last day as a run's range (perWeek counts the weeks between them)
+  function curveRange(c) {
+    var d = isObj(c) && Array.isArray(c.days) ? c.days : [];
+    return d.length ? { start: d[0], end: d[d.length - 1] } : {};
+  }
   var GROUP_FIG_ROWS = ["Net", "Win rate", "Trades", "Profit factor", "Deepest drawdown"];
   function kindOf(k) {
     for (var i = 0; i < GROUP_KINDS.length; i++) if (GROUP_KINDS[i].k === k) return GROUP_KINDS[i];
@@ -454,15 +459,22 @@
       { k: "Days traded", v: String(num(d.days) === null ? DASH : d.days) },
       { k: "Best day", v: usd(d.best_day) },
       { k: "Worst day", v: usd(d.worst_day) },
-      { k: "Days 2+ traded", v: num(d.together_days) === null ? DASH : String(d.together_days) },
     ] : [];
+    // the full sample is ONE block (owner 2026-10-30): the figures, realized RR, Sharpe (traded days only), trades a week, then the days
+    var fullRows = !fullFigs ? [] : [].concat(
+      GROUP_FIG_ROWS.slice(0, 3).map(function (k, i) { return { k: k, v: cbo[i] }; }),
+      [{ k: "Trades a week", v: perWeek({ trades: bo.trades, range: curveRange(bo.curve) }) }],
+      [{ k: GROUP_FIG_ROWS[3], v: cbo[3] }],
+      unseenExtras(bo),
+      [{ k: GROUP_FIG_ROWS[4], v: cbo[4] }],
+      days);
     var note = wait ? RES_WAIT : count === 0 ? EMPTY_GROUP : NO_GROUP_RUNS;
     return {
       title: text(g.name), kind: kindLabel(kind), kindNote: kindOf(kind).note, note: GROUP_NOTE + groupLate(members),
       lead: count + (count === 1 ? " strategy" : " strategies") + " · " + kindLabel(kind),
       empty: count === 0,
       figs: { head: fullFigs ? null : heads(w31, wf), full: fullFigs,
-        rows: fullFigs ? GROUP_FIG_ROWS.map(function (k, i) { return { k: k, v: cbo[i] }; })
+        rows: fullFigs ? fullRows
           : b || u ? GROUP_FIG_ROWS.map(function (k, i) { var r = { k: k, build: cb[i], unseen: cu[i] }; if (wf) r.both = cbo[i]; return r; }) : [], note: note },
       days: { title: fullFigs ? FULL_SAMPLE + ": days traded" : w31 ? "3:1 test months: days traded" : OLD_RECORD + ": days traded", rows: days },
       prop: {
