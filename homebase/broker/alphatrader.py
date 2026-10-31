@@ -47,7 +47,10 @@ SYM_ROOT_FIELD = "contract_id"                      # unconfirmed: a row's root 
 SYM_EXCHANGE_FIELD = "exchange_id"                  # unconfirmed: checked when the row has it
 SYM_MARKET_FIELD = "market_id"                      # unconfirmed: the T4 marketId
 SYM_MONTH_FIELDS = ("market_id", "name", "symbol")  # unconfirmed: text naming the month as <letter><yy>, e.g. "XCME_Eq NQ (Z26)"
-RESUBSCRIBE = {"subscribe": proto.ALL_UPDATES, "uplMode": proto.AVERAGE}   # unconfirmed: a one-account subscribe sends its snapshot
+# The socket's own all-accounts subscribe, sent again: unconfirmed that T4 answers it with every account's snapshot (a
+# repeated snapshot is harmless to an adapter already seeded).
+RESUBSCRIBE = {"subscribe": proto.ALL_UPDATES, "subscribeAllAccounts": True, "uplMode": proto.AVERAGE}
+DIRTY_RESYNC_S = 5.0            # a market still dirty this long asks for the snapshots again, once per dirty episode
 POS_ROOT_FIELD = "contractId"                       # unconfirmed: a position row's root
 POS_BUYS_FIELD, POS_SELLS_FIELD = "buys", "sells"   # unconfirmed: net = buys - sells
 ACCOUNT_FIELDS = ("accountNumber", "accountName", "displayName", "mode", "groupName", "enabled")
@@ -99,6 +102,21 @@ def _net_of(row: dict) -> int:
     return int(row.get(POS_BUYS_FIELD, 0)) - int(row.get(POS_SELLS_FIELD, 0))
 
 
+def _pos_root(v) -> str:
+    """A position row's root: "NQ", "NQZ26", "CME_Eq NQ" or "XCME_Eq NQ (Z26)" all read NQ; "" when no traded root is in it."""
+    for tok in str(v or "").upper().replace("(", " ").split():
+        if root_of(tok) in EXCHANGE:
+            return root_of(tok)
+    return ""
+
+
+async def _resubscribe(s: AtrSession) -> None:
+    try:
+        await s.socket.send("accountSubscribe", RESUBSCRIBE)
+    except (ConnectionError, AttributeError):
+        pass                                            # down (or gone): the next open sends every snapshot itself
+
+
 def _hub(s: AtrSession) -> None:
     """The login's shared state, attached to the session once."""
     if not hasattr(s, "adapters"):
@@ -136,6 +154,8 @@ class AlphaTraderAdapter(BrokerAdapter):
         self._orders_ok = False
         self._balance: Optional[float] = None
         self._no_stop: set = set()                      # marketIds holding a position with no working stop seen (Task 6)
+        self._resync: Optional[asyncio.Task] = None     # the wait before asking for the snapshots again
+        self._resynced = False                          # this dirty episode already asked once
 
     @property
     def broker_key(self):
@@ -171,31 +191,31 @@ class AlphaTraderAdapter(BrokerAdapter):
         if not self.account_name:
             self._connected = True
             return
-        if self._acct_id is None:
-            self._pick()
-        if self._acct_id is None:
+        found = self._pick() if self._acct_id is None else 1
+        if found != 1:
             await self.close()
             self._connected, self.pinned_ok = False, False
             have = [str(a.get("accountName") or a.get("accountId")) for a in s.accounts.values()]
             if not have:                                # an empty list is not proof the account is gone
                 raise RuntimeError(f"{self.account_id}: login exposes no accounts")
-            err = AccountNotOnLogin(f"account {self.account_name} not on this login (has: {', '.join(have)})")
+            err = AccountNotOnLogin(f"more than one account named {self.account_name} on this login" if found else
+                                    f"account {self.account_name} not on this login (has: {', '.join(have)})")
             err.listed = have
             raise err
         self._connected = True
-        if late:                                        # its snapshot went by before it listened: ask for it again
+        if late:                                        # its snapshot went by before it listened: ask for them again
             self._pos_ok = self._orders_ok = False
-            try:
-                await s.socket.send("accountSubscribe", {**RESUBSCRIBE, "accountId": self._acct_id})
-            except ConnectionError:
-                pass                                    # the next open sends every snapshot; unknown until then
+            await _resubscribe(s)
 
-    def _pick(self) -> None:
+    def _pick(self) -> int:
+        """Pin the account by id, else by accountName (case-blind); only a single match pins. Returns the match count."""
         want = self.account_name.lower()
-        for row in self.session.accounts.values():
-            if want in (str(row.get(k, "")).lower() for k in ("accountId", "accountName", "displayName", "accountNumber")):
-                self._acct_id, self._acct_row, self.pinned_ok = row["accountId"], row, True
-                return
+        rows = list(self.session.accounts.values())
+        hits = [r for r in rows if str(r["accountId"]).lower() == want] \
+            or [r for r in rows if str(r.get("accountName", "")).lower() == want]
+        if len(hits) == 1:
+            self._acct_id, self._acct_row, self.pinned_ok = hits[0]["accountId"], hits[0], True
+        return len(hits)
 
     async def close(self) -> None:
         """Leaves the login: the socket stops with its last adapter, the session is never closed here."""
@@ -211,9 +231,9 @@ class AlphaTraderAdapter(BrokerAdapter):
     async def _on_up(self) -> None:
         """The socket logged in (first time or again), before it reads anything: pick the account, and trust nothing until
         the fresh snapshot."""
+        self._pos_ok = self._orders_ok = False
         if self._acct_id is None and self.account_name:
             self._pick()
-        self._pos_ok = self._orders_ok = False
 
     async def observe_fills(self, on_fill: FillCallback) -> None:
         self._on_fill = on_fill                         # delivery: Task 6
@@ -231,8 +251,10 @@ class AlphaTraderAdapter(BrokerAdapter):
     def _apply(self, name: str, data: dict) -> None:
         if name == "accountPosition":
             mid = data.get("marketId", "")
-            self._pos[mid] = (str(data.get(POS_ROOT_FIELD, "")).upper(), _net_of(data))
+            self._pos[mid] = (_pos_root(data.get(POS_ROOT_FIELD)) or _pos_root(mid), _net_of(data))
             self._dirty.discard(mid)
+            if not self._dirty:
+                self._resynced = False                  # the dirty episode is over
         elif name == "accountUpdate":
             if "balance" in data:                       # a status-only update carries no balance
                 self._balance = data["balance"]
@@ -251,7 +273,7 @@ class AlphaTraderAdapter(BrokerAdapter):
         for m in data.get("messages", []):
             for name, d in m.items():
                 self._apply(name, d)
-        self._dirty = set()                             # the snapshot's positions come after its trades
+        self._dirty, self._resynced = set(), False      # the snapshot's positions come after its trades
         self._pos_ok = self._orders_ok = True
 
     def _on_order(self, kind: str, data: dict) -> Optional[dict]:
@@ -261,15 +283,36 @@ class AlphaTraderAdapter(BrokerAdapter):
         o = self._orders.setdefault(uid, {"uniqueId": uid, "buySell": 0, "priceType": 0, "volume": 0, "limitPrice": None,
                                           "stopPrice": None, "tag": "", "filled": 0, "working": 0, "orderLink": 0,
                                           "ordersLinked": "", "activationType": 0, "clOrdId": "", "statusDetail": ""})
+        filled, mid = o["filled"], o.get("marketId", "")
         o.update(_order_fields(kind, data))
-        if kind == "orderUpdateTrade" or data.get("trades"):
-            self._dirty.add(o["marketId"])              # until its accountPosition lands, the market's net is unknown
+        o["marketId"] = o["marketId"] or mid
+        if o["filled"] > filled:                        # a new fill (a repeated update of the same trades is not)
+            self._mark_dirty(o["marketId"])
         if len(self._orders) > _ORDER_CAP:              # forget the oldest finished orders, never a working one
             for k in [k for k, v in self._orders.items() if v["status"] in _DONE]:
                 if len(self._orders) <= _ORDER_CAP:
                     break
                 del self._orders[k]
         return o
+
+    def _mark_dirty(self, mid: str) -> None:
+        """A fill seen: the market's net is unknown until its accountPosition lands. Still dirty after DIRTY_RESYNC_S: the
+        snapshots are asked for again, once per dirty episode."""
+        if mid:
+            self._dirty.add(mid)
+        else:                                           # a fill with no market: every position unknown until the next snapshot
+            self._pos_ok = False
+        if not self._resynced and (self._resync is None or self._resync.done()):
+            try:
+                self._resync = asyncio.get_running_loop().create_task(self._resync_later())
+            except RuntimeError:
+                pass
+
+    async def _resync_later(self) -> None:
+        await _pause(DIRTY_RESYNC_S)
+        if (self._dirty or not self._pos_ok) and not self._resynced:
+            self._resynced = True
+            await _resubscribe(self.session)
 
     # ------------------------------------------------------------ accounts and markets
     def list_accounts(self) -> list[dict]:
@@ -336,8 +379,8 @@ class AlphaTraderAdapter(BrokerAdapter):
         root = root_of(str(symbol or "").strip().upper())
         if root not in EXCHANGE:
             raise ValueError(f"alphatrader: unknown market {symbol!r}")
-        if not self.positions_known:
-            raise RuntimeError("position unknown")
+        if not self.positions_known or any(n and r not in EXCHANGE for r, n in self._pos.values()):
+            raise RuntimeError("position unknown")      # a held row whose root we cannot read could be this market
         return sum(n for r, n in self._pos.values() if r == root)
 
     async def get_balance(self) -> dict:
@@ -351,8 +394,8 @@ class AlphaTraderAdapter(BrokerAdapter):
         known = m["positions_known"] = self.positions_known
         if known:
             by_root: dict[str, int] = {}
-            for r, n in self._pos.values():
-                by_root[r] = by_root.get(r, 0) + n
+            for mid, (r, n) in self._pos.items():
+                by_root[r or mid] = by_root.get(r or mid, 0) + n
             m["open_positions"] = [{"symbol": r, "net": n} for r, n in by_root.items() if n]
             m["open_position_count"] = len(m["open_positions"])
         else:
@@ -404,5 +447,6 @@ def _session_taken(session: AtrSession):
     """The login's handler for 'T4 ended this session for another login'. Task 6 counts and journals it; the socket logs in
     again by itself (through the budget) and the next snapshot reseeds the caches."""
     async def taken(why: str) -> None:
-        return None
+        for a in list(session.adapters):               # the book is stale until the next login's snapshot
+            a._pos_ok = a._orders_ok = False
     return taken

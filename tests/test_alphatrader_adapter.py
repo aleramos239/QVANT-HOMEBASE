@@ -17,12 +17,14 @@ KEY = "atr:o@x.com"
 ACCOUNTS = [{"accountId": "A1", "accountNumber": "1001", "accountName": "AF-50K-1", "displayName": "Alpha 50K Eval"},
             {"accountId": "A2", "accountNumber": "1002", "accountName": "AF-50K-2", "displayName": "Alpha 50K"}]
 TODAY = dt.date(2026, 10, 30)          # NQ's front month: Z26
+ALL = {"subscribe": proto.ALL_UPDATES, "subscribeAllAccounts": True, "uplMode": proto.AVERAGE}
 NQZ26, NQH27, ESZ26 = "XCME_Eq NQ (Z26)", "XCME_Eq NQ (H27)", "XCME_Eq ES (Z26)"
 
 
 class FakeSocket:
     """Stands in for AtrSocket: start() answers the login (accounts) and runs on_up; tests push events with push()."""
     made: list["FakeSocket"] = []
+    accounts = ACCOUNTS
 
     def __init__(self, session, on_event, *, on_up=None, on_taken=None, url=None):
         self.session, self.on_event, self.on_up, self.on_taken = session, on_event, on_up, on_taken
@@ -34,7 +36,7 @@ class FakeSocket:
         self.starts += 1
         if self.up:
             return
-        self.on_event("loginResponse", {"sessionId": "S1", "accounts": ACCOUNTS})
+        self.on_event("loginResponse", {"sessionId": "S1", "accounts": self.accounts})
         self.up = True
         await self.on_up()
 
@@ -133,8 +135,7 @@ def test_two_adapters_on_one_login_share_one_socket_and_each_keeps_its_own_accou
         await b.connect()
         assert len(FakeSocket.made) == 1 and s.socket is FakeSocket.made[0]
         sock = s.socket
-        assert sock.sent == [("accountSubscribe", {"subscribe": proto.ALL_UPDATES, "accountId": "A2",
-                                                   "uplMode": proto.AVERAGE})]     # b joined an open socket: its snapshot
+        assert sock.sent == [("accountSubscribe", ALL)]        # b joined an open socket: every snapshot again
         sock.push("accountSnapshot", snapshot("A1", {"accountPosition": pos("A1", NQZ26, "NQ", buys=2)},
                                               {"accountUpdate": {"accountId": "A1", "balance": 50100.0}}))
         sock.push("accountSnapshot", snapshot("A2", {"accountPosition": pos("A2", NQZ26, "NQ", sells=1)},
@@ -146,8 +147,7 @@ def test_two_adapters_on_one_login_share_one_socket_and_each_keeps_its_own_accou
         await a.close()
         assert not sock.stopped and s.adapters == [b]          # the socket stops with its last adapter
         await a.connect()                                       # back on the open socket: its book was missed meanwhile
-        assert sock.sent[-1] == ("accountSubscribe", {"subscribe": proto.ALL_UPDATES, "accountId": "A1",
-                                                      "uplMode": proto.AVERAGE})
+        assert sock.sent[-1] == ("accountSubscribe", ALL)
         with pytest.raises(RuntimeError, match="position unknown"):
             await a.get_net_position("NQ")
         await a.close()
@@ -215,7 +215,8 @@ def test_net_position_raises_while_unknown_or_dirty():
         assert (await a.get_metrics())["open_position_count"] is None
         s.socket.push("accountSnapshot", snapshot("A1"))       # a flat book
         assert await a.get_net_position("NQ") == 0
-        s.socket.push("orderUpdateTrade", {"uniqueId": "U9", "accountId": "A1", "marketId": NQZ26, "volume": 1})
+        s.socket.push("orderUpdateTrade", {"uniqueId": "U9", "accountId": "A1", "marketId": NQZ26, "volume": 1,
+                                           "totalFillVolume": 1})
         assert not a.positions_known
         with pytest.raises(RuntimeError, match="position unknown"):
             await a.get_net_position("NQ")                       # a fill seen, its position not yet
@@ -232,4 +233,118 @@ def test_net_position_raises_while_unknown_or_dirty():
             await a.get_net_position("NQ")
         s.socket.push("accountSnapshot", snapshot("A1", {"accountPosition": pos("A1", NQZ26, "NQ", buys=1)}))
         assert await a.get_net_position("NQ") == 1
+    asyncio.run(go())
+
+
+async def seeded(s, name="AF-50K-1", *rows):
+    a = adapter(s, name)
+    await a.connect()
+    s.socket.push("accountSnapshot", snapshot(a._acct_id, *({"accountPosition": r} for r in rows)))
+    return a
+
+
+def test_a_position_root_in_another_form_counts_and_an_unreadable_one_reads_unknown():
+    async def go():
+        s = session()
+        a = await seeded(s, "AF-50K-1", pos("A1", NQZ26, "NQZ26", buys=1), pos("A1", NQH27, "CME_Eq NQ", buys=1),
+                         pos("A1", ESZ26, "", sells=1))         # no contractId: the market id names it
+        assert await a.get_net_position("NQ") == 2 and await a.get_net_position("ES") == -1
+        s.socket.push("accountPosition", pos("A1", "T4-123", "", buys=1))     # a held row we cannot read
+        with pytest.raises(RuntimeError, match="position unknown"):
+            await a.get_net_position("NQ")                       # it could be NQ: never read past it
+        s.socket.push("accountPosition", pos("A1", "T4-123", ""))           # flat again: harmless
+        assert await a.get_net_position("NQ") == 2
+    asyncio.run(go())
+
+
+def test_a_late_joiners_resubscribe_is_all_accounts_and_a_repeated_snapshot_keeps_a_seeded_adapter_right():
+    async def go():
+        s = session()
+        a = await seeded(s, "AF-50K-1", pos("A1", NQZ26, "NQ", buys=2))
+        s.socket.push("orderUpdate", {"uniqueId": "U1", "accountId": "A1", "marketId": NQZ26, "status": proto.WORKING,
+                                      "buySell": proto.SELL, "priceType": proto.STOP_MARKET, "currentVolume": 2})
+        b = adapter(s, "AF-50K-2", "d2")
+        await b.connect()
+        assert s.socket.sent == [("accountSubscribe", ALL)]
+        assert a.positions_known and await a.get_net_position("NQ") == 2    # a keeps reading until the repeat arrives
+        s.socket.push("accountSnapshot", snapshot("A1", {"accountPosition": pos("A1", NQZ26, "NQ", buys=2)}))
+        s.socket.push("accountSnapshot", snapshot("A2"))
+        assert await a.get_net_position("NQ") == 2 and await b.get_net_position("NQ") == 0
+        assert a.orders_known and a._orders["U1"]["status"] == proto.WORKING     # a known order book is kept
+    asyncio.run(go())
+
+
+def test_an_ambiguous_account_name_raises_and_an_id_wins(monkeypatch):
+    monkeypatch.setattr(FakeSocket, "accounts", [
+        {"accountId": "A1", "accountName": "Main"}, {"accountId": "A2", "accountName": "MAIN"},
+        {"accountId": "A3", "accountName": "A1", "displayName": "Main"}])
+
+    async def go():
+        s = session()
+        with pytest.raises(AccountNotOnLogin, match="more than one account named main"):
+            await adapter(s, "main").connect()
+        a = adapter(s, "a1", "d2")                     # an id beats an accountName
+        await a.connect()
+        assert a.broker_key == ("alphatrader", "A1")
+        with pytest.raises(AccountNotOnLogin, match="not on this login"):
+            await adapter(s, "1001", "d3").connect()   # accountNumber / displayName do not pin
+    asyncio.run(go())
+
+
+def test_a_repeated_order_update_of_the_same_trades_does_not_make_the_market_dirty_again():
+    async def go():
+        s = session()
+        a = await seeded(s)
+        fill = {"uniqueId": "U1", "accountId": "A1", "marketId": NQZ26, "status": proto.FINISHED, "buySell": proto.BUY,
+                "totalFillVolume": 1, "trades": [{"sequenceOrder": 1, "volume": 1}]}
+        s.socket.push("orderUpdate", fill)
+        assert not a.positions_known
+        s.socket.push("accountPosition", pos("A1", NQZ26, "NQ", buys=1))
+        s.socket.push("orderUpdate", fill)                      # the same trades again
+        assert a.positions_known and await a.get_net_position("NQ") == 1
+    asyncio.run(go())
+
+
+def test_a_market_still_dirty_asks_for_the_snapshots_once_per_episode(monkeypatch):
+    monkeypatch.setattr(alphatrader, "DIRTY_RESYNC_S", 0.0)
+
+    async def go():
+        s = session()
+        a = await seeded(s)
+        trade = lambda n: {"uniqueId": "U1", "accountId": "A1", "marketId": NQZ26, "totalFillVolume": n}
+        s.socket.push("orderUpdateTrade", trade(1))
+        await asyncio.sleep(0.01)
+        assert s.socket.sent == [("accountSubscribe", ALL)]
+        s.socket.push("orderUpdateTrade", trade(2))             # the same episode: no second ask
+        await asyncio.sleep(0.01)
+        assert len(s.socket.sent) == 1
+        s.socket.push("accountPosition", pos("A1", NQZ26, "NQ", buys=2))     # the episode ends
+        s.socket.push("orderUpdateTrade", trade(3))
+        await asyncio.sleep(0.01)
+        assert len(s.socket.sent) == 2
+    asyncio.run(go())
+
+
+def test_a_trade_with_no_market_makes_every_position_unknown_until_the_snapshot(monkeypatch):
+    monkeypatch.setattr(alphatrader, "DIRTY_RESYNC_S", 0.0)
+
+    async def go():
+        s = session()
+        a = await seeded(s, "AF-50K-1", pos("A1", NQZ26, "NQ", buys=1))
+        s.socket.push("orderUpdateTrade", {"uniqueId": "U7", "accountId": "A1", "totalFillVolume": 1})
+        assert "" not in a._dirty and not a.positions_known
+        await asyncio.sleep(0.01)
+        assert s.socket.sent == [("accountSubscribe", ALL)]
+        s.socket.push("accountSnapshot", snapshot("A1", {"accountPosition": pos("A1", NQZ26, "NQ", buys=2)}))
+        assert await a.get_net_position("NQ") == 2
+    asyncio.run(go())
+
+
+def test_a_taken_session_reads_unknown_until_the_next_snapshot():
+    async def go():
+        s = session()
+        a = await seeded(s, "AF-50K-1", pos("A1", NQZ26, "NQ", buys=1))
+        await s.socket.on_taken("logged in elsewhere")
+        with pytest.raises(RuntimeError, match="position unknown"):
+            await a.get_net_position("NQ")
     asyncio.run(go())
