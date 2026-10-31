@@ -37,7 +37,7 @@ def test_step_1_offers_vest_and_the_page_loads_the_sdk_only_when_it_is_chosen():
 
 
 def test_the_demo_live_switch_is_hidden_for_vest_and_comes_back_for_tradovate():
-    assert '$("#envSeg").style.display = env === "vest" || env === "tsx" ? "none" : "";' in BOOK
+    assert '$("#envSeg").style.display = env === "vest" || env === "tsx" || env === "atr" ? "none" : "";' in BOOK
     assert 'setEnv(WIZ.broker === "tv" ? "demo" : WIZ.broker)' in BOOK
     assert 'wizBroker("tv"); wizGoto(1)' in BOOK                              # every opening starts on Tradovate
 
