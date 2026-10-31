@@ -665,13 +665,24 @@ class AlphaTraderAdapter(BrokerAdapter):
                 if not r.ok:
                     errors.append(r.error)
             flat = {mid for mid, (_, r) in res.items() if r.ok}
+            # read flat NOW, not at the start: a resting entry may have filled during the closes' waits
+            due = lambda mid: in_scope(mid) and (mid in flat or mid not in held)   # noqa: E731
+            now_flat = lambda mid: self._pos_ok and mid not in self._dirty and not self._pos.get(mid, ("", 0))[1]   # noqa: E731
+            pulled: set = set()
             if self.orders_known:
                 # a flat market's working orders all go, an earlier close still live there too (a market order on flat)
-                errors += await self._pull_all([o for o in self._orders.values() if o["status"] in _LIVE
-                                                and in_scope(o["marketId"])
-                                                and (o["marketId"] in flat or o["marketId"] not in held)])
+                rows = [o for o in self._orders.values() if o["status"] in _LIVE and due(o["marketId"])
+                        and now_flat(o["marketId"])]
+                pulled = {o["marketId"] for o in rows}
+                errors += await self._pull_all(rows)
             else:
                 errors.append("alphatrader: working orders unknown, none pulled")
+            if not self._pos_ok:                        # a fill with no market: nothing more was pulled
+                errors.append("alphatrader: positions unknown after the flatten: check them")
+            for m in sorted({m for m in set(self._pos) | self._dirty | pulled
+                             if self._pos_ok and due(m) and not now_flat(m)}):
+                errors.append(f"alphatrader: {m} filled during the flatten: "
+                              + ("its orders were being pulled, check its stop" if m in pulled else "its orders kept"))
             errors += [f"alphatrader: {m}: an earlier flatten close was never answered: it may be working, check it"
                        for m in sorted({m for c, m in self._closes.items()
                                         if m not in held and in_scope(m) and self._by_cid(c) is None})]
@@ -687,6 +698,7 @@ class AlphaTraderAdapter(BrokerAdapter):
             why = await self._filled(r.order_id, abs(net), mid)
             if why:
                 return first, OrderResult(ok=False, error=f"alphatrader: {mid}: {why}: its orders are left working")
+            self._closes.pop(r.raw.get("clOrdId"), None)   # filled: it no longer blocks a flatten
             now = self._pos.get(mid, ("", 0))[1]
             if not now:
                 return first, OrderResult(ok=True)

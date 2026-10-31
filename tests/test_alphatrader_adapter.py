@@ -562,6 +562,31 @@ def test_flatten_reads_positions_first_closes_each_month_then_pulls_only_closed_
         assert await a.get_net_position("NQ") == 0 and await a.get_net_position("ES") == 1
         assert r.raw["net_before"] == 1 and r.raw["flattened"] == 2          # the root's net, as the desk reads it
         assert r.raw["market"] == {"ok": True, "order_id": "U1", "error": None}
+        assert a._closes == {}                                       # filled closes no longer block a flatten
+    asyncio.run(go())
+
+
+def test_an_entry_filling_on_another_market_during_the_flatten_keeps_its_stop(monkeypatch):
+    monkeypatch.setattr(alphatrader, "ORDER_WAIT_S", 0.5)
+
+    async def go():
+        a, sock = await ready({"accountPosition": pos("A1", NQZ26, "NQ", buys=2)}, working("U10", NQZ26),
+                              working("U20", ESZ26, side=proto.BUY, ptype=proto.LIMIT),          # a resting ES entry
+                              working("U21", ESZ26, proto.HELD), working("U22", ESZ26, proto.HELD, ptype=proto.LIMIT))
+        answer = t4()
+
+        def reply(p, d):                                             # ES fills while the NQ close waits for its fill
+            if p != "orderSubmit":
+                return answer(p, d)
+            return [("orderUpdate", {"uniqueId": "U20", "accountId": "A1", "marketId": ESZ26, "status": proto.FINISHED,
+                                     "totalFillVolume": 1}),
+                    ("orderUpdate", {**working("U21", ESZ26)["orderUpdate"]}),
+                    ("accountPosition", pos("A1", ESZ26, "ES", buys=1))] + answer(p, d)
+        sock.reply = reply
+        r = await a.flatten_all()
+        assert not r.ok and f"{ESZ26} filled during the flatten: its orders kept" in r.error
+        assert pulls(sock) == [(NQZ26, "U10")]                       # ES's stop and target stay with its position
+        assert len(subs(sock)) == 1                                  # and no close is sent for it in this flatten
     asyncio.run(go())
 
 
