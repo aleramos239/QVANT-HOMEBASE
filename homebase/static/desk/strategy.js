@@ -31,9 +31,9 @@ function renderSide(names, hiddenCount, issues) {
     return head(k, esc(f.name), rows.length, open).replace('class="sh', 'class="sh sub') + (SIDE_FOLD[k] ? "" : rows.join("") || `<button class="side-more" onclick="openGroupMgr()">Empty · add strategies</button>`);
   }).join("");
   const cycRows = DESKGROUPS.groups.map(g => {
-    const on = !!((ST.groups || {})[g.id] || {}).on, n = g.members.length;
+    const gr = (ST.groups || {})[g.id] || {}, on = !!gr.on, n = g.members.length, word = {share: "shared", split: "split"}[gr.mode] || "cycle";
     return `<button class="item one${sel("group", g.id)}" onclick="setView('group',${jsArg(g.id)})" aria-current="${sel("group", g.id) ? "page" : "false"}" title="${on ? "Its account cycle is on" : "Its account cycle is off"}">
-      <i class="sd ${on ? "ok" : "off"}"></i><span class="it"><b>${esc(g.name)}${on ? '<span class="tag">cycle</span>' : ""}</b></span>
+      <i class="sd ${on ? "ok" : "off"}"></i><span class="it"><b>${esc(g.name)}${on ? `<span class="tag">${word}</span>` : ""}</b></span>
       <span class="ir mono dim">${n}</span></button>`;
   }).join("") || `<button class="side-more" onclick="openGroupMgr()">None yet · add one</button>`;
   // LIVE as isDemoAcct says: an account the desk does not mark demo or paper is LIVE
