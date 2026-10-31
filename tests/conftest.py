@@ -122,7 +122,7 @@ def no_network(request, monkeypatch):
     """The Vest/TopstepX tests never reach the network (M7): a non-local socket connect or DNS lookup raises, and the test fails
     at teardown even if it caught the error. Other tests are untouched."""
     hits: list = []
-    if request.path.name.startswith(("test_vest", "test_topstepx")):
+    if request.path.name.startswith(("test_vest", "test_topstepx", "test_alphatrader")):
         import socket
         connect, gai = socket.socket.connect, socket.getaddrinfo
 
