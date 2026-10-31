@@ -175,7 +175,7 @@ function groupView(id) {
     ${curve}
     <div class="figs labres-prop${p.figs.full ? "" : " grp-figs"}${three(p.figs)}" data-h="Combined, after costs">${two(p.figs)}</div>
     <div class="labres" data-for="${esc(g.id)}">
-      <div class="sec"><h2>${esc(p.days.title)}</h2><div class="figs labres-unseen" data-h="${esc(p.days.title)}">${days}</div></div>
+      <div class="sec"><h2>${esc(p.days.title)}</h2><div class="figs labres-unseen${p.figs.full ? " full" : ""}" data-h="${esc(p.days.title)}">${days}</div></div>
       <div class="sec"><h2>${esc(p.prop.title)}</h2><div class="figs labres-prop${three(p.prop)}" data-h="${esc(p.prop.title)}">${two(p.prop)}</div></div></div>
     ${members.length ? `<div class="sec"><h2>Strategies</h2><div class="agroup feed static">
       <div class="feed-row"><span class="h dim">Strategy</span>${p.membersFull ? `<span class="t dim">Full sample</span>` : `<span class="t dim">Build</span><span class="t dim">Unseen</span>`}</div>${members.join("")}</div></div>` : ""}
