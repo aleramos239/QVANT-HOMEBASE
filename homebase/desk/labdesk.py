@@ -62,6 +62,7 @@ from ..contracts import commission_rt, micro_of, point_value, tick_size
 from ..core.clock import desk_minutes, window_minutes
 from ..core.num import is_int as _whole
 from . import engine_lab
+from .engine_groups import member_risk
 from .acctsize import OVER_MOST, ROW_NO_SIZE, most_default, row_size
 from .engine_lab import GROUP_HEDGE, LAB_ACCOUNT_STOPPED, LAB_DONE_PROFIT, LAB_DONE_WIN
 from .labcfg import LAB
@@ -1560,15 +1561,16 @@ class LabDesk:
         (None, GROUP_NO_SIZE) when not one contract fits or the stop cannot be measured (fail closed).
         (None, None): no such group -- the Desk's own sizes stand. A pair is sized on its wider stop."""
         grp = self.engine.group_of(name)
-        if grp is None or not grp[1].get("risk_usd") or not rec.get("root"):
+        risk = member_risk(grp[1], name) if grp is not None else 0.0     # its own amount in the cycle, else the cycle's
+        if not risk or not rec.get("root"):
             return None, None
         g = grp[1]
         pv, full = point_value(labcfg.exec_symbol(rec)), point_value(rec["root"])
         try:
             dist = max(abs(door._entry_price(ev.intents[j], {"last_price": last}) - ev.intents[j]["sl"]) for j in unit)
-            n = round(g["risk_usd"] / (dist * pv))
-            if n * dist * pv > g["risk_usd"] * OVER_MOST:   # rounding up a big contract (1 NQ at $1,660 for $1,000)
-                n = int(g["risk_usd"] // (dist * pv))       # goes down instead
+            n = round(risk / (dist * pv))
+            if n * dist * pv > risk * OVER_MOST:            # rounding up a big contract (1 NQ at $1,660 for $1,000)
+                n = int(risk // (dist * pv))                # goes down instead
             if cap_usd and cap_usd > 0:
                 n = min(n, int(cap_usd // (dist * pv)))
         except (TypeError, ValueError, ZeroDivisionError):
@@ -1875,8 +1877,9 @@ class LabDesk:
         return {"strategy": name, "mark": labcfg.mark_of(self.cfg, name), "date": d["date"],
                 # its trades take turns over the accounts (one strategy, one trade at a time, any account), and the
                 # account cycle sets each trade's size: the runner's daily match reads them so (owner 2026-10-26)
-                "turns": grp is not None or self.engine.rotating(name),
-                "cycle_sized": bool(grp and grp[1].get("risk_usd")),
+                # "share": every account takes every trade, so the lead account's rounds are the day's trades
+                "turns": grp[1].get("mode", "cycle") != "share" if grp is not None else self.engine.rotating(name),
+                "cycle_sized": bool(grp and member_risk(grp[1], name)),
                 "symbol": str(self.cfg.strategies[name].symbol),     # the market THIS desk's orders go to
                 "enabled": bool(self.cfg.strategies[name].enabled), "armed": bool(self.cfg.armed),
                 "killed": self.engine.killed_today(name), "stopped": d["stopped"],

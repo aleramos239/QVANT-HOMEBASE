@@ -335,7 +335,7 @@ function setupHtml(name, s) {
     ["Accounts", book.map(a => `${acctShort(a.account)} ${word(a.account)} ${own(a)}`.replace("  ", " ")).join(" · ") || "none yet"],
     ["LIVE / paper", book.length ? [["LIVE", n("live")], ["demo", n("demo")], ["paper", n("paper")]].filter(x => x[1]).map(x => `${x[0]} on ${x[1]}`).join(" · ") || "—"
       : lab ? "no account: it runs in shadow" : "no account"],
-    ["Size", lab && cyc && cyc.on && cyc.risk_usd > 0 ? `${whole(cyc.risk_usd)} at risk a trade (the ${cyc.name} group sizes it)`
+    ["Size", lab && cyc && cyc.on && cycRisk(cyc, name) > 0 ? `${whole(cycRisk(cyc, name))} at risk a trade (the ${cyc.name} group sizes it)`
       : lab && set ? "set on each account (see Accounts)"
       : lab && lab.own_size === true ? (Number((lab.params || {}).risk) > 0 ? `${whole(Number(lab.params.risk))} at risk a trade` : "it sizes each trade itself")   // as DeskLab.ordersGo
       : qs.length === 1 ? `${qs[0]} contract${qs[0] === 1 ? "" : "s"} an account` : qs.length ? `${Math.min(...qs)}-${Math.max(...qs)} contracts an account` : "—"],
@@ -343,7 +343,8 @@ function setupHtml(name, s) {
     ["Window", lab ? specOf(c, name) : [c.kind === "bars" ? `${c.bar_minutes}-minute bars` : c.fire_et ? `fires ${String(c.fire_et).slice(0, 5)} ET` : "",
       c.flat_et ? `flat by ${c.flat_et} ET` : "", (c.only_dates || []).length ? `only on ${c.only_dates.length} set day${c.only_dates.length === 1 ? "" : "s"}` : "every weekday"]
       .filter(Boolean).join(" · ")],
-    ["Group", cyc ? `${cyc.name} (account cycle ${cyc.on ? "ON" : "OFF"}${cyc.on && cyc.next ? `, next ${acctShort(cyc.next)}` : ""})` : dg ? dg.name : "none"],
+    ["Group", cyc ? `${cyc.name} (account cycle ${cyc.on ? "ON" : "OFF"}${cyc.mode === "share" ? ", every account" : cyc.mode === "split"
+      ? `, ${(cyc.assign || {})[name] ? "its account " + acctShort(cyc.assign[name]) : "no account of its own"}` : ""}${cyc.on && cyc.next ? `, next ${acctShort(cyc.next)}` : ""})` : dg ? dg.name : "none"],
     ...(machineWords() ? [["Machine", machineWords().replace(/^on /, "")]] : []),
   ];
   return `<div class="sec setup"><h2>Setup</h2>${red.map(t => `<div class="mcap warn">${esc(t)}</div>`).join("")}

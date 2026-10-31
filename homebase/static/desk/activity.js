@@ -505,7 +505,14 @@ const CHG_WORDS = {
       ...(prior[k] || []).filter(x => !(r[k] || []).includes(x)).map(x => `${word(x)} taken out`)];
     const parts = [...(r.on !== prior.on ? [`Account cycle ${prior.on ? "ON" : "OFF"} → ${r.on ? "ON" : "OFF"}`] : []),
       ...(r.risk_usd !== prior.risk_usd ? [`Size ${money(prior.risk_usd)} → ${money(r.risk_usd)}`] : []),
+      ...[...new Set([...Object.keys(r.risk_by || {}), ...Object.keys(prior.risk_by || {})])]
+        .filter(m => (+(r.risk_by || {})[m] || 0) !== (+(prior.risk_by || {})[m] || 0))
+        .map(m => `${stratLabel(m)} ${money(cycRisk(prior, m))} → ${money(cycRisk(r, m))}`),
       ...(r.max_minis !== prior.max_minis ? [`Most minis ${prior.max_minis} → ${r.max_minis}`] : []),
+      ...((r.mode || "cycle") !== (prior.mode || "cycle") ? [`Mode ${prior.mode || "cycle"} → ${r.mode || "cycle"}`] : []),
+      ...[...new Set([...Object.keys(r.assign || {}), ...Object.keys(prior.assign || {})])]
+        .filter(m => ((r.assign || {})[m] || "") !== ((prior.assign || {})[m] || ""))
+        .map(m => `${stratLabel(m)} on ${(r.assign || {})[m] ? acctShort(r.assign[m]) : "no account"}`),
       ...list("accounts", acctShort), ...list("members", stratLabel)];
     // no Put back: the cycle's setters read the card's typed fields, so a draft would ride along unasked; the card is on the same page
     return parts.length ? {text: parts.join(" · ")} : null;
