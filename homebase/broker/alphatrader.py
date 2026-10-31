@@ -642,7 +642,9 @@ class AlphaTraderAdapter(BrokerAdapter):
         market gets ONE opposite MARKET of |net|, judged by its own fill and the position after it: flat → its working
         orders are pulled; flipped sign → closed again once, then judged the same way; anything else (refused, unanswered,
         not filled in the wait, finished unfilled, still held) → not ok, and its orders (its stop) are left working.
-        A market in scope holding nothing has its working orders pulled. raw: net_before (the root's net; None for
+        A market in scope holding nothing has its working orders pulled. Pulls go in two phases: a flat market's WORKING
+        orders first; its HELD legs (a bracket's stop and target) only once those pulls are confirmed and it still reads
+        flat, else the legs stay. raw: net_before (the root's net; None for
         flatten_all), market (the first close: ok, order_id, error), closes (per market), flattened."""
         if self._acct_id is None or not self._up():
             return OrderResult(ok=False, error=NOT_CONNECTED)
@@ -668,21 +670,33 @@ class AlphaTraderAdapter(BrokerAdapter):
             # read flat NOW, not at the start: a resting entry may have filled during the closes' waits
             due = lambda mid: in_scope(mid) and (mid in flat or mid not in held)   # noqa: E731
             now_flat = lambda mid: self._pos_ok and mid not in self._dirty and not self._pos.get(mid, ("", 0))[1]   # noqa: E731
-            pulled: set = set()
+            has_live = lambda m: any(o["status"] in _LIVE and o["marketId"] == m for o in self._orders.values())   # noqa: E731
+            entries: set = set()
+            legs: set = set()
             if self.orders_known:
-                # a flat market's working orders all go, an earlier close still live there too (a market order on flat)
-                rows = [o for o in self._orders.values() if o["status"] in _LIVE and due(o["marketId"])
-                        and now_flat(o["marketId"])]
-                pulled = {o["marketId"] for o in rows}
-                errors += await self._pull_all(rows)
+                flat_rows = lambda st: [o for o in self._orders.values() if o["status"] == st   # noqa: E731
+                                        and due(o["marketId"]) and now_flat(o["marketId"])]
+                # phase 1: what can open a position (a working entry, an earlier close still live); held legs wait
+                rows = flat_rows(proto.WORKING)
+                answers = await asyncio.gather(*(self._pull(o) for o in rows))
+                errors += [r.error for r in answers if not r.ok]
+                entries = {o["marketId"] for o in rows}
+                unsure = {o["marketId"] for o, r in zip(rows, answers) if not r.ok}
+                # phase 2, flat re-read: T4 sends a fill no later than its pull's FINISHED, so a filled entry's market
+                # is dirty by now  # unconfirmed
+                leg_rows = [o for o in flat_rows(proto.HELD) if o["marketId"] not in unsure]
+                legs = {o["marketId"] for o in leg_rows}
+                errors += await self._pull_all(leg_rows)
+                errors += [f"alphatrader: {m} pull not confirmed: its stop kept" for m in sorted(unsure) if has_live(m)]
             else:
                 errors.append("alphatrader: working orders unknown, none pulled")
             if not self._pos_ok:                        # a fill with no market: nothing more was pulled
                 errors.append("alphatrader: positions unknown after the flatten: check them")
-            for m in sorted({m for m in set(self._pos) | self._dirty | pulled
+            for m in sorted({m for m in set(self._pos) | self._dirty | entries | legs
                              if self._pos_ok and due(m) and not now_flat(m)}):
                 errors.append(f"alphatrader: {m} filled during the flatten: "
-                              + ("its orders were being pulled, check its stop" if m in pulled else "its orders kept"))
+                              + ("its orders were being pulled, check its stop" if m in legs
+                                 else "its stop kept" if m in entries and has_live(m) else "its orders kept"))
             errors += [f"alphatrader: {m}: an earlier flatten close was never answered: it may be working, check it"
                        for m in sorted({m for c, m in self._closes.items()
                                         if m not in held and in_scope(m) and self._by_cid(c) is None})]

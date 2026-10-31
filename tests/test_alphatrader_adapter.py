@@ -590,6 +590,66 @@ def test_an_entry_filling_on_another_market_during_the_flatten_keeps_its_stop(mo
     asyncio.run(go())
 
 
+# a resting ES bracket on a flat account, its held legs in the book before its entry
+ES_BRACKET = (working("U21", ESZ26, proto.HELD), working("U22", ESZ26, proto.HELD, ptype=proto.LIMIT),
+              working("U20", ESZ26, side=proto.BUY, ptype=proto.LIMIT))
+
+
+def test_flatten_pulls_a_flat_markets_entry_first_then_its_held_legs():
+    async def go():
+        a, sock = await ready(*ES_BRACKET)
+        r = await a.flatten_all()
+        assert r.ok, r.error
+        assert pulls(sock)[0] == (ESZ26, "U20") and sorted(pulls(sock)[1:]) == [(ESZ26, "U21"), (ESZ26, "U22")]
+    asyncio.run(go())
+
+
+def test_an_entry_filling_during_its_own_pull_keeps_its_stop_and_target():
+    async def go():
+        a, sock = await ready(*ES_BRACKET)
+        answer = t4()
+
+        def reply(p, d):                                             # T4: the entry's fill, then the pull's answer
+            fill = [("orderUpdateTrade", {"uniqueId": "U20", "accountId": "A1", "marketId": ESZ26,
+                                          "status": proto.FINISHED, "totalFillVolume": 1})]
+            return (fill if p == "orderPull" and d["pulls"][0]["uniqueId"] == "U20" else []) + answer(p, d)
+        sock.reply = reply
+        r = await a.flatten_all()
+        assert not r.ok and f"{ESZ26} filled during the flatten: its stop kept" in r.error
+        assert pulls(sock) == [(ESZ26, "U20")]                       # the stop and the target stay with the position
+        assert a._orders["U21"]["status"] == a._orders["U22"]["status"] == proto.HELD
+    asyncio.run(go())
+
+
+def test_a_refused_entry_pull_keeps_its_markets_legs():
+    async def go():
+        a, sock = await ready(*ES_BRACKET)
+        answer = t4()
+        sock.reply = lambda p, d: ([("orderUpdateFailed", {"uniqueId": "U20", "accountId": "A1", "marketId": ESZ26,
+                                                           "statusDetail": "Too late to cancel"})]
+                                   if p == "orderPull" and d["pulls"][0]["uniqueId"] == "U20" else answer(p, d))
+        r = await a.flatten_all()
+        assert not r.ok and "Too late to cancel" in r.error and f"{ESZ26} pull not confirmed: its stop kept" in r.error
+        assert pulls(sock) == [(ESZ26, "U20")]
+    asyncio.run(go())
+
+
+def test_a_fill_with_no_market_after_the_close_pulls_nothing():
+    async def go():
+        a, sock = await ready({"accountPosition": pos("A1", NQZ26, "NQ", buys=1)}, working("U10", NQZ26), *ES_BRACKET)
+        close = a._close_market
+
+        async def close_then_unknown_fill(mid, n):
+            out = await close(mid, n)
+            sock.push("orderUpdateTrade", {"uniqueId": "U9", "accountId": "A1", "totalFillVolume": 1})   # no market
+            return out
+        a._close_market = close_then_unknown_fill
+        r = await a.flatten_all()
+        assert not r.ok and "positions unknown after the flatten" in r.error
+        assert len(subs(sock)) == 1 and pulls(sock) == []
+    asyncio.run(go())
+
+
 def test_a_refused_close_on_one_month_still_pulls_the_other_months_orders():
     async def go():
         a, sock = await ready({"accountPosition": pos("A1", NQZ26, "NQ", buys=2)},
