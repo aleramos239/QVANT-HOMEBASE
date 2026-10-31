@@ -18,6 +18,7 @@ import asyncio
 import datetime as dt
 import logging
 import re
+import uuid
 from typing import Optional
 
 from .. import symbols
@@ -55,6 +56,11 @@ POS_ROOT_FIELD = "contractId"                       # unconfirmed: a position ro
 POS_BUYS_FIELD, POS_SELLS_FIELD = "buys", "sells"   # unconfirmed: net = buys - sells
 ACCOUNT_FIELDS = ("accountNumber", "accountName", "displayName", "mode", "groupName", "enabled")
 _DONE = (proto.FINISHED, proto.REJECTED)
+_LIVE = (proto.WORKING, proto.HELD)
+_ANSWERED = (proto.WORKING, proto.FINISHED, proto.REJECTED, proto.HELD)    # an order status that answers a submit
+TYPE = {"Market": proto.MARKET, "Limit": proto.LIMIT, "Stop": proto.STOP_MARKET, "StopLimit": proto.STOP_LIMIT}
+NOT_CONNECTED = "alphatrader: not connected"
+FLATTEN_TAG = "homebase:flatten"
 _ORDER_CAP = 5000
 # T4 order message -> {cache key: its field}. proto3 leaves defaults off the wire, so every field a message carries is set
 # (a missing one is its default), and the fields a message does not carry are kept from the earlier messages.
@@ -76,6 +82,14 @@ _DEFAULT = {"string": "", "int32": 0, "int64": 0, "bool": False, "double": 0.0, 
 
 async def _pause(seconds: float) -> None:       # tests shorten the waits here
     await asyncio.sleep(seconds)
+
+
+class _Refused(Exception):
+    """An order refused before anything is sent."""
+
+
+def _cl_ord_id() -> str:
+    return f"HB_{uuid.uuid4().hex}"
 
 
 def _same(a, b) -> bool:
@@ -159,6 +173,7 @@ class AlphaTraderAdapter(BrokerAdapter):
         self._no_stop: set = set()                      # marketIds holding a position with no working stop seen (Task 6)
         self._resync: Optional[asyncio.Task] = None     # the wait before asking for the snapshots again
         self._resynced = False                          # this dirty episode already asked once
+        self._waits: dict[str, asyncio.Future] = {}     # a sent ClOrdId, or "pull:<uniqueId>" -> its T4 answer
 
     @property
     def broker_key(self):
@@ -266,7 +281,18 @@ class AlphaTraderAdapter(BrokerAdapter):
                 for kind, d in u.items():
                     self._apply(kind, d)
         elif name in _ORDER_KEYS:
-            self._on_order(name, data)
+            self._answer(name, data, self._on_order(name, data))
+
+    def _answer(self, name: str, data: dict, row: Optional[dict]) -> None:
+        """Wake whoever waits on this order message: a submit by its ClOrdId (an orderUpdateFailed may come before any
+        uniqueId exists), a pull by its order's uniqueId once the order is gone."""
+        failed = name == "orderUpdateFailed"
+        f = self._waits.get(data.get("tagClOrdId", ""))
+        if f is not None and not f.done() and (failed or data.get("status", 0) in _ANSWERED):
+            f.set_result((name, data))
+        f = self._waits.get("pull:" + data.get("uniqueId", ""))
+        if f is not None and not f.done() and (failed or (row is not None and row["status"] in _DONE)):
+            f.set_result((name, data))
 
     def _on_snapshot(self, data: dict) -> None:
         """The account's whole book: positions replaced, the orders reseeded while unknown, then known."""
@@ -364,15 +390,233 @@ class AlphaTraderAdapter(BrokerAdapter):
                              f"{symbols.MONTH_TO_CODE[month]}{year % 100:02d}")
         return found.pop()
 
-    # ------------------------------------------------------------ orders (Task 5)
+    # ------------------------------------------------------------ orders
+    @staticmethod
+    def _build(req: OrderRequest, *, bracket: bool) -> list[dict]:
+        """The OrderSubmit orders: the entry, then (a bracket) the target and the stop. _Refused before anything is sent."""
+        root = root_of(str(req.symbol or "").strip().upper())
+        if root not in EXCHANGE:
+            raise _Refused(f"alphatrader: unknown market {req.symbol!r}")
+        side = {"buy": proto.BUY, "sell": proto.SELL}.get(str(req.side).lower())
+        if side is None or req.qty < 1:
+            raise _Refused(f"alphatrader: bad side / qty {req.side!r} {req.qty!r}")
+        ot = req.order_type
+        if ot not in TYPE:
+            raise _Refused(f"alphatrader: unknown order type {ot!r}")
+        if ot == "Limit":
+            level = {"limitPrice": req.price}
+        elif ot == "StopLimit":
+            level = {"limitPrice": req.price, "stopPrice": req.trigger_price}
+        elif ot == "Stop":     # a stop entry's trigger is its price; a bare protective Stop carries it in stop_price
+            level = {"stopPrice": req.price if bracket or req.stop_price is None else req.stop_price}
+        else:
+            level = {}
+        if any(v is None for v in level.values()):
+            raise _Refused(f"alphatrader: a {ot.lower()} order needs a price")
+        px = lambda v: proto.price(float(v), TICK[root])     # noqa: E731 -- float(): price() reads repr()
+        tag = str(req.text or "")[:40]
+        entry = {"buySell": side, "priceType": TYPE[ot], "timeType": proto.NORMAL, "volume": int(req.qty),
+                 **{k: px(v) for k, v in level.items()}, "tag": tag, "ClOrdId": _cl_ord_id()}
+        if not bracket:
+            return [entry]
+        ref = req.trigger_price if ot == "StopLimit" else req.price
+        if ref is None:
+            raise _Refused(f"alphatrader: a bracketed {ot.lower()} entry needs a price")
+        legs = []
+        for name, level_px, want, ptype, key in (("target", req.tp_price, 1, proto.LIMIT, "limitPrice"),
+                                                 ("stop", req.stop_price, -1, proto.STOP_MARKET, "stopPrice")):
+            if level_px is None:
+                continue
+            if (float(px(level_px)["value"]) - float(px(ref)["value"])) * side * want <= 0:   # on the tick, as sent
+                raise _Refused(f"alphatrader: the {name} {level_px} is on the wrong side of the entry {ref}")
+            legs.append({"buySell": -side, "priceType": ptype, "timeType": proto.GTC, "volume": 0, key: px(level_px),
+                         "tag": tag, "activationType": proto.HOLD, "ClOrdId": _cl_ord_id()})
+        return [entry, *legs]
+
     async def place_order(self, req: OrderRequest) -> OrderResult:
-        return OrderResult(ok=False, error="alphatrader: orders are not built yet")
+        return await self._place(req, bracket=False)
+
+    async def place_bracket(self, req: OrderRequest) -> OrderResult:
+        """Entry + target + stop in ONE orderSubmit (AUTO_OCO_P): T4 holds the legs and works them with the fill."""
+        if req.stop_price is None and req.tp_price is None:
+            return await self.place_order(req)
+        return await self._place(req, bracket=True)
+
+    async def _place(self, req: OrderRequest, *, bracket: bool) -> OrderResult:
+        if self._acct_id is None or not self._up():
+            return OrderResult(ok=False, error=NOT_CONNECTED)
+        try:
+            orders = self._build(req, bracket=bracket)
+            mid = await self.market_id(req.symbol)
+        except _Refused as e:
+            return OrderResult(ok=False, error=str(e))
+        except Exception as e:  # noqa: BLE001 -- the market lookup failed: nothing was sent
+            return OrderResult(ok=False, error=f"alphatrader: market not resolved, nothing sent: {e or type(e).__name__}"[:300])
+        return await self._submit(mid, orders, bracket=bracket)
+
+    async def _submit(self, mid: str, orders: list[dict], *, bracket: bool = False) -> OrderResult:
+        """ONE orderSubmit, answered by the orderUpdate* carrying the entry's ClOrdId within ORDER_WAIT_S. Never resent: no
+        answer is outcome unknown (a late answer still lands in the order cache). A bracket's leg ids are those of the
+        updates carrying the legs' own ClOrdIds, awaited within the same wait."""
+        loop = asyncio.get_running_loop()
+        ids = [o["ClOrdId"] for o in orders]
+        for i in ids:
+            self._waits[i] = loop.create_future()
+        try:
+            try:
+                await self.session.socket.send("orderSubmit", {
+                    "accountId": self._acct_id, "marketId": mid, "orderLink": proto.AUTO_OCO_P if bracket else 0,
+                    "manualOrderIndicator": False, "orders": orders})
+            except (ConnectionError, AttributeError):
+                return OrderResult(ok=False, error=NOT_CONNECTED)
+            log.info("alphatrader %s: order %s sent on %s (%d in the submit)", self.account_id, ids[0], mid, len(ids))
+            end = loop.time() + ORDER_WAIT_S
+            try:
+                name, d = await asyncio.wait_for(self._waits[ids[0]], ORDER_WAIT_S)
+            except asyncio.TimeoutError:
+                self.journal("atr_order_no_answer", clOrdId=ids[0], market=mid)
+                log.warning("alphatrader %s: no answer to order %s", self.account_id, ids[0])
+                return OrderResult(ok=False, raw={"outcome_unknown": True, "clOrdId": ids[0]},
+                                   error=f"alphatrader: no answer within {ORDER_WAIT_S:g} s: the order may be working, "
+                                         "check the orders before sending again")
+            uid = d.get("uniqueId", "")
+            if name == "orderUpdateFailed" or d.get("status") == proto.REJECTED:
+                why = d.get("statusDetail") or "no reason given"
+                return OrderResult(ok=False, order_id=uid or None, error=f"alphatrader: order refused: {why}"[:300],
+                                   raw={"status": d.get("status", 0), "statusDetail": why, "clOrdId": ids[0]})
+            raw = {"uniqueId": uid, "clOrdId": ids[0], "status": d.get("status")}
+            if bracket:
+                raw.update({"bracket": "attached", "sl_order_id": None, "tp_order_id": None})
+                if loop.time() < end:
+                    await asyncio.wait([self._waits[i] for i in ids[1:]], timeout=end - loop.time())
+                for o in orders[1:]:
+                    f, key = self._waits[o["ClOrdId"]], "tp_order_id" if o["priceType"] == proto.LIMIT else "sl_order_id"
+                    if not f.done():
+                        continue                        # unconfirmed that a held leg reports at once: left None
+                    lname, ld = f.result()
+                    if lname == "orderUpdateFailed" or ld.get("status") == proto.REJECTED:
+                        raw.setdefault("protective_errors", []).append(f"{key[:2]}: {ld.get('statusDetail') or 'refused'}")
+                        self.journal("atr_bracket_leg_refused", leg=key[:2], clOrdId=ids[0], market=mid)
+                    else:
+                        raw[key] = ld.get("uniqueId") or None
+            return OrderResult(ok=True, order_id=uid or None, raw=raw)
+        finally:
+            for i in ids:
+                self._waits.pop(i, None)
+
+    # ------------------------------------------------------------ cancel / flatten
+    async def _pull(self, o: dict) -> OrderResult:
+        """One orderPull for one order, with its own marketId; ok once the order reads gone (pulled, or already taken
+        by its OCO partner). Never resent."""
+        uid, key = o["uniqueId"], "pull:" + o["uniqueId"]
+        f = self._waits[key] = asyncio.get_running_loop().create_future()
+        try:
+            try:
+                await self.session.socket.send("orderPull", {"accountId": self._acct_id, "marketId": o["marketId"],
+                                                             "manualOrderIndicator": False, "pulls": [{"uniqueId": uid}]})
+            except (ConnectionError, AttributeError):
+                return OrderResult(ok=False, error=NOT_CONNECTED)
+            try:
+                _, d = await asyncio.wait_for(f, ORDER_WAIT_S)
+            except asyncio.TimeoutError:
+                return OrderResult(ok=False, order_id=uid, raw={"outcome_unknown": True},
+                                   error=f"alphatrader: no answer to the cancel of {uid} within {ORDER_WAIT_S:g} s")
+        finally:
+            self._waits.pop(key, None)
+        if self._orders.get(uid, o)["status"] in _DONE:
+            return OrderResult(ok=True, order_id=uid)
+        return OrderResult(ok=False, order_id=uid,
+                           error=f"alphatrader: cancel of {uid} refused: {d.get('statusDetail') or 'no reason given'}"[:300])
+
+    async def _pull_all(self, rows: list[dict]) -> list[str]:
+        """Every pull at once; their errors."""
+        return [r.error for r in await asyncio.gather(*(self._pull(o) for o in rows)) if not r.ok]
+
+    async def cancel_order_by_id(self, order_id: str) -> OrderResult:
+        if self._acct_id is None or not self._up():
+            return OrderResult(ok=False, error=NOT_CONNECTED)
+        o = self._orders.get(str(order_id))
+        if o is None or not o.get("marketId"):
+            return OrderResult(ok=False, error=f"alphatrader: order {order_id} is not in the order book (its market is not "
+                                               "known), nothing sent")
+        if o["status"] in _DONE:
+            return OrderResult(ok=False, order_id=str(order_id), error=f"alphatrader: order {order_id} is no longer working")
+        return await self._pull(o)
 
     async def cancel_all(self) -> OrderResult:
-        return OrderResult(ok=False, error="alphatrader: orders are not built yet")
+        """Pull every working (or held) order of this account."""
+        if self._acct_id is None or not self._up():
+            return OrderResult(ok=False, error=NOT_CONNECTED)
+        if not self.orders_known:
+            return OrderResult(ok=False, error="alphatrader: working orders unknown, nothing pulled")
+        rows = [o for o in self._orders.values() if o["status"] in _LIVE]
+        errors = await self._pull_all(rows)
+        return OrderResult(ok=not errors, error="; ".join(errors) or None, raw={"pulled": len(rows) - len(errors)})
+
+    async def flatten_symbol(self, symbol: str) -> OrderResult:
+        """Close every month of the root held (an older month after a roll, a hand-opened one), then pull the working
+        orders of the root's markets that closed."""
+        root = root_of(str(symbol or "").strip().upper())
+        if root not in EXCHANGE:
+            return OrderResult(ok=False, error=f"alphatrader: unknown market {symbol!r}")
+        return await self._flatten(root)
 
     async def flatten_all(self) -> OrderResult:
-        return OrderResult(ok=False, error="alphatrader: orders are not built yet")
+        """Close every market held, then pull every working order of the markets that closed (or held nothing)."""
+        return await self._flatten(None)
+
+    def _root_of_market(self, mid: str) -> str:
+        return self._pos[mid][0] if mid in self._pos else _pos_root("", mid)
+
+    async def _flatten(self, root: Optional[str]) -> OrderResult:
+        """Positions are read first (unknown: nothing is sent). Each held market gets an opposite MARKET of |net|; then the
+        working orders are pulled, except in a market whose close was refused (its stop stays: never naked). Last, a net
+        that flipped sign is closed again; one that has not moved yet is never sent a second close."""
+        if self._acct_id is None or not self._up():
+            return OrderResult(ok=False, error=NOT_CONNECTED)
+        if not self.positions_known or (root and any(n and not r for r, n in self._pos.values())):
+            return OrderResult(ok=False, error="alphatrader: positions unknown, nothing sent")
+        held = {mid: n for mid, (r, n) in self._pos.items() if n and (root is None or r == root)}
+        res = dict(zip(held, await asyncio.gather(*(self._close(mid, n) for mid, n in held.items()))))
+        errors = [r.error for r in res.values() if not r.ok]
+        refused = {mid for mid, r in res.items() if not r.ok}
+        if self.orders_known:
+            mine = {r.order_id for r in res.values()}              # our own closes are not pulled
+            errors += await self._pull_all([o for o in self._orders.values() if o["status"] in _LIVE
+                                            and o["uniqueId"] not in mine and o["marketId"] not in refused
+                                            and (root is None or self._root_of_market(o["marketId"]) == root)])
+        else:
+            errors.append("alphatrader: working orders unknown, none pulled")
+        closed = {mid: n for mid, n in held.items() if mid not in refused}
+        errors += await self._close_flipped(closed)
+        return OrderResult(ok=not errors, error="; ".join(errors) or None, raw={"flattened": len(closed)})
+
+    async def _close(self, mid: str, net: int) -> OrderResult:
+        r = await self._submit(mid, [{"buySell": proto.SELL if net > 0 else proto.BUY, "priceType": proto.MARKET,
+                                      "timeType": proto.NORMAL, "volume": abs(net), "tag": FLATTEN_TAG,
+                                      "ClOrdId": _cl_ord_id()}])
+        if not r.ok:
+            r.error = f"{mid}: {r.error}"
+        return r
+
+    async def _close_flipped(self, closed: dict) -> list[str]:
+        """Wait (up to ORDER_WAIT_S) for each closed market's net to move; close again only one that flipped sign."""
+        if not closed:
+            return []
+        loop = asyncio.get_running_loop()
+        end = loop.time() + ORDER_WAIT_S
+        net = lambda mid: self._pos.get(mid, ("", 0))[1]   # noqa: E731
+        while not (self.positions_known and all(net(m) != n for m, n in closed.items())) and loop.time() < end:
+            await _pause(0.02)
+        if not self.positions_known:
+            return ["alphatrader: positions unknown after the flatten: check them"]
+        errors, again = [], {}
+        for mid, n in closed.items():
+            if net(mid) * n < 0:
+                again[mid] = net(mid)
+            elif net(mid):
+                errors.append(f"alphatrader: {mid} still {net(mid):+d} after its close (not sent again): check it")
+        return errors + [r.error for r in await asyncio.gather(*(self._close(m, n) for m, n in again.items())) if not r.ok]
 
     # ------------------------------------------------------------ reads
     async def get_net_position(self, symbol: str) -> int:
