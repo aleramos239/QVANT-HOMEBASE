@@ -23,7 +23,7 @@ function ctx({ cyc = null, live = false, liveSet = null, yes = true, reply, tick
     groupOf: (id) => (group ? { id, ...group } : null),
     labSafe: (f, d) => { try { return f(); } catch (_) { return d; } },
     DeskLab: { refusalText: (r) => (r && r.detail) || 'refused' },
-    document: { querySelector: () => ({ querySelector: el, querySelectorAll: () => boxes }) },
+    document: { querySelector: () => ({ querySelector: el, querySelectorAll: (sel) => (sel === '.cyc-acct' ? boxes : []) }) },
     jsArg: (v) => JSON.stringify(v),
     acctShort: (id) => id.toUpperCase(),
     stratLabel: (n) => n,
@@ -156,7 +156,7 @@ test('1.2: risk, Most and the ticks no longer save by themselves; each tick says
   const { c } = ctx({ cyc: LIVE_ON, liveSet: ['a'], accounts: { a: { env: 'live' }, b: { env: 'demo' }, p: { env: 'paper' } } });
   const h = c.cycleHtml(G);
   assert.doesNotMatch(h, /onchange="[^"]*saveCycle|onblur="[^"]*saveCycle/, 'no save on change or blur');
-  assert.equal((h.match(/oninput="cycleEdit\(&quot;g1&quot;\)"/g) || []).length, 2);
+  assert.equal((h.match(/oninput="cycleEdit\(&quot;g1&quot;\)"/g) || []).length, 3);   // risk, Most, lab_x's own risk
   assert.equal((h.match(/onchange="cycleEdit\(&quot;g1&quot;\)"/g) || []).length, 3);
   assert.match(h, /A <span class="tag-live">LIVE<\/span>/);
   assert.match(h, /B <span class="tag">DEMO<\/span>/);
@@ -327,4 +327,66 @@ test('book-all keeps every booked row\'s own settings: size, risk, stop after, M
   const { c, sent } = ctx({ cyc: ON, book: { lab_x: [set] } });
   await c.bookCycle('g1');
   assert.deepEqual(JSON.parse(JSON.stringify(sent)), [['/api/book', { strategy: 'lab_x', assignments: [set, { account: 'b', qty: 1 }] }]]);
+});
+
+/* Per-strategy risk (owner, 2026-10-30): each strategy of the cycle has its own risk box; empty = the cycle's risk. */
+test('a strategy\'s own risk: a box per strategy, shown when set, sent in risk_by', async () => {
+  const cyc = { on: false, accounts: ['a'], members: ['lab_x'], risk_usd: 2000, risk_by: { lab_x: 1500 }, max_minis: 17 };
+  const t = ctx({ cyc, risk: '2000', ticked: ['a'] });
+  const h = t.c.cycleHtml({ id: 'g1', members: ['lab_x', 'nq930'] });
+  assert.match(h, /class="cyc-risk-m" data-m="lab_x"/);
+  assert.match(h, /value="1500"/);
+  assert.equal((h.match(/cyc-risk-m/g) || []).length, 1);          // Lab strategies only
+  const box = { value: '2500', dataset: { m: 'lab_x' } };
+  t.c.document.querySelector = () => ({ querySelector: (cls) => t.els[cls] || null,
+    querySelectorAll: (sel) => (sel === '.cyc-risk-m' ? [box] : sel === '.cyc-acct' ? t.boxes : []) });
+  t.c.cycleEdit('g1');
+  assert.match(t.els['.cyc-save'].innerHTML, /lab_x \$1,500 → \$2,500/);
+  await t.c.saveCycle('g1');
+  assert.deepEqual(JSON.parse(JSON.stringify(t.sent.at(-1)[1].risk_by)), { lab_x: 2500 });
+  box.value = '';                                                    // emptied: back to the cycle's risk
+  t.c.cycleEdit('g1');
+  assert.match(t.els['.cyc-save'].innerHTML, /lab_x \$1,500 → \$2,000/);
+});
+
+// ---- modes (owner, 2026-10-30): take turns, every account, or one strategy per account -------------------------------
+test('modes: the card picks a mode; one-per-account shows an account box per strategy from the ticked accounts', () => {
+  const split = { ...LIVE_ON, accounts: ['a', 'b'], mode: 'split', assign: { lab_x: 'b' }, next: null };
+  const h = ctx({ cyc: split, ticked: ['a', 'b'] }).c.cycleHtml(G);
+  assert.match(h, /<option value="split" selected>One strategy per account<\/option>/);
+  assert.match(h, /class="cyc-assign" data-m="lab_x"[\s\S]*?<option value="b" selected>B<\/option>/);
+  assert.match(h, /lab_x is not booked on B/);
+  assert.match(h, /Book each strategy on its account/);
+  const cyc = ctx({ cyc: LIVE_ON }).c.cycleHtml(G);
+  assert.match(cyc, /<option value="cycle" selected>/);
+  assert.doesNotMatch(cyc, /cyc-assign/, 'take turns: no account per strategy');
+});
+
+test('modes: a changed mode and account read old → new on Save and go in the body', async () => {
+  const t = ctx({ cyc: { ...LIVE_ON, accounts: ['a', 'b'] }, ticked: ['a', 'b'] });
+  t.els['.cyc-mode'] = { value: 'split' };
+  const sel = { value: 'b', dataset: { m: 'lab_x' } };
+  t.c.document.querySelector = () => ({ querySelector: (cls) => t.els[cls] || null,
+    querySelectorAll: (s) => (s === '.cyc-acct' ? t.boxes : s === '.cyc-assign' ? [sel] : []) });
+  t.c.cycleEdit('g1');
+  assert.equal(t.els['.cyc-save'].innerHTML.match(/>Save: (.*)<\/button>/)[1],
+    'Take turns: one account a trade → One strategy per account · lab_x on no account → B');
+  await t.c.saveCycle('g1');
+  const b = JSON.parse(JSON.stringify(t.sent.at(-1)[1]));
+  assert.equal(b.mode, 'split');
+  assert.deepEqual(b.assign, { lab_x: 'b' });
+});
+
+test('modes: going to every account counts as sizing up on a LIVE cycle (asks first)', async () => {
+  const t = ctx({ cyc: LIVE_ON, live: true });
+  t.els['.cyc-mode'] = { value: 'share' };
+  await t.c.saveCycle('g1');
+  assert.equal(t.asked.length, 1);
+  assert.match(t.asked[0], /Every account takes every trade/);
+});
+
+test('modes: in one-per-account, book only each strategy\'s own account', async () => {
+  const t = ctx({ cyc: { ...LIVE_ON, accounts: ['a', 'b'], mode: 'split', assign: { lab_x: 'b' } }, book: { lab_x: [] } });
+  await t.c.bookCycle('g1');
+  assert.deepEqual(JSON.parse(JSON.stringify(t.sent.map(x => x[1]))), [{ strategy: 'lab_x', assignments: [{ account: 'b', qty: 1 }] }]);
 });

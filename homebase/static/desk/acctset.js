@@ -90,7 +90,7 @@ function openAcctSet(strategy, account) {
   $("#asHold").value = form.hold ? "yes" : "no";
   $("#asTake").value = ACCT_SET.take || "";
   $("#asLoss").value = ACCT_SET.loss || "";
-  const cyc = Object.values((ST && ST.groups) || {}).find(g => g && g.on && Number(g.risk_usd) > 0 && (g.members || []).includes(strategy)
+  const cyc = Object.values((ST && ST.groups) || {}).find(g => g && g.on && (Number((g.risk_by || {})[strategy]) || Number(g.risk_usd) || 0) > 0 && (g.members || []).includes(strategy)
     && (!Array.isArray(g.accounts) || g.accounts.includes(account)));
   const note = $("#asCycle");
   note.textContent = cyc ? "The account cycle sizes this strategy while it is on." : "";

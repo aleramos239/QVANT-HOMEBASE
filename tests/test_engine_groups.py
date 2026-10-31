@@ -101,9 +101,9 @@ def test_the_check_is_asked_again_when_the_round_opens(tmp_path):
     calls = []
     real = eng.group_hedged
 
-    def later(g, symbol, legs):                      # clear at the first ask, a short opened while the order waited
+    def later(g, symbol, legs, name=""):             # clear at the first ask, a short opened while the order waited
         calls.append(1)
-        return len(calls) > 1 or real(g, symbol, legs)
+        return len(calls) > 1 or real(g, symbol, legs, name)
 
     eng.group_hedged = later
     out = enter(eng, tlab.LAB, tlab.leg())
@@ -195,6 +195,45 @@ def test_rounding_never_goes_more_than_ten_percent_over(tmp_path, risk, qty):
     d.eng.set_group("g", {"name": "A", "members": [lu.LAB], "accounts": ["a1"], "on": True, "risk_usd": risk})
     lu.send(d, [lu.entry()])
     assert [b.qty for b in d.ads["a1"].brackets] == ([qty] if qty else [])
+
+
+@pytest.mark.parametrize("cycle, own, qty", [(500.0, {}, 5), (500.0, None, 5), (0.0, 1000.0, 10), (500.0, 1000.0, 10),
+                                              (5000.0, 300.0, 3)])
+def test_a_strategy_s_own_risk_sizes_its_trades(tmp_path, cycle, own, qty):
+    """$100 a contract: a member with its own risk in the cycle (risk_by) is sized to it; one without keeps the cycle's."""
+    from tests import labdesk_util as lu
+    d = lu.mkdesk(tmp_path, accounts=("a1",), limits=dict(lu.LIMITS, max_risk_usd=100_000))
+    body = {"name": "A", "members": [lu.LAB], "accounts": ["a1"], "on": True, "risk_usd": cycle}
+    if own is not None:
+        body["risk_by"] = own if isinstance(own, dict) else {lu.LAB: own}
+    d.eng.set_group("g", body)
+    lu.send(d, [lu.entry()])
+    assert [b.qty for b in d.ads["a1"].brackets] == [qty]
+
+
+def test_risk_by_is_kept_checked_and_follows_the_members(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    group(eng, risk_usd=2000.0, risk_by={tlab.LAB: 1500, TWO: 0})
+    assert eng.groups["g"]["risk_by"] == {tlab.LAB: 1500.0}                  # 0 = the cycle's risk: not kept
+    eng.set_group("g", {"max_minis": 10})                                     # left out: kept
+    assert Engine(eng.cfg, ads, now_fn=clock, root=tmp_path).groups["g"]["risk_by"] == {tlab.LAB: 1500.0}
+    for bad in ({tlab.LAB: -1}, {tlab.LAB: "1500"}, {tlab.LAB: True}, {tlab.LAB: float("nan")}, {tlab.LAB: 1e9}, [1500]):
+        with pytest.raises(GroupError, match="Risk per strategy"):
+            eng.set_group("g", {"risk_by": bad})
+    assert eng.groups["g"]["risk_by"] == {tlab.LAB: 1500.0}
+    eng.set_group("g", {"members": [TWO]})                                    # a strategy that leaves takes its amount along
+    assert eng.groups["g"]["risk_by"] == {}
+
+
+def test_a_bad_risk_by_in_the_file_keeps_the_group(tmp_path):
+    import json
+    eng, ads, clock = mk(tmp_path)
+    group(eng, risk_usd=2000.0)
+    raw = json.loads((tmp_path / "groups.json").read_text())
+    raw["g"]["risk_by"] = {tlab.LAB: "x", TWO: 900, "lab_gone": 500}
+    (tmp_path / "groups.json").write_text(json.dumps(raw))
+    g = Engine(eng.cfg, ads, now_fn=clock, root=tmp_path).groups["g"]
+    assert g["on"] and g["risk_by"] == {TWO: 900.0}
 
 
 def test_cycle_on_switches_on_each_members_take_turns(tmp_path):
@@ -289,3 +328,74 @@ def test_an_account_done_for_the_day_passes_the_cycle_turn_on(tmp_path):
     eng.groups["g"]["last"] = "a3"                                    # a1 is next ...
     assert took(enter(eng, tlab.LAB, tlab.leg(iid=2))) == ["a2"]      # ... but it is done: the turn moves on
     assert len(ads["a1"].brackets) == 1
+
+
+# ------------------------------------------------------------------------------------------------ modes (owner, 2026-10-30)
+def test_share_mode_every_account_takes_every_trade(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    v = group(eng, mode="share")
+    assert v["mode"] == "share" and v["next"] is None
+    assert not eng.rotating(tlab.LAB)                                    # no take-turns switched on for it
+    assert took(enter(eng, tlab.LAB, tlab.leg(iid=1))) == list(ACCTS)
+    out = enter(eng, TWO, tlab.leg(iid=3, side="Sell", px=90.0, sl=95.0, tp=80.0))
+    assert out["reason"] == GROUP_HEDGE and took(out) == []              # the hedge block still covers them all
+
+
+def test_share_mode_a_pair_goes_to_every_account(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    group(eng, mode="share")
+    assert took(enter(eng, tlab.LAB, tlab.pair())) == list(ACCTS)       # one signal is not a hedge of itself
+    assert enter(eng, TWO, tlab.pair())["reason"] == GROUP_HEDGE        # another strategy's pair still is
+
+
+def test_split_mode_each_strategy_trades_its_own_account(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    v = group(eng, mode="split", assign={tlab.LAB: "a2", TWO: "a3"})
+    assert v["assign"] == {tlab.LAB: "a2", TWO: "a3"} and v["next"] is None
+    assert v["outside"] == {tlab.LAB: ["a1", "a3"], TWO: ["a1", "a2"]}   # booked there, never traded there
+    assert took(enter(eng, tlab.LAB, tlab.leg(iid=1))) == ["a2"]
+    assert took(enter(eng, TWO, tlab.leg(iid=2))) == ["a3"]
+    assert [len(ads[a].brackets) for a in ACCTS] == [0, 1, 1]
+
+
+def test_split_mode_blocks_a_hedge_across_its_accounts(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    group(eng, mode="split", assign={tlab.LAB: "a1", TWO: "a2"})
+    enter(eng, tlab.LAB, tlab.leg(iid=1, side="Buy"))                    # a1 long
+    out = enter(eng, TWO, tlab.leg(iid=2, side="Sell", px=90.0, sl=95.0, tp=80.0))
+    assert out["reason"] == GROUP_HEDGE and ads["a2"].brackets == []
+
+
+def test_split_mode_without_an_account_never_trades(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    group(eng, mode="split", assign={tlab.LAB: "a1"})
+    out = enter(eng, TWO, tlab.leg())
+    assert out["reason"].startswith("Its own account in its group cannot") and all(not ad.brackets for ad in ads.values())
+
+
+def test_modes_are_checked_kept_and_survive_a_restart(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    with pytest.raises(GroupError, match="Mode"):
+        group(eng, mode="all")
+    with pytest.raises(GroupError, match="ticked accounts"):
+        group(eng, mode="split", assign={tlab.LAB: "zz"})
+    group(eng, mode="split", assign={tlab.LAB: "a1", "gone": "a2"})
+    assert eng.groups["g"]["assign"] == {tlab.LAB: "a1"}                 # a non-member's account is dropped
+    v = Engine(eng.cfg, ads, now_fn=clock, root=tmp_path).groups_view()["g"]
+    assert v["mode"] == "split" and v["assign"] == {tlab.LAB: "a1"}
+    eng.set_group("g", {"accounts": ["a1", "a2"], "assign": {tlab.LAB: "a1", TWO: "a2"}})
+    assert eng.groups["g"]["mode"] == "split"                            # a save without the mode keeps it
+    eng.set_group("g", {"accounts": ["a1"]})
+    assert eng.groups["g"]["assign"] == {tlab.LAB: "a1"}                 # an account taken out takes its strategy's with it
+
+
+def test_an_old_file_reads_as_a_cycle(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    group(eng)
+    import json
+    p = tmp_path / "groups.json"
+    d = json.loads(p.read_text())
+    d["g"].pop("mode"), d["g"].pop("assign")
+    p.write_text(json.dumps(d))
+    v = Engine(eng.cfg, ads, now_fn=clock, root=tmp_path).groups_view()["g"]
+    assert v["mode"] == "cycle" and v["assign"] == {} and v["next"] == "a1"
