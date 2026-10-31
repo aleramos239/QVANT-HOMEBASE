@@ -284,7 +284,7 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
         sess.budget, sess.journal = budget, engine.journal
         try:
             if code or not saved:
-                await sess.login(code=code or None)     # books itself on the budget, under the session's lock
+                await sess.login(code=code or None, manual=True)    # books itself on the budget, under the session's lock
                 for aid, a in cfg.accounts.items():     # answered: its accounts need not wait out their cool-down
                     if a.keyring_key == key:
                         _login_cooldown.pop(aid, None)

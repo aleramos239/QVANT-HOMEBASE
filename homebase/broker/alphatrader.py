@@ -244,7 +244,7 @@ class AlphaTraderAdapter(BrokerAdapter):
                 raise RuntimeError(f"{self.account_id}: login exposes no accounts")
             err = AccountNotOnLogin(f"more than one account named {self.account_name} on this login" if found else
                                     f"account {self.account_name} not on this login (has: {', '.join(have)})")
-            err.listed = have
+            err.listed = [str(a["accountId"]) for a in s.accounts.values()]     # what the desk's pins are (ids)
             raise err
         self._connected = True
         if late:                                        # its snapshot went by before it listened: ask for them again

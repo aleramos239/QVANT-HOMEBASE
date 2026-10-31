@@ -309,3 +309,39 @@ def test_a_kicked_session_logging_in_again_is_not_shown_lost(client, monkeypatch
             await client.app.state.broker_loop()
     client.portal.call(one_pass)
     assert ad.connected and ad in sess.adapters
+
+
+def test_the_wizards_code_login_is_not_refused_by_a_backoff(client, api):
+    """T4 asked for a code (or any failed login) started a backoff; the owner then types the code in the wizard: that
+    login is manual, it goes through (the cap and a 429 still hold)."""
+    assert connect(client).json()["ok"]                       # a token is held: the session's check is not a first one
+    client.app.state.login_budget.login_result(KEY, RuntimeError("T4 login result 1"))
+    r = connect(client, code="123456").json()
+    assert r["ok"] and r["env"] == "atr", r
+    assert api.logins()[-1]["code"] == "123456"
+
+
+def test_an_account_gone_from_the_login_is_parked_then_removed(client, monkeypatch):
+    import sys
+    more = [{"accountId": f"A{n}", "accountName": f"AF-50K-{n}", "displayName": f"Alpha 50K {w}"}
+            for n, w in ((3, "Three"), (4, "Four"))]
+    monkeypatch.setattr(sys.modules[__name__], "ACCOUNTS", [*ACCOUNTS, *more])
+    connect(client)
+    out = client.post("/api/accounts/add-many", json={"key": KEY, "accounts": [
+        "Alpha 50K Eval", "Alpha 50K", "Alpha 50K Three", "Alpha 50K Four"]}).json()
+    assert out["added"] == 4, out                             # three live: one missing is a minority, a closed account
+    sess = brokers._ATR_SESSIONS[KEY]
+    # closed at AlphaTrader, seen by the next fresh adapter (a desk restart: a held pin never re-reads the list)
+    sess.accounts.pop(next(k for k, a in sess.accounts.items() if a["accountId"] == "A3"))
+    client.portal.call(client.app.state.adapters.pop("alpha-50k-three").close)
+    r = client.post("/api/accounts/reconnect", json={"account": "alpha-50k-three"}).json()
+    assert r["results"]["alpha-50k-three"]["ok"] is False
+    st = client.app.state
+    assert "alpha-50k-three" in st.parked and "alpha-50k-three" in st.gone
+    notices = [n["text"] for n in client.get("/api/status").json()["notices"]]
+    assert any("no longer on your AlphaTrader login — parked" in t for t in notices), notices
+    assert not any("may have changed" in t for t in notices), notices
+    st.gone["alpha-50k-three"]["confirmed"] = True            # the second check agreed
+    client.portal.call(st.gone_step)
+    assert "alpha-50k-three" not in st.cfg.accounts and "alpha-50k-three" not in st.adapters
+    assert set(st.cfg.accounts) >= {"alpha-50k-eval", "alpha-50k", "alpha-50k-four"}

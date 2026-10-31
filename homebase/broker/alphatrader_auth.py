@@ -171,12 +171,13 @@ class AtrSession:
         return bool(self._access) and self.expires_at - time.time() > RENEW_LEFT_S
 
     # -- login -------------------------------------------------------------------------------------------------
-    async def login(self, code: str | None = None) -> None:
-        """One password login, booked on the budget: refused (LoginDeferred) when the cap, backoff or a 429 cool-down says so."""
+    async def login(self, code: str | None = None, *, manual: bool = False) -> None:
+        """One password login, booked on the budget: refused (LoginDeferred) when the cap, backoff or a 429 cool-down says so
+        (`manual`, the owner's own login in the wizard, skips only the backoff)."""
         async with self._held():
             b = self.budget
             if b is not None:
-                blocked = b.blocked(self.key, first=self._access is None)
+                blocked = b.blocked(self.key, first=self._access is None, manual=manual)
                 if blocked:
                     raise LoginDeferred(blocked)
                 b.record_login(self.key)

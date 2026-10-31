@@ -168,6 +168,7 @@ class AtrSocket:
                     self._frame(raw)
             finally:
                 self._ws, self.up = None, False
+                self.session.lost = None                # stale words (a renewal failed while up) must not read as lost
                 beat.cancel()
                 await asyncio.gather(beat, return_exceptions=True)
 
@@ -185,7 +186,8 @@ class AtrSocket:
                     name, data = proto.server(await ws.recv())
             r = data.get("result", 0)
             if s.budget is not None:
-                s.budget.login_result(s.key, None if r == proto.LOGIN_OK else f"T4 login result {r}")
+                ok = r in (proto.LOGIN_OK, proto.TWO_FACTOR_REQUIRED)     # a code request is not a failed login
+                s.budget.login_result(s.key, None if ok else f"T4 login result {r}")
             if r == proto.LOGIN_OK:
                 try:
                     self.on_event(name, data)           # the adapters read loginResponse.accounts (no credential in it)

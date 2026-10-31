@@ -254,7 +254,8 @@ def test_a_failed_login_stops_without_a_loop(result, lost, fast):
             await sock.stop()
         assert s.lost == lost
         assert len(t4.logins()) == 1 and s.budget.slots == 1
-        assert s.budget.results == [f"T4 login result {result}"]        # the failure is reported to the budget
+        # a failure is reported to the budget; a code request is not a failed login (it starts no backoff)
+        assert s.budget.results == [None if result == proto.TWO_FACTOR_REQUIRED else f"T4 login result {result}"]
     asyncio.run(go())
     assert fast == []
 
@@ -460,3 +461,32 @@ def test_a_successful_login_answer_reaches_on_event_before_on_up():
     asyncio.run(go())
     assert seen[:2] == [("loginResponse", {"sessionId": "S1", "accounts": [{"accountId": "A1", "accountName": "Main"}]}),
                         ("on_up", None)]
+
+
+def test_a_drop_clears_a_stale_lost_so_the_card_does_not_show_an_old_reason(monkeypatch, roomy):
+    """A renewal that failed while the socket was up left words in session.lost; a plain drop must not keep them (the
+    desk would read the drop as a lost session and wait out a cool-down). The next login attempt says why, if it fails."""
+    seen: list = []
+
+    async def pause(sec):
+        seen.append(s.lost)
+        await asyncio.sleep(0.005)
+    monkeypatch.setattr(alphatrader_ws, "_pause", pause)
+
+    async def script(ws, n):
+        if n == 1:
+            await until(lambda: sock.up)
+            s.lost = "backing off after 1 failed login(s) — next try at 11:40:00"
+            await ws.close()
+
+    async def go():
+        nonlocal s, sock
+        t4 = T4(script)
+        async with t4.serving() as srv:
+            sock = AtrSocket(s, lambda p, d: None, url=url_of(srv))
+            await sock.start()
+            await until(lambda: seen)
+            await sock.stop()
+    s, sock = make_session(), None
+    asyncio.run(go())
+    assert seen[0] is None

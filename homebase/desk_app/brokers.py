@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 from .. import config as config_mod
 from ..broker.alphatrader import ATR_BOOKING_OPEN, TAKEN_LOST, AlphaTraderAdapter
-from ..broker.alphatrader_auth import AtrSession
+from ..broker.alphatrader_auth import CODE_ASKED, AtrSession
 from ..broker.alphatrader_auth import NeedsCode as AtrNeedsCode
 from ..broker.base import AccountNotOnLogin, BrokerAdapter
 from ..broker.login_budget import LoginDeferred, is_rate_limited
@@ -31,7 +31,7 @@ GONE_CHECK_TIMEOUT_S = 30  # a confirming re-sync runs in its own task, at most 
 NOTICES_KEPT = 10
 NEEDS_SIGNATURE = "needs a new wallet signature"
 NEEDS_CODE = "TopstepX needs a code"
-NEEDS_CODE_ATR = "AlphaTrader needs a code"
+NEEDS_CODE_ATR = CODE_ASKED
 _VEST_SESSIONS: dict = {}     # keyring key -> its one VestSession (refresh tokens rotate: one per login)
 _TSX_SESSIONS: dict = {}      # keyring key -> its one TsxSession (one token and one socket per login)
 _ATR_SESSIONS: dict = {}      # keyring key -> its one AtrSession (one token and one T4 socket per login)
@@ -203,6 +203,9 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
             return "AlphaTrader"
         tail = _login_key(aid).rsplit(":", 1)[-1].split("_", 1)[0]
         return tail.capitalize() if tail else "Tradovate"
+
+    def _check_at(aid: str) -> str:
+        return "AlphaTrader" if is_atr_key(_login_key(aid)) else "Tradovate"     # TopstepX's words stay as they were
 
     _listed: dict[str, set[str]] = {}        # login key -> account names its last probe listed
     _add_lock = asyncio.Lock()               # one "add accounts" at a time
@@ -415,7 +418,7 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
                 _no_accounts_warned.add(aid)
                 engine.journal("login_lists_no_accounts", account=aid, login=_login_key(aid))
                 _notice(f"your {_login_label(aid)} login listed no accounts — nothing was "
-                        "removed; check the login at Tradovate", account=aid, level="warn")
+                        f"removed; check the login at {_check_at(aid)}", account=aid, level="warn")
         acct_status[aid] = {"connected": False, "error": msg}
         if isinstance(e, LoginDeferred) and _token_left(aid) > 120:
             # the socket dropped, its token is still good, only the login fallback was
@@ -457,7 +460,7 @@ def make(*, cfg, engine, adapters, acct_status, budget, desk, paper_http, paper_
                                login_lists=list(listed))
                 _notice(f"your {_login_label(aid)} login no longer lists "
                         f"{', '.join(_short(x) for x in missing) or _short(aid)} — the login may "
-                        "have changed; nothing was unbooked or removed. Check it at Tradovate",
+                        f"have changed; nothing was unbooked or removed. Check it at {_check_at(aid)}",
                         account=aid, level="warn")
             return
         now = _t.time()
