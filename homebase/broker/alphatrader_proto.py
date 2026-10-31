@@ -40,7 +40,7 @@ SCHEMAS = {
     "ClientMessage": _m(
         heartbeat=(1, _msg("Heartbeat")), loginRequest=(2, _msg("LoginRequest")),
         accountSubscribe=(200, _msg("AccountSubscribe")), orderSubmit=(300, _msg("OrderSubmit")),
-        orderPull=(302, _msg("OrderPull"))),
+        orderRevise=(301, _msg("OrderRevise")), orderPull=(302, _msg("OrderPull"))),
     # t4proto.v1.service.ServerMessage
     "ServerMessage": _m(
         heartbeat=(1, _msg("Heartbeat")), loginResponse=(2, _msg("LoginResponse")),
@@ -72,13 +72,13 @@ SCHEMAS = {
     # t4proto.v1.account.AccountUpdate
     "AccountUpdate": _m(accountId=(1, _S), status=(2, _I32), balance=(3, _D), rpl=(4, _D)),
     # t4proto.v1.account.AccountDetails
-    "AccountDetails": _m(accountId=(1, _S), accountName=(2, _S), account=(3, _S), enabled=(4, _B), mode=(23, _I32),
+    "AccountDetails": _m(accountId=(1, _S), accountName=(2, _S), account=(3, _S), enabled=(4, _I32), mode=(23, _I32),
                          displayName=(26, _S), groupName=(34, _S)),
     # t4proto.v1.account.AccountProfit
     "AccountProfit": _m(accountId=(1, _S), upl=(3, _D), rpl=(5, _D)),
     # t4proto.v1.account.AccountSnapshot
     "AccountSnapshot": _m(accountId=(1, _S), messages=(6, _msg("AccountSnapshotMessage", True))),
-    # t4proto.v1.account.AccountSnapshot.AccountSnapshotMessage
+    # t4proto.v1.account.AccountSnapshotMessage
     "AccountSnapshotMessage": _m(accountPosition=(3, _msg("AccountPosition")), accountUpdate=(4, _msg("AccountUpdate")),
                                  accountDetails=(5, _msg("AccountDetails")),
                                  orderUpdateMulti=(8, _msg("OrderUpdateMulti"))),
@@ -89,6 +89,11 @@ SCHEMAS = {
     "OrderSubmit.Order": _m(buySell=(1, _I32), priceType=(2, _I32), timeType=(3, _I32), volume=(4, _I32),
                             limitPrice=(7, _msg("Price")), stopPrice=(8, _msg("Price")), tag=(10, _S),
                             activationType=(11, _I32), ClOrdId=(13, _S)),
+    # t4proto.v1.orderrouting.OrderRevise
+    "OrderRevise": _m(accountId=(2, _S), marketId=(3, _S), revisions=(5, _msg("OrderRevise.Revise", True))),
+    # t4proto.v1.orderrouting.OrderRevise.Revise
+    "OrderRevise.Revise": _m(uniqueId=(1, _S), volume=(2, _I32), limitPrice=(5, _msg("Price")),
+                             stopPrice=(6, _msg("Price")), ClOrdId=(10, _S)),
     # t4proto.v1.orderrouting.OrderPull
     "OrderPull": _m(accountId=(2, _S), marketId=(3, _S), manualOrderIndicator=(4, _B),
                     pulls=(5, _msg("OrderPull.Pull", True))),
@@ -99,16 +104,16 @@ SCHEMAS = {
                       statusDetail=(8, _S), buySell=(23, _I32), priceType=(24, _I32), currentVolume=(26, _I32),
                       currentLimitPrice=(27, _msg("Price")), currentStopPrice=(28, _msg("Price")), tag=(47, _S),
                       totalFillVolume=(48, _I32), workingVolume=(49, _I32), orderLink=(54, _I32),
-                      ordersLinked=(55, _I32), activationType=(56, _I32), tagClOrdId=(66, _S),
+                      ordersLinked=(55, _S), activationType=(56, _I32), tagClOrdId=(66, _S),
                       trades=(77, _msg("OrderUpdate.Trade", True))),
     # t4proto.v1.orderrouting.OrderUpdate.Trade
     "OrderUpdate.Trade": _m(sequenceOrder=(1, _I32), volume=(2, _I32), price=(3, _msg("Price")),
                             exchangeTradeId=(6, _S), tradeDate=(10, _I64)),
     # t4proto.v1.orderrouting.OrderUpdateMulti
     "OrderUpdateMulti": _m(marketId=(1, _S), accountId=(2, _S), historical=(3, _B),
-                           updates=(4, _msg("OrderUpdateMulti.Update", True))),
-    # t4proto.v1.orderrouting.OrderUpdateMulti.Update
-    "OrderUpdateMulti.Update": _m(orderUpdate=(3, _msg("OrderUpdate")), orderUpdateFailed=(4, _msg("OrderUpdateFailed")),
+                           updates=(4, _msg("OrderUpdateMultiMessage", True))),
+    # t4proto.v1.orderrouting.OrderUpdateMultiMessage
+    "OrderUpdateMultiMessage": _m(orderUpdate=(3, _msg("OrderUpdate")), orderUpdateFailed=(4, _msg("OrderUpdateFailed")),
                                   orderUpdateStatus=(5, _msg("OrderUpdateStatus")),
                                   orderUpdateTrade=(6, _msg("OrderUpdateTrade"))),
     # t4proto.v1.orderrouting.OrderUpdateStatus

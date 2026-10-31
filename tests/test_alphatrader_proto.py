@@ -85,3 +85,20 @@ def test_price_rounds_to_tick():
     assert price(2400.04, .1) == {"value": "2400.0"}
     assert price_of({"value": "20000.25"}) == 20000.25
     assert price_of(None) is None
+
+
+def test_order_update_orders_linked_is_a_string_and_survives_decode():
+    update = {"uniqueId": "u1", "ordersLinked": "u2,u3", "currentLimitPrice": price(20010, .25)}
+    buf = client_free_server("orderUpdate", update)
+    assert server(buf) == ("orderUpdate", update)
+
+
+def test_order_revise_wraps_at_301():
+    rev = {"accountId": "A", "revisions": [{"uniqueId": "u1", "volume": 2, "stopPrice": price(19990, .25)}]}
+    assert client("orderRevise", rev)[:2] == bytes.fromhex("ea12")
+    assert decode("OrderRevise", encode("OrderRevise", rev)) == rev
+
+
+def client_free_server(payload, data):
+    """A ServerMessage frame (the codec only builds client frames by name)."""
+    return encode("ServerMessage", {payload: data})
