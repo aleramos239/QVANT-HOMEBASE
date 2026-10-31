@@ -203,6 +203,20 @@ const cycRisk = (g, m) => Number(((g && g.risk_by) || {})[m]) || Number(g && g.r
 /* Three ways a group trades its accounts (owner, 2026-10-30); the hedge block covers its accounts in every one. */
 const CYC_MODES = {cycle: "Take turns: one account a trade", share: "Every account takes every trade", split: "One strategy per account"};
 const cycMode = (g) => (g && CYC_MODES[g.mode]) ? g.mode : "cycle";
+const CYC_TITLES = {cycle: "Account cycle", share: "Every account, every trade", split: "One strategy per account"};
+/* Split, as saved: one row per account of the group -- the strategy that trades it, its size, whether it is booked there. */
+function splitRows(cyc, mem) {
+  const by = Object.fromEntries(Object.entries(cyc.assign || {}).map(([m, a]) => [a, m]));
+  const booked = (m, a) => ((ST.book || {})[m] || []).some(r => r.account === a);
+  const rows = cyc.accounts.map(a => {
+    const m = by[a], risk = m ? ((cyc.risk_by || {})[m] || cyc.risk_usd) : 0, acc = (ST.accounts || {})[a] || {}, p = acc.day_pnl;
+    return `<div class="feed-row"><span class="h">${esc(acctShort(a))} <span class="dim">${esc(cycleEnvWord(a))}</span></span>
+      <span class="t">${m ? `<b>${esc(stratLabel(m))}</b> · ${+risk > 0 ? "$" + (+risk).toLocaleString("en-US") + " a trade" : "its own size"}${booked(m, a) ? "" : ' · <span class="neg">not booked</span>'}`
+        : '<span class="dim">no strategy</span>'}${p == null ? "" : ` <span class="mono ${p > 0 ? "pos" : p < 0 ? "neg" : ""}" title="Today, 18:00 to 16:00 ET">${DAY_PNL_WORDS(p)}</span>`}</span></div>`;
+  }).join("");
+  const none = cyc.members.filter(m => !(cyc.assign || {})[m]);
+  return `<div class="agroup feed static">${rows}${none.length ? `<div class="feed-row"><span class="h neg">No account</span><span class="t">${esc(none.map(stratLabel).join(", "))}</span></div>` : ""}</div>`;
+}
 const cycUsd = (v) => Number.isFinite(v) ? "$" + v.toLocaleString("en-US") : "?";
 const cycleEnvWord = (a) => !isDemoAcct(a) ? "LIVE" : ((((ST && ST.accounts) || {})[a] || {}).env === "paper" ? "PAPER" : "DEMO");
 /* What a save would change, against what the desk has now (no cycle yet: the card's defaults, $1,000 and 17, no account).
@@ -274,7 +288,7 @@ function cycleHtml(g) {
   const out = cyc ? cyc.members.filter(m => !mem.includes(m)) : [], add = cyc ? mem.filter(m => !cyc.members.includes(m)) : [];
   const num = (cls, v, ph, extra) => `<input class="${cls}"${extra || ""} type="text" inputmode="decimal" autocomplete="off" value="${esc(String(v))}"
       placeholder="${ph}" style="width:72px;max-width:100%;text-align:right" onfocus="FREEZE=true" onblur="FREEZE=false" oninput="cycleEdit(${jsArg(g.id)})">`;
-  return `<div class="sec"><h2>Account cycle</h2><div class="agroup feed static">
+  return `<div class="sec"><h2>${esc(CYC_TITLES[mode])}</h2>${cyc && cycMode(cyc) === "split" && on ? splitRows(cyc, mem) : ""}<div class="agroup feed static">
     <div class="feed-row"><span class="h">${esc(CYC_MODES[mode])}</span>
       <button class="switch" role="switch" aria-label="Account cycle" aria-checked="${on}"
         title="${on ? "ON — " + CYC_MODES[mode] : "OFF — each strategy trades its own booked accounts"}"

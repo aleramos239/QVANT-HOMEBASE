@@ -390,3 +390,11 @@ test('modes: in one-per-account, book only each strategy\'s own account', async 
   await t.c.bookCycle('g1');
   assert.deepEqual(JSON.parse(JSON.stringify(t.sent.map(x => x[1]))), [{ strategy: 'lab_x', assignments: [{ account: 'b', qty: 1 }] }]);
 });
+
+test('modes: one-per-account shows one row per account with its strategy, size and booking; the heading follows the mode', () => {
+  const split = { ...LIVE_ON, accounts: ['a', 'b'], mode: 'split', assign: { lab_x: 'b' }, risk_by: { lab_x: 2000 }, next: null };
+  const h = ctx({ cyc: split, ticked: ['a', 'b'] }).c.cycleHtml(G);
+  assert.match(h, /<h2>One strategy per account<\/h2>/);
+  assert.match(h, /A[\s\S]*?no strategy[\s\S]*?B[\s\S]*?<b>lab_x<\/b> · \$2,000 a trade · <span class="neg">not booked<\/span>/);
+  assert.match(ctx({ cyc: LIVE_ON }).c.cycleHtml(G), /<h2>Account cycle<\/h2>/);
+});
