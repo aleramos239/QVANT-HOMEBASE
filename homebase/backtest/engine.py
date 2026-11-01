@@ -99,6 +99,9 @@ class Costs:
     slippage_ticks: float = 1.0     # per side, on market and stop fills only
 
 
+HELD = 1 << 62                      # Order.min_i of an order that may not fill yet (oco_mode hold)
+
+
 @dataclass(eq=False)
 class Order:
     id: int
@@ -113,6 +116,9 @@ class Order:
     tp_rr: float | None = None      # entries: TP re-derived from the fill at this RR
     ref: float | None = None        # entries: the price the brackets were sized from
     oco: int | None = None
+    oco_mode: str = ""              # "" the peer is cancelled at the fill | "live" the peer stays and is cancelled only when this
+                                    # position closes at its target | "hold" like live, but the peer cannot fill until this position
+                                    # closes at anything but its target (stop-and-reverse)
     status: str = "working"         # working | filled | cancelled
     pos: "Position | None" = None   # exits: the position they close
     # Recording only (never read by the fill law): what an ENTRY actually became, so a strategy
@@ -136,6 +142,8 @@ class Position:
     tp: Order | None = None
     be: Order | None = None         # run controls: the breakeven's trigger (a touch, never a fill)
     trail: Order | None = None      # run controls: the trailing stop's next ratchet (a touch)
+    peers: list | None = None       # oco_mode live | hold: the orders linked to the entry this came from
+    hold: bool = False              # oco_mode hold: the peers are released when this closes by anything but its target
 
 
 # Not the same Bar as feed.py or charts/bars.py: mutable, start/end in ns; the three are kept apart on purpose.
@@ -248,10 +256,11 @@ class Ctx:
                ref: float | None = None) -> Order:
         return self._entry("market", side, None, qty, sl, tp, tp_rr, ref)
 
-    def oco(self, *orders: Order) -> None:
+    def oco(self, *orders: Order, mode: str = "") -> None:
+        assert mode in ("", "live", "hold"), mode
         g = orders[0].id
         for o in orders:
-            o.oco = g
+            o.oco, o.oco_mode = g, mode
 
     def cancel(self, order: Order) -> None:
         self._s.cancel(order)
@@ -593,10 +602,17 @@ class _Sim:
         if o.role != "entry":
             self._close(o.pos, fill, k, o.role)
             return
+        peers = None
         if o.oco is not None:
-            for x in [x for x in self.orders if x.oco == o.oco]:
-                self.cancel(x)
-        pos = Position(o.side, o.qty, fill, k, o.price)
+            peers = [x for x in self.orders if x.oco == o.oco]
+            if not o.oco_mode:
+                for x in peers:
+                    self.cancel(x)
+                peers = None
+            elif o.oco_mode == "hold":
+                for x in peers:
+                    x.min_i = HELD
+        pos = Position(o.side, o.qty, fill, k, o.price, peers=peers or None, hold=o.oco_mode == "hold")
         sl, tp = o.sl, o.tp
         # Fix round 1 ruling: the SL moves FIRST (keeping its distance to `ref`),
         # independent of tp_rr; only then is a tp_rr target derived, from the
@@ -658,6 +674,12 @@ class _Sim:
             mae_usd=round(mae * self.pv * pos.qty, 2), mfe_usd=round(mfe * self.pv * pos.qty, 2),
             bars=int(t1 // 60_000_000_000 - t0 // 60_000_000_000 + 1),
             seconds=round((t1 - t0) / 1e9, 3)))
+        if pos.peers:
+            for x in pos.peers:
+                if reason == "tp":
+                    self.cancel(x)
+                elif pos.hold and x.status == "working":
+                    x.min_i = k + 1
         if self.ctl is not None:
             net, st = gross - comm, self.st
             st["pnl"] += net

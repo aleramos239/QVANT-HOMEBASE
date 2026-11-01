@@ -404,3 +404,33 @@ def test_mae_mfe_short_side():
     assert (t.mae_pts, t.mfe_pts) == (2.25, 15.25)
     assert (t.mae_usd, t.mfe_usd) == (45.0, 305.0)
     assert t.bars == 4 and t.seconds == 179.0
+
+
+def straddle_mode(mode):
+    def fire(ctx, s):
+        a = ctx.last_price
+        s.o["buy"] = ctx.stop_entry("long", a + 10, sl=a - 15, tp=a + 25)
+        s.o["sell"] = ctx.stop_entry("short", a - 10, sl=a + 15, tp=a - 25)
+        ctx.oco(s.o["buy"], s.o["sell"], mode=mode)
+    return fire
+
+
+FALL = [("09:29:59", 100.0), ("09:30:01", 110.0), ("09:31", 88.0), ("09:32", 84.0), ("09:40", 70.0)]
+
+
+def test_oco_live_the_other_leg_stays_and_is_cancelled_only_by_the_target():
+    plan = {"09:30:00": straddle_mode("live"), "12:55": cancel, "15:55": flat}
+    up = one([("09:29:59", 100.0), ("09:30:01", 110.0), ("09:31", 135.5), ("09:40", 85.0)], plan)
+    assert [t.side for t in up] == ["long"] and up[0].exit_reason == "tp"      # the target cancelled the sell stop
+    down = one(FALL, plan)
+    assert sorted(t.side for t in down) == ["long", "short"]                  # the sell stop stayed and filled at 90 while long
+    assert min(t.entry_ns for t in down) < max(t.exit_ns for t in down)
+
+
+def test_oco_hold_the_other_leg_cannot_fill_until_the_first_is_stopped_out():
+    plan = {"09:30:00": straddle_mode("hold"), "12:55": cancel, "15:55": flat}
+    down = one(FALL, plan)
+    assert [t.side for t in down] == ["long", "short"]
+    assert down[0].exit_reason == "sl" and down[1].entry_ns > down[0].exit_ns   # 88 crossed the sell stop; no fill until the stop
+    held = one([("09:29:59", 100.0), ("09:30:01", 110.0), ("09:31", 88.0), ("09:32", 112.0), ("09:33", 135.5)], plan)
+    assert [t.side for t in held] == ["long"] and held[0].exit_reason == "tp"   # target: the held leg is cancelled
