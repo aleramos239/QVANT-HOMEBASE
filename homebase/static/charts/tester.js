@@ -125,7 +125,7 @@ const CONTROLS = {
   be_after_pts: ['float', 0, 0, 5000], be_after_tp: ['float', 0, 0, 1], be_offset_ticks: ['int', 1, 0, 100], trail_pts: ['float', 0, 0, 5000], trail_after_pts: ['float', 0, 0, 5000],
   exit_line: ['choice', '', ['', 'vwap', 'vwap_rth', 'ema20', 'ema50']], exit_line_min: ['choice', 5, [1, 5, 15]],
   bar_minutes: ['choice', 0, [0, 1, 5, 15]],
-  atr_minutes: ['choice', 5, [0, 1, 5, 15]], atr_period: ['int', 14, 2, 200],     // atr_minutes 0 = the strategy's own bar
+  atr_minutes: ['choice', 5, [0, 1, 5, 15]], atr_period: ['int', 14, 2, 200], vol_kind: ['choice', 'atr', ['atr', 'median', 'std']],     // atr_minutes 0 = the strategy's own bar
 };
 const CTL_NEEDS = [['stop_mode', 'fixed', 'stop_pts'], ['stop_mode', 'atr', 'stop_atr'], ['target_mode', 'fixed', 'target_pts'],
   ['target_mode', 'atr', 'target_atr'], ['target_mode', 'rr', 'target_rr']];
@@ -148,7 +148,7 @@ function controlsClean(raw) {
   const o = controlsFields(raw);
   for (const [m, name, num] of CTL_NEEDS) if (o[m] !== name) delete o[num];
   if (o.stop_mode && o.stop_mode !== 'own') { delete o.stop_own_mult; delete o.own_floor; }
-  if (o.stop_mode !== 'atr' && o.target_mode !== 'atr' && !o.own_floor) { delete o.atr_minutes; delete o.atr_period; }
+  if (o.stop_mode !== 'atr' && o.target_mode !== 'atr' && !o.own_floor) { delete o.atr_minutes; delete o.atr_period; delete o.vol_kind; }
   // a number another field switches on means nothing without it (controls.py parse: the same rules, the same request)
   if (o.stop_mode !== 'candle') delete o.stop_candle_ticks;
   if (!o.be_after_pts && !o.be_after_tp) delete o.be_offset_ticks;
@@ -188,7 +188,7 @@ const CTL_LABELS = {
   max_trades: 'Trades a day', stop_wins: 'Stop after wins', stop_losses: 'Stop after losses', max_consec_losses: 'Losses in a row',
   day_loss: 'Daily loss ($)', day_profit: 'Daily profit ($)', cooldown_min: 'Cool off after a loss (min)', max_hold_min: 'Close after (min held)',
   stop: 'Stop', stop_own_mult: 'Own stop (x)', own_floor: 'Own stop floor (0.25 x ATR)', stop_mode: 'Stop type', stop_pts: 'Stop (points)', stop_atr: 'Stop (x ATR)', target_mode: 'Target type', target_pts: 'Target (points)',
-  target_atr: 'Target (x ATR)', target_rr: 'Target (x stop)', bar_minutes: 'Signal bar (min)', atr_minutes: 'ATR bars (min)', atr_period: 'ATR length',
+  target_atr: 'Target (x ATR)', target_rr: 'Target (x stop)', bar_minutes: 'Signal bar (min)', atr_minutes: 'ATR bars (min)', atr_period: 'ATR length', vol_kind: 'Volatility measure',
   stop_candle_ticks: 'Candle stop buffer (ticks)', be_after_pts: 'Breakeven after (points)', be_after_tp: 'Breakeven after (x target)', be_offset_ticks: 'Breakeven + (ticks)',
   trail_pts: 'Trailing stop (points)', trail_after_pts: 'Trail after (points)', exit_line: 'Exit on close through', exit_line_min: 'Exit line bars (min)',
 };

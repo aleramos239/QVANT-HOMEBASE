@@ -37,6 +37,7 @@ Stdlib only (array + bisect): the desk's venv carries no numpy.
 """
 from __future__ import annotations
 
+import statistics
 from bisect import bisect_left
 from dataclasses import asdict, dataclass, field
 
@@ -372,8 +373,12 @@ class _Sim:
         if len(rows) < period + 1:
             return None
         rows.reverse()
+        kind = self.ctl.vol_kind
+        if kind == "std":                                   # the spread of the bars' close-to-close moves, in points
+            cs = [r[2] for r in rows]
+            return statistics.stdev([b - a for a, b in zip(cs, cs[1:])])
         trs = [max(h - l, abs(h - pc), abs(l - pc)) for (h, l, _), (_, _, pc) in zip(rows[1:], rows)]
-        return sum(trs) / len(trs)
+        return statistics.median(trs) if kind == "median" else sum(trs) / len(trs)
 
     def candle(self) -> tuple | None:
         """(low, high) of the last CLOSED signal bar (sig_min minutes) before now -- at a bar's close, that bar -- or None."""

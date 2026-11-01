@@ -393,6 +393,24 @@ def test_old_request_unchanged():
     assert "controls" not in validate({**old, "controls": {"stop_own_mult": 1.0, "atr_minutes": 5}})
 
 
+def test_volatility_measure_swaps_what_the_atr_multiple_reads():
+    # 5-minute bars span 2 points, except the last closed one (09:30-09:34) which spans 12
+    rows = []
+    for m in range(9 * 60, 9 * 60 + 40):
+        w = 12.0 if 9 * 60 + 30 <= m < 9 * 60 + 35 else 2.0
+        rows += [(f"{m // 60:02d}:{m % 60:02d}:00", 100.0), (f"{m // 60:02d}:{m % 60:02d}:30", 100.0 + w)]
+    cfg = {"stop_mode": "atr", "stop_atr": 1, "atr_period": 5}
+    got = {}
+    for kind in ("atr", "median", "std"):
+        t, = go(rows, {"09:36:00": long_at()}, {**cfg, "vol_kind": kind}).trades
+        got[kind] = round(t.entry_price - t.sl, 2)
+    assert got == {"atr": 4.0, "median": 2.0, "std": 4.5}      # mean TR 4, median TR 2, std of closes 4.47
+    assert parse({**cfg, "vol_kind": "std"})["vol_kind"] == "std" and "vol_kind" not in parse({**cfg, "vol_kind": "atr"})
+    assert "vol_kind" not in parse({"stop_mode": "fixed", "stop_pts": 5, "vol_kind": "std"})
+    with pytest.raises(ValueError):
+        parse({**cfg, "vol_kind": "garch"})
+
+
 class BarScript(Script):
     bar_minutes = 5
 

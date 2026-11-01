@@ -38,6 +38,9 @@ they are part of the request, so a run's bundle shows what was set.
   atr_minutes / atr_period  the ATR: mean true range of the last `atr_period` CLOSED `atr_minutes` bars (0 = the
                           strategy's own bar size; refused for a strategy without one) before the
                           entry (overnight included); fewer than that = the entry is refused ("atr warming up").
+  vol_kind                what the "ATR" number is: atr (mean true range, the default) | median (the MEDIAN true range of
+                          those bars) | std (the standard deviation of their close-to-close changes, in points). The
+                          stop_atr / target_atr multiples then read that number.
 
 A fixed or ATR bracket is measured from the FILL, like a broker bracket; it replaces the strategy's own level, for the
 stop and the target separately. Every refused entry is counted by reason in the run's `controls.blocked`.
@@ -49,6 +52,7 @@ from dataclasses import dataclass
 
 TIME = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 DIRECTIONS = ("both", "long", "short")
+VOL_KINDS = ("atr", "median", "std")
 STOP_MODES = ("own", "fixed", "atr", "candle", "none")
 EXIT_LINES = ("", "vwap", "vwap_rth", "ema20", "ema50")
 LINE_MINUTES = (1, 5, 15)
@@ -90,6 +94,7 @@ SPEC: dict[str, tuple] = {
     "bar_minutes": ("choice", 0, BAR_MINUTES, None),
     "atr_minutes": ("choice", 5, ATR_MINUTES, None),
     "atr_period": ("int", 14, 2, 200),
+    "vol_kind": ("choice", "atr", VOL_KINDS, None),
 }
 # which number each mode reads; a number a mode does not read is dropped from the request, so the same rules
 # always make the same request (and the same cache key)
@@ -139,7 +144,7 @@ LABELS = {
     "target_rr": "Target (x stop)", "stop_candle_ticks": "Candle stop buffer (ticks)", "be_after_pts": "Breakeven after (points)", "be_after_tp": "Breakeven after (x target)",
     "be_offset_ticks": "Breakeven + (ticks)", "trail_pts": "Trailing stop (points)", "trail_after_pts": "Trail after (points)",
     "exit_line": "Exit on close through", "exit_line_min": "Exit line bars (min)", "bar_minutes": "Signal bar (min)", "atr_minutes": "ATR bars (min)",
-    "atr_period": "ATR length",
+    "atr_period": "ATR length", "vol_kind": "Volatility measure",
 }
 # a number that only means something under one mode: a heat-map axis on it switches that mode on (0 = leave it)
 IMPLIES = {"stop_pts": ("stop_mode", "fixed"), "stop_own_mult": ("stop_mode", "own"), "stop_atr": ("stop_mode", "atr"),
@@ -191,6 +196,7 @@ def parse(raw) -> dict:
     if not out.get("own_floor") and not any(out.get(m) == n for m, n in ATR_USERS):
         out.pop("atr_minutes", None)
         out.pop("atr_period", None)
+        out.pop("vol_kind", None)
     if out.get("be_after_pts") and out.get("be_after_tp"):
         raise ValueError("controls: breakeven is set in points or as a fraction of the target, not both")
     if out.get("entry_from") and out.get("entry_to") and out["entry_from"] >= out["entry_to"]:
@@ -234,6 +240,7 @@ class Controls:
     bar_minutes: int = 0
     atr_minutes: int = 5
     atr_period: int = 14
+    vol_kind: str = "atr"
 
     @staticmethod
     def from_dict(d) -> "Controls | None":
