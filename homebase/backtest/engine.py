@@ -421,12 +421,33 @@ class _Sim:
             pos.be = self.touch(pos, "be", pos.entry_px + pos.side * c.be_after_pts, k)
         elif c.be_after_tp and pos.tp is not None:
             pos.be = self.touch(pos, "be", pos.entry_px + c.be_after_tp * (pos.tp.price - pos.entry_px), k)
+        if c.be_at and self.ts[k] >= et_ns(self.date, c.be_at):
+            self.be_now(pos, k)
         if c.trail_pts:
-            if c.trail_after_pts:
+            if c.trail_from:
+                if self.ts[k] >= et_ns(self.date, c.trail_from):
+                    self.trail_now(pos, k)
+            elif c.trail_after_pts:
                 pos.trail = self.touch(pos, "trail", pos.entry_px + pos.side * c.trail_after_pts, k)
             else:
                 self.set_stop(pos, pos.entry_px - pos.side * c.trail_pts, k)
                 pos.trail = self.touch(pos, "trail", pos.entry_px + pos.side * self.tick, k)
+
+    def be_now(self, pos: "Position", k: int) -> None:
+        """be_at: breakeven from print k. In profit enough the stop moves now; otherwise a touch one tick past the level moves it."""
+        if pos.be is not None:
+            return
+        lvl = to_tick(pos.entry_px + pos.side * self.ctl.be_offset_ticks * self.tick, self.tick)
+        if tick_cmp(pos.side * (self.px[k] - lvl), self.tick, self.tick) >= 0:
+            self.set_stop(pos, lvl, k)
+        else:
+            pos.be = self.touch(pos, "be", lvl + pos.side * self.tick, k)
+
+    def trail_now(self, pos: "Position", k: int) -> None:
+        """trail_from: the trail starts at print k, trail_pts behind it (never looser than the stop it has)."""
+        if pos.trail is None:
+            self.set_stop(pos, self.px[k] - pos.side * self.ctl.trail_pts, k)
+            pos.trail = self.touch(pos, "trail", self.px[k] + pos.side * self.tick, k)
 
     def ratchet(self, o: Order, k: int) -> None:
         """A breakeven / trailing trigger touched at print k: the stop moves (BE once; the trail follows print k, the best
@@ -495,6 +516,10 @@ class _Sim:
         """A scheduled control event: flat_at, the end of the entry window, or the minute's time-stop check."""
         if what == "flat":
             self.flatten("time")
+        elif what in ("be_at", "trail_from"):
+            for pos in list(self.positions):
+                k = max(min(self.i, self.hi) - 1, pos.entry_i)      # the last print before the clock time
+                (self.be_now if what == "be_at" else self.trail_now)(pos, k)
         elif what == "close":
             for o in [o for o in self.orders if o.role == "entry"]:
                 self.cancel(o)
@@ -802,6 +827,10 @@ def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None =
             events.append((et_ns(d, controls.flat_at), 2, 10_000, "ctl", "flat"))
         if controls.entry_to:
             events.append((et_ns(d, controls.entry_to), 2, 10_001, "ctl", "close"))
+        if controls.be_at:
+            events.append((et_ns(d, controls.be_at), 2, 10_002, "ctl", "be_at"))
+        if controls.trail_from:
+            events.append((et_ns(d, controls.trail_from), 2, 10_003, "ctl", "trail_from"))
         if controls.max_hold_min:
             events += [(t, 3, 0, "ctl", "hold") for t in range(t0 + 60_000_000_000, t1, 60_000_000_000)]
         if controls.exit_line:

@@ -111,7 +111,7 @@ const COSTS = [['qty', 'Qty', 1, 100, true], ['commission', 'Commission', 0, 100
    Everything is OFF by default; a run with none set sends no `controls` field at all and is the run it always was.
    key -> [kind, default, lo | choices, hi]; kind time = a New York HH:MM. */
 const CONTROLS = {
-  entry_from: ['time', ''], entry_to: ['time', ''], flat_at: ['time', ''],
+  entry_from: ['time', ''], entry_to: ['time', ''], flat_at: ['time', ''], be_at: ['time', ''], trail_from: ['time', ''],
   direction: ['choice', 'both', ['both', 'long', 'short']],
   max_trades: ['int', 0, 0, 50], stop_wins: ['int', 0, 0, 50], stop_losses: ['int', 0, 0, 50], max_consec_losses: ['int', 0, 0, 50],
   day_loss: ['float', 0, 0, 1e6], day_profit: ['float', 0, 0, 1e6], cooldown_min: ['int', 0, 0, 600], max_hold_min: ['int', 0, 0, 1440],
@@ -151,8 +151,8 @@ function controlsClean(raw) {
   if (o.stop_mode !== 'atr' && o.target_mode !== 'atr' && !o.own_floor) { delete o.atr_minutes; delete o.atr_period; delete o.vol_kind; }
   // a number another field switches on means nothing without it (controls.py parse: the same rules, the same request)
   if (o.stop_mode !== 'candle') delete o.stop_candle_ticks;
-  if (!o.be_after_pts && !o.be_after_tp) delete o.be_offset_ticks;
-  if (!o.trail_pts) delete o.trail_after_pts;
+  if (!o.be_after_pts && !o.be_after_tp && !o.be_at) delete o.be_offset_ticks;
+  if (!o.trail_pts) { delete o.trail_after_pts; delete o.trail_from; }
   if (!o.exit_line) delete o.exit_line_min;
   return o;
 }
@@ -184,7 +184,7 @@ const CTL_AXIS = 'ctl.';
 const CTL_IMPLIES = { stop_own_mult: ['stop_mode', 'own'], stop_pts: ['stop_mode', 'fixed'], stop_atr: ['stop_mode', 'atr'], target_pts: ['target_mode', 'fixed'],
   target_atr: ['target_mode', 'atr'], target_rr: ['target_mode', 'rr'], stop_candle_ticks: ['stop_mode', 'candle'] };
 const CTL_LABELS = {
-  entry_from: 'Trade from (NY)', entry_to: 'Last entry (NY)', flat_at: 'Flat by (NY)', direction: 'Direction',
+  entry_from: 'Trade from (NY)', entry_to: 'Last entry (NY)', flat_at: 'Flat by (NY)', be_at: 'Breakeven at (NY)', trail_from: 'Trail from (NY)', direction: 'Direction',
   max_trades: 'Trades a day', stop_wins: 'Stop after wins', stop_losses: 'Stop after losses', max_consec_losses: 'Losses in a row',
   day_loss: 'Daily loss ($)', day_profit: 'Daily profit ($)', cooldown_min: 'Cool off after a loss (min)', max_hold_min: 'Close after (min held)',
   stop: 'Stop', stop_own_mult: 'Own stop (x)', own_floor: 'Own stop floor (0.25 x ATR)', stop_mode: 'Stop type', stop_pts: 'Stop (points)', stop_atr: 'Stop (x ATR)', target_mode: 'Target type', target_pts: 'Target (points)',

@@ -324,6 +324,30 @@ def test_trailing_stop_follows_the_best_print_and_only_tightens():
     assert t.exit_price == 101.0                                           # 103 reached: trailing from there
 
 
+def test_breakeven_at_a_time_moves_the_stop_when_in_profit_or_once_the_price_gets_back():
+    rows = [("09:29:59", 100.0), ("09:30:05", 100.0), ("09:31", 105.0), ("09:35", 103.0), ("09:36", 100.25), ("09:40", 90.0)]
+    t, = go(rows, {"09:30:00": long_at(sl=90.0)}, {"be_at": "09:33"}).trades
+    assert (t.sl, t.exit_price) == (100.25, 100.25)                         # in profit at 09:33: stop to fill + 1 tick
+    rows = [("09:29:59", 100.0), ("09:30:05", 100.0), ("09:31", 98.0), ("09:35", 101.0), ("09:36", 100.25), ("09:40", 90.0)]
+    t, = go(rows, {"09:30:00": long_at(sl=90.0)}, {"be_at": "09:33"}).trades
+    assert t.exit_price == 100.25                                           # under water at 09:33: breakeven once 100.5 prints
+    t, = go(rows, {"09:30:00": long_at(sl=98.5)}, {"be_at": "09:33"}).trades
+    assert t.exit_reason == "sl" and t.exit_price == 98.0                   # before 09:33 the original stop works
+    assert parse({"be_at": "10:00"}) == {"be_at": "10:00", "be_offset_ticks": 1} or parse({"be_at": "10:00"}) == {"be_at": "10:00"}
+    with pytest.raises(ValueError):
+        parse({"be_at": "10:00", "be_after_pts": 2})
+
+
+def test_trail_from_a_time_starts_the_trail_at_the_last_print():
+    rows = [("09:29:59", 100.0), ("09:30:05", 100.0), ("09:31", 99.0), ("09:35", 104.0), ("09:36", 106.0), ("09:37", 101.5), ("09:40", 90.0)]
+    t, = go(rows, {"09:30:00": long_at(sl=90.0)}, {"trail_pts": 3, "trail_from": "09:33"}).trades
+    assert (t.exit_reason, t.sl) == ("sl", 103.0)                           # 99 at 09:33 -> stop 96 (tighter than 90); 106 -> 103
+    t, = go(rows, {"09:30:00": long_at(sl=90.0)}, {"trail_pts": 3, "trail_from": "09:45"}).trades
+    assert t.sl == 90.0 and t.exit_price == 90.0                          # never started: the original stop stays
+    with pytest.raises(ValueError):
+        parse({"trail_from": "10:00"})
+
+
 def test_candle_stop_sits_past_the_last_closed_candle():
     rows = [("09:29:00", 100.0), ("09:29:20", 98.0), ("09:29:40", 101.0), ("09:29:59", 100.0), ("09:30:05", 100.0),
             ("09:31", 98.5), ("09:32", 97.75), ("09:33", 90.0)]

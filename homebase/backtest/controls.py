@@ -28,6 +28,11 @@ they are part of the request, so a run's bundle shows what was set.
                           (no target: nothing triggers). Not together with be_after_pts.
   trail_pts / trail_after_pts       a tick trailing stop: the stop follows the best print since the fill by trail_pts,
                           only tighter; from the fill, or once a print is trail_after_pts in profit.
+  be_at                   NY "HH:MM": at that time every open position (and any filled later) gets breakeven: in profit, the stop
+                          goes to the fill + be_offset_ticks now; not yet, it goes there once a print gets that far. The
+                          stop is never loosened. Not together with be_after_pts / be_after_tp.
+  trail_from              NY "HH:MM": the trailing stop (trail_pts) starts at that time, from the last print, instead of at
+                          the fill; only tighter. Needs trail_pts; not together with trail_after_pts.
   exit_line / exit_line_min         close when an exit_line_min bar CLOSES back through the line -- vwap (from the tape's
                           start, the Globex open), vwap_rth (from 09:30), ema20, ema50 (of those bars' closes) -- a long
                           below it, a short above; at the next print.
@@ -65,6 +70,8 @@ SPEC: dict[str, tuple] = {
     "entry_from": ("time", "", None, None),
     "entry_to": ("time", "", None, None),
     "flat_at": ("time", "", None, None),
+    "be_at": ("time", "", None, None),
+    "trail_from": ("time", "", None, None),
     "direction": ("choice", "both", DIRECTIONS, None),
     "max_trades": ("int", 0, 0, 50),
     "stop_wins": ("int", 0, 0, 50),
@@ -135,7 +142,7 @@ def coerce(k: str, v):
 
 # what a heat-map axis (or a page) calls each field
 LABELS = {
-    "entry_from": "Trade from (NY)", "entry_to": "Trade until (NY)", "flat_at": "Flat at (NY)", "direction": "Direction",
+    "entry_from": "Trade from (NY)", "entry_to": "Trade until (NY)", "flat_at": "Flat at (NY)", "be_at": "Breakeven at (NY)", "trail_from": "Trail from (NY)", "direction": "Direction",
     "max_trades": "Trades a day", "stop_wins": "Stop after wins", "stop_losses": "Stop after losses",
     "max_consec_losses": "Losses in a row", "day_loss": "Daily loss ($)", "day_profit": "Daily profit ($)",
     "cooldown_min": "Cool off after a loss (min)", "max_hold_min": "Close after (min held)",
@@ -189,7 +196,7 @@ def parse(raw) -> dict:
         else:
             out.pop(num, None)
     # a number another field switches on means nothing without it (the same rules always make the same request)
-    for num, on in (("stop_candle_ticks", out.get("stop_mode") == "candle"), ("be_offset_ticks", bool(out.get("be_after_pts") or out.get("be_after_tp"))),
+    for num, on in (("stop_candle_ticks", out.get("stop_mode") == "candle"), ("be_offset_ticks", bool(out.get("be_after_pts") or out.get("be_after_tp") or out.get("be_at"))),
                     ("trail_after_pts", bool(out.get("trail_pts"))), ("exit_line_min", bool(out.get("exit_line")))):
         if not on:
             out.pop(num, None)
@@ -199,6 +206,12 @@ def parse(raw) -> dict:
         out.pop("vol_kind", None)
     if out.get("be_after_pts") and out.get("be_after_tp"):
         raise ValueError("controls: breakeven is set in points or as a fraction of the target, not both")
+    if out.get("be_at") and (out.get("be_after_pts") or out.get("be_after_tp")):
+        raise ValueError("controls: breakeven is set by time or by distance, not both")
+    if out.get("trail_from") and not out.get("trail_pts"):
+        raise ValueError("controls.trail_pts: needed when trail_from is set")
+    if out.get("trail_from") and out.get("trail_after_pts"):
+        raise ValueError("controls: the trail starts at a time or after points, not both")
     if out.get("entry_from") and out.get("entry_to") and out["entry_from"] >= out["entry_to"]:
         raise ValueError("controls: the entry window ends before it starts")
     if out.get("flat_at") and out.get("entry_from") and out["flat_at"] <= out["entry_from"]:
@@ -211,6 +224,8 @@ class Controls:
     entry_from: str = ""
     entry_to: str = ""
     flat_at: str = ""
+    be_at: str = ""
+    trail_from: str = ""
     direction: str = "both"
     max_trades: int = 0
     stop_wins: int = 0
