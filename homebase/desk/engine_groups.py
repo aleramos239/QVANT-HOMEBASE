@@ -190,6 +190,11 @@ class GroupMixin:
     # --- the switch and the settings ----------------------------------------------------------------------------
     def set_group(self, gid: str, body: dict) -> dict:
         """Create or change one group from the page's form. Every field is checked; nothing is half written."""
+        old, new = self.group_checked(gid, body)
+        return self.write_group(gid, old, new)
+
+    def group_checked(self, gid: str, body: dict) -> tuple:
+        """(the group as it is, {} when new; the group `body` would make). GroupError with the sentence; writes nothing."""
         if not isinstance(gid, str) or not GROUP_ID_RE.fullmatch(gid):
             raise GroupError("A group id is lowercase letters, digits, - or _.")
         if gid not in self.groups and len(self.groups) >= MAX_GROUPS:
@@ -245,10 +250,15 @@ class GroupMixin:
             raise GroupError("on must be true or false.")
         if on and (not members or not accounts):
             raise GroupError("A group needs a strategy and an account before it can go on.")
+        return old, {"name": name.strip(), "members": members, "accounts": accounts, "risk_usd": float(risk),
+                     "risk_by": risk_by, "max_minis": minis, "mode": mode, "assign": assign, "on": on,
+                     "last": old.get("last") if old.get("last") in accounts else None}
+
+    def write_group(self, gid: str, old: dict, new: dict) -> dict:
+        """Write a group group_checked made (its own or a set of them checked together: routes/setup.py)."""
         had = self.groups.get(gid)
-        self.groups[gid] = {"name": name.strip(), "members": members, "accounts": accounts, "risk_usd": float(risk),
-                            "risk_by": risk_by, "max_minis": minis, "mode": mode, "assign": assign, "on": on,
-                            "last": old.get("last") if old.get("last") in accounts else None}
+        on, mode, members = new["on"], new["mode"], new["members"]
+        self.groups[gid] = new
         try:
             self._save_groups()
         except Exception:  # noqa: BLE001 -- the memory goes back with the file: never a switch that is on only in memory
@@ -269,7 +279,12 @@ class GroupMixin:
     def follow_group(self, gid: str, name: str | None = None, members: list | None = None) -> dict:
         """The charts service's Desk group changed (a rename, a strategy moved in or out): its cycle follows, in the same
         request, server side (never left to a page). Members the Desk does not hold as Lab strategies are left out; a cycle
-        left with no strategy goes off. GroupMissing when the group has no cycle (nothing to follow)."""
+        left with no strategy goes off. GroupMissing when the group has no cycle (nothing to follow). The books follow too
+        in routes/setup.py (the route the charts service calls)."""
+        return self.set_group(gid, self.follow_body(gid, name, members))
+
+    def follow_body(self, gid: str, name: str | None = None, members: list | None = None) -> dict:
+        """follow_group's change as a set_group body."""
         if gid not in self.groups:
             raise GroupMissing("No such group.")
         body: dict = {}
@@ -279,7 +294,9 @@ class GroupMixin:
             body["members"] = [m for m in members if isinstance(m, str) and getattr(self.cfg.strategies.get(m), "kind", None) == LAB]
             if not body["members"]:
                 body["on"] = False
-        return self.set_group(gid, body)
+            elif not self.groups[gid]["members"]:        # an emptied team that gets a strategy back routes again
+                body["on"] = bool(self.groups[gid]["accounts"])
+        return body
 
     def delete_group(self, gid: str) -> None:
         if gid not in self.groups:

@@ -184,14 +184,6 @@ function labDeskView(name, s) {
   const isDay = (d) => /^\d{4}-\d\d-\d\d$/.test(String(d));
   const days = (row && Array.isArray(row.days) ? row.days : []).map(DeskLab.matchLine).map(m =>
     `<div class="feed-row"><span class="t">${esc(isDay(m.date) ? shortDay(m.date) : m.date)}</span><span class="h${m.ok === false ? " warn" : ""}">${esc(m.text)}</span>${m.rebuilt ? '<span class="t dim">rebuilt</span>' : ""}<span class="t net">${esc(usdS(m.net))}</span></div>`);
-  const rows = book.map(a => acctRow(a.account, {qty: a.qty, strategy: name, locked: ro, row: a})).join("");
-  const free = Object.keys(accts).filter(id => !book.some(a => a.account === id));
-  const addForm = !Object.keys(accts).length ? `<div class="mcap">Add an account to run this strategy.</div>`
-    : lock.locked ? `<div class="mcap">${esc(lock.caption)}</div>`                // one line says how it gets accounts, no dead button
-    : free.length ? `<div style="position:relative;display:inline-block;margin-top:10px">
-        <button class="btn btn-quiet noarrow btn-sm" onclick="toggleAsgMenu(${jsArg(name)})" aria-haspopup="menu">+ Assign an account</button>
-        <div class="amenu" id="amenu-${esc(name)}" role="menu" hidden>` +
-        free.map(id => `<button class="mi2" role="menuitem" onclick="pickAsg(${jsArg(name)},${jsArg(id)},${+c.qty || 1})">${esc(accts[id].label || id)}</button>`).join("") + `</div></div>` : "";
   return `<button class="back" onclick="setView('today')">‹ Today</button>
     <div class="sd-top"><div><h1 class="sd-title">${esc(nm)}</h1><div class="sp mono">${esc(specOf(c, name))}</div></div>${sw}</div>
     <div class="sd-state"><b>${esc(DeskLab.deskState(s, book))}</b>${sh ? ` · today would be ${esc(usdS(sh.net))}` : p != null ? ` · today ${esc(usdS(p))}` : ""}</div>
@@ -205,7 +197,7 @@ function labDeskView(name, s) {
     ${old.length ? `<div class="sec"><h2>${esc(DeskLab.OLD_TITLE)}</h2><div class="agroup feed static">${old.join("")}</div></div>` : ""}
     ${row ? `<div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
     ${labCurveHtml(row.name)}${labResHtml(row.name, name)}` : ""}
-    <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div>` : ""}${ro ? "" : rotationHtml(name)}${addForm}</div>
+    ${labSafe(() => soloSetupHtml(name, s, ro, lock), "")}
     ${labSafe(() => deskChangesHtml("s:" + name), "")}
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat(${jsArg(name)})" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       ${deskMachine() === "server" ? "" : `<button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>`}
@@ -584,6 +576,96 @@ function renderMain(names, issues) {
   else if (VIEW.k === "archive") $("#viewStrat").innerHTML = labSafe(() => archiveView(), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${LAB_FAULT}</div>`);
 }
 
+/* Set up a strategy on its own (the owner, 2026-11-02): the same card as a team's, smaller -- the accounts to tick, contracts,
+   Take turns, Hold overnight and one Save (POST /api/setup: its accounts and Take turns in one go, checked whole first). ON / OFF is
+   the page's own switch. A strategy in a team is set up on the team's page (the server refuses a solo save for it). */
+let SOLO_DRAFT = {};
+const soloTeam = (name) => DESKGROUPS.groups.find(g => g.members.includes(name))
+  || Object.entries((ST && ST.groups) || {}).map(([id, g]) => ({id, name: g.name, members: g.members || []})).find(g => g.members.includes(name)) || null;
+function soloNow(name) {      // what the desk has now, in the card's terms
+  const s = ST.strategies[name], book = ((ST.book || {})[name] || []).filter(r => r.account in (ST.accounts || {}));
+  return {accounts: book.map(r => r.account), qty: +(book[0] || {}).qty || +s.cfg.qty || 1, turns: !!((s.rotation || {}).on), hold: book.some(r => r.hold === true)};
+}
+function soloBody(name) {
+  const root = document.querySelector("#viewStrat"), q = (sel) => root && root.querySelector(sel);
+  const accounts = [...(root ? root.querySelectorAll(".solo-acct") : [])].filter(b => b.checked).map(b => b.dataset.acct);
+  return {strategy: name, accounts, qty: Math.round(cycNum(q(".solo-qty") ? q(".solo-qty").value : 1)),
+          turns: !!(q(".solo-turns") && q(".solo-turns").checked), hold: !!(q(".solo-hold") && q(".solo-hold").checked)};
+}
+function soloDiff(now, b) {
+  const parts = [...b.accounts.filter(a => !now.accounts.includes(a)).map(a => "+" + acctShort(a)),
+                 ...now.accounts.filter(a => !b.accounts.includes(a)).map(a => "−" + acctShort(a))];
+  if (b.qty !== now.qty) parts.push(`${now.qty} → ${Number.isFinite(b.qty) ? b.qty : "?"} contracts`);
+  if (b.turns !== now.turns) parts.push(b.turns ? "take turns" : "every account");
+  if (b.hold !== now.hold) parts.push(b.hold ? "holds overnight" : "flat each night");
+  return parts;
+}
+const soloSaveHtml = (name, parts) => parts.length ? `<div class="sd-actions"><button class="btn btn-default btn-sm" onclick="FREEZE=false;saveSolo(${jsArg(name)})">Save: ${esc(parts.join(" · "))}</button></div>` : "";
+function soloEdit(name) {
+  const root = document.querySelector("#viewStrat");
+  if (!root) return;
+  const b = soloBody(name), parts = soloDiff(soloNow(name), b);
+  if (parts.length) SOLO_DRAFT[name] = {accounts: b.accounts, qty: String(root.querySelector(".solo-qty").value), turns: b.turns, hold: b.hold};
+  else delete SOLO_DRAFT[name];
+  const slot = root.querySelector(".solo-save");
+  if (slot) slot.innerHTML = soloSaveHtml(name, parts);
+}
+function soloStatus(name, s, now) {
+  const bad = [], accts = ST.accounts || {};
+  if (!ST.armed) bad.push("the Desk is OFF");
+  if (s.cfg.enabled !== true) bad.push("it is OFF");
+  if ((s.lab || {}).state === "stopped") bad.push("it is stopped for today");
+  if ((s.lab || {}).state === "runner_down") bad.push("its runner is not running");
+  for (const a of now.accounts) {
+    if (!(accts[a] || {}).connected) bad.push(`account ${acctShort(a)} is offline`);
+    else if ((accts[a].day || {}).locked) bad.push(`account ${acctShort(a)} is stopped for today`);
+  }
+  if (bad.length) return {ok: false, text: "Not trading: " + bad.join(" · ")};
+  if (!now.accounts.length) return {ok: true, text: "No account: it runs as practice"};
+  return {ok: true, text: `Ready: trades on ${now.accounts.map(acctShort).join(" and ")}${now.accounts.length > 1 ? (now.turns ? ", take turns" : ", every account") : ""}, ${plural(now.qty, "contract", "contracts")}`};
+}
+function soloSetupHtml(name, s, ro, lock) {
+  const team = soloTeam(name);
+  if (team) return `<div class="sec"><h2>Set up</h2><div class="mcap">In the team ${esc(team.name)}: its accounts, size and Trading switch are set on the team's page.</div>
+    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="setView('group',${jsArg(team.id)})">Open ${esc(team.name)}</button></div></div>`;
+  const accts = ST.accounts || {}, now = soloNow(name), dr = SOLO_DRAFT[name] || null, st = soloStatus(name, s, now);
+  const status = `<div class="mcap ${st.ok ? "pos" : "warn"}">${esc(st.text)}.</div>`;
+  if (!Object.keys(accts).length) return `<div class="sec"><h2>Set up</h2><div class="mcap">Add an account to run this strategy.</div>${status}</div>`;
+  if (ro || lock.locked) return `<div class="sec"><h2>Set up</h2>${lock.locked ? `<div class="mcap">${esc(lock.caption)}</div>` : ""}${status}</div>`;
+  const chosen = new Set(dr ? dr.accounts : now.accounts), off = ` onchange="soloEdit(${jsArg(name)})"`;
+  const tagCls = {LIVE: "tag-live", PAPER: "tag-paper", DEMO: "tag"};
+  const boxes = Object.keys(accts).map(a => `<label class="feed-row" style="cursor:pointer">
+      <span class="h"><input type="checkbox" class="solo-acct" data-acct="${esc(a)}" ${chosen.has(a) ? "checked" : ""}${off}> ${esc(acctShort(a))}
+        <span class="${tagCls[cycleEnvWord(a)]}">${cycleEnvWord(a)}</span>${accts[a].connected ? "" : ' <span class="neg">offline</span>'}</span>
+      ${(p => p == null ? "" : `<span class="mono ${p > 0 ? "pos" : p < 0 ? "neg" : ""}" style="margin-left:auto" title="Today, 18:00 to 16:00 ET">${DAY_PNL_WORDS(p)}</span>`)(accts[a].day_pnl)}</label>`).join("");
+  const turns = dr ? dr.turns : now.turns, hold = dr ? dr.hold : now.hold;
+  return `<div class="sec"><h2>Set up</h2><div class="agroup feed static">${boxes}
+    <div class="feed-row"><span class="h">Contracts per account</span><span class="t"><input class="solo-qty" type="text" inputmode="numeric" autocomplete="off"
+      value="${esc(String(dr ? dr.qty : now.qty))}" style="width:72px;text-align:right" onfocus="FREEZE=true" onblur="FREEZE=false" oninput="soloEdit(${jsArg(name)})"></span></div>
+    <label class="feed-row" style="cursor:pointer" title="With 2 or more accounts: each trade goes to ONE account, the next free one"><span class="h"><input type="checkbox" class="solo-turns" ${turns ? "checked" : ""}${off}> Take turns: one account a trade</span></label>
+    <label class="feed-row" style="cursor:pointer" title="Keeps a filled trade open past the day's flat time"><span class="h"><input type="checkbox" class="solo-hold" ${hold ? "checked" : ""}${off}> Hold overnight</span></label></div>
+    <div class="solo-save">${dr ? soloSaveHtml(name, soloDiff(now, {...dr, qty: Math.round(cycNum(dr.qty))})) : ""}</div>${status}
+    <div class="mcap">For $ risk per trade, put it in a team.</div></div>`;
+}
+/* Asks first when (ON, on any account that is not paper -- LIVE or DEMO, as its tag says): one is ticked in or the size goes
+   up; it stops taking turns; or it loses its last account while ON (today is over for it; it trades again tomorrow). */
+async function saveSolo(name) {
+  const s = ST.strategies[name], now = soloNow(name), b = soloBody(name), on = s.cfg.enabled === true, N = stratLabel(name);
+  const parts = soloDiff(now, b), liveIn = b.accounts.filter(a => !now.accounts.includes(a) && isRealAcct(a)), live = b.accounts.filter(isRealAcct);
+  const why = [];
+  if (on && liveIn.length) why.push(`${riskWord(liveIn)} account${liveIn.length === 1 ? "" : "s"} ticked in: ${liveIn.map(acctShort).join(", ")}.`);
+  if (on && live.length && b.qty > now.qty) why.push(`${b.qty} contracts on ${riskWord(live)} accounts.`);
+  if (on && !b.turns && now.turns && live.length && b.accounts.length > 1) why.push(`Each trade then goes to all ${b.accounts.length} accounts, ${riskWord(live)} ones included.`);
+  if (on && now.accounts.length && !b.accounts.length) why.push("It loses its last account: today is over for it; it trades again tomorrow.");
+  if (why.length && !await confirmDlg(`Change ${N}?`, `${parts.join(" · ")}. ${why.join(" ")}${machineWords() ? " It runs " + machineWords() + "." : ""}`, "Save", false)) { refresh(); return; }
+  let r, err = null;
+  try { r = await post("/api/setup", {...b, on}); } catch (e) { err = e || new Error("no answer"); }
+  const w = DEMO ? null : answerWhy(r, err);
+  if (w === "") delete SOLO_DRAFT[name];
+  refresh();
+  if (!DEMO) toast(w ? `${N} NOT saved — ${w}.` : `${N} saved.`, w ? 8000 : 4200);
+}
+
 function render() {
   const s = ST;
   $("#clock").textContent = hbClock(String(s.et_now).slice(11, 19)) + " ET";
@@ -691,4 +773,3 @@ async function refresh() {
     if ($("#settingsOverlay").classList.contains("open")) renderSettings();
   }
 }
-

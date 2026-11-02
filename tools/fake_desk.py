@@ -1363,6 +1363,8 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
 
     from homebase.routes import groups as group_routes
     group_routes.register(app, engine=engine)            # the server's own account cycle routes, not a copy
+    from homebase.routes import setup as setup_routes
+    setup_routes.register(app, cfg=cfg, engine=engine, labdesk=labdesk)      # the Set-up save and the follow, not a copy
 
     @app.post("/api/strategy-flatten")
     async def strategy_flatten(request: Request):

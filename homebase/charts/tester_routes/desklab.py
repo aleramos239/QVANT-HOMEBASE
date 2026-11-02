@@ -648,9 +648,11 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
             return None
         before = {g["id"]: g for g in deskgroups.load()}
         after = await asyncio.to_thread(deskgroups.preview, what, body)
-        calls = [("/api/groups/delete", {"id": body.get("id")})] if what == "delete" else [
-            ("/api/groups/follow", {"id": g["id"], "name": g["name"], "members": g["members"]})
-            for g in after if g["id"] in before and (before[g["id"]]["members"], before[g["id"]]["name"]) != (g["members"], g["name"])]
+        changed = [{"id": g["id"], "name": g["name"], "members": g["members"]}
+                   for g in after if g["id"] in before and (before[g["id"]]["members"], before[g["id"]]["name"]) != (g["members"], g["name"])]
+        # every group a move changes in ONE call: a strategy moved from one team to another is booked over in one write
+        calls = [("/api/groups/delete", {"id": body.get("id")})] if what == "delete" else \
+            [("/api/groups/follow", {"groups": changed})] if changed else []
         for path_, payload in calls:
             code, detail = await asyncio.to_thread(desk_post, path_, payload)
             if code not in (200, 404):                      # 404: that group has no cycle

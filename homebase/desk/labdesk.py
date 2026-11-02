@@ -748,15 +748,25 @@ class LabDesk:
             if why is not None:
                 raise Refused(why)
 
-    async def set_book(self, name: str, rows: list) -> None:
-        """A Lab strategy's book (it lives in its sidecar, never in config.json): the checks, then the file, then the
-        desk's memory. `rows` are the new rows FOR THIS DESK'S POOL; the rows of accounts that are not in the pool are
-        kept as they are, unposted. Refused with the sentence; nothing changes then."""
+    def can_book(self, name: str, rows: list) -> None:
+        """set_book's checks alone (Refused with the sentence): so a save of several books refuses as a whole."""
         if not self.on:
             raise Refused(SWITCHED_OFF)
         self._need(name)
         self._must_own()
         self.check_book(name, rows)
+
+    def can_enable(self, name: str) -> None:
+        """set_enabled(name, True)'s own checks (Refused with the sentence); a record promoted again still answers False there."""
+        self._must_own()
+        if labcfg.unreadable(self.cfg, name):
+            raise Refused(CANNOT_READ)
+
+    async def set_book(self, name: str, rows: list) -> None:
+        """A Lab strategy's book (it lives in its sidecar, never in config.json): the checks, then the file, then the
+        desk's memory. `rows` are the new rows FOR THIS DESK'S POOL; the rows of accounts that are not in the pool are
+        kept as they are, unposted. Refused with the sentence; nothing changes then."""
+        self.can_book(name, rows)
         # the rows of accounts that are not in this desk's pool are not its to take off: they stay as they are
         others = [dict(r) for r in self.cfg.book.get(name) or [] if r.get("account") not in self.cfg.accounts]
         await self._commit(name, labcfg.limits_of(self.cfg, name),
@@ -773,9 +783,7 @@ class LabDesk:
             return False
         on = bool(on)
         if on:
-            self._must_own()
-            if labcfg.unreadable(self.cfg, name):
-                raise Refused(CANNOT_READ)
+            self.can_enable(name)
         cfg, at, sname, mark = self.cfg, self._at, labcfg.store_name(name), labcfg.mark_of(self.cfg, name)
 
         def keep(rec) -> bool:

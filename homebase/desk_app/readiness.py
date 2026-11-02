@@ -109,12 +109,26 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
     # an event-day strategy (only_dates) is not part of a day it does not trade
     enabled = {n: s for n, s in cfg.strategies.items()
                if s.enabled and s.trades_on(now_et.date())}
+    teams = getattr(engine, "groups", None) or {}
+    for name, s in cfg.strategies.items():             # switched OFF on accounts: says it, so OFF is never a surprise
+        if getattr(s, "kind", "straddle") == "lab" and not s.enabled and config_mod.assignments(cfg, name):
+            checks.append({"level": "info", "label": shown(name), "detail": "switched OFF: it will not trade"})
     for name, s in enabled.items():
-        if not config_mod.assignments(cfg, name):
+        booked = [a["account"] for a in config_mod.assignments(cfg, name)]
+        if not booked:
             if getattr(s, "kind", "straddle") == "lab":      # a promoted Lab strategy: its resting state too
-                checks.append({"level": "info", "label": shown(name),
-                               "detail": "no account: runs in shadow"})
+                team = next((g for g in teams.values() if name in g.get("members", ()) and g.get("mode") == "split"), None)
+                checks.append({"level": "warn", "label": shown(name),
+                               "detail": f"in team {team['name']} with no account: it never trades"} if team else
+                              {"level": "info", "label": shown(name), "detail": "no account: runs in shadow"})
                 continue
+        elif getattr(s, "kind", "straddle") == "lab":       # its accounts stopped for the day (day take / lock / loss)
+            locked = [a for a in booked if engine.account_locked(a)]
+            if locked:
+                names = ", ".join((cfg.accounts[a].label or a) if a in cfg.accounts else a for a in locked)
+                checks.append({"level": "warn" if len(locked) == len(booked) else "info", "label": shown(name),
+                               "detail": f"account stopped for today: {names}"})
+        if not booked:
             # a SHADOW strategy with no account is a normal resting state —
             # it must not hold the bulb amber forever
             checks.append({"level": "info" if getattr(s, "shadow", False) else "warn",

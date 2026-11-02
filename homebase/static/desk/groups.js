@@ -186,50 +186,43 @@ function groupView(id) {
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openGroupMgr()">Manage groups</button>
       <button class="btn btn-outline btn-sm" onclick="deleteGroup(${jsArg(g.id)})" title="The strategies stay on the Desk, in no group.">Delete group</button></div>`;
 }
-/* Account group (the owner, 2026-10-25): the group's strategies share ONE turn over the ticked accounts -- each trade goes to
-   the next ticked account that is free, so two trades may be open at once but only on separate accounts; a trade opposite
-   to one open on another of these accounts is skipped (no long on one while a short is on another); with a risk set,
-   every order is sized to that many dollars at its own stop. Off by default. The engine keeps it (POST /api/groups).
-   Each strategy must still be booked on the accounts (its own Accounts section): an account it is not booked on is
-   not in its turn. */
+/* Set up a team (the owner, 2026-11-02: "easy to set up impossible to get confused and mess it up"). A team = this Desk group
+   and its account group, always together. ONE card: the accounts to tick, how they share the trades, the size, Hold overnight
+   per strategy, ONE Trading switch and ONE Save. Both send the whole card to POST /api/setup, which writes the account group,
+   every strategy's accounts and ON / OFF in one go, checked whole first (a refusal writes nothing). A strategy in a team
+   trades only the team's accounts; one that leaves the group loses them (the server does both). */
 function cycleMembers(g) {
   return (g.members || []).filter(m => ST.strategies[m] && ST.strategies[m].cfg.kind === "lab");
 }
-/* Risk, Most and the ticks save only on the card's one Save button, which reads old → new ("Save: Risk $1,000 → $1,500 ·
-   +…026"). What is typed or ticked but not saved is kept here, per group, so a repaint never wipes it. */
+/* What is typed or ticked but not saved is kept here, per team, so a repaint never wipes it. */
 let CYC_DRAFT = {};
-const cycNum = (s) => Number(String(s).replace(/[$,\s]/g, ""));
-// A member's dollars at risk in a cycle: its own amount (risk_by), else the cycle's (engine_groups.member_risk)
-const cycRisk = (g, m) => Number(((g && g.risk_by) || {})[m]) || Number(g && g.risk_usd) || 0;   // "$1,500" -> 1500; the one parse for the body and the Save button
-/* Three ways a group trades its accounts (owner, 2026-10-30); the hedge block covers its accounts in every one. */
-const CYC_MODES = {cycle: "Take turns: one account a trade", share: "Every account takes every trade", split: "One strategy per account"};
+const cycNum = (s) => Number(String(s).replace(/[$,\s]/g, ""));   // "$1,500" -> 1500
+// A member's dollars at risk in a team: its own amount (risk_by), else the team's (engine_groups.member_risk)
+const cycRisk = (g, m) => Number(((g && g.risk_by) || {})[m]) || Number(g && g.risk_usd) || 0;
+/* Three ways a team trades its accounts (owner, 2026-10-30); the hedge block covers its accounts in every one. */
+const CYC_MODES = {cycle: "Take turns: one account a trade", share: "Every account takes every trade", split: "One account each"};
 const cycMode = (g) => (g && CYC_MODES[g.mode]) ? g.mode : "cycle";
-const CYC_TITLES = {cycle: "Account cycle", share: "Every account, every trade", split: "One strategy per account"};
-/* Split, as saved: one row per account of the group -- the strategy that trades it, its size, whether it is booked there. */
-function splitRows(cyc, mem) {
-  const by = Object.fromEntries(Object.entries(cyc.assign || {}).map(([m, a]) => [a, m]));
-  const booked = (m, a) => ((ST.book || {})[m] || []).some(r => r.account === a);
-  const rows = cyc.accounts.map(a => {
-    const m = by[a], risk = m ? ((cyc.risk_by || {})[m] || cyc.risk_usd) : 0, acc = (ST.accounts || {})[a] || {}, p = acc.day_pnl;
-    return `<div class="feed-row"><span class="h">${esc(acctShort(a))} <span class="dim">${esc(cycleEnvWord(a))}</span></span>
-      <span class="t">${m ? `<b>${esc(stratLabel(m))}</b> · ${+risk > 0 ? "$" + (+risk).toLocaleString("en-US") + " a trade" : "its own size"}${booked(m, a) ? "" : ' · <span class="neg">not booked</span>'}`
-        : '<span class="dim">no strategy</span>'}${p == null ? "" : ` <span class="mono ${p > 0 ? "pos" : p < 0 ? "neg" : ""}" title="Today, 18:00 to 16:00 ET">${DAY_PNL_WORDS(p)}</span>`}</span></div>`;
-  }).join("");
-  const none = cyc.members.filter(m => !(cyc.assign || {})[m]);
-  return `<div class="agroup feed static">${rows}${none.length ? `<div class="feed-row"><span class="h neg">No account</span><span class="t">${esc(none.map(stratLabel).join(", "))}</span></div>` : ""}</div>`;
-}
 const cycUsd = (v) => Number.isFinite(v) ? "$" + v.toLocaleString("en-US") : "?";
 const cycleEnvWord = (a) => !isDemoAcct(a) ? "LIVE" : ((((ST && ST.accounts) || {})[a] || {}).env === "paper" ? "PAPER" : "DEMO");
-/* What a save would change, against what the desk has now (no cycle yet: the card's defaults, $1,000 and 17, no account).
+/* The word for accounts that are not paper (the ones a save asks about), as their tags say: LIVE if one is, else DEMO. */
+const riskWord = (as) => as.some(a => cycleEnvWord(a) === "LIVE") ? "LIVE" : "DEMO";
+const holdOf = (m) => ((ST.book || {})[m] || []).some(r => r.hold === true);
+const teamOn = (mem) => mem.length > 0 && mem.every(m => ST.strategies[m].cfg.enabled === true);
+/* The accounts each strategy ends on after a save (as routes/setup.team_books): the team's ticked ones, or (One account each) its own. */
+const teamWant = (b, m) => (b.mode || "cycle") === "split" ? ((b.assign || {})[m] ? [b.assign[m]] : []) : b.accounts;
+// accounts a member is booked on that the team does not give it (booked before it joined): a save takes them off
+const teamStray = (b, m) => ((ST.book || {})[m] || []).map(r => r.account).filter(a => a in (ST.accounts || {}) && !teamWant(b, m).includes(a));
+/* What a save would change, against what the desk has now (no team yet: the card's defaults, $1,000 and 17, no account).
    up: risk or Most goes up -- or risk goes to 0 ("each strategy's own size"), which may be bigger, so it counts as up. */
 function cycleDiff(cyc, nw) {
-  const old = cyc ? {risk: cyc.risk_usd, minis: cyc.max_minis, accounts: cyc.accounts || [], by: cyc.risk_by || {}, mode: cycMode(cyc), assign: cyc.assign || {}}
-                  : {risk: 1000, minis: 17, accounts: [], by: {}, mode: "cycle", assign: {}};
+  const old = cyc ? {risk: cyc.risk_usd, minis: cyc.max_minis, accounts: cyc.accounts || [], by: cyc.risk_by || {}, mode: cycMode(cyc), assign: cyc.assign || {}, members: cyc.members || []}
+                  : {risk: 1000, minis: 17, accounts: [], by: {}, mode: "cycle", assign: {}, members: []};
   const mode = nw.mode || old.mode, assign = nw.assign || old.assign;     // no box sent: the desk's own stay
   const was = {risk_usd: old.risk, risk_by: old.by}, by = nw.risk_by || old.by;     // no boxes sent: the desk's own amounts stay
   // an account the Desk removed is not "gone" by a save: no tick can show it, and the save never sends it (cycleBody)
   const added = nw.accounts.filter(a => !old.accounts.includes(a)), gone = old.accounts.filter(a => a in ((ST && ST.accounts) || {}) && !nw.accounts.includes(a));
   const parts = [];
+  for (const m of (nw.members || []).filter(m => !old.members.includes(m))) parts.push(`+ ${stratLabel(m)}`);
   if (nw.risk_usd !== old.risk) parts.push(`Risk ${cycUsd(old.risk)} → ${cycUsd(nw.risk_usd)}`);
   const own = [...new Set([...Object.keys(old.by), ...Object.keys(by)])].filter(m => (+old.by[m] || 0) !== (+by[m] || 0));
   for (const m of own) parts.push(`${stratLabel(m)} ${cycUsd(cycRisk(was, m))} → ${cycUsd(cycRisk(nw, m))}`);
@@ -239,15 +232,21 @@ function cycleDiff(cyc, nw) {
   for (const m of moved) parts.push(`${stratLabel(m)} on ${old.assign[m] ? acctShort(old.assign[m]) : "no account"} → ${assign[m] ? acctShort(assign[m]) : "no account"}`);
   for (const a of added) parts.push("+" + acctShort(a));
   for (const a of gone) parts.push("−" + acctShort(a));
-  const members = [...new Set([...((cyc && cyc.members) || []), ...(nw.members || []), ...Object.keys(by)])];
+  for (const m of (nw.members || []).filter(m => !moved.includes(m))) {
+    const off = teamStray({mode, assign, accounts: nw.accounts}, m).filter(a => !gone.includes(a));
+    if (off.length) parts.push(`${stratLabel(m)} off ${off.map(acctShort).join(", ")}`);
+  }
+  const held = Object.entries(nw.hold || {}).filter(([m, h]) => h !== holdOf(m));
+  for (const [m, h] of held) parts.push(`${stratLabel(m)} ${h ? "holds overnight" : "flat each night"}`);
+  const members = [...new Set([...old.members, ...(nw.members || []), ...Object.keys(by)])];
   const up = !(nw.risk_usd <= old.risk) || (old.risk > 0 && nw.risk_usd === 0) || !(nw.max_minis <= old.minis)
     || members.some(m => !(cycRisk(nw, m) <= cycRisk(was, m)) || (cycRisk(was, m) > 0 && cycRisk(nw, m) === 0))
-    || (mode === "share" && old.mode !== "share") || moved.some(m => assign[m]);     // more accounts a trade, or a new account
+    || (mode === "share" && old.mode !== "share") || moved.some(m => assign[m]) || held.some(([, h]) => h);
   return {parts, up, liveIn: added.filter(isRealAcct)};
 }
 const cycByBody = (raw) => Object.fromEntries(Object.entries(raw || {}).filter(([, v]) => String(v).trim() !== "").map(([m, v]) => [m, cycNum(v)]));
-const cycleDraftBody = (dr) => ({risk_usd: cycNum(dr.risk), risk_by: cycByBody(dr.by), max_minis: Math.round(cycNum(dr.minis)),
-                                 ...(dr.mode ? {mode: dr.mode} : {}), ...(dr.assign ? {assign: dr.assign} : {}),
+const cycleDraftBody = (dr) => ({members: dr.members || [], risk_usd: cycNum(dr.risk), risk_by: cycByBody(dr.by), max_minis: Math.round(cycNum(dr.minis)),
+                                 ...(dr.mode ? {mode: dr.mode} : {}), ...(dr.assign ? {assign: dr.assign} : {}), ...(dr.hold ? {hold: dr.hold} : {}),
                                  accounts: dr.accounts.filter(a => a in ((ST && ST.accounts) || {}))});   // as cycleBody reads the ticks
 function cycleSaveHtml(id, cyc, nw) {
   const d = nw ? cycleDiff(cyc, nw) : {parts: []};
@@ -260,165 +259,127 @@ function cycleEdit(id) {
   const raw = (sel) => { const el = root.querySelector(sel); return el ? String(el.value) : ""; };
   const b = cycleBody(id), cyc = ((ST && ST.groups) || {})[id] || null;
   const by = Object.fromEntries([...root.querySelectorAll(".cyc-risk-m")].map(el => [el.dataset.m, String(el.value)]));
-  if (cycleDiff(cyc, b).parts.length) CYC_DRAFT[id] = {risk: raw(".cyc-risk"), minis: raw(".cyc-minis"), accounts: b.accounts, by,
-                                                       ...(b.mode ? {mode: b.mode} : {}), ...(b.assign ? {assign: b.assign} : {})};
+  if (cycleDiff(cyc, b).parts.length) CYC_DRAFT[id] = {risk: raw(".cyc-risk"), minis: raw(".cyc-minis"), accounts: b.accounts, by, members: b.members,
+                                                       ...(b.mode ? {mode: b.mode} : {}), ...(b.assign ? {assign: b.assign} : {}), ...(b.hold ? {hold: b.hold} : {})};
   else delete CYC_DRAFT[id];
   const slot = root.querySelector(".cyc-save");
   if (slot) slot.innerHTML = cycleSaveHtml(id, cyc, b);
 }
+/* The status line under the card: green "Ready: ..." or red with every reason it will not trade, in words. */
+function teamStatus(cyc, mem) {
+  const accts = cyc && cyc.on ? (cyc.accounts || []).filter(a => a in (ST.accounts || {})) : [], bad = [];
+  if (!ST.armed) bad.push("the Desk is OFF");
+  if (!mem.length) bad.push("no strategy in this team yet (Manage groups)");
+  else if (!accts.length) bad.push("no account ticked: its strategies run as practice");
+  for (const a of accts) {
+    const x = ST.accounts[a] || {};
+    if (!x.connected) bad.push(`account ${acctShort(a)} is offline`);
+    else if (x.day && x.day.locked) bad.push(`account ${acctShort(a)} is stopped for today`);
+  }
+  if (cyc && cycMode(cyc) === "split" && accts.length) mem.filter(m => !(cyc.assign || {})[m] && !((ST.book || {})[m] || []).length).forEach(m => bad.push(`${stratLabel(m)} has no account`));
+  mem.filter(m => cyc && !(cyc.members || []).includes(m)).forEach(m => bad.push(`${stratLabel(m)} is not saved in the team yet`));
+  mem.forEach(m => { const off = teamStray({mode: cycMode(cyc), assign: (cyc && cyc.assign) || {}, accounts: accts}, m);
+    if (off.length) bad.push(`${stratLabel(m)} is still on ${off.map(acctShort).join(", ")}, outside this team`); });
+  mem.filter(m => ST.strategies[m].cfg.enabled !== true).forEach(m => bad.push(`${stratLabel(m)} is OFF`));
+  mem.filter(m => (ST.strategies[m].lab || {}).state === "stopped").forEach(m => bad.push(`${stratLabel(m)} is stopped for today`));
+  mem.filter(m => (ST.strategies[m].lab || {}).state === "runner_down").forEach(m => bad.push(`${stratLabel(m)}'s runner is not running`));
+  if (bad.length) return {ok: false, text: "Not ready: " + bad.join(" · ")};
+  const risk = mem.some(m => cycRisk(cyc, m) > 0) ? (new Set(mem.map(m => cycRisk(cyc, m))).size === 1 ? cycUsd(cycRisk(cyc, mem[0])) + " a trade" : "each strategy's own $ a trade") : "each strategy's own size";
+  return {ok: true, text: `Ready: trades on ${accts.map(acctShort).join(" and ")}, ${CYC_MODES[cycMode(cyc)].toLowerCase()}, ${risk}`};
+}
 function cycleHtml(g) {
   const cyc = ((ST && ST.groups) || {})[g.id] || null, mem = cycleMembers(g), dr = CYC_DRAFT[g.id] || null;
-  if (!mem.length && !cyc) return `<div class="sec"><h2>Account group</h2><div class="mcap">Put this group's strategies in it first
-    (Manage groups): then tick the accounts here and switch the cycle on.</div></div>`;
-  const on = !!(cyc && cyc.on), chosen = new Set(dr ? dr.accounts : cyc ? cyc.accounts : []);
-  const mode = (dr && dr.mode) || cycMode(cyc), assign = (dr && dr.assign) || (cyc && cyc.assign) || {};
-  const turn = on ? labSafe(() => cycleLastTurn(g), "") : "";
+  if (!mem.length && !cyc) return `<div class="sec"><h2>Set up</h2><div class="mcap">Put this team's strategies in it first
+    (Manage groups): then tick its accounts here and switch it on.</div></div>`;
+  const on = teamOn(mem), some = !on && mem.some(m => ST.strategies[m].cfg.enabled === true);
+  const chosen = new Set(dr ? dr.accounts : cyc ? cyc.accounts : []);
+  const mode = (dr && dr.mode) || cycMode(cyc), assign = (dr && dr.assign) || (cyc && cyc.assign) || {}, hold = (dr && dr.hold) || {};
+  const turn = cyc && cyc.on ? labSafe(() => cycleLastTurn(g), "") : "";
   const tagCls = {LIVE: "tag-live", PAPER: "tag-paper", DEMO: "tag"};
   const boxes = Object.keys(ST.accounts || {}).map(a => `<label class="feed-row" style="cursor:pointer">
       <span class="h"><input type="checkbox" class="cyc-acct" data-acct="${esc(a)}" ${chosen.has(a) ? "checked" : ""}
-        onchange="cycleEdit(${jsArg(g.id)})"> ${esc(acctShort(a))} <span class="${tagCls[cycleEnvWord(a)]}">${cycleEnvWord(a)}</span></span>
+        onchange="cycleEdit(${jsArg(g.id)})"> ${esc(acctShort(a))} <span class="${tagCls[cycleEnvWord(a)]}">${cycleEnvWord(a)}</span>${ST.accounts[a].connected ? "" : ' <span class="neg">offline</span>'}</span>
       ${(p => p == null ? "" : `<span class="mono ${p > 0 ? "pos" : p < 0 ? "neg" : ""}" style="margin-left:auto" title="Today, 18:00 to 16:00 ET">${DAY_PNL_WORDS(p)}</span>`)(ST.accounts[a].day_pnl)}</label>`).join("");
-  const booked = (m, a) => ((ST.book || {})[m] || []).some(r => r.account === a);
-  const missing = !cyc ? [] : cycMode(cyc) === "split"
-    ? mem.map(m => (cyc.assign || {})[m] ? (booked(m, cyc.assign[m]) ? "" : `${stratLabel(m)} is not booked on ${acctShort(cyc.assign[m])}`)
-                                         : `${stratLabel(m)} has no account: it never trades`).filter(Boolean)
-    : cyc.accounts.map(a => [a, mem.filter(m => !booked(m, a)).length])
-      .filter(x => x[1]).map(([a, n]) => `${acctShort(a)}: ${n} of ${mem.length} strategies not booked`);
   const pick = (m) => `<select class="cyc-assign" data-m="${esc(m)}" aria-label="${esc(stratLabel(m))} account" onfocus="FREEZE=true" onblur="FREEZE=false"
       onchange="cycleEdit(${jsArg(g.id)})"><option value="">no account</option>${[...chosen].map(a => `<option value="${esc(a)}"${assign[m] === a ? " selected" : ""}>${esc(acctShort(a))}</option>`).join("")}</select>`;
-  const out = cyc ? cyc.members.filter(m => !mem.includes(m)) : [], add = cyc ? mem.filter(m => !cyc.members.includes(m)) : [];
   const num = (cls, v, ph, extra) => `<input class="${cls}"${extra || ""} type="text" inputmode="decimal" autocomplete="off" value="${esc(String(v))}"
       placeholder="${ph}" style="width:72px;max-width:100%;text-align:right" onfocus="FREEZE=true" onblur="FREEZE=false" oninput="cycleEdit(${jsArg(g.id)})">`;
-  return `<div class="sec"><h2>${esc(CYC_TITLES[mode])}</h2>${cyc && cycMode(cyc) === "split" && on ? splitRows(cyc, mem) : ""}<div class="agroup feed static">
-    <div class="feed-row"><span class="h">${esc(CYC_MODES[mode])}</span>
-      <button class="switch" role="switch" aria-label="Account group" aria-checked="${on}"
-        title="${on ? "ON — " + CYC_MODES[mode] : "OFF — each strategy trades its own booked accounts"}"
-        onclick="toggleCycle(${jsArg(g.id)})"></button></div>
-    ${on && cyc.next ? `<div class="feed-row"><span class="h">Next account: ${esc(acctShort(cyc.next))}</span></div>` : ""}
+  const st = teamStatus(cyc, mem);
+  return `<div class="sec"><h2>Set up</h2><div class="agroup feed static">
+    <div class="feed-row"><span class="h"><b>Trading</b> ${on ? "ON" : some ? "ON for some" : "OFF"}</span>
+      <button class="switch" role="switch" aria-label="Trading" aria-checked="${on}"
+        title="${on ? "ON: every strategy of the team trades its accounts" : "OFF: no strategy of the team trades"}"
+        onclick="toggleTeam(${jsArg(g.id)})"></button></div>
     ${turn ? `<div class="feed-row"><span class="h">${esc(turn)}</span></div>` : ""}
-    <div class="feed-row"><span class="h">How it trades</span><span class="t"><select class="cyc-mode" aria-label="How the group trades its accounts"
+    ${boxes}
+    <div class="feed-row"><span class="h">How</span><span class="t"><select class="cyc-mode" aria-label="How the team trades its accounts"
       onfocus="FREEZE=true" onblur="FREEZE=false" onchange="FREEZE=false;cycleEdit(${jsArg(g.id)});render()">${Object.entries(CYC_MODES).map(([k, w]) =>
       `<option value="${k}"${k === mode ? " selected" : ""}>${esc(w)}</option>`).join("")}</select></span></div>
     <div class="feed-row"><span class="h">Risk per trade ($)</span><span class="t">${num("cyc-risk", dr ? dr.risk : cyc ? cyc.risk_usd : 1000, "1000")}</span></div>
-    ${mem.map(m => `<div class="feed-row"><span class="h">&nbsp;&nbsp;${esc(stratLabel(m))} ($)</span><span class="t">${num("cyc-risk-m",
-      dr && dr.by && m in dr.by ? dr.by[m] : ((cyc && cyc.risk_by) || {})[m] || "", "same", ` data-m="${esc(m)}" aria-label="${esc(stratLabel(m))} risk per trade"`)}${mode === "split" ? " " + pick(m) : ""}</span></div>`).join("")}
     <div class="feed-row"><span class="h">Most per trade (full contracts)</span><span class="t">${num("cyc-minis", dr ? dr.minis : cyc ? cyc.max_minis : 17, "17")}</span></div>
-    ${boxes}</div>
-    <div class="cyc-save">${dr ? cycleSaveHtml(g.id, cyc, cycleDraftBody(dr)) : ""}</div>
-    <div class="mcap">${mode === "share" ? "Every trade goes to every ticked account the strategy is booked on."
-      : mode === "split" ? "Each strategy trades only the account chosen beside it (it must be booked there)."
+    ${mem.map(m => `<div class="feed-row"><span class="h">${esc(stratLabel(m))}</span><span class="t">${mode === "split" ? pick(m) + " " : ""}${num("cyc-risk-m",
+      dr && dr.by && m in dr.by ? dr.by[m] : ((cyc && cyc.risk_by) || {})[m] || "", "same $", ` data-m="${esc(m)}" aria-label="${esc(stratLabel(m))} risk per trade"`)}
+      <label title="Keeps a filled trade open past the day's flat time"><input type="checkbox" class="cyc-hold" data-m="${esc(m)}" ${(m in hold ? hold[m] : holdOf(m)) ? "checked" : ""}
+        onchange="cycleEdit(${jsArg(g.id)})"> hold overnight</label></span></div>`).join("")}</div>
+    <div class="cyc-save">${cycleSaveHtml(g.id, cyc, dr ? cycleDraftBody(dr) : {members: mem, risk_usd: cyc ? cyc.risk_usd : 1000, max_minis: cyc ? cyc.max_minis : 17,
+      accounts: ((cyc && cyc.accounts) || []).filter(a => a in (ST.accounts || {}))})}</div>
+    <div class="mcap ${st.ok ? "pos" : "warn"}">${esc(st.text)}.</div>
+    <div class="mcap">${mode === "share" ? "Every trade goes to every ticked account."
+      : mode === "split" ? "Each strategy trades only the account chosen beside it."
       : "One trade goes to one account, the next ticked one that is free."} A trade the opposite way to one open on
-      another of these accounts is skipped. Risk 0 = each strategy's own size. A strategy's own amount (left empty: the same
-      as the cycle's) sizes its trades instead.</div>
-    ${cyc && cyc.outside && Object.keys(cyc.outside).length ? `<div class="mcap warn">${esc(Object.entries(cyc.outside).map(([m, as]) =>
-      `${stratLabel(m)} is booked on ${as.map(acctShort).join(", ")}${cycMode(cyc) === "split" ? "" : " outside the cycle"}: it never trades there`).join(" · "))}.</div>` : ""}
-    ${missing.length ? `<div class="mcap warn">${esc(missing.join(" · "))}.</div>
-      ${on ? `<div class="sd-actions"><button class="btn btn-default btn-sm" onclick="bookCycle(${jsArg(g.id)})">${cycMode(cyc) === "split" ? "Book each strategy on its account" : "Book every strategy on these accounts"}</button></div>`
-           : `<div class="mcap">Switch the cycle on first, then book its strategies here (booked with the cycle off, each strategy trades every account it is booked on).</div>`}` : ""}
-    ${out.length || add.length ? `<div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="syncCycle(${jsArg(g.id)})">Update the cycle to the group's strategies</button></div>` : ""}</div>`;
+      another of these accounts is skipped. Risk 0 = each strategy's own size; a strategy's own $ (empty: the team's) sizes its
+      trades instead. Its strategies trade only these accounts.</div></div>`;
 }
-function cycleCopies(members) {     // the strategies that, out of the cycle, would send each trade to several accounts at once
+function cycleCopies(members) {     // the strategies that, out of the team, would send each trade to several accounts at once
   return members.filter(m => ((ST.book || {})[m] || []).length > 1 && !((((ST.strategies || {})[m]) || {}).rotation || {}).on);
 }
 function cycleLive(members) {        // ", 3 of them LIVE" for the accounts these strategies are booked on
   const live = new Set(members.flatMap(m => ((ST.book || {})[m] || []).map(r => r.account)).filter(isRealAcct)).size;
   return live ? `, ${live} of them LIVE` : "";
 }
-/* The cycle follows its Desk group: its strategies are the group's Lab strategies; a group deleted takes its cycle with it.
-   A cycle left with no strategy goes off. */
-async function syncCycle(id) {
-  const cyc = ((ST && ST.groups) || {})[id];
-  if (!cyc) return;
-  const g = groupOf(id), members = g ? cycleMembers(g) : [];
-  if (g && JSON.stringify(members) === JSON.stringify(cyc.members)) return;
-  let r, err = null;
-  try {
-    r = g ? await post("/api/groups", {id, members, ...(members.length ? {} : {on: false})}) : await post("/api/groups/delete", {id});
-  } catch (e) { err = e || new Error("no answer"); }
-  refresh();
-  const why = DEMO ? "" : answerWhy(r, err);
-  if (why) toast(`Account group NOT updated — ${why}.`, 8000);
-}
-/* Book every strategy of an ON cycle on the cycle's accounts it is not booked on yet (size 1: the cycle sizes each order). Only
-   while the cycle is on: booked with it off, each strategy would trade every account at once. */
-async function bookCycle(id) {
-  const cyc = ((ST && ST.groups) || {})[id];
-  if (!cyc || !cyc.on) return;
-  const split = cycMode(cyc) === "split", where = (m) => split ? ((cyc.assign || {})[m] ? [cyc.assign[m]] : []) : cyc.accounts;
-  const todo = cyc.members.map(m => [m, where(m).filter(a => !((ST.book || {})[m] || []).some(r => r.account === a))]).filter(x => x[1].length);
-  const n = todo.reduce((k, x) => k + x[1].length, 0), live = new Set(todo.flatMap(x => x[1]).filter(isRealAcct)).size;
-  if (!n || !await confirmDlg(`Book ${n} account${n === 1 ? "" : "s"}?`, `${todo.length} strateg${todo.length === 1 ? "y" : "ies"} on the cycle's accounts` +
-      `${live ? ` (${live} LIVE)` : ""}. ${{cycle: "Each trade still goes to ONE account, in turn", share: "Every trade goes to EVERY ticked account",
-      split: "Each strategy trades only its own account"}[cycMode(cyc)]}, sized by the cycle.`, "Book", false)) return;
-  const bad = [];
-  for (const [m, add] of todo) {
-    const rows = ((ST.book || {})[m] || []).concat(add.map(a => ({account: a, qty: 1})));     // a booked row keeps its settings
-    let r = null;
-    try { r = await post("/api/book", {strategy: m, assignments: rows}); } catch (_) { r = null; }
-    if (!r || r.ok !== true) bad.push(`${stratLabel(m)}: ${labSafe(() => DeskLab.refusalText(r), "refused")}`);
-  }
-  refresh();
-  if (!DEMO) toast(bad.length ? `Not all booked — ${bad.join(" · ")}` : "Every strategy is booked on the cycle's accounts.", bad.length ? 9000 : 4200);
-}
+/* The whole card as POST /api/setup reads a team. */
 function cycleBody(id) {
   const g = groupOf(id), root = document.querySelector("#viewStrat");
   const val = (sel, d) => { const el = root && root.querySelector(sel); return el ? cycNum(el.value) : d; };
-  const byEls = [...(root ? root.querySelectorAll(".cyc-risk-m") : [])];   // one per Lab strategy of the card; none: risk_by not sent
-  const modeEl = root && root.querySelector(".cyc-mode"), asEls = [...(root ? root.querySelectorAll(".cyc-assign") : [])];
-  const accounts = [...(root ? root.querySelectorAll(".cyc-acct") : [])].filter(b => b.checked).map(b => b.dataset.acct);
-  return {id, name: g ? g.name : id, members: g ? cycleMembers(g) : [], accounts,
+  const all = (sel) => [...(root ? root.querySelectorAll(sel) : [])];
+  const byEls = all(".cyc-risk-m"), modeEl = root && root.querySelector(".cyc-mode"), asEls = all(".cyc-assign"), holdEls = all(".cyc-hold");
+  const accounts = all(".cyc-acct").filter(b => b.checked).map(b => b.dataset.acct);
+  return {team: id, name: g ? g.name : id, members: g ? cycleMembers(g) : [], accounts,
           risk_usd: val(".cyc-risk", 0), max_minis: Math.round(val(".cyc-minis", 17)),
           ...(byEls.length ? {risk_by: cycByBody(Object.fromEntries(byEls.map(el => [el.dataset.m, el.value])))} : {}),
           ...(modeEl ? {mode: modeEl.value} : {}),
-          // an account unticked takes its strategy with it (the server refuses an account outside the group)
-          ...(asEls.length ? {assign: Object.fromEntries(asEls.filter(el => accounts.includes(el.value)).map(el => [el.dataset.m, el.value]))} : {})};
+          // an account unticked takes its strategy with it (the server refuses an account outside the team)
+          ...(asEls.length ? {assign: Object.fromEntries(asEls.filter(el => accounts.includes(el.value)).map(el => [el.dataset.m, el.value]))} : {}),
+          ...(holdEls.length ? {hold: Object.fromEntries(holdEls.map(el => [el.dataset.m, !!el.checked]))} : {})};
 }
-/* The card's Save (no `extra`) asks first ONLY while the cycle is ON on a LIVE account and the change sizes up (risk or Most
-   goes up) or ticks a LIVE account in. Lowering, unticking and every demo/paper-only cycle save at once. The switch
-   (setCycle, with `extra`) keeps its own questions and never saves a draft. */
-async function saveCycle(id, extra) {
-  const body = {...cycleBody(id), ...(extra || {})};
-  const cyc = ((ST && ST.groups) || {})[id] || null;
-  if (!extra && cyc && cyc.on) {
-    const d = cycleDiff(cyc, body), live = body.accounts.filter(isRealAcct), where = machineWords();
-    if (live.length && (d.up || d.liveIn.length) && !await confirmDlg("Change the LIVE account group?",
-        `${d.parts.join(" · ")}.${d.liveIn.length ? ` LIVE account${d.liveIn.length === 1 ? "" : "s"} ticked in: ${d.liveIn.map(acctShort).join(", ")}.` : ""}` +
-        ` The cycle is ON across ${live.length} LIVE account${live.length === 1 ? "" : "s"}${where ? " " + where : ""}: the next trade uses this.`,
-        "Save", false)) { refresh(); return false; }
-  }
+/* Save (on: as now) and the Trading switch (on: flipped) both send the whole card. It asks first when: the team goes ON;
+   it goes OFF; it is ON on an account that is not paper (LIVE or DEMO) and the change sizes up or ticks one in; or a strategy
+   loses its last account mid-day (its day ends; it trades again tomorrow). Lowering, unticking and paper-only changes save at once. */
+async function saveCycle(id, on) {
+  const g = groupOf(id), mem = g ? cycleMembers(g) : [], was = teamOn(mem);
+  if (on === undefined) on = was;
+  const body = {...cycleBody(id), on}, cyc = ((ST && ST.groups) || {})[id] || null, d = cycleDiff(cyc, body);
+  const live = body.accounts.filter(isRealAcct), where = machineWords();
+  const ends = body.members.filter(m => ((ST.book || {})[m] || []).length && !teamWant(body, m).length && ST.strategies[m].cfg.enabled);
+  const endWords = ends.length ? ` ${ends.map(stratLabel).join(", ")} lose${ends.length === 1 ? "s" : ""} the last account: today is over for ${ends.length === 1 ? "it" : "them"}; trading again tomorrow.` : "";
+  const how = {cycle: "take turns across", share: "trade every one of", split: "each trade their own one of"}[body.mode || cycMode(cyc)];
+  const lv = live.length ? ` (${live.length} ${riskWord(live)})` : "";
+  const sized = body.members.some(m => cycRisk(body, m) > 0) ? ` Each trade sized to ${body.members.map(m => `${stratLabel(m)} ${cycRisk(body, m) > 0 ? cycUsd(cycRisk(body, m)) : "its own size"}`).join(", ")} at risk, at most ${body.max_minis} full contracts.` : " Each at its own size.";
+  let ask = null;
+  if (on && !was) ask = ["Start trading?", `${plural(body.members.length, "strategy", "strategies")} ${how} ${plural(body.accounts.length, "account", "accounts")}${lv}${where ? " " + where : ""}.${sized}${endWords}`, "Start"];
+  else if (!on && was) ask = ["Stop trading?", `${plural(body.members.length, "strategy", "strategies")} switched OFF: today is over for them (unfilled entries are cancelled). Accounts and sizes stay for the next ON.`, "Stop"];
+  else if (ends.length || (on && live.length && (d.up || d.liveIn.length))) ask = ["Change the team?", `${d.parts.join(" · ")}.${d.liveIn.length ? ` ${riskWord(d.liveIn)} account${d.liveIn.length === 1 ? "" : "s"} ticked in: ${d.liveIn.map(acctShort).join(", ")}.` : ""}${endWords}${on && live.length ? ` It is ON across ${live.length} ${riskWord(live)} account${live.length === 1 ? "" : "s"}${where ? " " + where : ""}: the next trade uses this.` : ""}`, "Save"];
+  if (ask && !await confirmDlg(ask[0], ask[1], ask[2], false)) { refresh(); return false; }
   let r, err = null;
-  try { r = await post("/api/groups", body); } catch (e) { err = e || new Error("no answer"); }
+  try { r = await post("/api/setup", body); } catch (e) { err = e || new Error("no answer"); }
   const why = DEMO ? null : answerWhy(r, err);
-  if (why === "" && !(extra && "accounts" in extra)) delete CYC_DRAFT[id];   // saved: the card shows the desk's values again
+  if (why === "") delete CYC_DRAFT[id];   // saved: the card shows the desk's values again
   refresh();
   if (DEMO) return false;
-  if (why) toast(`Account group NOT changed — ${why}.`, 8000);
+  toast(why ? `NOT saved — ${why}.` : on !== was ? (on ? "Trading ON." : "Trading OFF.") : "Saved.", why ? 8000 : 4200);
   return !why;
 }
-const toggleCycle = (id) => setCycle(id, !(((ST && ST.groups) || {})[id] || {}).on);
-async function setCycle(id, on) {
-  if (switchBounced("cycle:" + id)) return;
-  /* A draft (typed or ticked, not saved) never rides on the switch: ON waits for Save; OFF sends the desk's own values and
-     the draft stays for its Save button. */
-  const cyc = ((ST && ST.groups) || {})[id] || null, dr = CYC_DRAFT[id];
-  // A draft = what the card's Save button shows (cycleHtml), so ON never points at a Save that is not there. OFF sends the
-  // desk's own values as the page ticks them: never an account the Desk removed (the server refuses one).
-  const saved = cyc && dr && cycleDiff(cyc, cycleDraftBody(dr)).parts.length ? {accounts: Object.keys(ST.accounts || {}).filter(a => (cyc.accounts || []).includes(a)),
-                                                                                 risk_usd: cyc.risk_usd, max_minis: cyc.max_minis, ...(cyc.risk_by ? {risk_by: cyc.risk_by} : {}),
-                                                                                 ...(cyc.mode ? {mode: cyc.mode, assign: cyc.assign || {}} : {})} : null;
-  if (saved && on) { toast("Save or undo your changes first, then switch the cycle on.", 6000); refresh(); return; }
-  const b = {...cycleBody(id), ...saved};
-  const copies = on ? [] : cycleCopies(b.members);
-  if (copies.length && !await confirmDlg(`Stop the account group?`,
-      `${copies.length} strateg${copies.length === 1 ? "y" : "ies"} then send each trade to EVERY account booked${cycleLive(copies)}.`, "Stop the cycle", true)) { refresh(); return; }
-  if (on) {
-    const live = b.accounts.filter(isRealAcct).length;
-    const how = {cycle: "take turns across", share: "trade every one of", split: "each trade their own one of"}[b.mode || cycMode(cyc)];
-    if (!await confirmDlg(`Start the account group?`, `${b.members.length} strateg${b.members.length === 1 ? "y" : "ies"} ${how} ${b.accounts.length} account${b.accounts.length === 1 ? "" : "s"}${live ? ` (${live} LIVE)` : ""}` +
-        (b.members.some(m => cycRisk(b, m) > 0) ? `, each trade sized to ${b.members.map(m => `${stratLabel(m)} ${cycRisk(b, m) > 0 ? cycUsd(cycRisk(b, m)) : "its own size"}`).join(", ")} at risk, at most ${b.max_minis} full contracts.` : ", each at its own size."), "Start", false)) { refresh(); return; }
-  }
-  if (await saveCycle(id, {...saved, on})) toast(on ? `Account group ON: ${CYC_MODES[b.mode || cycMode(cyc)].toLowerCase()}.` : "Account group OFF.");
-}
+const toggleTeam = (id) => { if (switchBounced("team:" + id)) return; const g = groupOf(id); return saveCycle(id, !teamOn(g ? cycleMembers(g) : [])); };
 async function deleteGroup(id) {
   const g = groupOf(id);
   if (!g) return;

@@ -445,7 +445,7 @@ test('M: a Setup or Changes block that fails to draw leaves the rest of a Lab st
     const html = t.ctx.api.stratView('lab_nq_orb');
     assert.doesNotMatch(html, /could not be shown/, broken);
     assert.match(html, /Flatten &amp; turn off/, broken);
-    assert.match(html, /<h2>Accounts<\/h2>/, broken);
+    assert.match(html, /<h2>Set up<\/h2>/, broken);
   }
 });
 
@@ -526,7 +526,7 @@ test('a Lab strategy\'s state is the server\'s word, whatever the Desk\'s own ti
 });
 
 // ---- the strategy page ------------------------------------------------------------------------------------------------
-test('the page: state, note, Limits, Today, Matched the backtest, Accounts, and the three actions -- no Test fire', () => {
+test('the page: state, note, Limits, Today, Matched the backtest, Set up, and the three actions -- no Test fire', () => {
   const t = load();
   const html = t.view();
   assert.match(html, /<b>Waiting for the session<\/b>/);
@@ -537,7 +537,7 @@ test('the page: state, note, Limits, Today, Matched the backtest, Accounts, and 
   assert.match(html, /onclick="openLabLimits\(&quot;lab_nq_orb&quot;\)">Edit limits<\/button>/);
   assert.match(html, /<h2>Today, in shadow<\/h2>/);
   assert.match(html, /<h2>Matched the backtest<\/h2>/);
-  assert.match(html, /<h2>Accounts<\/h2>/);
+  assert.match(html, /<h2>Set up<\/h2>/);
   assert.match(html, /flattenStrat\(&quot;lab_nq_orb&quot;\)" title="Flattens its positions and switches it off">Flatten &amp; turn off</);
   assert.match(html, /openDeskLabInLab\(&quot;nq_orb&quot;\)[^>]*>Open in the Lab</);
   assert.match(html, /removeLabStrat\(&quot;lab_nq_orb&quot;\)"[^>]*>Remove from Desk</);
@@ -547,16 +547,19 @@ test('the page: state, note, Limits, Today, Matched the backtest, Accounts, and 
   assert.match(html, /<div class="sd-actions">/);
 });
 
-test('with accounts: the other note, the account rows and the Desk\'s own + Assign menu', () => {
+test('with accounts: the other note and the Set-up card -- every account a tick, contracts, Take turns, Hold overnight, a status line', () => {
   const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
   const html = t.view();
   assert.match(html, /From the Lab\. Its orders go to the accounts below\. Every entry carries a stop held at the broker\./);
   assert.match(html, /<h2>Today<\/h2>/);
-  assert.match(html, /Lucid Eval #1/);
-  assert.match(html, /<div class="amenu" id="amenu-lab_nq_orb" role="menu" hidden>/);
-  assert.match(html, /onclick="toggleAsgMenu\(&quot;lab_nq_orb&quot;\)"/);
-  assert.match(html, /onclick="pickAsg\(&quot;lab_nq_orb&quot;,&quot;a2&quot;,1\)"/, 'the Desk\'s own flow, with the strategy\'s size');
-  assert.doesNotMatch(html, /pickAsg\(&quot;lab_nq_orb&quot;,&quot;a1&quot;/, 'an account already booked is not offered');
+  assert.match(html, /class="solo-acct" data-acct="a1" checked/);
+  assert.match(html, /class="solo-acct" data-acct="a2"  onchange/, 'an account not booked: a tick, unticked');
+  assert.match(html, /APEX…048\s*<span class="tag-live">LIVE<\/span>/);
+  assert.match(html, /class="solo-qty"[^>]*\s+value="1"/);
+  assert.match(html, /class="solo-turns"/);
+  assert.match(html, /class="solo-hold"/);
+  assert.match(html, /<div class="mcap pos">Ready: trades on Lucid Eval #1, 1 contract\.<\/div>/);
+  assert.doesNotMatch(html, /toggleAsgMenu|pickAsg|amenu|editQty|removeAsg|openAcctSet/, 'one place to set it up, nothing else');
   assert.doesNotMatch(html, /Set the limits first/);
 });
 
@@ -1278,16 +1281,83 @@ test('m2 switching OFF with no account booked says Step A\'s short sentence', as
   assert.match(booked.toasts[0], /It trades again from the next session\.$/);
 });
 
-test('m4 under read_only the size edit and the unassign x of a booked account are disabled', () => {
+test('m4 under read_only the Set-up card only says why and how it stands: no tick, no field', () => {
   const t = load({ book: BOOKED, strategies: { lab_nq_orb: deskStrat({ read_only: true }) } });
   const html = t.view();
-  assert.doesNotMatch(html, /editQty/);
-  assert.match(html, /<button class="x" disabled style=/);
-  assert.doesNotMatch(html, /onclick="removeAsg/);
-  assert.match(html, /<span class="strats">×1<\/span>/);
+  assert.doesNotMatch(html, /solo-acct|solo-qty|editQty|removeAsg/);
+  assert.match(html, /<h2>Set up<\/h2><div class="mcap">Another copy of the Desk is using the Lab strategies\.<\/div>/);
   const ok = load({ book: BOOKED }).view();
-  assert.match(ok, /onclick="editQty\(event,'lab_nq_orb'/);
-  assert.match(ok, /onclick="removeAsg\('lab_nq_orb'/);
+  assert.match(ok, /class="solo-acct"/);
+});
+
+/* The solo Set-up card's Save (owner 2026-11-02): its ticks, contracts, Take turns and Hold go in ONE /api/setup call. */
+function soloRoot(t, { ticked = [], qty = '1', turns = false, hold = false } = {}) {
+  const box = (cls, checked, extra = {}) => ({ checked, className: cls, dataset: extra });
+  const accts = Object.keys(t.ctx.ST.accounts).map((a) => box('solo-acct', ticked.includes(a), { acct: a }));
+  const one = { '.solo-qty': { value: qty }, '.solo-turns': box('solo-turns', turns), '.solo-hold': box('solo-hold', hold), '.solo-save': { innerHTML: '' } };
+  const root = { querySelectorAll: (sel) => (sel === '.solo-acct' ? accts : []), querySelector: (sel) => one[sel] || null };
+  t.ctx.document.querySelector = (sel) => (sel === '#viewStrat' ? root : null);
+  return one;
+}
+
+test('solo Save: one /api/setup call with the ticks, contracts, Take turns, Hold and the switch as it is', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  soloRoot(t, { ticked: ['a1'], qty: '1', turns: false, hold: true });
+  await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+  assert.equal(t.confirms.length, 0, 'nothing sized up, nothing ticked in: no question');
+  assert.deepEqual(t.posts, [{ url: '/api/setup', body: { strategy: 'lab_nq_orb', accounts: ['a1'], qty: 1, turns: false, hold: true, on: true } }]);
+  assert.deepEqual(t.toasts, ['NQ ORB saved.']);
+  soloRoot(t, { ticked: ['a1'], qty: '2' });                    // sizing up on a DEMO account asks, in its tag's word
+  await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+  assert.match(t.confirms[0].body, /1 → 2 contracts\. 2 contracts on DEMO accounts\./);
+});
+
+test('solo Save: a LIVE account ticked in on an ON strategy asks first, naming it; a no sends nothing', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] }, confirm: false });
+  soloRoot(t, { ticked: ['a1', 'a2'], turns: true });
+  await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+  assert.equal(t.confirms.length, 1);
+  assert.match(t.confirms[0].body, /\+APEX…048 · take turns\. LIVE account ticked in: APEX…048\./);
+  assert.deepEqual(t.posts, []);
+});
+
+test('solo Save: losing the last account while ON says today is over for it', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  soloRoot(t, { ticked: [] });
+  await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+  assert.match(t.confirms[0].body, /It loses its last account: today is over for it; it trades again tomorrow\./);
+  assert.deepEqual(t.posts[0].body.accounts, []);
+});
+
+test('solo Save: a refusal is said in words and the draft stays', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] }, answer: { ok: false, detail: 'Set the limits first.' } });
+  const one = soloRoot(t, { ticked: ['a1'], hold: true });
+  vm.runInContext('soloEdit("lab_nq_orb")', t.ctx);
+  assert.match(one['.solo-save'].innerHTML, /Save: holds overnight/);
+  await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+  assert.match(t.toasts[0], /^NQ ORB NOT saved — /);
+  assert.equal(vm.runInContext('!!SOLO_DRAFT.lab_nq_orb', t.ctx), true);
+});
+
+test('solo status: red with every reason, the Desk OFF and an offline account named', () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] } });
+  t.ctx.ST.armed = false;
+  t.ctx.ST.accounts.a2.connected = false;
+  assert.match(t.view(), /<div class="mcap warn">Not trading: the Desk is OFF · account APEX…048 is offline\.<\/div>/);
+  const none = load();
+  assert.match(none.view(), /<div class="mcap pos">No account: it runs as practice\.<\/div>/);
+  const dead = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  dead.ctx.ST.strategies.lab_nq_orb.lab.state = 'runner_down';
+  assert.match(dead.view(), /Not trading: its runner is not running/);
+});
+
+test('a strategy in a team has no ticks of its own: its page says so and opens the team', () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  t.ctx.ST.groups = { g3: { name: 'apex 300k', members: ['lab_nq_orb'], accounts: ['a1'], on: true } };
+  const html = t.view();
+  assert.match(html, /In the team apex 300k: its accounts, size and Trading switch are set on the team's page\./);
+  assert.match(html, /onclick="setView\('group',&quot;g3&quot;\)">Open apex 300k</);
+  assert.doesNotMatch(html, /solo-acct/);
 });
 
 test('m5 a save that is out stays out across a close and a re-open: no second POST, and its answer does not close the new dialog', async () => {

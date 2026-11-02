@@ -1404,11 +1404,10 @@ test('a group page before its first answer says so, and a hostile name or senten
 
 test('the group writes go to the chart service by name (the account group to the desk), and a group id is only a JS string literal in a handler', () => {
   const urls = [...new Set([...GROUP_PAGE.matchAll(/["'`](\/api\/[^"'`$?]*)/g)].map((m) => m[1]))].sort();
-  // the Desk is reached only by the group's account group (owner 2026-10-25): its settings and booking its strategies
-  assert.deepEqual(urls, ['/api/book', '/api/groups', '/api/groups/delete', '/api/tester/deskfamilies', '/api/tester/deskfamilies/',
+  // the Desk is reached only by the team's one Set-up save (owner 2026-11-02): group, books, turns and ON/OFF in one call
+  assert.deepEqual(urls, ['/api/setup', '/api/tester/deskfamilies', '/api/tester/deskfamilies/',
                           '/api/tester/deskgroups', '/api/tester/deskgroups/', '/api/tester/deskgroups/results']);
-  assert.doesNotMatch(GROUP_PAGE.replace(/\/\*[\s\S]*?\*\//g, ''), /\/api\/(strategy|status|arm|kill|rotation)/, 'nothing else of the desk');
-  assert.equal((GROUP_PAGE.match(/\/api\/book/g) || []).length, 1, 'booking only from bookCycle (the cycle on)');
+  assert.doesNotMatch(GROUP_PAGE.replace(/\/\*[\s\S]*?\*\//g, ''), /\/api\/(strategy|status|arm|kill|rotation|book|groups)\b/, 'nothing else of the desk');
   const handlers = [...GROUP_PAGE.matchAll(/on(?:click|keydown)="([^"]*)"/g)].map((m) => m[1]);
   assert.ok(handlers.length >= 4);
   for (const h of handlers) for (const m of h.matchAll(/\$\{([^}]*)\}/g)) assert.match(m[1], /^jsArg\([\w.]+\)$/, h);
