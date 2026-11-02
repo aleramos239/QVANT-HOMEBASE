@@ -420,7 +420,7 @@ function renderGroupMgr(force) {
   if (!force && a && ov.contains(a) && a.matches("#groupList input, #groupList select")) return;      // never wipe a field being used
   const groups = DESKGROUPS.groups;
   const fams = DESKFAM.families;
-  $("#groupCount").textContent = `${fams.length} famil${fams.length === 1 ? "y" : "ies"} · ${groups.length} account cycle${groups.length === 1 ? "" : "s"}`;
+  $("#groupCount").textContent = `${fams.length} famil${fams.length === 1 ? "y" : "ies"} · ${groups.length} account group${groups.length === 1 ? "" : "s"}`;
   const known = [];                    // every strategy a group may take: [id, label]
   const shelved = archivedBuiltins();       // an archived built-in is not offered (one already in a group still shows)
   for (const n of Object.keys(ST.strategies || {})) if (!shelved.includes(n)) known.push([n, stratLabel(n)]);
@@ -448,30 +448,30 @@ function renderGroupMgr(force) {
       <input class="hb-field grp-sel" style="width:96px;max-width:96px" maxlength="24" spellcheck="false" placeholder="short name"
         aria-label="Short name of ${esc(label)} in its family" title="Its name inside the family, e.g. 25 pts · 1.5R"
         value="${esc((fam && fam.short[id]) || "")}"${fam ? "" : " disabled"} onchange="familyPost('short', {strategy: ${jsArg(id)}, short: String(this.value).trim()})">
-      <select class="hb-field grp-sel" aria-label="Account cycle of ${esc(label)}" title="Account cycle: takes turns across accounts" onchange="moveToGroup(${jsArg(id)}, this.value)">
+      <select class="hb-field grp-sel" aria-label="Account group of ${esc(label)}" title="Account group: takes turns across accounts" onchange="moveToGroup(${jsArg(id)}, this.value)">
         <option value="">${esc(DeskLab.NO_GROUP)}</option>${groups.map(g => `<option value="${esc(g.id)}"${cur && cur.id === g.id ? " selected" : ""}>${esc(g.name)}</option>`).join("")}
       </select></div>`;
   }).join("");
-  // an account cycle whose Desk group is gone (a delete from before the chart service kept them in step): shown, so it can be removed
+  // an account group whose Desk group is gone (a delete from before the chart service kept them in step): shown, so it can be removed
   const orphans = DESKGROUPS.ok === true ? Object.entries((ST && ST.groups) || {}).filter(([id]) => !groupOf(id)) : [];
   const olist = orphans.map(([id, c]) => `<div class="acct" style="padding:8px 0;gap:8px;align-items:center">
-      <span class="nm" style="font-size:13px;flex:1;min-width:0">${esc(c.name)} · account cycle ${c.on ? "<b>ON</b>" : "off"}, no group</span>
+      <span class="nm" style="font-size:13px;flex:1;min-width:0">${esc(c.name)} · account group ${c.on ? "<b>ON</b>" : "off"}, no group</span>
       <button class="btn btn-outline btn-sm" onclick="removeOrphanCycle(${jsArg(id)})">Remove</button></div>`).join("");
-  $("#groupList").innerHTML = (olist ? `<div class="mcap warn" style="margin:8px 0 2px">Account cycles with no group</div>${olist}` : "")
+  $("#groupList").innerHTML = (olist ? `<div class="mcap warn" style="margin:8px 0 2px">Account groups with no group</div>${olist}` : "")
     + (fams.length ? `<div class="mcap" style="margin:8px 0 2px">Families</div>${flist}` : "")
-    + (groups.length ? `<div class="mcap" style="margin:8px 0 2px">Account cycles</div>${glist}` : "")
-    + (known.length ? `<div class="mcap" style="margin:12px 0 2px;display:flex;gap:8px"><span style="flex:1">Strategies</span><span>Family · short name · account cycle</span></div>${slist}` : `<div class="mcap" style="padding:14px 0">No strategies on the Desk yet.</div>`);
+    + (groups.length ? `<div class="mcap" style="margin:8px 0 2px">Account groups</div>${glist}` : "")
+    + (known.length ? `<div class="mcap" style="margin:12px 0 2px;display:flex;gap:8px"><span style="flex:1">Strategies</span><span>Family · short name · account group</span></div>${slist}` : `<div class="mcap" style="padding:14px 0">No strategies on the Desk yet.</div>`);
 }
 function openGroupMgr() { renderGroupMgr(true); showOverlay("groupOverlay"); renderGroupMgr(true); }
 async function removeOrphanCycle(id) {
   const c = ((ST && ST.groups) || {})[id];
-  if (!c || !await confirmDlg(`Remove the ${c.name} account cycle?`, c.on ? `It is ON with no group. Its strategies then trade their own booked accounts again${cycleLive(c.members || [])}.`
+  if (!c || !await confirmDlg(`Remove the ${c.name} account group?`, c.on ? `It is ON with no group. Its strategies then trade their own booked accounts again${cycleLive(c.members || [])}.`
       : "It has no group and is off.", "Remove", !!c.on)) return;
   let r, err = null;
   try { r = await post("/api/groups/delete", {id}); } catch (e) { err = e || new Error("no answer"); }
   refresh();
   const why = DEMO ? "" : answerWhy(r, err);
-  toast(why ? `Account cycle NOT removed — ${why}.` : `${c.name} account cycle removed.`, why ? 8000 : 4200);
+  toast(why ? `Account group NOT removed — ${why}.` : `${c.name} account group removed.`, why ? 8000 : 4200);
 }
 function closeGroupMgr() { hideOverlay("groupOverlay"); }
 async function addFamily() {
@@ -484,7 +484,7 @@ async function addFamily() {
 }
 async function addGroup() {
   const name = $("#groupNewName").value.trim();
-  if (!name) { toast("Give the account cycle a name."); $("#groupNewName").focus(); return; }
+  if (!name) { toast("Give the account group a name."); $("#groupNewName").focus(); return; }
   if (await groupPost("create", {name})) {
     $("#groupNewName").value = "";
     toast(`${name} is added. Pick its strategies below.`);
@@ -494,14 +494,14 @@ const renameGroup = (id, name) => groupPost("rename", {id, name: String(name).tr
 async function moveToGroup(strategy, group) {
   const old = DESKGROUPS.groups.find(g => g.members.includes(strategy)), oc = old ? ((ST && ST.groups) || {})[old.id] : null;
   if (oc && oc.on && oc.members.includes(strategy) && cycleCopies([strategy]).length && !await confirmDlg(
-      `Take ${stratLabel(strategy)} out of the account cycle?`,
+      `Take ${stratLabel(strategy)} out of the account group?`,
       `Its next trade goes to EVERY account it is booked on${cycleLive([strategy])}, not one at a time.`, "Take it out", true)) {
     renderGroupMgr(true);
     return;
   }
   const nc = group ? ((ST && ST.groups) || {})[group] : null;
   if (nc && nc.on && !(nc.members || []).includes(strategy) && !await confirmDlg(
-      `Add ${stratLabel(strategy)} to the ${nc.name} account cycle?`,
+      `Add ${stratLabel(strategy)} to the ${nc.name} account group?`,
       `Its trades then go to ONE account at a time of ${nc.accounts.length}${nc.risk_usd > 0 ? `, each sized to $${Number(nc.risk_usd).toLocaleString("en-US")} at risk` : ""}.`,
       "Add it", false)) {
     renderGroupMgr(true);

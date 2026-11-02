@@ -347,7 +347,7 @@ test('WP1.15 a change no longer in force, or any group row (even on its own page
   changes(t, [chg('group_set', { group: 'g3', name: 'apex', members: [], accounts: [], risk_usd: 750, max_minis: 17, on: true }),
     chg('group_set', { group: 'g3', name: 'apex', members: [], accounts: [], risk_usd: 500, max_minis: 17, on: true })], 'g:g3');
   const g = t.api.deskChangeList('g:g3');
-  assert.deepEqual(plain(g.map((x) => [x.text, !!x.back])), [['Size $500 at risk a trade → $750 at risk a trade', false], ['Account cycle ON · $500 at risk a trade', false]]);
+  assert.deepEqual(plain(g.map((x) => [x.text, !!x.back])), [['Size $500 at risk a trade → $750 at risk a trade', false], ['Account group ON · $500 at risk a trade', false]]);
   vm.runInContext('VIEW = {k: "group", name: "g3"}', t.ctx);
   assert.deepEqual(plain(t.api.deskChangeList('g:g3').map((x) => !!x.back)), [false, false], 'on its own page too: the cycle card is the one place it changes');
   assert.doesNotMatch(t.api.deskChangesHtml('g:g3'), /Put back/);
@@ -386,7 +386,7 @@ test('WP1.14 a Lab strategy\'s Setup: accounts, LIVE / paper, the group\'s $ ris
   assert.equal(setupRow(html, 'Size'), '$500 at risk a trade (the apex 300k group sizes it)');
   assert.equal(setupRow(html, 'Limits'), 'Trades a day 2 · Most contracts per account 1 · Most at risk per trade $300 · Last entry 11:00 ET · Flat by 15:55 ET');
   assert.equal(setupRow(html, 'Window'), 'NQ · 09:25-16:00 ET · from the Lab', 'the Lab strategy\'s own spec line');
-  assert.equal(setupRow(html, 'Group'), 'apex 300k (account cycle ON, next APEX…048)');
+  assert.equal(setupRow(html, 'Group'), 'apex 300k (account group ON, next APEX…048)');
   assert.equal(setupRow(html, 'Machine'), 'the SERVER · Chicago');
   assert.doesNotMatch(setupOf(html), /mcap warn/, 'nothing missing: no red line');
   assert.doesNotMatch(setupOf(html), /<button|<input|onclick/, 'shown only: nothing here edits the window or anything else');
@@ -445,7 +445,7 @@ test('M: a Setup or Changes block that fails to draw leaves the rest of a Lab st
     const html = t.ctx.api.stratView('lab_nq_orb');
     assert.doesNotMatch(html, /could not be shown/, broken);
     assert.match(html, /Flatten &amp; turn off/, broken);
-    assert.match(html, /<h2>Accounts<\/h2>/, broken);
+    assert.match(html, /<h2>Set up<\/h2>/, broken);
   }
 });
 
@@ -482,7 +482,7 @@ test('WP1.8 sidebar accounts: a LIVE / DEMO / PAPER tag on every row, what it ho
 test('the Strategies count in a folded sidebar does not count the same strategy twice', () => {
   const side = SLICE('function renderSide(', '/* ---- strategy detail ---- */');
   // the count is the rows under Strategies: a Lab row the Desk holds is its own row (one row, never two); families fold their
-  // variants inside Strategies (2026-10-29), so a strategy in a family is counted there once; account cycles are their own section
+  // variants inside Strategies (2026-10-29), so a strategy in a family is counted there once; account groups are their own section
   assert.match(side, /DESKLAB\.strategies\.filter\(w => !labOnDesk\(w\)\)\.map/);
   assert.match(side, /head\("strat", "Strategies", names\.length \+ labIds\.length/);
   assert.match(side, /famBlocks \+ loose/);
@@ -526,7 +526,7 @@ test('a Lab strategy\'s state is the server\'s word, whatever the Desk\'s own ti
 });
 
 // ---- the strategy page ------------------------------------------------------------------------------------------------
-test('the page: state, note, Limits, Today, Matched the backtest, Accounts, and the three actions -- no Test fire', () => {
+test('the page: state, note, Limits, Today, Matched the backtest, Set up, and the three actions -- no Test fire', () => {
   const t = load();
   const html = t.view();
   assert.match(html, /<b>Waiting for the session<\/b>/);
@@ -537,7 +537,7 @@ test('the page: state, note, Limits, Today, Matched the backtest, Accounts, and 
   assert.match(html, /onclick="openLabLimits\(&quot;lab_nq_orb&quot;\)">Edit limits<\/button>/);
   assert.match(html, /<h2>Today, in shadow<\/h2>/);
   assert.match(html, /<h2>Matched the backtest<\/h2>/);
-  assert.match(html, /<h2>Accounts<\/h2>/);
+  assert.match(html, /<h2>Set up<\/h2>/);
   assert.match(html, /flattenStrat\(&quot;lab_nq_orb&quot;\)" title="Flattens its positions and switches it off">Flatten &amp; turn off</);
   assert.match(html, /openDeskLabInLab\(&quot;nq_orb&quot;\)[^>]*>Open in the Lab</);
   assert.match(html, /removeLabStrat\(&quot;lab_nq_orb&quot;\)"[^>]*>Remove from Desk</);
@@ -547,16 +547,19 @@ test('the page: state, note, Limits, Today, Matched the backtest, Accounts, and 
   assert.match(html, /<div class="sd-actions">/);
 });
 
-test('with accounts: the other note, the account rows and the Desk\'s own + Assign menu', () => {
+test('with accounts: the other note and the Set-up card -- every account a tick, contracts, Take turns, Hold overnight, a status line', () => {
   const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
   const html = t.view();
   assert.match(html, /From the Lab\. Its orders go to the accounts below\. Every entry carries a stop held at the broker\./);
   assert.match(html, /<h2>Today<\/h2>/);
-  assert.match(html, /Lucid Eval #1/);
-  assert.match(html, /<div class="amenu" id="amenu-lab_nq_orb" role="menu" hidden>/);
-  assert.match(html, /onclick="toggleAsgMenu\(&quot;lab_nq_orb&quot;\)"/);
-  assert.match(html, /onclick="pickAsg\(&quot;lab_nq_orb&quot;,&quot;a2&quot;,1\)"/, 'the Desk\'s own flow, with the strategy\'s size');
-  assert.doesNotMatch(html, /pickAsg\(&quot;lab_nq_orb&quot;,&quot;a1&quot;/, 'an account already booked is not offered');
+  assert.match(html, /class="solo-acct" data-acct="a1" checked/);
+  assert.match(html, /class="solo-acct" data-acct="a2"  onchange/, 'an account not booked: a tick, unticked');
+  assert.match(html, /APEX…048\s*<span class="tag-live">LIVE<\/span>/);
+  assert.match(html, /class="solo-qty"[^>]*\s+value="1"/);
+  assert.match(html, /class="solo-turns"/);
+  assert.match(html, /class="solo-hold"/);
+  assert.match(html, /<div class="mcap pos">Ready: trades on Lucid Eval #1, 1 contract\.<\/div>/);
+  assert.doesNotMatch(html, /toggleAsgMenu|pickAsg|amenu|editQty|removeAsg|openAcctSet/, 'one place to set it up, nothing else');
   assert.doesNotMatch(html, /Set the limits first/);
 });
 
@@ -1050,8 +1053,8 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=51"><\/script>/);
-  assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=5"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=52"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=6"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
   assert.equal(manifest.version >= 3, true);
@@ -1278,16 +1281,83 @@ test('m2 switching OFF with no account booked says Step A\'s short sentence', as
   assert.match(booked.toasts[0], /It trades again from the next session\.$/);
 });
 
-test('m4 under read_only the size edit and the unassign x of a booked account are disabled', () => {
+test('m4 under read_only the Set-up card only says why and how it stands: no tick, no field', () => {
   const t = load({ book: BOOKED, strategies: { lab_nq_orb: deskStrat({ read_only: true }) } });
   const html = t.view();
-  assert.doesNotMatch(html, /editQty/);
-  assert.match(html, /<button class="x" disabled style=/);
-  assert.doesNotMatch(html, /onclick="removeAsg/);
-  assert.match(html, /<span class="strats">×1<\/span>/);
+  assert.doesNotMatch(html, /solo-acct|solo-qty|editQty|removeAsg/);
+  assert.match(html, /<h2>Set up<\/h2><div class="mcap">Another copy of the Desk is using the Lab strategies\.<\/div>/);
   const ok = load({ book: BOOKED }).view();
-  assert.match(ok, /onclick="editQty\(event,'lab_nq_orb'/);
-  assert.match(ok, /onclick="removeAsg\('lab_nq_orb'/);
+  assert.match(ok, /class="solo-acct"/);
+});
+
+/* The solo Set-up card's Save (owner 2026-11-02): its ticks, contracts, Take turns and Hold go in ONE /api/setup call. */
+function soloRoot(t, { ticked = [], qty = '1', turns = false, hold = false } = {}) {
+  const box = (cls, checked, extra = {}) => ({ checked, className: cls, dataset: extra });
+  const accts = Object.keys(t.ctx.ST.accounts).map((a) => box('solo-acct', ticked.includes(a), { acct: a }));
+  const one = { '.solo-qty': { value: qty }, '.solo-turns': box('solo-turns', turns), '.solo-hold': box('solo-hold', hold), '.solo-save': { innerHTML: '' } };
+  const root = { querySelectorAll: (sel) => (sel === '.solo-acct' ? accts : []), querySelector: (sel) => one[sel] || null };
+  t.ctx.document.querySelector = (sel) => (sel === '#viewStrat' ? root : null);
+  return one;
+}
+
+test('solo Save: one /api/setup call with the ticks, contracts, Take turns, Hold and the switch as it is', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  soloRoot(t, { ticked: ['a1'], qty: '1', turns: false, hold: true });
+  await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+  assert.equal(t.confirms.length, 0, 'nothing sized up, nothing ticked in: no question');
+  assert.deepEqual(t.posts, [{ url: '/api/setup', body: { strategy: 'lab_nq_orb', accounts: ['a1'], qty: 1, turns: false, hold: true, on: true } }]);
+  assert.deepEqual(t.toasts, ['NQ ORB saved.']);
+  soloRoot(t, { ticked: ['a1'], qty: '2' });                    // sizing up on a DEMO account asks, in its tag's word
+  await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+  assert.match(t.confirms[0].body, /1 → 2 contracts\. 2 contracts on DEMO accounts\./);
+});
+
+test('solo Save: a LIVE account ticked in on an ON strategy asks first, naming it; a no sends nothing', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] }, confirm: false });
+  soloRoot(t, { ticked: ['a1', 'a2'], turns: true });
+  await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+  assert.equal(t.confirms.length, 1);
+  assert.match(t.confirms[0].body, /\+APEX…048 · take turns\. LIVE account ticked in: APEX…048\./);
+  assert.deepEqual(t.posts, []);
+});
+
+test('solo Save: losing the last account while ON says today is over for it', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  soloRoot(t, { ticked: [] });
+  await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+  assert.match(t.confirms[0].body, /It loses its last account: today is over for it; it trades again tomorrow\./);
+  assert.deepEqual(t.posts[0].body.accounts, []);
+});
+
+test('solo Save: a refusal is said in words and the draft stays', async () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] }, answer: { ok: false, detail: 'Set the limits first.' } });
+  const one = soloRoot(t, { ticked: ['a1'], hold: true });
+  vm.runInContext('soloEdit("lab_nq_orb")', t.ctx);
+  assert.match(one['.solo-save'].innerHTML, /Save: holds overnight/);
+  await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+  assert.match(t.toasts[0], /^NQ ORB NOT saved — /);
+  assert.equal(vm.runInContext('!!SOLO_DRAFT.lab_nq_orb', t.ctx), true);
+});
+
+test('solo status: red with every reason, the Desk OFF and an offline account named', () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] } });
+  t.ctx.ST.armed = false;
+  t.ctx.ST.accounts.a2.connected = false;
+  assert.match(t.view(), /<div class="mcap warn">Not trading: the Desk is OFF · account APEX…048 is offline\.<\/div>/);
+  const none = load();
+  assert.match(none.view(), /<div class="mcap pos">No account: it runs as practice\.<\/div>/);
+  const dead = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  dead.ctx.ST.strategies.lab_nq_orb.lab.state = 'runner_down';
+  assert.match(dead.view(), /Not trading: its runner is not running/);
+});
+
+test('a strategy in a team has no ticks of its own: its page says so and opens the team', () => {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  t.ctx.ST.groups = { g3: { name: 'apex 300k', members: ['lab_nq_orb'], accounts: ['a1'], on: true } };
+  const html = t.view();
+  assert.match(html, /In the team apex 300k: its accounts, size and Trading switch are set on the team's page\./);
+  assert.match(html, /onclick="setView\('group',&quot;g3&quot;\)">Open apex 300k</);
+  assert.doesNotMatch(html, /solo-acct/);
 });
 
 test('m5 a save that is out stays out across a close and a re-open: no second POST, and its answer does not close the new dialog', async () => {
@@ -1723,7 +1793,7 @@ test('1.19: each member\'s state, last signal, position and today; the group tod
   assert.match(html, /<span class="t dim">Last signal 09:30<\/span><span class="t net pos">\+\$120<\/span>/);
   assert.match(html, new RegExp(`<span class="h">Last turn 10:41: NQ ORB on ${a1}</span>`));
   assert.ok(html.indexOf('Next account: ' + a2) < html.indexOf('Last turn'), 'beside the next account, in the cycle card');
-  assert.ok(html.indexOf('<h2>Account cycle</h2>') < html.indexOf('<h2>Today</h2>'), 'the members under the cycle card, as drawn');
+  assert.ok(html.indexOf('<h2>Account group</h2>') < html.indexOf('<h2>Today</h2>'), 'the members under the cycle card, as drawn');
   assert.ok(html.indexOf('<h2>Today</h2>') < html.indexOf('<h2>Changes (7 days)</h2>'), 'the group\'s Changes (7 days) under Today (WP1.15)');
   assert.match(html, /onclick="openGroupMember\(&quot;lab_nq_orb&quot;\)"/);
 });
@@ -1750,7 +1820,7 @@ test('1.19: a piece with no data is left out: no answer, no turn, the cycle off,
   assert.match(noPnl.page(), /<h2>Today<\/h2>/);
 });
 
-// ---- families (owner 2026-10-29): variants of one idea fold under one sidebar row; account cycles are their own section --------
+// ---- families (owner 2026-10-29): variants of one idea fold under one sidebar row; account groups are their own section --------
 test('a family folds its variants by their short names, the rest follow; the cycle is its own section; the family page sets them side by side', () => {
   const t = groupDesk({});
   vm.runInContext(`DESKFAM = {families: [{id: "f1", name: "NQ ORB", members: ["lab_nq_orb"], short: {lab_nq_orb: "1.5R"}}], ok: true};
@@ -1759,7 +1829,7 @@ test('a family folds its variants by their short names, the rest follow; the cyc
   assert.match(side, /<span>NQ ORB<\/span>/, 'the family is a folding header');
   assert.match(side, /<b>1\.5R<\/b>/, 'its variant shows by its short name');
   assert.ok(side.indexOf('NQ ORB') < side.indexOf('nq930') || !/nq930/.test(side), 'families first, then the strategies in no family');
-  assert.match(side, /<span>Account cycles<\/span>/);
+  assert.match(side, /<span>Account groups<\/span>/);
   assert.match(side, /setView\('group',&quot;g1&quot;\)[^>]*>\s*<i class="sd ok"><\/i><span class="it"><b>Apex<span class="tag">cycle<\/span><\/b>/, 'the cycle is one row, on');
   assert.equal((side.match(/setView\('strat','lab_nq_orb'\)/g) || []).length, 1, 'a variant in a family and a cycle shows once');
   const page = vm.runInContext('familyView("f1")', t.ctx);

@@ -7,16 +7,14 @@ function tradeWords(a) {
 }
 const DEMO_TAG = '<span class="tag" title="A demo account — the broker\'s practice money">DEMO</span>';
 /* The size on an account row: "×N" (a Lab row with settings: "$X risk", and a small tag when it stops after a win or in profit).
-   A Lab row with a size opens the account's settings sheet on click; any other row keeps the inline size box. */
+   A Lab row with a size shows its words only (settings dropped, owner 2026-11-02); any other row keeps the inline size box. */
 function acctQtyHtml(id, extra) {
   const row = extra.row, words = row ? AcctSet.label(row) : "×" + extra.qty, tag = row ? AcctSet.tag(row) : "";
   const nw = ' style="white-space:nowrap"';                   // "$500 risk" and its tag never break inside themselves
   const note = tag ? `<span class="mcap"${nw}>${esc(tag)}</span>` : "";
   if (!extra.strategy || extra.locked) return `<span class="strats"${row && row.size ? nw : ""}>${esc(words)}</span>${note}`;
-  return (row && row.size
-    ? `<span class="strats qty-edit"${nw} title="Click for this account's settings"
-           onclick="openAcctSet(${jsArg(extra.strategy)},${jsArg(id)})">${esc(words)}</span>`
-    : `<span class="strats qty-edit" title="Click to change size"
+  if (row && row.size) return `<span class="strats"${nw}>${esc(words)}</span>${note}`;     // per-account settings dropped (owner, 2026-11-02)
+  return (`<span class="strats qty-edit" title="Click to change size"
            onclick="editQty(event,'${extra.strategy}',${jsArg(id)},${extra.qty})">${esc(words)}</span>`) + note;
 }
 function acctRow(id, extra) {
@@ -36,7 +34,6 @@ function acctRow(id, extra) {
     <span class="kvi" data-ro="bal">${usd(a.balance)}</span>
     <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}" data-ro="pnl" title="Today, 18:00 to 16:00 ET: balance now minus balance at 18:00">${DAY_PNL_WORDS(pnl)}</span>
     <button class="btn btn-outline btn-sm" onclick="openCal(${jsArg(a.account || a.label)})">Calendar</button>
-    ${extra.strategy && extra.row ? `<button class="btn btn-outline btn-sm"${extra.locked ? " disabled" : ` onclick="openAcctSet(${jsArg(extra.strategy)},${jsArg(id)})"`}>Settings</button>` : ""}
     ${extra.strategy ? `<button class="x"${extra.locked ? " disabled" : ""} style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
       ${extra.locked ? "" : `onclick="removeAsg('${extra.strategy}',${jsArg(id)})" `}title="Unassign">&times;</button>` : ""}
   </div>`;
@@ -67,7 +64,7 @@ function rotationHtml(name) {
     <button class="switch" role="switch" aria-label="Take turns" aria-checked="${!!rot.on}"
       title="${rot.on ? "ON — each trade goes to the next account in the list" : "OFF — every trade goes to every account"}"
       onclick="setRotation(${jsArg(name)}, ${!rot.on})"></button></div>
-    ${cyc ? `<div class="feed-row"><span class="h">In the ${esc(cyc.name)} account cycle: it picks the account (next: ${esc(acctShort(cyc.next || ""))})</span></div>`
+    ${cyc ? `<div class="feed-row"><span class="h">In the ${esc(cyc.name)} account group: it picks the account (next: ${esc(acctShort(cyc.next || ""))})</span></div>`
           : rot.on && rot.next ? `<div class="feed-row"><span class="h">Next account: ${esc(acctShort(rot.next))}</span></div>` : ""}</div>`;
 }
 async function setRotation(name, on) {

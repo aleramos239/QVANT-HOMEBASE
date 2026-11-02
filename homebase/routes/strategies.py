@@ -11,6 +11,28 @@ from ..desk import labcfg, labdesk as labdesk_mod
 from ..desk_app.brokers import is_atr_key, is_tsx_key
 
 
+def book_rows(cfg, labdesk, name: str, assignments: list) -> list:
+    """The book rows a page sent, checked as a book write checks them (HTTPException with the sentence)."""
+    rows = []
+    for a in assignments:
+        aid, qty = str(a.get("account") or ""), int(a.get("qty") or 0)
+        if aid not in cfg.accounts:
+            raise HTTPException(400, f"unknown account {aid!r}")
+        if qty > 0:
+            try:
+                row = {**a, "account": aid, "qty": qty}
+                if not labdesk.is_lab(name):     # a built-in strategy has no row settings: never a 400 for what it drops
+                    row = {"account": aid, "qty": qty}
+                rows.append(labcfg.book_row(row))
+            except ValueError as e:
+                raise HTTPException(400, str(e)) from None
+    if not topstepx.TSX_BOOKING_OPEN and any(is_tsx_key(cfg.accounts[r["account"]].keyring_key) for r in rows):
+        raise HTTPException(409, topstepx.TSX_BOOKING_CLOSED)
+    if not alphatrader.ATR_BOOKING_OPEN and any(is_atr_key(cfg.accounts[r["account"]].keyring_key) for r in rows):
+        raise HTTPException(409, alphatrader.ATR_BOOKING_CLOSED)
+    return rows
+
+
 def register(app, *, cfg, engine, labdesk) -> None:
 
     @app.post("/api/strategy")
@@ -123,23 +145,7 @@ def register(app, *, cfg, engine, labdesk) -> None:
         name = str(body.get("strategy") or "")
         if name not in cfg.strategies:
             raise HTTPException(404, f"unknown strategy {name!r}")
-        rows = []
-        for a in body.get("assignments") or []:
-            aid, qty = str(a.get("account") or ""), int(a.get("qty") or 0)
-            if aid not in cfg.accounts:
-                raise HTTPException(400, f"unknown account {aid!r}")
-            if qty > 0:
-                try:
-                    row = {**a, "account": aid, "qty": qty}
-                    if not labdesk.is_lab(name):     # a built-in strategy has no row settings: never a 400 for what it drops
-                        row = {"account": aid, "qty": qty}
-                    rows.append(labcfg.book_row(row))
-                except ValueError as e:
-                    raise HTTPException(400, str(e)) from None
-        if not topstepx.TSX_BOOKING_OPEN and any(is_tsx_key(cfg.accounts[r["account"]].keyring_key) for r in rows):
-            raise HTTPException(409, topstepx.TSX_BOOKING_CLOSED)
-        if not alphatrader.ATR_BOOKING_OPEN and any(is_atr_key(cfg.accounts[r["account"]].keyring_key) for r in rows):
-            raise HTTPException(409, alphatrader.ATR_BOOKING_CLOSED)
+        rows = book_rows(cfg, labdesk, name, body.get("assignments") or [])
         previous = [dict(r) for r in cfg.book.get(name) or []]
         try:
             if labdesk.is_lab(name):         # its book lives in its own file beside its record, never in config.json

@@ -237,10 +237,10 @@ const ACTIVITY = {
   },
   group_save_failed: (r) => [`${actCycle(r)}: the next account could not be saved — ${actErr(r.error)}`, "neg"],
 };
-/* "Account cycle "apex 300k"": the journal line's own name, else the Desk group's, else its id. */
+/* "Account group "apex 300k"": the journal line's own name, else the Desk group's, else its id. */
 function actCycle(r) {
   const g = typeof DESKGROUPS !== "undefined" ? DESKGROUPS.groups.find(x => x.id === r.group) : null;
-  return `Account cycle "${r.name || (g && g.name) || r.group}"`;
+  return `Account group "${r.name || (g && g.name) || r.group}"`;
 }
 const actSides = (s) => (Array.isArray(s) ? s : []).map(x => x === "Buy" ? "long" : x === "Sell" ? "short" : String(x)).join(" and ") || "trade";
 /* A Lab strategy's flatten answers with plain steps that are not failures ("This trade had already ended."): read them as plain, for a Lab strategy only. */
@@ -310,7 +310,7 @@ function renderActivity(journal) {
 const actDay = (d) => { try { return new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric", timeZone: "UTC"}); } catch (_) { return d; } };
 /* Activity for one strategy or one group, or for more than today (owner 2026-10-26: "see which strategy copied on which account
    and when"): the Desk's journal for those days (GET /api/journal, strategy/group/days), read again every 15 s while the page is
-   open. Everything, today, stays the status poll's own tail. A group shows its strategies' lines and its account cycle's. */
+   open. Everything, today, stays the status poll's own tail. A group shows its strategies' lines and its account group's. */
 let ACT_WHO = "", ACT_DAYS = 1, ACT_EVENT = "", ACT_ACCT = "", ACT_DATE = "", ACT_ROWS = null, ACT_BUSY = false, ACT_AT = 0;
 const ACT_SEEN = {events: new Set(), accts: new Set()};      // the event types and accounts any rows shown carried: the choices of the two menus
 const actFiltered = () => ACT_WHO !== "" || ACT_DAYS > 1 || ACT_EVENT !== "" || ACT_ACCT !== "" || ACT_DATE !== "";
@@ -500,10 +500,10 @@ const CHG_WORDS = {
   },
   group_set: (r, prior) => {
     const money = (v) => +v > 0 ? usd(v).replace(/\.00$/, "") + " at risk a trade" : "each at its own size";
-    if (!prior) return {text: `Account cycle ${r.on ? "ON" : "OFF"} · ${money(r.risk_usd)}`};
+    if (!prior) return {text: `Account group ${r.on ? "ON" : "OFF"} · ${money(r.risk_usd)}`};
     const list = (k, word) => [...(r[k] || []).filter(x => !(prior[k] || []).includes(x)).map(x => `${word(x)} added`),
       ...(prior[k] || []).filter(x => !(r[k] || []).includes(x)).map(x => `${word(x)} taken out`)];
-    const parts = [...(r.on !== prior.on ? [`Account cycle ${prior.on ? "ON" : "OFF"} → ${r.on ? "ON" : "OFF"}`] : []),
+    const parts = [...(r.on !== prior.on ? [`Account group ${prior.on ? "ON" : "OFF"} → ${r.on ? "ON" : "OFF"}`] : []),
       ...(r.risk_usd !== prior.risk_usd ? [`Size ${money(prior.risk_usd)} → ${money(r.risk_usd)}`] : []),
       ...[...new Set([...Object.keys(r.risk_by || {}), ...Object.keys(prior.risk_by || {})])]
         .filter(m => (+(r.risk_by || {})[m] || 0) !== (+(prior.risk_by || {})[m] || 0))

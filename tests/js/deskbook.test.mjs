@@ -299,23 +299,15 @@ function rowPage() {
   return ctx;
 }
 
-test('per-account settings: a Lab row with a size shows it and opens the sheet; one without keeps the inline box', () => {
+test('per-account settings: a Lab row with a size shows its words and opens nothing (extras dropped, owner 2026-11-02); one without keeps the inline box', () => {
   const c = rowPage();
   const sized = c.acctRow('paper-1', { qty: 1, strategy: 'lab_orb', row: SET_ROW });
-  assert.match(sized, /onclick="openAcctSet\(&quot;lab_orb&quot;,&quot;paper-1&quot;\)"/);
-  assert.doesNotMatch(sized, /editQty/);
-  assert.match(sized, /\$500 risk/);
-  assert.match(sized, /stops after a win/);
+  assert.doesNotMatch(sized, /openAcctSet|editQty|>Settings</);
   // one line each: the size and its tag never wrap inside themselves (final review minor 14)
-  assert.match(sized, /<span class="strats qty-edit" style="white-space:nowrap"[^>]*>\$500 risk<\/span><span class="mcap" style="white-space:nowrap">stops after a win<\/span>/);
-  assert.match(sized, /<button class="btn btn-outline btn-sm" onclick="openAcctSet\(&quot;lab_orb&quot;,&quot;paper-1&quot;\)">Settings<\/button>/);
+  assert.match(sized, /<span class="strats" style="white-space:nowrap">\$500 risk<\/span><span class="mcap" style="white-space:nowrap">stops after a win<\/span>/);
   const legacy = c.acctRow('paper-1', { qty: 2, strategy: 'lab_orb', row: { account: 'paper-1', qty: 2 } });
   assert.match(legacy, /onclick="editQty\(event,'lab_orb',&quot;paper-1&quot;,2\)"/);
-  assert.match(legacy, />Settings<\/button>/, 'every Lab row gets the Settings button');
-  const locked = c.acctRow('paper-1', { qty: 1, strategy: 'lab_orb', row: SET_ROW, locked: true });
-  assert.match(locked, /<span class="strats" style="white-space:nowrap">\$500 risk<\/span>/);
-  assert.doesNotMatch(locked, /qty-edit/);
-  assert.match(locked, /<button class="btn btn-outline btn-sm" disabled[^>]*>Settings<\/button>/);
+  assert.doesNotMatch(legacy, /Settings|openAcctSet/);
 });
 
 test('per-account settings: a built-in strategy\'s row is exactly as before -- no Settings button', () => {

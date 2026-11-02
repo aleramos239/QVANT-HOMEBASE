@@ -675,13 +675,11 @@ body[data-cursor-style="dot"] .panel[data-cursor="crosshair"] .chart * {
 .tr-sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; line-height: 11px; opacity: .9; }
 .tr-sub:empty { display: none; }
 /* S1, the LIVE cue (2026-09-28 safety pass): while the NEXT send from the chart's Buy/Sell block or the order panel's
-   Send reaches a LIVE account (HBTradeUI.liveCue -- the send path's own account set), a red ring round it and a LIVE
-   tag on each send button, one-click on or off. Nothing here takes space: the ring is an absolutely positioned
-   pseudo-element outside the buttons, the tag sits inside a label that already fits it (the buttons' fixed width),
-   so the block never moves or resizes when it appears or goes. Demo / paper: none of it. */
+   Send reaches a LIVE account (HBTradeUI.liveCue -- the send path's own account set), a LIVE tag on each send button,
+   one-click on or off. The tag sits inside a label that already fits it (the buttons' fixed width), so the block never
+   moves or resizes when it appears or goes. Demo / paper: none of it. */
 .lg-trade { position: relative; align-self: flex-start; }   /* the slot's top: a taller accounts column never moves it */
-.lg-trade.live::before, .op-sendwrap.live::before { content: ''; position: absolute; inset: -3px; border: 2px solid var(--down);
-  border-radius: 6px; pointer-events: none; }
+/* the red ring round them was removed (owner, 2026-11-02); the LIVE tag stays */
 .tr-lbl { display: inline-flex; align-items: center; gap: 4px; }
 .tr-live { flex: none; padding: 0 3px; border-radius: 3px; background: #FFFFFF; color: var(--down); font-size: 9px;
   font-weight: 700; line-height: 12px; letter-spacing: .04em; }
@@ -914,7 +912,6 @@ body[data-cursor-style="dot"] .panel[data-cursor="crosshair"] .chart * {
 .op-why:empty { display: none; }
 .op-foot { flex: none; padding: 0 14px 14px; }
 .op-sendwrap { position: relative; display: flex; }   /* S1: exactly the Send's own box; carries its LIVE ring */
-.op-sendwrap.live::before { border-radius: 8px; }
 .op-send .tr-live { display: inline-block; margin-right: 2px; vertical-align: 1px; }
 .op-send { width: 100%; min-height: 44px; padding: 6px 12px; border-radius: 6px; color: #FFFFFF; font-size: 14px; font-weight: 600;
   background: var(--accent); }

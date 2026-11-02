@@ -194,3 +194,22 @@ test('5.7 the panel keeps only "Show the order on the chart"; its line, thicknes
   assert.equal(typeof OP.setLook, 'function', 'Settings › Trading sets the look through the panel');
   assert.deepEqual(Object.keys(OP.look()).sort(), ['labels', 'on', 'shade', 'style', 'width']);
 });
+
+test('owner 2026-11-02: one click enters -- a Buy tile press sends at once, and the chart preview switches off after it', async () => {
+  cell.cfg.trade = { accounts: ['sim041'] };
+  desk.quotes.NQ = { bid: 30000, ask: 30000.25, last: 30000.25, ts_ms: NOW - 1000 };
+  desk.prefs.oneClickPanel = true;
+  global.document.dispatchEvent = () => true;   // setLook tells the desk's own lines (tradelines.js)
+  global.Event = class { constructor(t) { this.type = t; } };
+  OP.setRoot();
+  OP.setLook('on', true);
+  const tiles = [];
+  (function walk(n) { for (const c of n.children || []) { if (typeof c !== 'object') continue; if (c.cls.has('op-tile')) tiles.push(c); walk(c); } })(box);
+  const buy = tiles.find((t) => t.textContent === 'Buy');
+  const before = desk.sent.length;
+  buy.onclick();
+  for (let i = 0; i < 3; i++) await new Promise((r) => setTimeout(r, 0));
+  assert.equal(desk.sent.length, before + 1, 'one press, one order');
+  assert.equal(desk.sent.at(-1).b.side, 'Buy');
+  assert.equal(OP.look().on, false, 'the preview is off once the order went');
+});

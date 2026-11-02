@@ -187,8 +187,8 @@ function build() {
     b.type = 'button';
     b.setAttribute('aria-pressed', 'false');
     b.append(mk('span', 'op-tlbl', side));
-    // the owner, 2026-10-26: a Buy / Sell press brings the chart preview back (the tag's × or the switch hid it)
-    b.onclick = () => { st.side = side; if (look.on) paint(); else setLook('on', true); };
+    // the owner, 2026-11-02: one click enters -- a Buy / Sell press picks the side and sends, as Send would
+    b.onclick = () => { st.side = side; paint(); send(); };
     ui.tile[side] = { b };
   }
   tiles.append(ui.tile.Sell.b, ui.tile.Buy.b);
@@ -454,7 +454,7 @@ function sendNow() {
   // compute refused the order if BE / the trail is on without its value
   const beLevel = st.be.on && c.be ? c.be.price : null, trDist = st.tr.on && c.tr ? c.tr.ticks : null;
   const after = st.tr.after;
-  const onSent = beLevel == null && trDist == null ? null : (b) => {
+  const arm = beLevel == null && trDist == null ? null : (b) => {
     const base = { root: c.root, side: o.side, accounts: b.accounts };
     if (runOn === 'server') {   // the BE first: the trail may wait for it by id
       const be = beLevel == null ? Promise.resolve(null) : serverArm({ ...base, kind: 'be', level: beLevel });
@@ -464,6 +464,9 @@ function sendNow() {
     const be = beLevel == null ? null : armBe({ ...base, kind: 'be', level: beLevel });
     if (trDist != null) armBe({ ...base, kind: 'trail', dist: trDist, best: null, beId: after === 'be' && be ? be.id : null });
   };
+  // the owner, 2026-11-02: the chart preview switches off once the order goes (its switch brings it back); after the
+  // send, so nothing here can ever hold an order back
+  const onSent = (b) => { if (arm) arm(b); if (look.on) setTimeout(() => setLook('on', false), 0); };
   const split = st.p1.on && c.p1 ? { qty: c.n1, tp: c.p1.price } : null;   // compute refused a partial that doesn't fit
   UI().placeOrder({ onSent, split, cell, root: c.root, side: o.side, type: o.type, price: o.price, trigger: o.trigger, qty: o.qty,
     tif: o.tif, exits: { sl: o.sl, tp: o.tp }, surface: 'panel' });

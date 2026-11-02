@@ -242,13 +242,13 @@ def test_a_group_change_makes_its_account_cycle_follow_first(c, monkeypatch):
     post(c, "move", {"strategy": "lab_nq_b", "group": "g2"})
     calls = _desk(monkeypatch, lambda path, body: 200)
     assert post(c, "move", {"strategy": "lab_nq_a", "group": "g1"}).json()["ok"] is True
-    assert calls == [("/api/groups/follow", {"id": "g1", "name": "Apex", "members": ["lab_nq_a"]})]
+    assert calls == [("/api/groups/follow", {"groups": [{"id": "g1", "name": "Apex", "members": ["lab_nq_a"]}]})]
     calls.clear()
-    post(c, "move", {"strategy": "lab_nq_b", "group": "g1"})                  # out of g2, into g1: both follow
-    assert [b["id"] for _, b in calls] == ["g1", "g2"]
+    post(c, "move", {"strategy": "lab_nq_b", "group": "g1"})                  # out of g2, into g1: both follow, in ONE call
+    assert [[g["id"] for g in b["groups"]] for _, b in calls] == [["g1", "g2"]]
     calls.clear()
     post(c, "rename", {"id": "g1", "name": "Apex 300k"})
-    assert calls == [("/api/groups/follow", {"id": "g1", "name": "Apex 300k", "members": ["lab_nq_a", "lab_nq_b"]})]
+    assert calls == [("/api/groups/follow", {"groups": [{"id": "g1", "name": "Apex 300k", "members": ["lab_nq_a", "lab_nq_b"]}]})]
     calls.clear()
     assert post(c, "delete", {"id": "g1"}).json()["ok"] is True
     assert calls == [("/api/groups/delete", {"id": "g1"})]

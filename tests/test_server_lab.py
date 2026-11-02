@@ -547,6 +547,22 @@ def test_readiness_an_enabled_lab_strategy_with_no_account_is_info_not_a_warning
     assert lab_checks(client) == [{"level": "info", "label": "PP ORB", "detail": "no account: runs in shadow"}]
 
 
+def test_readiness_says_a_strategy_switched_off_on_accounts_a_locked_account_and_a_team_member_with_none(client):
+    set_limits(client)
+    book(client, [("eval1", 1)])
+    assert lab_checks(client) == [{"level": "info", "label": "PP ORB", "detail": "switched OFF: it will not trade"}]
+    client.post("/api/strategy", json={"strategy": LAB, "enabled": True})
+    assert lab_checks(client) == []
+    client.engine.book("eval1").locked = "day_lock"                              # its only account stopped for today
+    got = lab_checks(client)
+    assert len(got) == 1 and got[0]["level"] == "warn" and got[0]["detail"].startswith("account stopped for today: ")
+    client.engine.book("eval1").locked = None
+    book(client, [])
+    client.engine.groups["g9"] = {"name": "apex", "members": [LAB], "accounts": ["eval1"], "mode": "split", "assign": {}}
+    assert lab_checks(client) == [{"level": "warn", "label": "PP ORB",
+                                   "detail": "in team apex with no account: it never trades"}]
+
+
 def test_readiness_a_strategy_booked_after_its_session_opened_warns_it_runs_in_shadow_today(client):
     def checks():
         r = compute_readiness(WED_10, client.cfg, client.engine, {}, {"connected": False, "watching": {}},
