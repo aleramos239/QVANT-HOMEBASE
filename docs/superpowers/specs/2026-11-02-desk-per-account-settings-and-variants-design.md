@@ -196,9 +196,10 @@ Set up card shows its settings in words: "NQ - $500 a trade - 1.5R" or "MNQ x 3 
 
 - On a **LIVE** account, any change that can send more (NQ instead of MNQ, more contracts, more $ risk, higher cap)
   asks first, as the old sheet did (`AcctSet.needsAsk`).
-- **$ risk that buys less than one contract** of the row's contract (e.g. $500 with a 40-point stop on NQ = 0.6):
-  the trade is **skipped** on that account and the Desk says so in Activity. Never rounded up. (Today `row_size`
-  rounds; make under-1 a skip.) **My call**, mentioned to the owner.
+- **$ risk rounding (owner, 2026-11-02: "Keep 10% leeway"):** unchanged from today's `acctsize.row_size`, now with
+  the row's own contract's point value: the nearest whole contract, allowed up to 10% over the typed amount; a trade
+  where even one contract would risk more than 10% over is skipped on that account and the Desk says so in Activity.
+  Example, $500 risk with a 40-point stop: NQ = 0.6 contract -> skipped; MNQ = 6.25 -> 6.
 - The status line under the card counts per account ("Ready: ..24 NQ x1 1R, ..25 MNQ $500 2R").
 
 ## Tests (where)
