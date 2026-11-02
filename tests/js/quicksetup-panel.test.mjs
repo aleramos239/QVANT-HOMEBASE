@@ -66,7 +66,8 @@ const page = {
 };
 global.window = { HBTrade: T, HBCatalog: Cat, HBDeskClient: desk, HBIcons: { clock: '<svg></svg>', chevron: '<svg></svg>' },
   HBChartMenu: { register() {} }, HBCharts: { cells: [cell], selected: 0 }, HBCell: { badgeEl: () => new El('span') } };
-global.document = { getElementById: () => null, createElement: (t) => new El(t), get activeElement() { return active; } };
+global.document = { getElementById: () => null, createElement: (t) => new El(t), get activeElement() { return active; }, dispatchEvent: () => true };
+global.Event = class { constructor(t) { this.type = t; } };   // the preview's look tells the desk's own lines
 const realSetInterval = global.setInterval;
 global.setInterval = () => 0;   // the panel's own 1 s repaint (set up in mount): the test paints by hand
 require('../../homebase/static/charts/tradeui.js');

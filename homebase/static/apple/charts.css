@@ -135,7 +135,6 @@ html.hb-apple .ib:hover { background: var(--a-fill); color: var(--a-label); }
 html.hb-apple .cell-gear { border-radius: 0; background: var(--c-canvas); -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--a-label-2); }
 html.hb-apple .cell-gear:hover { background: var(--c-canvas); color: var(--a-label); }
 html.hb-apple .tr-sell, html.hb-apple .tr-buy, html.hb-apple .tr-flat { border-radius: 6px; }
-html.hb-apple .lg-trade.live::before { border-radius: 9px; }
 html.hb-apple .ev-tip, html.hb-apple .rail-tip { border-radius: 6px; font-size: 11px; line-height: 14px; }
 
 /* the drawing tools: a flat full-height panel, 44 wide, hairline on its right; 28 buttons; the chosen tool on the grey pill */
@@ -232,7 +231,6 @@ html.hb-apple .op-foot { padding: 2px 11px 14px; }
 html.hb-apple .op-send { min-height: 36px; padding: 4px 16px; border-radius: var(--hb-bubble-r); font-size: 13px; line-height: 16px; font-weight: 590; color: #fff; }
 /* the page's own send buttons are white on the Sell red / Buy blue: the shared control reset (color: inherit) must not turn them ink */
 html.hb-apple .tr-sell, html.hb-apple .tr-buy { color: #fff; }
-html.hb-apple .op-sendwrap.live::before { border-radius: 21px; }
 html.hb-apple .op-reason { font-size: 11px; line-height: 14px; color: var(--a-label-2); }
 
 /* the mini switch (36 × 16), the size a form uses; the page marks it on with .on */
