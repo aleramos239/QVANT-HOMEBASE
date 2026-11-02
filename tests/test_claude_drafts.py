@@ -265,3 +265,13 @@ def test_the_paper_algo_list_never_carries_a_draft(tmp_path):
     with client(tmp_path) as c:
         ids = [s.get("id") for s in c.get("/api/paper/strategies").json()]
     assert ids and not any(draftstore.is_draft_id(i) for i in ids)
+
+
+@pytest.mark.parametrize("val,ok", [("1", True), ("0.5", True), ("0.25", True), ("0.3", False), ("True", False)])
+def test_static_meta_takes_whole_minutes_or_15_and_30_second_bars(val, ok):
+    src = f"from homebase.strategies.base import Strategy\nclass A(Strategy):\n    root = 'NQ'\n    bar_minutes = {val}\n"
+    if ok:
+        assert draftstore.static_meta(src)["bar_minutes"] == float(val)
+    else:
+        with pytest.raises(ValueError, match="bar_minutes"):
+            draftstore.static_meta(src)

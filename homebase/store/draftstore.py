@@ -379,10 +379,11 @@ def set_group(sid, group, base: Path | None = None) -> dict:
 
 # ---------------------------------------------------------------- static metadata (never runs the code)
 
-_CLASS_ATTRS = {"name": str, "root": str, "session_window": (tuple, list), "bar_minutes": int,
+_CLASS_ATTRS = {"name": str, "root": str, "session_window": (tuple, list), "bar_minutes": (int, float),
                 "bar_window": (tuple, list, type(None)), "placement_ms": int, "session_independent": bool,
                 "desk_settings": (tuple, list), "exec_root": str, "own_size": bool, "own_stop": bool, "bar_sizes": (tuple, list),
                 "max_trades_day": int}
+SUB_MINUTE = (0.25, 0.5)        # the only non-whole bar sizes: 15 and 30-second bars (tester only; the Desk's Lab runner takes whole minutes)
 INPUT_FIELDS = ("key", "label", "type", "default", "min", "max", "step", "choices")
 
 
@@ -447,6 +448,8 @@ def static_meta(source: str) -> dict:
                 v = _lit(st.value, t.id)
                 if not isinstance(v, _CLASS_ATTRS[t.id]) or (t.id in ("bar_minutes", "max_trades_day") and isinstance(v, bool)):
                     raise StaticError(f"{t.id}: wrong type ({type(v).__name__})")
+                if t.id == "bar_minutes" and isinstance(v, float) and v not in SUB_MINUTE:
+                    raise StaticError(f"bar_minutes: whole minutes, or {' / '.join(map(str, SUB_MINUTE))} (15 / 30-second bars)")
                 meta[t.id] = list(v) if isinstance(v, (tuple, list)) else v
         if isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef)) and st.name == "inputs":
             body = [b for b in st.body if not (isinstance(b, ast.Expr) and isinstance(b.value, ast.Constant))]

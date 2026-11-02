@@ -188,3 +188,21 @@ def test_the_warm_job_keeps_the_sidecar_fresh(tmp_path):
     os.utime(p, ns=(p.stat().st_atime_ns, p.stat().st_mtime_ns + 1_000_000_000))
     tape_mod._warm_one((str(base), str(cache), "NQ", D))
     assert minutebars.fresh(p)
+
+
+def test_15_and_30_second_bars_sit_on_whole_seconds_and_make_up_the_minute():
+    tp = synthetic()
+    t0, t1 = et_ns(D, "09:30"), et_ns(D, "16:00")
+    lo, hi = bisect_left(tp.ts, t0), bisect_left(tp.ts, t1)
+    one = build_bars(tp.ts, tp.px, tp.size, lo, hi, t0, t1, 1)
+    for mins, secs in ((0.5, 30), (0.25, 15)):
+        bars = build_bars(tp.ts, tp.px, tp.size, lo, hi, t0, t1, mins)
+        assert bars and all(type(b.start_ns) is int and b.start_ns % (secs * 1_000_000_000) == 0
+                            and b.end_ns - b.start_ns == secs * 1_000_000_000 for b in bars)
+        by_min = {}
+        for b in bars:
+            by_min.setdefault(b.start_ns - b.start_ns % M, []).append(b)
+        for m in one:                                  # the sub-minute bars of a minute rebuild it
+            parts = by_min[m.start_ns]
+            assert (parts[0].o, max(p.h for p in parts), min(p.l for p in parts), parts[-1].c, sum(p.v for p in parts)) \
+                == (m.o, m.h, m.l, m.c, m.v)

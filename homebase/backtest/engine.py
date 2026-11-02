@@ -368,7 +368,7 @@ class _Sim:
     def atr(self, minutes: int, period: int) -> float | None:
         """Mean true range of the last `period` closed `minutes` bars before now (the bar in progress is not
         used), looking back over the whole tape (overnight included). None when there are not that many."""
-        step = minutes * 60_000_000_000
+        step = bar_ns(minutes)
         b1 = self.now - self.now % step
         j1 = bisect_left(self.ts, b1, 0, self.hi)
         rows, guard = [], period * 4 + 4
@@ -391,7 +391,7 @@ class _Sim:
 
     def candle(self) -> tuple | None:
         """(low, high) of the last CLOSED signal bar (sig_min minutes) before now -- at a bar's close, that bar -- or None."""
-        step = self.sig_min * 60_000_000_000
+        step = bar_ns(self.sig_min)
         b1 = self.now - self.now % step
         j0, j1 = bisect_left(self.ts, b1 - step, 0, self.hi), bisect_left(self.ts, b1, 0, self.hi)
         if j1 <= j0:
@@ -704,13 +704,18 @@ class _Sim:
             self._close(pos, to_tick(self.px[k] - pos.side * self.slip, self.tick), k, reason)
 
 
+def bar_ns(minutes) -> int:
+    """A bar's length in whole nanoseconds: 0.25 / 0.5 minutes (15 / 30-second bars) stay exact integers."""
+    return round(minutes * 60_000_000_000)
+
+
 def build_bars(ts, px, size, lo: int, hi: int, t0: int, t1: int, minutes: int, m1: tuple | None = None) -> list[Bar]:
     """Time bars from prints [lo, hi), aligned to multiples of `minutes` in epoch
     time (ET-aligned: offsets are whole hours), covering [t0, t1). Empty buckets
     make no bar. m1: the tape's 1-minute bars (Tape.minutes) to compose them from
     instead of the prints -- the same bars, ONLY when `minutes` is whole and [lo, hi)
     is every print of a span on whole minutes (run_session checks)."""
-    step = minutes * 60_000_000_000
+    step = bar_ns(minutes)
     out = []
     b0 = t0 - t0 % step
     if m1 is not None:
@@ -744,7 +749,7 @@ def exit_lines(ts, px, size, hi: int, d, t0: int, t1: int, kind: str, minutes: i
     closes from the tape's first print. Bars before a line exists are left out."""
     if hi <= 0:
         return {}
-    step = minutes * 60_000_000_000
+    step = bar_ns(minutes)
     start = et_ns(d, "09:30") if kind == "vwap_rth" else int(ts[0])
     bars = build_bars(ts, px, size, 0, hi, start - start % step, t1, minutes)
     n = int(kind[3:]) if kind.startswith("ema") else 0
