@@ -21,7 +21,7 @@ function renderSide(names, hiddenCount, issues) {
     return id;
   }), []);
   /* families fold their variants under one row, each by its short name (owner 2026-10-29); the strategies in no family follow.
-     Account cycles (the Desk groups) are their own section below: a variant can be in a family and a cycle at once. */
+     Account groups (the Desk groups) are their own section below: a variant can be in a family and a cycle at once. */
   const inFam = new Set(DESKFAM.families.flatMap(f => f.members));
   const loose = names.concat(labIds).filter(id => !inFam.has(id)).map(id => rowOf[id] || "").join("");
   const famBlocks = DESKFAM.families.filter(f => !famArchived(f)).map(f => {      // a family all in the Archive sits there, not here
@@ -32,7 +32,7 @@ function renderSide(names, hiddenCount, issues) {
   }).join("");
   const cycRows = DESKGROUPS.groups.map(g => {
     const gr = (ST.groups || {})[g.id] || {}, on = !!gr.on, n = g.members.length, word = {share: "shared", split: "split"}[gr.mode] || "cycle";
-    return `<button class="item one${sel("group", g.id)}" onclick="setView('group',${jsArg(g.id)})" aria-current="${sel("group", g.id) ? "page" : "false"}" title="${on ? "Its account cycle is on" : "Its account cycle is off"}">
+    return `<button class="item one${sel("group", g.id)}" onclick="setView('group',${jsArg(g.id)})" aria-current="${sel("group", g.id) ? "page" : "false"}" title="${on ? "Its account group is on" : "Its account group is off"}">
       <i class="sd ${on ? "ok" : "off"}"></i><span class="it"><b>${esc(g.name)}${on ? `<span class="tag">${word}</span>` : ""}</b></span>
       <span class="ir mono dim">${n}</span></button>`;
   }).join("") || `<button class="side-more" onclick="openGroupMgr()">None yet · add one</button>`;
@@ -54,10 +54,10 @@ function renderSide(names, hiddenCount, issues) {
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span>Today</span><span></span></button>
-    ${head("strat", "Strategies", names.length + labIds.length, `<span class="sh-acts"><button class="sh-btn grp-new" title="Families and account cycles: new, delete, add or remove strategies" aria-label="Manage families and account cycles" onclick="openGroupMgr()">+</button><button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button></span>`)}
+    ${head("strat", "Strategies", names.length + labIds.length, `<span class="sh-acts"><button class="sh-btn grp-new" title="Families and account groups: new, delete, add or remove strategies" aria-label="Manage families and account groups" onclick="openGroupMgr()">+</button><button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button></span>`)}
     ${SIDE_FOLD.strat ? "" : famBlocks + loose + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")
       + ((DESKLAB.archived || []).length || VIEW.k === "archive" ? `<button class="side-more${sel("archive")}" onclick="setView('archive')">Archive · ${(DESKLAB.archived || []).length}</button>` : "")}
-    ${head("cyc", "Account cycles", DESKGROUPS.groups.length, `<button class="sh-btn" title="Account cycles: new, delete, add or remove strategies" aria-label="Manage account cycles" onclick="openGroupMgr()">+</button>`)}
+    ${head("cyc", "Account groups", DESKGROUPS.groups.length, `<button class="sh-btn" title="Account groups: new, delete, add or remove strategies" aria-label="Manage account groups" onclick="openGroupMgr()">+</button>`)}
     ${SIDE_FOLD.cyc ? "" : cycRows}
     ${head("accts", "Accounts", accts.length, `<button class="sh-btn" title="Add account" aria-label="Add account" onclick="openConnect()">+</button>`)}
     ${SIDE_FOLD.accts ? "" : acctRows + more}
@@ -343,10 +343,38 @@ function setupHtml(name, s) {
     ["Window", lab ? specOf(c, name) : [c.kind === "bars" ? `${c.bar_minutes}-minute bars` : c.fire_et ? `fires ${String(c.fire_et).slice(0, 5)} ET` : "",
       c.flat_et ? `flat by ${c.flat_et} ET` : "", (c.only_dates || []).length ? `only on ${c.only_dates.length} set day${c.only_dates.length === 1 ? "" : "s"}` : "every weekday"]
       .filter(Boolean).join(" · ")],
-    ["Group", cyc ? `${cyc.name} (account cycle ${cyc.on ? "ON" : "OFF"}${cyc.mode === "share" ? ", every account" : cyc.mode === "split"
+    ["Group", cyc ? `${cyc.name} (account group ${cyc.on ? "ON" : "OFF"}${cyc.mode === "share" ? ", every account" : cyc.mode === "split"
       ? `, ${(cyc.assign || {})[name] ? "its account " + acctShort(cyc.assign[name]) : "no account of its own"}` : ""}${cyc.on && cyc.next ? `, next ${acctShort(cyc.next)}` : ""})` : dg ? dg.name : "none"],
     ...(machineWords() ? [["Machine", machineWords().replace(/^on /, "")]] : []),
   ];
   return `<div class="sec setup"><h2>Setup</h2>${red.map(t => `<div class="mcap warn">${esc(t)}</div>`).join("")}
-    <div class="agroup feed static">${rows.map(([k, v]) => `<div class="feed-row"><span class="t">${esc(k)}</span><span class="h">${esc(v)}</span></div>`).join("")}</div></div>`;
+    <div class="agroup feed static">${rows.map(([k, v]) => `<div class="feed-row"><span class="t">${esc(k)}</span><span class="h">${esc(v)}</span></div>`).join("")}
+    ${lab ? labSetRows(name, lab) : ""}</div></div>`;
+}
+
+/* The settings a Lab strategy lets the Desk change (desk_settings), as a menu / number box (owner 2026-11-01: "i still dont see
+   where i would switch it"). A change saves on pick (Enter or leaving the box for a number); setLabSetting asks first when
+   a LIVE account is booked, and the Desk refuses it while the session runs. Focus holds repaints (FREEZE) so a poll never wipes it. */
+function labSetRows(name, lab) {
+  const specs = (Array.isArray(lab.settings) ? lab.settings : []).filter(x => x && typeof x.key === "string");
+  const p = lab.params || {}, off = lab.read_only ? " disabled" : "";
+  const hold = `onfocus="FREEZE=true" onblur="FREEZE=false;refresh()"`;
+  return specs.map(sp => {
+    const v = p[sp.key] != null ? p[sp.key] : sp.default, lbl = esc(sp.label || sp.key), k = jsArg(name), key = jsArg(sp.key);
+    const ctl = sp.type === "choice" || sp.type === "bool"
+      ? `<select class="hb-field" aria-label="${lbl}"${off} ${hold} onchange="labSetPick(${k},${key},this,${jsArg(v)},${jsArg(sp.type)})">${
+          (sp.type === "bool" ? [["true", "On"], ["false", "Off"]] : (sp.choices || []).map(c => [String(c), String(c)]))
+            .map(([val, txt]) => `<option value="${esc(val)}"${String(v) === val ? " selected" : ""}>${esc(txt)}</option>`).join("")}</select>`
+      : `<input class="hb-field" type="number" inputmode="decimal" aria-label="${lbl}" value="${esc(String(v))}"${sp.min != null ? ` min="${sp.min}"` : ""}${sp.max != null ? ` max="${sp.max}"` : ""}${sp.step != null ? ` step="${sp.step}"` : ""} style="width:90px;text-align:right"${off} ${hold}
+          onchange="labSetPick(${k},${key},this,${jsArg(v)},'float')" onkeydown="if(event.key==='Enter'&&!event.repeat)this.blur()">`;
+    return `<div class="feed-row"><span class="t">${lbl}</span><span class="h">${ctl}</span></div>`;
+  }).join("");
+}
+async function labSetPick(name, key, el, was, type) {
+  const v = type === "float" ? Number(el.value) : type === "bool" ? el.value === "true" : el.value;
+  if (type === "float" && !isFinite(v)) { toast("A number, please."); el.value = String(was); return; }
+  const from = type === "float" ? Number(was) : type === "bool" ? was === "true" : was;   // jsArg hands it over as text
+  const why = await setLabSetting(name, key, v, {from});
+  if (why) { toast(why, 8000); el.value = String(was); }
+  FREEZE = false; refresh();
 }

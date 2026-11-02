@@ -59,7 +59,7 @@ async function groupPost(action, body) {
 }
 /* ---- DESK FAMILIES (owner 2026-10-29): variants of one idea (the same code at other targets or stops) folded under one sidebar
    row, and one page that sets them side by side. Display only: each variant keeps its own switch, accounts and record, and may sit
-   in an account cycle too. Kept by the chart service (GET /api/tester/deskfamilies, read with the groups). ---- */
+   in an account group too. Kept by the chart service (GET /api/tester/deskfamilies, read with the groups). ---- */
 let DESKFAM = {families: [], ok: null};
 const FAMILY_ID = /^f\d{1,4}$/;
 const FAMILY_FAULT = "The family could not be shown.";
@@ -186,7 +186,7 @@ function groupView(id) {
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openGroupMgr()">Manage groups</button>
       <button class="btn btn-outline btn-sm" onclick="deleteGroup(${jsArg(g.id)})" title="The strategies stay on the Desk, in no group.">Delete group</button></div>`;
 }
-/* Account cycle (the owner, 2026-10-25): the group's strategies share ONE turn over the ticked accounts -- each trade goes to
+/* Account group (the owner, 2026-10-25): the group's strategies share ONE turn over the ticked accounts -- each trade goes to
    the next ticked account that is free, so two trades may be open at once but only on separate accounts; a trade opposite
    to one open on another of these accounts is skipped (no long on one while a short is on another); with a risk set,
    every order is sized to that many dollars at its own stop. Off by default. The engine keeps it (POST /api/groups).
@@ -268,7 +268,7 @@ function cycleEdit(id) {
 }
 function cycleHtml(g) {
   const cyc = ((ST && ST.groups) || {})[g.id] || null, mem = cycleMembers(g), dr = CYC_DRAFT[g.id] || null;
-  if (!mem.length && !cyc) return `<div class="sec"><h2>Account cycle</h2><div class="mcap">Put this group's strategies in it first
+  if (!mem.length && !cyc) return `<div class="sec"><h2>Account group</h2><div class="mcap">Put this group's strategies in it first
     (Manage groups): then tick the accounts here and switch the cycle on.</div></div>`;
   const on = !!(cyc && cyc.on), chosen = new Set(dr ? dr.accounts : cyc ? cyc.accounts : []);
   const mode = (dr && dr.mode) || cycMode(cyc), assign = (dr && dr.assign) || (cyc && cyc.assign) || {};
@@ -291,7 +291,7 @@ function cycleHtml(g) {
       placeholder="${ph}" style="width:72px;max-width:100%;text-align:right" onfocus="FREEZE=true" onblur="FREEZE=false" oninput="cycleEdit(${jsArg(g.id)})">`;
   return `<div class="sec"><h2>${esc(CYC_TITLES[mode])}</h2>${cyc && cycMode(cyc) === "split" && on ? splitRows(cyc, mem) : ""}<div class="agroup feed static">
     <div class="feed-row"><span class="h">${esc(CYC_MODES[mode])}</span>
-      <button class="switch" role="switch" aria-label="Account cycle" aria-checked="${on}"
+      <button class="switch" role="switch" aria-label="Account group" aria-checked="${on}"
         title="${on ? "ON — " + CYC_MODES[mode] : "OFF — each strategy trades its own booked accounts"}"
         onclick="toggleCycle(${jsArg(g.id)})"></button></div>
     ${on && cyc.next ? `<div class="feed-row"><span class="h">Next account: ${esc(acctShort(cyc.next))}</span></div>` : ""}
@@ -337,7 +337,7 @@ async function syncCycle(id) {
   } catch (e) { err = e || new Error("no answer"); }
   refresh();
   const why = DEMO ? "" : answerWhy(r, err);
-  if (why) toast(`Account cycle NOT updated — ${why}.`, 8000);
+  if (why) toast(`Account group NOT updated — ${why}.`, 8000);
 }
 /* Book every strategy of an ON cycle on the cycle's accounts it is not booked on yet (size 1: the cycle sizes each order). Only
    while the cycle is on: booked with it off, each strategy would trade every account at once. */
@@ -381,7 +381,7 @@ async function saveCycle(id, extra) {
   const cyc = ((ST && ST.groups) || {})[id] || null;
   if (!extra && cyc && cyc.on) {
     const d = cycleDiff(cyc, body), live = body.accounts.filter(isRealAcct), where = machineWords();
-    if (live.length && (d.up || d.liveIn.length) && !await confirmDlg("Change the LIVE account cycle?",
+    if (live.length && (d.up || d.liveIn.length) && !await confirmDlg("Change the LIVE account group?",
         `${d.parts.join(" · ")}.${d.liveIn.length ? ` LIVE account${d.liveIn.length === 1 ? "" : "s"} ticked in: ${d.liveIn.map(acctShort).join(", ")}.` : ""}` +
         ` The cycle is ON across ${live.length} LIVE account${live.length === 1 ? "" : "s"}${where ? " " + where : ""}: the next trade uses this.`,
         "Save", false)) { refresh(); return false; }
@@ -392,7 +392,7 @@ async function saveCycle(id, extra) {
   if (why === "" && !(extra && "accounts" in extra)) delete CYC_DRAFT[id];   // saved: the card shows the desk's values again
   refresh();
   if (DEMO) return false;
-  if (why) toast(`Account cycle NOT changed — ${why}.`, 8000);
+  if (why) toast(`Account group NOT changed — ${why}.`, 8000);
   return !why;
 }
 const toggleCycle = (id) => setCycle(id, !(((ST && ST.groups) || {})[id] || {}).on);
@@ -409,21 +409,21 @@ async function setCycle(id, on) {
   if (saved && on) { toast("Save or undo your changes first, then switch the cycle on.", 6000); refresh(); return; }
   const b = {...cycleBody(id), ...saved};
   const copies = on ? [] : cycleCopies(b.members);
-  if (copies.length && !await confirmDlg(`Stop the account cycle?`,
+  if (copies.length && !await confirmDlg(`Stop the account group?`,
       `${copies.length} strateg${copies.length === 1 ? "y" : "ies"} then send each trade to EVERY account booked${cycleLive(copies)}.`, "Stop the cycle", true)) { refresh(); return; }
   if (on) {
     const live = b.accounts.filter(isRealAcct).length;
     const how = {cycle: "take turns across", share: "trade every one of", split: "each trade their own one of"}[b.mode || cycMode(cyc)];
-    if (!await confirmDlg(`Start the account cycle?`, `${b.members.length} strateg${b.members.length === 1 ? "y" : "ies"} ${how} ${b.accounts.length} account${b.accounts.length === 1 ? "" : "s"}${live ? ` (${live} LIVE)` : ""}` +
+    if (!await confirmDlg(`Start the account group?`, `${b.members.length} strateg${b.members.length === 1 ? "y" : "ies"} ${how} ${b.accounts.length} account${b.accounts.length === 1 ? "" : "s"}${live ? ` (${live} LIVE)` : ""}` +
         (b.members.some(m => cycRisk(b, m) > 0) ? `, each trade sized to ${b.members.map(m => `${stratLabel(m)} ${cycRisk(b, m) > 0 ? cycUsd(cycRisk(b, m)) : "its own size"}`).join(", ")} at risk, at most ${b.max_minis} full contracts.` : ", each at its own size."), "Start", false)) { refresh(); return; }
   }
-  if (await saveCycle(id, {...saved, on})) toast(on ? `Account cycle ON: ${CYC_MODES[b.mode || cycMode(cyc)].toLowerCase()}.` : "Account cycle OFF.");
+  if (await saveCycle(id, {...saved, on})) toast(on ? `Account group ON: ${CYC_MODES[b.mode || cycMode(cyc)].toLowerCase()}.` : "Account group OFF.");
 }
 async function deleteGroup(id) {
   const g = groupOf(id);
   if (!g) return;
   const on = !!(((ST && ST.groups) || {})[id] || {}).on && cycleCopies(cycleMembers(g)).length > 0;
-  if (!await confirmDlg(`Delete ${g.name}?`, on ? `Its account cycle stops too: ${cycleCopies(cycleMembers(g)).length} of its strategies then send each trade to EVERY account booked${cycleLive(cycleCopies(cycleMembers(g)))}. Its strategies stay on the Desk, in no group.`
+  if (!await confirmDlg(`Delete ${g.name}?`, on ? `Its account group stops too: ${cycleCopies(cycleMembers(g)).length} of its strategies then send each trade to EVERY account booked${cycleLive(cycleCopies(cycleMembers(g)))}. Its strategies stay on the Desk, in no group.`
                                              : "Its strategies stay on the Desk and go back under Strategies. Nothing is switched off.", "Delete", on)) return;
   if (await groupPost("delete", {id})) toast(`${g.name} is deleted. Its strategies are in no group.`);     // its cycle went first, server side
 }

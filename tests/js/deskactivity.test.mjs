@@ -341,14 +341,14 @@ test("a kill step the engine reports as a no-op ('already killed — nothing to 
     { text: 'NQ930 flattened on 1 account', tone: '' });
 });
 
-// ---- the account cycle's lines (2026-10-26) ----------------------------------------------------------------------------------
-test('the account cycle says what it skipped and why, and which accounts it runs on', () => {
+// ---- the account group's lines (2026-10-26) ----------------------------------------------------------------------------------
+test('the account group says what it skipped and why, and which accounts it runs on', () => {
   const l = (r) => line(r, null, { accounts: ACCTS });
   assert.equal(l({ event: 'group_hedge_skipped', group: 'g4', strategy: 'lab_x', sides: ['Buy'], open: ['Sell'] }).text,
-    'LAB_X skipped a long — a short is open on another account of account cycle "g4" (no hedging)');
+    'LAB_X skipped a long — a short is open on another account of account group "g4" (no hedging)');
   assert.equal(l({ event: 'group_hedge_skipped', group: 'g4', strategy: 'lab_x', sides: ['Buy'], open: ['Sell'] }).tone, 'warn');
   assert.match(l({ event: 'group_set', group: 'g4', name: 'apex 300k', on: true, members: ['a', 'b'], accounts: ['1234567049'], risk_usd: 1000 }).text,
-    /^Account cycle "apex 300k" ON — 2 strategies on .*049 · \$1,000/);
+    /^Account group "apex 300k" ON — 2 strategies on .*049 · \$1,000/);
   assert.match(l({ event: 'group_skipped', group: 'g4', strategy: 'lab_x', reason: 'No account of its group could take this trade.',
     accounts: { '1234567049': 'busy' } }).text, /skipped — No account of its group could take this trade\. \(.*049: busy\)/);
 });

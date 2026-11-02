@@ -67,7 +67,7 @@ function rotationHtml(name) {
     <button class="switch" role="switch" aria-label="Take turns" aria-checked="${!!rot.on}"
       title="${rot.on ? "ON — each trade goes to the next account in the list" : "OFF — every trade goes to every account"}"
       onclick="setRotation(${jsArg(name)}, ${!rot.on})"></button></div>
-    ${cyc ? `<div class="feed-row"><span class="h">In the ${esc(cyc.name)} account cycle: it picks the account (next: ${esc(acctShort(cyc.next || ""))})</span></div>`
+    ${cyc ? `<div class="feed-row"><span class="h">In the ${esc(cyc.name)} account group: it picks the account (next: ${esc(acctShort(cyc.next || ""))})</span></div>`
           : rot.on && rot.next ? `<div class="feed-row"><span class="h">Next account: ${esc(acctShort(rot.next))}</span></div>` : ""}</div>`;
 }
 async function setRotation(name, on) {

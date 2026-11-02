@@ -108,7 +108,7 @@ test('open: a Lab row fills the fields; a cycle with risk shows the note', () =>
   assert.equal(t.$('#asQty').value, '3');
   assert.equal(t.$('#asSize').value, 'own');
   assert.equal(t.$('#asCycle').hidden, false);
-  assert.match(t.$('#asCycle').textContent, /The account cycle sizes this strategy while it is on/);
+  assert.match(t.$('#asCycle').textContent, /The account group sizes this strategy while it is on/);
   const off = load({ book: { lab_x: [{ account: 'live1', qty: 3 }] } });
   off.api.openAcctSet('lab_x', 'live1');
   assert.equal(off.$('#asCycle').hidden, true);

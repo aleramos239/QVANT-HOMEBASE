@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-/* Account cycle (the owner, 2026-10-25): a Desk group's page carries the cycle -- a switch, the accounts to tick, the risk
+/* Account group (the owner, 2026-10-25): a Desk group's page carries the cycle -- a switch, the accounts to tick, the risk
    per trade and the most per trade -- and, while on, "Next account: X". Turning it ON asks first, naming LIVE accounts. */
 import { HTML } from './deskpage.mjs';
 const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
 const ESC = between('const esc = (v) =>', 'async function chartPost(');
-const CODE = between('/* Account cycle (the owner, 2026-10-25)', 'async function deleteGroup(');
+const CODE = between('/* Account group (the owner, 2026-10-25)', 'async function deleteGroup(');
 
 function ctx({ cyc = null, live = false, liveSet = null, yes = true, reply, ticked = ['a'], risk = '1000', minis = '17', book = { lab_x: [{ account: 'a', qty: 1 }] },
               group = { name: 'Apex', members: ['lab_x', 'nq930'] }, accounts = { a: {}, b: {} }, machine = 'server' } = {}) {
@@ -45,7 +45,7 @@ function ctx({ cyc = null, live = false, liveSet = null, yes = true, reply, tick
 test('off: a switch, every account to tick, no next account', () => {
   const { c } = ctx();
   const h = c.cycleHtml({ id: 'g1', members: ['lab_x', 'nq930'] });
-  assert.match(h, /Account cycle/);
+  assert.match(h, /Account group/);
   assert.match(h, /aria-checked="false"/);
   assert.equal((h.match(/class="cyc-acct"/g) || []).length, 2);
   assert.doesNotMatch(h, /Next account/);
@@ -121,7 +121,7 @@ test('the cycle follows its group: new strategies, and gone with the group', asy
 
 test('an empty group still shows the card, saying what to do first', () => {
   const h = ctx({ group: { name: 'Apex', members: [] } }).c.cycleHtml({ id: 'g1', members: [] });
-  assert.match(h, /Account cycle/);
+  assert.match(h, /Account group/);
   assert.match(h, /strategies in it first/);
 });
 
@@ -140,7 +140,7 @@ test('moving a strategy into an ON cycle asks first; a no moves nothing', async 
   };
   const on = { on: true, name: 'apex 300k', members: [], accounts: ['a', 'b'], risk_usd: 1000 };
   let r = await run(false, on);
-  assert.match(r.asked[0], /Add lab_x to the apex 300k account cycle/) && assert.equal(r.posts.length, 0);
+  assert.match(r.asked[0], /Add lab_x to the apex 300k account group/) && assert.equal(r.posts.length, 0);
   r = await run(true, on);
   assert.deepEqual(JSON.parse(JSON.stringify(r.posts)), [['move', { strategy: 'lab_x', group: 'g4' }]]);
   r = await run(true, null);                                         // no cycle: no question

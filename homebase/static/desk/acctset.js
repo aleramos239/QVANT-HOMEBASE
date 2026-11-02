@@ -93,7 +93,7 @@ function openAcctSet(strategy, account) {
   const cyc = Object.values((ST && ST.groups) || {}).find(g => g && g.on && (Number((g.risk_by || {})[strategy]) || Number(g.risk_usd) || 0) > 0 && (g.members || []).includes(strategy)
     && (!Array.isArray(g.accounts) || g.accounts.includes(account)));
   const note = $("#asCycle");
-  note.textContent = cyc ? "The account cycle sizes this strategy while it is on." : "";
+  note.textContent = cyc ? "The account group sizes this strategy while it is on." : "";
   note.hidden = !cyc;
   acctSetNote("");
   paintAcctSet();

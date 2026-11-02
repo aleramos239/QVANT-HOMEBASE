@@ -347,7 +347,7 @@ test('WP1.15 a change no longer in force, or any group row (even on its own page
   changes(t, [chg('group_set', { group: 'g3', name: 'apex', members: [], accounts: [], risk_usd: 750, max_minis: 17, on: true }),
     chg('group_set', { group: 'g3', name: 'apex', members: [], accounts: [], risk_usd: 500, max_minis: 17, on: true })], 'g:g3');
   const g = t.api.deskChangeList('g:g3');
-  assert.deepEqual(plain(g.map((x) => [x.text, !!x.back])), [['Size $500 at risk a trade → $750 at risk a trade', false], ['Account cycle ON · $500 at risk a trade', false]]);
+  assert.deepEqual(plain(g.map((x) => [x.text, !!x.back])), [['Size $500 at risk a trade → $750 at risk a trade', false], ['Account group ON · $500 at risk a trade', false]]);
   vm.runInContext('VIEW = {k: "group", name: "g3"}', t.ctx);
   assert.deepEqual(plain(t.api.deskChangeList('g:g3').map((x) => !!x.back)), [false, false], 'on its own page too: the cycle card is the one place it changes');
   assert.doesNotMatch(t.api.deskChangesHtml('g:g3'), /Put back/);
@@ -386,7 +386,7 @@ test('WP1.14 a Lab strategy\'s Setup: accounts, LIVE / paper, the group\'s $ ris
   assert.equal(setupRow(html, 'Size'), '$500 at risk a trade (the apex 300k group sizes it)');
   assert.equal(setupRow(html, 'Limits'), 'Trades a day 2 · Most contracts per account 1 · Most at risk per trade $300 · Last entry 11:00 ET · Flat by 15:55 ET');
   assert.equal(setupRow(html, 'Window'), 'NQ · 09:25-16:00 ET · from the Lab', 'the Lab strategy\'s own spec line');
-  assert.equal(setupRow(html, 'Group'), 'apex 300k (account cycle ON, next APEX…048)');
+  assert.equal(setupRow(html, 'Group'), 'apex 300k (account group ON, next APEX…048)');
   assert.equal(setupRow(html, 'Machine'), 'the SERVER · Chicago');
   assert.doesNotMatch(setupOf(html), /mcap warn/, 'nothing missing: no red line');
   assert.doesNotMatch(setupOf(html), /<button|<input|onclick/, 'shown only: nothing here edits the window or anything else');
@@ -482,7 +482,7 @@ test('WP1.8 sidebar accounts: a LIVE / DEMO / PAPER tag on every row, what it ho
 test('the Strategies count in a folded sidebar does not count the same strategy twice', () => {
   const side = SLICE('function renderSide(', '/* ---- strategy detail ---- */');
   // the count is the rows under Strategies: a Lab row the Desk holds is its own row (one row, never two); families fold their
-  // variants inside Strategies (2026-10-29), so a strategy in a family is counted there once; account cycles are their own section
+  // variants inside Strategies (2026-10-29), so a strategy in a family is counted there once; account groups are their own section
   assert.match(side, /DESKLAB\.strategies\.filter\(w => !labOnDesk\(w\)\)\.map/);
   assert.match(side, /head\("strat", "Strategies", names\.length \+ labIds\.length/);
   assert.match(side, /famBlocks \+ loose/);
@@ -1050,8 +1050,8 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=51"><\/script>/);
-  assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=5"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=52"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=6"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
   assert.equal(manifest.version >= 3, true);
@@ -1723,7 +1723,7 @@ test('1.19: each member\'s state, last signal, position and today; the group tod
   assert.match(html, /<span class="t dim">Last signal 09:30<\/span><span class="t net pos">\+\$120<\/span>/);
   assert.match(html, new RegExp(`<span class="h">Last turn 10:41: NQ ORB on ${a1}</span>`));
   assert.ok(html.indexOf('Next account: ' + a2) < html.indexOf('Last turn'), 'beside the next account, in the cycle card');
-  assert.ok(html.indexOf('<h2>Account cycle</h2>') < html.indexOf('<h2>Today</h2>'), 'the members under the cycle card, as drawn');
+  assert.ok(html.indexOf('<h2>Account group</h2>') < html.indexOf('<h2>Today</h2>'), 'the members under the cycle card, as drawn');
   assert.ok(html.indexOf('<h2>Today</h2>') < html.indexOf('<h2>Changes (7 days)</h2>'), 'the group\'s Changes (7 days) under Today (WP1.15)');
   assert.match(html, /onclick="openGroupMember\(&quot;lab_nq_orb&quot;\)"/);
 });
@@ -1750,7 +1750,7 @@ test('1.19: a piece with no data is left out: no answer, no turn, the cycle off,
   assert.match(noPnl.page(), /<h2>Today<\/h2>/);
 });
 
-// ---- families (owner 2026-10-29): variants of one idea fold under one sidebar row; account cycles are their own section --------
+// ---- families (owner 2026-10-29): variants of one idea fold under one sidebar row; account groups are their own section --------
 test('a family folds its variants by their short names, the rest follow; the cycle is its own section; the family page sets them side by side', () => {
   const t = groupDesk({});
   vm.runInContext(`DESKFAM = {families: [{id: "f1", name: "NQ ORB", members: ["lab_nq_orb"], short: {lab_nq_orb: "1.5R"}}], ok: true};
@@ -1759,7 +1759,7 @@ test('a family folds its variants by their short names, the rest follow; the cyc
   assert.match(side, /<span>NQ ORB<\/span>/, 'the family is a folding header');
   assert.match(side, /<b>1\.5R<\/b>/, 'its variant shows by its short name');
   assert.ok(side.indexOf('NQ ORB') < side.indexOf('nq930') || !/nq930/.test(side), 'families first, then the strategies in no family');
-  assert.match(side, /<span>Account cycles<\/span>/);
+  assert.match(side, /<span>Account groups<\/span>/);
   assert.match(side, /setView\('group',&quot;g1&quot;\)[^>]*>\s*<i class="sd ok"><\/i><span class="it"><b>Apex<span class="tag">cycle<\/span><\/b>/, 'the cycle is one row, on');
   assert.equal((side.match(/setView\('strat','lab_nq_orb'\)/g) || []).length, 1, 'a variant in a family and a cycle shows once');
   const page = vm.runInContext('familyView("f1")', t.ctx);

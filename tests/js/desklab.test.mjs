@@ -1402,9 +1402,9 @@ test('a group page before its first answer says so, and a hostile name or senten
   assert.match(ctx.html, /<i data-chg="g:g1"><\/i>/, 'the group page lists its Changes (7 days)');
 });
 
-test('the group writes go to the chart service by name (the account cycle to the desk), and a group id is only a JS string literal in a handler', () => {
+test('the group writes go to the chart service by name (the account group to the desk), and a group id is only a JS string literal in a handler', () => {
   const urls = [...new Set([...GROUP_PAGE.matchAll(/["'`](\/api\/[^"'`$?]*)/g)].map((m) => m[1]))].sort();
-  // the Desk is reached only by the group's account cycle (owner 2026-10-25): its settings and booking its strategies
+  // the Desk is reached only by the group's account group (owner 2026-10-25): its settings and booking its strategies
   assert.deepEqual(urls, ['/api/book', '/api/groups', '/api/groups/delete', '/api/tester/deskfamilies', '/api/tester/deskfamilies/',
                           '/api/tester/deskgroups', '/api/tester/deskgroups/', '/api/tester/deskgroups/results']);
   assert.doesNotMatch(GROUP_PAGE.replace(/\/\*[\s\S]*?\*\//g, ''), /\/api\/(strategy|status|arm|kill|rotation)/, 'nothing else of the desk');
