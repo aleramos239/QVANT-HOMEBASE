@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import vm from 'node:vm';
 
 /* The desk page's (homebase/static/index.html, :8850) ONE confirm policy for every switch
@@ -9,10 +8,7 @@ import vm from 'node:vm';
    a strategy's on/off asked both ways, chart trading asked only when turning ON, Manage algos'
    "Show on home page" never asked. Now every switch follows chart trading's pattern: ask only
    when a flip turns ON something that can place orders; never in the safer direction; never
-   for a switch that changes nothing that trades. The rule is algo-visibility.js's
-   switchNeedsConfirm; the page's needsConfirm() falls back to "ask when turning on". */
-const require = createRequire(import.meta.url);
-const AV = require('../../homebase/static/algo-visibility.js');
+   for a switch that changes nothing that trades. The rule is the page's needsConfirm() (desk/core.js). */
 import { HTML } from './deskpage.mjs';
 const LABEL = HTML.slice(HTML.indexOf('const stratLabel = '), HTML.indexOf('const actStrat = '));   // the page's name helper
 const STRAT = HTML.slice(HTML.indexOf('/* ---- strategy on/off + flatten ----'),
@@ -28,8 +24,12 @@ test("the page names a strategy by its label when it has one, else by its id (di
   assert.equal(ctx.sl(''), '');
 });
 
+const NEEDS = HTML.slice(HTML.indexOf('function needsConfirm('), HTML.indexOf('function cfDone('));
+const needs = vm.createContext({});
+vm.runInContext(NEEDS + '\nglobalThis.ask = needsConfirm;', needs);
+
 test('the policy: ask only when turning ON something that can trade', () => {
-  const ask = AV.switchNeedsConfirm;
+  const ask = needs.ask;
   assert.equal(ask('strategy', true), true);
   assert.equal(ask('strategy', false), false, 'OFF only makes things safer');
   assert.equal(ask('strategy', true, { shadow: true }), false, 'a SHADOW strategy never places an order');
@@ -37,27 +37,8 @@ test('the policy: ask only when turning ON something that can trade', () => {
   assert.equal(ask('chartTrading', false), false);
   assert.equal(ask('desk', true), true, 'Arm');
   assert.equal(ask('desk', false), false, 'Disarm');
-  assert.equal(ask('visibility', true), false, 'showing a card changes nothing that trades');
-  assert.equal(ask('visibility', false), false, 'hiding a card changes nothing that trades');
   assert.equal(ask('something-new', true), true, 'an unknown switch asks when turned on (fail toward asking)');
   assert.equal(ask('something-new', false), false);
-});
-
-test("the page's needsConfirm uses that policy, and asks whenever a switch turns on if the module is missing", () => {
-  const fn = HTML.slice(HTML.indexOf('function needsConfirm('), HTML.indexOf('function cfDone('));
-  const withModule = vm.createContext({ window: { AlgoVisibility: AV } });
-  vm.runInContext(fn + '\nglobalThis.nc = needsConfirm;', withModule);
-  assert.equal(withModule.nc('visibility', true), false);
-  assert.equal(withModule.nc('strategy', true), true);
-  const without = vm.createContext({ window: {} });
-  vm.runInContext(fn + '\nglobalThis.nc = needsConfirm;', without);
-  assert.equal(without.nc('visibility', true), true);
-  assert.equal(without.nc('strategy', false), false);
-  // a cached algo-visibility.js from before the rule existed must not break any switch
-  const stale = vm.createContext({ window: { AlgoVisibility: { computeVisibility() {} } } });
-  vm.runInContext(fn + '\nglobalThis.nc = needsConfirm;', stale);
-  assert.equal(stale.nc('strategy', true), true);
-  assert.equal(stale.nc('strategy', false), false);
 });
 
 const BOUNCE = HTML.slice(HTML.indexOf('const SWITCH_AT = {};'), HTML.indexOf('function cfDone('));
@@ -70,7 +51,7 @@ function load({ confirm = true, shadow = false, enabled = false, answer = { ok: 
   const ctx = vm.createContext({
     console, Date: { now: () => clock.now }, DOUBLE_CLICK_MS: 400,
     ST: { strategies: { nq930: { cfg: { enabled, shadow } }, ym_test: { cfg: { enabled, shadow } } } },
-    needsConfirm: (k, on, o) => AV.switchNeedsConfirm(k, on, o),
+    needsConfirm: needs.ask,
     confirmDlg: async (title, body, action, destructive) => { confirms.push({ title, body, action, destructive }); return confirm; },
     post: async (url, body) => {
       posts.push({ url, body });
@@ -80,7 +61,6 @@ function load({ confirm = true, shadow = false, enabled = false, answer = { ok: 
     toast: (t) => toasts.push(t),
     alertBar: (t) => alerts.push(t),
     acctShort: (id) => '…' + String(id).slice(-3),
-    DEMO: false,
     refresh: () => refreshes.push(true),
   });
   vm.runInContext(LABEL + HELPERS + BOUNCE + STRAT + '\nglobalThis.api = { toggleStrat, flattenStrat };', ctx);
@@ -125,13 +105,6 @@ test('Flatten keeps its confirm: it market-flattens a real position (not a switc
   assert.equal(s.confirms.length, 1);
   assert.equal(s.confirms[0].destructive, true);
   assert.deepEqual(plain(s.posts), [{ url: '/api/strategy-flatten', body: { strategy: 'nq930' } }]);
-});
-
-test("Manage algos' Show-on-home-page switch never asks, either way", () => {
-  const fn = HTML.slice(HTML.indexOf('function toggleAlgoHidden('), HTML.indexOf('$("#algoOverlay").addEventListener'));
-  assert.doesNotMatch(fn, /confirmDlg\(/);
-  assert.equal(AV.switchNeedsConfirm('visibility', true), false);
-  assert.equal(AV.switchNeedsConfirm('visibility', false), false);
 });
 
 test('a double-click on an ON switch is one flip: OFF once, then no "Turn ON?" from the second click', async () => {

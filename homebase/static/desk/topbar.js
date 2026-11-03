@@ -16,7 +16,6 @@ async function setArmed(want) {
   let r, err = null;
   try { r = await post("/api/arm", {armed: want}); } catch (e) { err = e || new Error("no answer"); }
   refresh();
-  if (DEMO) return;                        // preview mode: post() already said nothing is sent
   if (!err && r && r.ok === true && r.armed === want) {
     const where = machineWords();
     toast(want ? `Armed${where ? " " + where : ""} — signals now place real orders.` : `Disarmed${where ? " " + where : ""} — dry-run journaling only.`);
@@ -116,7 +115,6 @@ async function flattenAcct(id) {
   let r, err = null;
   try { r = await post("/api/account-flatten", {account: id}); } catch (e) { err = e || new Error("no answer"); }
   refresh();
-  if (DEMO) return;
   const why = answerWhy(r, err);
   if (why) return alertBar(`${N} flatten NOT confirmed — ${why}. Check its positions at the broker now.`);
   const bad = r.results && typeof r.results === "object" ? killFailures(r.results) : [`${N} (the desk sent no result)`];
@@ -132,7 +130,6 @@ async function doKill() {
       `Cancels every working order and market-flattens every position on EVERY connected account${reach ? ` (${reach})` : ""}, then disarms.`,
       "Kill", true)) { toast("Kill cancelled — nothing sent."); return; }
   if (killInFlight()) return killRunning();
-  if (DEMO) { await post("/api/kill"); refresh(); return; }   // preview mode: post() says nothing is sent
   const at = KILL_AT = Date.now();
   let slow = false;
   toast("Kill sent — waiting for the desk…", KILL_BUSY_MS);
@@ -376,7 +373,6 @@ function preopenWindow(et) {
   return day >= 1 && day <= 5 && min >= 465 && min < 540;
 }
 async function loadPreopen(run) {
-  if (DEMO) return;
   try {
     const r = await fetch("/api/preopen-check" + (run ? "?run=1" : ""));
     if (!r.ok) return;

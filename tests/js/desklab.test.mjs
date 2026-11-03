@@ -203,7 +203,7 @@ const code = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '');
 test('the page asks the chart service for the Lab strategies and never the desk\'s own API about them', () => {
   assert.ok(LABBLOCK.length > 500 && LABVIEW.length > 500, 'the Lab section and its page are there');
   const urls = [...new Set([...code(LABBLOCK).matchAll(/["'`](\/api\/[^"'`$?]*)/g)].map((m) => m[1]))].sort();
-  assert.deepEqual(urls, ['/api/tester/desklab', '/api/tester/desklab/onoff', '/api/tester/desklab/open', '/api/tester/desklab/remove',
+  assert.deepEqual(urls, ['/api/tester/desklab', '/api/tester/desklab/onoff', '/api/tester/desklab/open',
     '/api/tester/desklab/results']);      // results: a read of saved runs (the unseen days' run, the prop sim)
   assert.doesNotMatch(code(LABBLOCK + LABVIEW), /\/api\/(strategy|book|status)|[^t]post\(/, 'the desk does not know a Lab strategy in this step');
   assert.doesNotMatch(code(LABVIEW), /flattenStrat|toggleStrat|testFire|pickAsg|toggleAsgMenu|openRes|openLive/);
@@ -212,7 +212,7 @@ test('the page asks the chart service for the Lab strategies and never the desk\
 test('no polling while the page is hidden', () => {
   assert.match(HTML, /setInterval\(\(\) => \{ if \(!document\.hidden\) loadDeskLab\(\); \}, 5000\)/);
   assert.match(HTML, /document\.addEventListener\("visibilitychange", \(\) => \{ if \(!document\.hidden\) loadDeskLab\(\); \}\)/);
-  assert.match(LABBLOCK, /async function loadDeskLab\(\) \{\n  if \(DEMO \|\| document\.hidden\) return;/);
+  assert.match(LABBLOCK, /async function loadDeskLab\(\) \{\n  if \(document\.hidden\) return;/);
 });
 
 test('every template hole in the Lab rows and page is escaped, a flag the page made, or a piece built from escaped holes', () => {
@@ -304,28 +304,6 @@ test('the page: "Today, in shadow", the size in the net\'s tooltip, and "rebuilt
   assert.match(ctx.rowHtml, /title="What it would have made today, after costs, 2 contracts"/);
 });
 
-test('removeLabRow (the Lab page\'s Remove) renders only once the desk\'s status is in, like its neighbours', async () => {
-  // S4 moved it out of desk/views.js (its removeDeskLab is left there, unused): the Lab page's button calls removeLabRow
-  assert.match(LABVIEW, /onclick="removeLabRow\(/);
-  assert.match(LABVIEW, /title="Takes it off the Desk\. Its history is kept\. Archive keeps it to restore from the Desk\.">Remove from Desk/);
-  assert.doesNotMatch(HTML.replace(/async function removeDeskLab\(/, ''), /removeDeskLab\(/, 'nothing calls removeDeskLab any more');
-  const fn = HTML.slice(HTML.indexOf('async function removeLabRow'), HTML.indexOf("/* The chart service's delete"));
-  assert.ok(fn.length > 200 && /is off the Desk\. Its history is kept, and it is still in the Lab\./.test(fn));
-  assert.equal((fn.match(/render\(\)/g) || []).length, 2);
-  assert.equal((fn.match(/if \(ST\) render\(\)/g) || []).length, 2, 'never a bare render()');
-  const run = async (ST) => {
-    let renders = 0;
-    const ctx = vm.createContext({ ST, DEMO: false, FREEZE: false, CHART: '', VIEW: { k: 'lab', name: 'nq_orb' }, DeskLab: D, document: { hidden: true },
-      location: { hash: '' }, history: { replaceState() {} }, switchBounced: () => false, toast() {}, confirmDlg: async () => true,
-      chartPost: async () => ({ ok: true }), render() { if (!ST) throw new Error('render() with no status'); renders += 1; } });
-    vm.runInContext(`${LABBLOCK}\n${fn}\nDESKLAB = { strategies: [{ name: 'nq_orb' }], runner: null };\nglobalThis.go = () => removeLabRow('nq_orb'); globalThis.left = () => DESKLAB.strategies.length;`, ctx);
-    await ctx.go();
-    return [renders, ctx.left()];
-  };
-  assert.deepEqual(await run(null), [0, 0], 'no status yet: it is removed and nothing renders (or throws)');
-  assert.deepEqual(await run({ strategies: {} }), [2, 0]);
-});
-
 test('the skin treats a Lab page as its own kind, reads the same helpers, and still talks to nobody', () => {
   assert.match(SKIN, /VIEW\.k === 'lab'/);
   assert.match(SKIN, /DeskLab\.setupRows/);
@@ -400,7 +378,7 @@ function renderCtx({ deskLab, view = { k: 'today' } } = {}) {
   const $ = (sel) => (els[sel] = els[sel] || { innerHTML: '', hidden: false });
   const ST = { armed: true, et_now: '2026-10-09T10:00:00-0400', timer: { strategies: {} }, accounts: {}, journal: [],
     strategies: { nq930: { cfg: { symbol: 'NQ', kind: 'straddle', offset_pts: 5, sl_pts: 5, tp_pts: 15, enabled: true, shadow: false, cancel_et: '12:55', flat_et: '15:55' }, day_status: 'idle', accounts: [] } } };
-  const ctx = vm.createContext({ $, ST, DEMO: false, CHART: 'http://x', DESK_STALE: false, FREEZE: false, document: { hidden: false }, closeAsgMenus() {}, switchBounced() { return false; },
+  const ctx = vm.createContext({ $, ST, CHART: 'http://x', DESK_STALE: false, FREEZE: false, document: { hidden: false }, closeAsgMenus() {}, switchBounced() { return false; },
     toast() {}, chartPost: async () => ({}), confirmDlg: async () => false, fetch: async () => ({ ok: false }), ...(deskLab ? { DeskLab: deskLab } : {}) });
   vm.runInContext(SLICE('const esc = (v) =>', 'async function chartPost(') + SLICE('const stratLabel = ', 'const actStrat = ') + SLICE('const fmt = ', 'const usd = ') +
     'const usd = (v) => v == null ? "—" : (v < 0 ? "-$" : "$") + fmt(Math.abs(v));\n' +
@@ -1087,11 +1065,12 @@ test('per-account settings: the ON confirm and the switch title name each accoun
   assert.match(ctx.DeskLab.switchOnAsk(off, [set], accounts), /SHORT-live047 LIVE \$500 risk/);
 });
 
-test('3.4 when the switch asks is unchanged: switchNeedsConfirm decides, and the page still asks before turning a booked Lab strategy ON', () => {
-  const AV = require('../../homebase/static/algo-visibility.js');
-  assert.equal(AV.switchNeedsConfirm('strategy', true, { shadow: false }), true);
-  assert.equal(AV.switchNeedsConfirm('strategy', false, { shadow: false }), false);
-  assert.equal(AV.switchNeedsConfirm('strategy', true, { shadow: true }), false);
+test('3.4 when the switch asks is unchanged: needsConfirm decides, and the page still asks before turning a booked Lab strategy ON', () => {
+  const nc = vm.createContext({});
+  vm.runInContext(HTML.slice(HTML.indexOf('function needsConfirm('), HTML.indexOf('function cfDone(')) + '\nglobalThis.ask = needsConfirm;', nc);
+  assert.equal(nc.ask('strategy', true, { shadow: false }), true);
+  assert.equal(nc.ask('strategy', false, { shadow: false }), false);
+  assert.equal(nc.ask('strategy', true, { shadow: true }), false);
   const toggle = HTML.slice(HTML.indexOf('async function toggleStrat('), HTML.indexOf('async function setStratRr('));
   assert.match(toggle, /needsConfirm\("strategy", enabled, \{shadow: !!c\.shadow \|\| \(lab && !\(\(ST\.book && ST\.book\[name\]\) \|\| \[\]\)\.length\)\}\)/);
   assert.match(toggle, /post\("\/api\/strategy", \{strategy: name, enabled\}\)/, 'the same request');

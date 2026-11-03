@@ -66,7 +66,7 @@ test('the clock: a chart service that is down changes nothing, and before load()
 test('every page loads the clock before its own code, and the charts take their time format from it', () => {
   for (const page of ['index.html', 'charts.html', 'backtest.html']) assert.match(read(page), /<script src="\/static\/hbclock\.js\?v=\d+"><\/script>/, page);
   assert.match(read('charts/settings.js'), /if \(typeof HBClock !== 'undefined'\) n\.timeFormat = HBClock\.format;/);
-  assert.match(HTML, /if \(!DEMO\) HBClock\.load\(CHART\);/);
+  assert.match(HTML, /HBClock\.load\(CHART\);/);
 });
 
 // ---- Activity -----------------------------------------------------------------------------------

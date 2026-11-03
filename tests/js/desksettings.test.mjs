@@ -1,11 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import vm from 'node:vm';
-
-const require = createRequire(import.meta.url);
-const AV = require('../../homebase/static/algo-visibility.js');   // the desk's one confirm policy (S6)
 
 /* The desk page's (homebase/static/index.html, :8850) Settings dialog block (2026-09-27
    desk-settings plan + fix round 1; Arm/Disarm/Kill moved to the top bar 2026-09-28 -- their
@@ -17,8 +13,6 @@ const AV = require('../../homebase/static/algo-visibility.js');   // the desk's 
        never replaced. MARKET DATA lives in its own container and is skipped when nothing in it
        changed.
      I2 -- ST == null: CHART TRADING still builds (nothing asserted), no throw.
-     I3 -- DEMO guards applyMd/loadSettings/loadChartStatus: never touches fetch, same toast
-       post() uses.
      I4 -- covered in the Python/HTML grep, not here (no JS surface).
    Plus the original MARKET DATA coverage (escaping, Apply stage/apply/failure-snapback). */
 import { HTML } from './deskpage.mjs';
@@ -43,7 +37,7 @@ async function tick(n = 12) { for (let i = 0; i < n; i++) await Promise.resolve(
 const STATIC_IDS = new Set(['settingsOverlay', 'settingsBody', 'settingsTrading', 'settingsMarketData']);
 
 const WHERE = { server: 'on the SERVER · Chicago', mac: 'on this Mac' };   // core.js machineWords()
-function load({ armed = false, confirm = true, demo = false, fetchAnswers = {}, putAnswers = {}, machine = null } = {}) {
+function load({ armed = false, confirm = true, fetchAnswers = {}, putAnswers = {}, machine = null } = {}) {
   const els = {}, fetched = [], posts = [], toasts = [], confirms = [], refreshes = [];
   const listeners = {}, builtIds = new Set(STATIC_IDS);
   const doc = { activeElement: null };
@@ -89,7 +83,6 @@ function load({ armed = false, confirm = true, demo = false, fetchAnswers = {}, 
     console,
     ST: armed == null ? null : { armed },
     DESK_STALE: false,
-    DEMO: demo,
     machineWords: () => WHERE[machine] || '',
     document: doc,
     $: (sel) => {
@@ -100,7 +93,7 @@ function load({ armed = false, confirm = true, demo = false, fetchAnswers = {}, 
     esc,
     toast: (t) => toasts.push(t),
     confirmDlg: async (title, body, action, destructive) => { confirms.push({ title, body, action, destructive }); return confirm; },
-    needsConfirm: (kind, on, opts) => AV.switchNeedsConfirm(kind, on, opts),
+    needsConfirm: (kind, on, opts) => !!on && !(kind === 'strategy' && opts && opts.shadow),
     switchBounced: () => false,   // the double-click guard (tested in deskswitches)
     showOverlay: (id) => el(id).classList.add('open'),      // the page's one open/close path (W7)
     hideOverlay: (id) => el(id).classList.remove('open'),
@@ -217,37 +210,6 @@ test('I2: ST == null still builds CHART TRADING, leaves the switch as built, and
   assert.equal(els.ctSwitch.getAttribute('aria-checked'), undefined, 'no state painted from an unknown desk');
 });
 
-// ---- I3: preview mode never touches the CHART service ------------------------------------------
-test('I3: applyMd in DEMO toasts the preview message and never calls fetch', async () => {
-  const { api, fetched, toasts } = load({ demo: true });
-  await api.applyMd();
-  assert.deepEqual(fetched, []);
-  assert.deepEqual(toasts, ['Preview mode — sample data, controls disabled.']);
-});
-
-test('I3: loadSettings in DEMO toasts and never calls fetch; MARKET DATA reads unreachable', async () => {
-  const { api, els, fetched, toasts } = load({ demo: true });
-  await api.loadSettings();
-  assert.deepEqual(fetched, []);
-  assert.deepEqual(toasts, ['Preview mode — sample data, controls disabled.']);
-  assert.match(els.settingsMarketData.innerHTML, /Charts service not reachable from this page\./);
-});
-
-test('I3: loadChartStatus in DEMO toasts and never calls fetch', async () => {
-  const { api, fetched, toasts } = load({ demo: true });
-  await api.loadChartStatus();
-  assert.deepEqual(fetched, []);
-  assert.deepEqual(toasts, ['Preview mode — sample data, controls disabled.']);
-});
-
-test('I3: openSettings in DEMO never reaches the chart service', async () => {
-  const { api, fetched } = load({ demo: true });
-  api.openSettings();
-  await tick();
-  assert.deepEqual(fetched, []);
-});
-
-// ---- MARKET DATA: escaping, Apply stage/apply/failure-snapback, busy guard --------------------
 test('MARKET DATA: account labels and error text from the server are escaped', async () => {
   const { api, els } = load({
     fetchAnswers: { [`${CHART}/api/settings`]: { body: { md: 'demo', accounts: { live: '<b>x</b>', demo: null } } } },

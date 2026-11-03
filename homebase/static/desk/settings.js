@@ -14,7 +14,6 @@ const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g,
    broker, so every inline handler that carries one uses this. */
 const jsArg = (v) => esc(JSON.stringify(String(v == null ? "" : v)));
 async function chartPost(path, body) {
-  if (DEMO) { toast("Preview mode — sample data, controls disabled."); return {ok: false}; }
   try {
     const r = await fetch(CHART + path, {method: "POST", headers: {"Content-Type": "application/json"},
                                          body: JSON.stringify(body || {})});
@@ -42,7 +41,6 @@ async function addPaper() {
   } finally { btn.disabled = false; btn.textContent = "Add paper account"; }
 }
 async function loadPaper() {
-  if (DEMO) { PAPER = []; return renderPaper(); }
   try {
     const r = await fetch(CHART + "/api/paper/accounts");
     const d = await r.json().catch(() => ({}));
@@ -178,10 +176,8 @@ async function chartGet(path) {
 }
 function labelOfMd(v) { return (MD_CHOICES.find(c => c.value === v) || {label: v}).label; }
 
-const PREVIEW_TOAST = "Preview mode — sample data, controls disabled.";   // same text as post()'s
 
 async function loadSettings() {
-  if (DEMO) { toast(PREVIEW_TOAST); MD_REACHABLE = false; renderMarketData(); return; }
   const r = await chartGet("/api/settings");
   MD_REACHABLE = r.ok;
   if (r.ok) {
@@ -191,7 +187,6 @@ async function loadSettings() {
   renderMarketData();
 }
 async function loadChartStatus() {
-  if (DEMO) { toast(PREVIEW_TOAST); return; }
   const r = await chartGet("/api/status");
   if (r.ok) MD_FEED = r.data;
   MD_REACHABLE = r.ok;   // M1: reflects the LATEST read, so a dead-then-revived service recovers
@@ -282,7 +277,6 @@ function renderSettings() {
 }
 
 async function applyMd() {
-  if (DEMO) { toast(PREVIEW_TOAST); return; }
   if (MD_BUSY || !MD || MD_STAGED === MD.md) return;   // e.repeat / a stray second click: ignored
   const md = MD_STAGED;
   MD_BUSY = true; MD_ERR = ""; renderMarketData();
@@ -376,7 +370,6 @@ function renderHealth(h) {
   root.innerHTML = html;
 }
 async function loadHealth() {
-  if (DEMO) return;
   try {
     const r = await fetch("/api/health");
     renderHealth(r.ok ? await r.json() : null);
@@ -433,7 +426,6 @@ function renderDeploy(d) {
     <p class="wnote" style="margin-top:4px;${ok ? "" : "color:var(--foreground)"}">${esc(deployWords(d))}</p>${table}${log}`;
 }
 async function loadDeploy() {
-  if (DEMO) return;
   try {
     const r = await fetch("/api/deploy-status");
     renderDeploy(r.ok ? await r.json() : null);
@@ -446,7 +438,7 @@ function openSettings() {
   loadSettings();
   loadChartStatus();
   clearInterval(MD_POLL);
-  if (!DEMO) MD_POLL = setInterval(loadChartStatus, 2500);   // preview mode never polls :8852
+  MD_POLL = setInterval(loadChartStatus, 2500);
   loadDeploy();
   clearInterval(DEPLOY_POLL);
   DEPLOY_POLL = setInterval(loadDeploy, 60000);              // while Settings is open

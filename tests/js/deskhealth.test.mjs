@@ -11,10 +11,10 @@ const CARD = between('/* ---- Health (read-only)', '/* ---- Server updates (read
 const BANNER = between('const FIRE_AT', "/* ---- the desk's notices ----");        // readinessShown and the pre-open rows
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-function load({ answers = {}, demo = false, ST = {}, win = {} } = {}) {
+function load({ answers = {}, ST = {}, win = {} } = {}) {
   const els = { settingsHealth: { innerHTML: '' }, hlLogText: { textContent: '', scrollTop: 0, scrollHeight: 9 } }, fetched = [];
   const ctx = vm.createContext({
-    DEMO: demo, esc, ST, hbClock: (t) => t, window: win, Date,
+    esc, ST, hbClock: (t) => t, window: win, Date,
     $: (s) => els[s.replace(/^#/, '')] || null,
     fetch: async (url, opts) => {
       fetched.push({ url, opts });
@@ -82,9 +82,6 @@ test('loadPreopen reads GET only, keeps the answer with its age; run asks for a 
   const off = load({ answers: { '/api/preopen-check': new Error('down') } });
   await off.api.loadPreopen(false);                                   // an unreachable desk: no throw, nothing changes
   assert.equal(off.win.PREOPEN, undefined);
-  const demo = load({ demo: true });
-  await demo.api.loadPreopen(true);
-  assert.equal(demo.fetched.length, 0);
 });
 
 test('the card: the answer first, one row per market, archive counts, escaped', () => {
@@ -163,7 +160,4 @@ test('loadHealth is GET only and draws a note when the desk does not answer', as
   const bad = load({ answers: { '/api/health': new Error('down') } });
   await bad.api.loadHealth();
   assert.match(bad.els.settingsHealth.innerHTML, /Could not read it/);
-  const demo = load({ demo: true });
-  await demo.api.loadHealth();
-  assert.equal(demo.fetched.length, 0);
 });

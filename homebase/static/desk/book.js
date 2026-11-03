@@ -76,7 +76,6 @@ async function setRotation(name, on) {
   let r, err = null;
   try { r = await post("/api/rotation", {strategy: name, on}); } catch (e) { err = e || new Error("no answer"); }
   refresh();
-  if (DEMO) return;
   const why = answerWhy(r, err);
   if (why) toast(`${N}: take turns NOT changed — ${why}.`, 8000);
   else toast(on ? `${N} takes turns: one account a trade.` : `${N}: every account takes every trade.`);

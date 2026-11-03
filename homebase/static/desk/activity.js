@@ -334,7 +334,7 @@ function actOpts(first, seen, cur, label) {
   return [["", first]].concat(keys.map(k => [k, label(k)]));
 }
 async function loadActivity(force) {
-  if (!actFiltered() || DEMO || ACT_BUSY || (!force && Date.now() - ACT_AT < 15000)) return;
+  if (!actFiltered() || ACT_BUSY || (!force && Date.now() - ACT_AT < 15000)) return;
   ACT_BUSY = true;
   const q = actQuery();
   try {
@@ -424,7 +424,7 @@ let CHG = {};                                       // who -> {rows (the change 
 const CHG_EVENTS = ["lab_limits_set", "lab_settings_set", "strategy_rr_changed", "book_updated", "group_set"];
 async function loadDeskChanges(who, force) {
   const c = CHG[who] || (CHG[who] = {rows: null, at: 0, busy: false});
-  if (DEMO || c.busy || (!force && Date.now() - c.at < 60000)) return;      // at most once a minute
+  if (c.busy || (!force && Date.now() - c.at < 60000)) return;      // at most once a minute
   c.busy = true;
   try {
     const r = await fetch(`/api/journal?days=7&limit=2000&${who.startsWith("g:") ? "group" : "strategy"}=${encodeURIComponent(who.slice(2))}`);
@@ -529,7 +529,6 @@ function deskChangeList(who) {
   return out;
 }
 function deskChangesHtml(who) {
-  if (DEMO) return "";
   loadDeskChanges(who);
   if (!CHG[who] || !CHG[who].rows) return "";                  // not read yet
   const list = deskChangeList(who), today = String((ST && ST.et_now) || "").slice(0, 10);

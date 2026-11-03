@@ -43,7 +43,7 @@ const KILL_OK = { ok: true, armed: false, strategies: {}, results: {
   a2: { cancel_all: { ok: true, error: null }, flatten_all: { ok: true, error: null } } } };
 
 const WHERE = { server: 'on the SERVER · Chicago', mac: 'on this Mac' };   // core.js machineWords()
-function load({ st = { armed: false }, stale = false, confirm = true, answer = KILL_OK, demo = false, machine = null, demoAccts = [] } = {}) {
+function load({ st = { armed: false }, stale = false, confirm = true, answer = KILL_OK, machine = null, demoAccts = [] } = {}) {
   const els = { statusPill: fakeEl(), armBtn: fakeEl(), killBtn: fakeEl(), alertBar: fakeEl(), alertText: fakeEl() };
   els.alertBar.hidden = false;
   const posts = [], toasts = [], confirms = [], refreshes = [], fetched = [], alerts = [], hides = [];
@@ -80,7 +80,6 @@ function load({ st = { armed: false }, stale = false, confirm = true, answer = K
     Date: { now: () => now },
     DOUBLE_CLICK_MS: 400,
     acctShort: (id) => '…' + String(id).slice(-3),
-    DEMO: demo,
     machineWords: () => WHERE[machine] || '',
     isDemoAcct: (id) => demoAccts.includes(id),
     confirmDlg: async (title, body, action, destructive) => { confirms.push({ title, body, action, destructive }); return confirm; },
@@ -129,7 +128,7 @@ test('the status pill is a plain status (it no longer opens Settings), and rende
   assert.doesNotMatch(HTML, /id="statusPill"[^>]*onclick/);
   const render = HTML.slice(HTML.indexOf('function render() {'), HTML.indexOf('async function refresh()'));
   assert.match(render, /renderMaster\(\);/);
-  const refresh = HTML.slice(HTML.indexOf('async function refresh()'), HTML.indexOf('/* ---- PREVIEW MODE'));
+  const refresh = HTML.slice(HTML.indexOf('async function refresh()'), HTML.indexOf('/* ---- account row (rendered inside strategy cards)'));
   assert.match(refresh, /catch \{[\s\S]*renderMaster\(\);/, 'a failing refresh marks the top bar stale');
 });
 
@@ -398,13 +397,9 @@ test('an account whose flatten or cancel failed: Kill FAILED on it, with the rea
   assert.deepEqual(s.toasts, ['Kill sent — waiting for the desk…'], 'no success toast');
 });
 
-test('a clean Kill with no connected account still says what happened; preview mode says nothing more', async () => {
+test('a clean Kill with no connected account still says what happened', async () => {
   const s = await kill({ answer: { ok: true, results: {} } });
   assert.equal(s.toasts[s.toasts.length - 1], 'Kill sent — the desk is disarmed (no connected account to flatten).');
-  const d = await kill({ demo: true, answer: { ok: false } });
-  assert.deepEqual(plain(d.posts), [{ url: '/api/kill' }], 'the same call (post() itself refuses in preview)');
-  assert.deepEqual(d.alerts, [], 'preview: post() already said nothing is sent');
-  assert.deepEqual(d.toasts, []);
 });
 
 test('nits: a missing error reads "no reason given" (no stray quotes); ok with no results is NOT confirmed, not "refused"', async () => {
@@ -567,7 +562,7 @@ test('the stale pill is never faded: a dashed edge, full-strength text (measured
 });
 
 // ---- an open menu or size edit holds updates, but never leaves the pill asserting a state ------
-const REFRESH = HTML.slice(HTML.indexOf('const FREEZE_STALE_MS'), HTML.indexOf('/* ---- PREVIEW MODE'));
+const REFRESH = HTML.slice(HTML.indexOf('const FREEZE_STALE_MS'), HTML.indexOf('/* ---- account row (rendered inside strategy cards)'));
 function loadRefresh({ st = { armed: true }, reply = () => ({ ok: true, status: 200, body: { armed: true } }), freezeInFlight = false } = {}) {
   const clock = { now: 0 }, fetched = [], masters = [], renders = [];
   const clockEl = { textContent: '', classList: { contains: () => false } };

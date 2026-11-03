@@ -1,5 +1,5 @@
 /* ---- sidebar ---- */
-function renderSide(names, hiddenCount, issues) {
+function renderSide(names, issues) {
   /* A section header: a button that folds its rows (chevron, title, a count while it is shut) and, beside it, the section's own action. */
   const head = (k, title, n, action) => {
     const shut = !!SIDE_FOLD[k];
@@ -46,7 +46,7 @@ function renderSide(names, hiddenCount, issues) {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span>Today</span><span></span></button>
     ${head("strat", "Strategies", names.length + labIds.length, `<span class="sh-acts"><button class="sh-btn grp-new" title="Account groups: new, delete, add or remove strategies" aria-label="Manage account groups" onclick="openGroupMgr()">+</button><button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button></span>`)}
-    ${SIDE_FOLD.strat ? "" : loose + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")
+    ${SIDE_FOLD.strat ? "" : loose
       + ((DESKLAB.archived || []).length || VIEW.k === "archive" ? `<button class="side-more${sel("archive")}" onclick="setView('archive')">Archive · ${(DESKLAB.archived || []).length}</button>` : "")}
     ${head("cyc", "Account groups", DESKGROUPS.groups.length, `<button class="sh-btn" title="Account groups: new, delete, add or remove strategies" aria-label="Manage account groups" onclick="openGroupMgr()">+</button>`)}
     ${SIDE_FOLD.cyc ? "" : cycRows}
@@ -251,8 +251,7 @@ function labView(name) {
     ${notes.length ? `<div class="sec"><h2>On an account the Desk would refuse:</h2><div class="agroup feed static">${notes.join("")}</div></div>` : ""}
     <div class="sec"><h2>Accounts</h2><div class="mcap">${esc(DeskLab.ACCOUNTS_CAPTION)}</div></div>
     <div class="sd-actions">${deskMachine() === "server" ? "" : `<button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(w.name)})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>`}
-      <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Off the Desk and kept. Restore it from Archive any time.">Archive</button>
-      <button class="btn btn-outline btn-sm" onclick="removeLabRow(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Takes it off the Desk. Its history is kept. Archive keeps it to restore from the Desk.">Remove from Desk</button></div>`;
+      <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Off the Desk and kept. Restore it from Archive any time.">Archive</button></div>`;
 }
 
 function stratView(name) {
@@ -289,7 +288,6 @@ function stratView(name) {
   // the Desk's own straddles: the tester twin that mirrors them (its saved runs are the unseen metrics), and whether the card may be hidden
   const twin = DESKRES[name] && typeof DESKRES[name].twin === "string" ? DESKRES[name].twin : "";
   const hasRun = !!(DESKRES[name] && DESKRES[name].unseen && DESKRES[name].unseen.id);
-  const hide = hideInfo(name);
   const sw = `<button class="switch" role="switch" aria-label="${esc(stratLabel(name))} on or off" aria-checked="${c.enabled}"
     title="${c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
     onclick="toggleStrat('${name}', ${!c.enabled})"></button>`;
@@ -305,9 +303,7 @@ function stratView(name) {
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat('${name}')" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       ${twin && deskMachine() !== "server" ? `<button class="btn btn-outline btn-sm" onclick="openBuiltinInLab(${jsArg(name)})" title="The Lab page, on this strategy's tester twin (it follows the Desk's setting)">Open in the Lab</button>
       <button class="btn btn-outline btn-sm" onclick="openBuiltinInLab(${jsArg(name)}, true)"${hasRun ? "" : " disabled"} title="Its twin's run on the unseen days, on the chart, trade by trade">Show on chart</button>` : ""}
-      <button class="btn btn-outline btn-sm" onclick="archiveBuiltin(${jsArg(name)})"${DESKLAB_BUSY || ((ST.book && ST.book[name]) || []).length ? " disabled" : ""} title="Switched off and off the Desk's list, kept. Restore it from Archive any time.">Archive</button>
-      <button class="btn btn-outline btn-sm" onclick="removeBuiltin(${jsArg(name)})"${hide.locked ? " disabled" : ""} title="${esc(hide.locked ? hide.reason + ". Switch it off first." : "Takes it off the Desk's list. Bring it back from Manage algos; its settings and history stay.")}">Remove from Desk</button>${test}</div>
-    ${hide.locked ? `<div class="mcap">Remove from Desk: ${esc(hide.reason)}. Switch it off first.</div>` : ""}`;
+      <button class="btn btn-outline btn-sm" onclick="archiveBuiltin(${jsArg(name)})"${DESKLAB_BUSY || ((ST.book && ST.book[name]) || []).length ? " disabled" : ""} title="Switched off and off the Desk's list, kept. Restore it from Archive any time.">Archive</button>${test}</div>`;
 }
 
 /* WP1.14 The Setup summary at the top of a strategy's page: the whole setup in one place, read only. The window and the days are
@@ -368,4 +364,17 @@ async function labSetPick(name, key, el, was, type) {
   const why = await setLabSetting(name, key, v, {from});
   if (why) { toast(why, 8000); el.value = String(was); }
   FREEZE = false; refresh();
+}
+
+/* A dry run of a built-in straddle: what it would send, nothing sent. */
+async function testFire(name) {
+  const r = await post("/api/test-alert", {strategy: name});
+  toast(testFireWords(r), 8000); refresh();
+}
+/* {sent:{upper, lower}, result:{ok, accounts}} or a refusal ({ok:false, reason} / a 404's {detail}) -> one sentence */
+function testFireWords(r) {
+  const res = (r && r.result) || r || {}, s = (r && r.sent) || {}, n = res.accounts;
+  if (!res.ok) return `Dry run refused: ${res.reason || res.detail || "no answer"}.`;
+  return `Dry run: it would have sent a buy stop at ${fmtPx(s.upper)} and a sell stop at ${fmtPx(s.lower)}` +
+    `${typeof n === "number" ? ` on ${n} account${n === 1 ? "" : "s"}` : ""}. Nothing was sent.`;
 }

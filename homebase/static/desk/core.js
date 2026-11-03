@@ -11,7 +11,6 @@ const $ = (s) => document.querySelector(s);
 let ST = null;
 let DESK_STALE = false;   // true while refresh() is failing: ST is the last-known state, not current
 let STALE_WHY = "";       // why it is stale, for the pill's tooltip
-const DEMO = new URLSearchParams(location.search).has("demo");
 
 /* ---- which machine this Desk runs on: ONE value, read at call time -- the native shell's window.HB_MACHINE, else
    /api/status `machine` (ST). Unknown: null and no words. Never guessed from the address: the server's Desk can show as
@@ -32,14 +31,6 @@ function renderMachineChip() {
   el.title = el.hidden ? "" : "This Desk runs " + machineWords();
 }
 
-/* ---- algo manager: which algo cards show on the home page ----
-   Display-only preference, per viewer, in localStorage. Missing/unreadable
-   storage, or an algo that's tradable, has activity today, or needs a
-   human check, all fail toward SHOWING the card — the safe failure is
-   seeing more, never less. The pure decision lives in algo-visibility.js
-   so it can be unit tested with `node --test`. */
-let HIDDEN_ALGOS = (window.AlgoVisibility ? window.AlgoVisibility.loadHidden() : []);
-
 function toast(msg, ms = 4200) {
   const t = $("#toast");
   t.textContent = msg; t.classList.add("show");
@@ -58,7 +49,6 @@ function alertBar(msg) {
 }
 $("#alertX").onclick = () => { $("#alertBar").hidden = true; };
 async function post(url, body) {
-  if (DEMO) { toast("Preview mode — sample data, controls disabled."); return {ok: false}; }
   const r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"},
                               body: JSON.stringify(body || {})});
   return r.json();
@@ -86,9 +76,9 @@ $("#themeToggle").onclick = () => {
    matters more now that focus lands inside a dialog while the key that opened it may still be
    down. The + Assign menu gets Esc, focus in and back, and the arrow keys. Nothing here sends. */
 const OVERLAYS = [];   // the open dialogs, topmost last: {el, trigger}
-const OVERLAY_CLOSE = {confirmOverlay: () => cfDone(false), labLimitsOverlay: () => closeLabLimits(), acctSetOverlay: () => closeAcctSet(), settingsOverlay: () => closeSettings(),
+const OVERLAY_CLOSE = {confirmOverlay: () => cfDone(false), labLimitsOverlay: () => closeLabLimits(), settingsOverlay: () => closeSettings(),
   connectOverlay: () => closeConnect(), resOverlay: () => closeRes(), acctOverlay: () => closeAccts(),
-  algoOverlay: () => closeAlgoMgr(), groupOverlay: () => closeGroupMgr(), liveOverlay: () => closeLive(), checksOverlay: () => closeChecks(),
+  groupOverlay: () => closeGroupMgr(), liveOverlay: () => closeLive(), checksOverlay: () => closeChecks(),
   calOverlay: () => closeCal()};
 const FOCUSABLE = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), " +
   "textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
@@ -225,15 +215,10 @@ function confirmDlg(title, body, action, destructive, text) {      // text (a st
     if (!inp.hidden) setTimeout(() => { inp.focus(); inp.select(); }, 50);
   });
 }
-/* The desk's ONE confirm policy for every switch (S6): ask only when a flip turns ON something
-   that can place orders; never when it makes things safer (OFF, Disarm) or changes nothing that
-   trades (Manage algos' "Show on home page"). The rule lives in algo-visibility.js
-   (switchNeedsConfirm) so it is unit tested; without it -- no module, or a cached copy from
-   before it had the rule -- ask whenever a switch turns something on (fail toward asking). */
+/* The desk's ONE confirm policy for every switch (S6): ask only when a flip turns ON something that can place
+   orders; never when it makes things safer (OFF, Disarm) or when a shadow strategy has nothing to trade. */
 function needsConfirm(kind, turningOn, opts) {
-  const AV = window.AlgoVisibility;
-  return AV && typeof AV.switchNeedsConfirm === "function"
-    ? AV.switchNeedsConfirm(kind, turningOn, opts) : !!turningOn;
+  return !!turningOn && !(kind === "strategy" && opts && opts.shadow);
 }
 /* A double-click on a switch is one flip, never two (review): a second click on the same switch
    within DOUBLE_CLICK_MS is ignored -- so a double-clicked ON strategy turns OFF once (OFF never

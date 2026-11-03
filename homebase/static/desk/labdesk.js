@@ -202,9 +202,7 @@ function labDeskView(name, s) {
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat(${jsArg(name)})" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       ${deskMachine() === "server" ? "" : `<button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>`}
       <button class="btn btn-outline btn-sm" onclick="renameLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Change the name the Desk shows for it.">Rename</button>
-      <button class="btn btn-outline btn-sm" onclick="duplicateLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="A copy with the same code and settings, OFF, on no account.">Duplicate</button>
       <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(lab.name || "")}, ${jsArg(name)})"${busy || ro || !lab.name ? " disabled" : ""} title="Off the Desk, switched off, its accounts off, and kept. Restore it from Archive any time.">Archive</button>
-      <button class="btn btn-outline btn-sm" onclick="removeLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Takes it off the Desk. Its history is kept. Archive keeps it to restore from the Desk.">Remove from Desk</button>
       <button class="btn btn-outline btn-sm" onclick="deleteLabStrat(${jsArg(name)}, ${jsArg(lab.name || "")})"${busy || ro || !lab.name ? " disabled" : ""} title="Takes it off the Desk and deletes its shadow and day history for good. Its Lab draft stays.">Delete</button></div>`;
 }
 /* The Limits dialog: filled when it opens, never while it is open. Save posts exactly what the fields say, after the same checks the Desk makes. */
@@ -285,7 +283,7 @@ async function saveLabLimits() {
 /* Rename, Duplicate and the mini / micro switch (2026-10-28, owner). The Desk does the work (POST /api/lab-identity, /api/lab-duplicate) and answers a
    refusal with its own sentence. */
 async function labIdentityPost(name, url, body) {
-  if (DESKLAB_BUSY || DEMO) return null;
+  if (DESKLAB_BUSY) return null;
   DESKLAB_BUSY = name; if (ST) render();
   let r, err = null;
   try { r = await post(url, {strategy: name, ...body}); } catch (e) { err = e || new Error("no answer"); }
@@ -298,57 +296,12 @@ async function labIdentityPost(name, url, body) {
 }
 async function renameLabStrat(name) {
   const s = ST && ST.strategies && ST.strategies[name];
-  if (!s || DESKLAB_BUSY || DEMO) return;
+  if (!s || DESKLAB_BUSY) return;
   const ask = DeskLab.renameAsk(stratLabel(name));
   const label = await confirmDlg(ask.title, ask.body, "Rename", false, stratLabel(name));
   if (typeof label !== "string" || !label || label === stratLabel(name)) return;
   const r = await labIdentityPost(name, "/api/lab-identity", {label});
   if (r) toast(`Renamed to ${r.label}.`);
-}
-async function duplicateLabStrat(name) {
-  const s = ST && ST.strategies && ST.strategies[name];
-  if (!s || DESKLAB_BUSY || DEMO) return;
-  const ask = DeskLab.duplicateAsk(stratLabel(name));
-  if (!await confirmDlg(ask.title, ask.body, "Duplicate", false)) return;
-  const r = await labIdentityPost(name, "/api/lab-duplicate", {});
-  if (r) { toast(`Copied as ${r.copy}. It is OFF, on no account.`); VIEW = {k: "strat", name: "lab_" + r.copy}; if (ST) render(); }
-}
-/* Remove from the Desk: its accounts come off, its limits go, its history stays. Refused while a trade is open ("Flatten it first."). */
-async function removeLabStrat(name) {
-  const s = ST && ST.strategies && ST.strategies[name];
-  if (!s || DESKLAB_BUSY || DEMO) return;
-  const ask = DeskLab.removeAskDesk(stratLabel(name));
-  if (!await confirmDlg(ask.title, ask.body, "Remove", false)) return;
-  DESKLAB_BUSY = name; if (ST) render();
-  let r, err = null;
-  try { r = await post("/api/lab-remove", {strategy: name}); } catch (e) { err = e || new Error("no answer"); }
-  DESKLAB_BUSY = "";
-  if (!err && r && r.ok === true) {
-    if (VIEW.k === "strat" && VIEW.name === name) VIEW = {k: "today"};
-    toast(`${stratLabel(name)} is off the Desk. Its history is kept, and it is still in the Lab.`);
-  } else toast(DeskLab.refusalText(r, err), 7000);
-  await refresh();
-  loadDeskLab();
-}
-/* Remove from the Desk, from a Lab strategy's own page (labView): the chart service takes it off its list; its history stays.
-   removeDeskLab of desk/views.js, with S4's words (the confirm names Archive; the toast no longer says "promote it again").
-   views.js is left as it was on purpose: its ?v= line in index.html sits next to activity.js's, which S2 bumps, and two bumps
-   on neighbouring lines stop either commit from being dropped alone. Nothing calls removeDeskLab now: delete it with the
-   next edit of views.js. */
-async function removeLabRow(name) {
-  if (DESKLAB_BUSY) return;
-  const ask = DeskLab.removeAsk(name);
-  if (!await confirmDlg(ask.title, ask.body, "Remove", false)) return;
-  DESKLAB_BUSY = name; if (ST) render();
-  const r = await chartPost("/api/tester/desklab/remove", {name});
-  DESKLAB_BUSY = "";
-  if (r && r.ok === true) {
-    DESKLAB.strategies = DESKLAB.strategies.filter(w => w.name !== name);
-    if (VIEW.k === "lab" && VIEW.name === name) VIEW = {k: "today"};
-    toast(`${name} is off the Desk. Its history is kept, and it is still in the Lab.`);
-  } else toast(`Could not remove ${name}: ${(r && r.detail) || "no answer"}`, 7000);
-  if (ST) render();
-  loadDeskLab();
 }
 /* The chart service's delete of an off-the-Desk strategy's history (draft: its Lab draft too). The runner needs a few seconds to let
    a strategy go, so it is tried again while it says so. */
@@ -366,7 +319,7 @@ async function deleteHistory(lab, draft) {
    needs a few seconds to let it go, so that step is tried again while it says so. Real trades stay in the account history;
    the Lab draft stays in the Lab. */
 async function deleteLabStrat(name, lab) {
-  if (!name || !lab || DESKLAB_BUSY || DEMO) return;
+  if (!name || !lab || DESKLAB_BUSY) return;
   const N = stratLabel(name);
   if (!await confirmDlg(`Delete ${N}?`, "It comes off the Desk and its accounts come off. Its shadow calendar and day records are deleted for good. Real trades stay in the account history, and its Lab draft stays in the Lab.", "Delete", true)) return;
   DESKLAB_BUSY = name; if (ST) render();
@@ -388,7 +341,7 @@ async function deleteLabStrat(name, lab) {
    then the Desk's own Remove takes it off (refused while a trade is open: "Flatten it first."; its accounts come off), then its Lab
    draft is filed under the "Archive" group. deskId: its Desk id when the Desk holds it (lab_<name>), else the chart service removes it. */
 async function archiveLabStrat(name, deskId) {
-  if (!name || DESKLAB_BUSY || DEMO) return;
+  if (!name || DESKLAB_BUSY) return;
   const label = deskId ? stratLabel(deskId) : name;
   if (!await confirmDlg(`Archive ${label}?`, "It comes off the Desk, switched off, and its accounts come off. Its history is kept. Restore it from Archive any time.", "Archive", false)) return;
   DESKLAB_BUSY = name; if (ST) render();
@@ -413,7 +366,7 @@ async function archiveSteps(name, deskId) {      // the three steps for one stra
 /* DELETE from the Archive (the owner, 2026-10-22: "fully delete and remove them"): the archived copy, the strategy's history and its Lab
    draft (the draft goes to the drafts' trash). Real trades stay in the account history. A built-in is the Desk's own: no Delete. */
 async function deleteArchived(name) {
-  if (DESKLAB_BUSY || DEMO) return;
+  if (DESKLAB_BUSY) return;
   const w = (DESKLAB.archived || []).find(x => x.name === name), label = w ? DeskLab.label(w) : name;
   if (!await confirmDlg(`Delete ${label} for good?`, "It is wiped from the Archive and the Lab. Its shadow calendar and day records are deleted for good. Real trades stay in the account history.", "Delete", true)) return;
   DESKLAB_BUSY = name; if (ST) render();
@@ -423,7 +376,7 @@ async function deleteArchived(name) {
   await loadDeskLab();
 }
 async function restoreArchived(name) {
-  if (DESKLAB_BUSY || DEMO) return;
+  if (DESKLAB_BUSY) return;
   const w = (DESKLAB.archived || []).find(x => x.name === name), label = w ? DeskLab.label(w) : name;
   DESKLAB_BUSY = name; if (ST) render();
   const r = await chartPost("/api/tester/desklab/restore", {name});
@@ -439,10 +392,10 @@ async function restoreArchived(name) {
 function archivedBuiltins() { return (DESKLAB.archived || []).filter(w => w && w.builtin === true).map(w => w.name); }
 async function archiveBuiltin(name) {
   const s = ST && ST.strategies && ST.strategies[name];
-  if (!s || DESKLAB_BUSY || DEMO) return;
-  const N = stratLabel(name), book = (ST.book && ST.book[name]) || [], info = hideInfo(name);
+  if (!s || DESKLAB_BUSY) return;
+  const N = stratLabel(name), book = (ST.book && ST.book[name]) || [];
   if (book.length) return toast(`${N} has accounts assigned. Take them off first.`, 7000);
-  if (info.locked) return toast(`${N} cannot be archived now: ${info.reason}.`, 7000);
+  if (["placing", "placed", "live", "error"].includes(s.day_status)) return toast(`${N} cannot be archived now: it has orders or a position today.`, 7000);
   if (!await confirmDlg(`Archive ${N}?`, "It is switched off and comes off the Desk's list. Its settings and history stay. Restore it from Archive any time.", "Archive", false)) return;
   DESKLAB_BUSY = name; if (ST) render();
   let r = {ok: true}, err = null;
@@ -458,7 +411,7 @@ async function archiveBuiltin(name) {
   refresh();
 }
 async function restoreBuiltin(name) {
-  if (DESKLAB_BUSY || DEMO) return;
+  if (DESKLAB_BUSY) return;
   DESKLAB_BUSY = name; if (ST) render();
   const r = await chartPost("/api/tester/desklab/restore_builtin", {name});
   DESKLAB_BUSY = "";
@@ -489,7 +442,7 @@ const LAB_CLEARING = new Map();      // "strategy@account" -> Infinity while a c
 const labClearing = (name, account) => { const t = LAB_CLEARING.get(name + "@" + account); return t !== undefined && (t === Infinity || Date.now() - t < 3000); };
 async function clearLabBlock(name, account) {
   const key = name + "@" + account;
-  if (labClearing(name, account) || DEMO) return;      // one click is one clear; a double click is not two
+  if (labClearing(name, account)) return;      // one click is one clear; a double click is not two
   LAB_CLEARING.set(key, Infinity);
   let r, err = null;
   try { r = await post("/api/lab-clear", {strategy: name, account}); } catch (e) { err = e || new Error("no answer"); }
@@ -601,10 +554,10 @@ async function saveSolo(name) {
   if (why.length && !await confirmDlg(`Change ${N}?`, `${parts.join(" · ")}. ${why.join(" ")}${machineWords() ? " It runs " + machineWords() + "." : ""}`, "Save", false)) { refresh(); return; }
   let r, err = null;
   try { r = await post("/api/setup", {...b, on}); } catch (e) { err = e || new Error("no answer"); }
-  const w = DEMO ? null : answerWhy(r, err);
+  const w = answerWhy(r, err);
   if (w === "") delete SOLO_DRAFT[name];
   refresh();
-  if (!DEMO) toast(w ? `${N} NOT saved — ${w}.` : `${N} saved.`, w ? 8000 : 4200);
+  toast(w ? `${N} NOT saved — ${w}.` : `${N} saved.`, w ? 8000 : 4200);
 }
 
 function render() {
@@ -639,25 +592,20 @@ function render() {
          onclick="dismissReady()">&times;</button>`;
   } else strip.style.display = "none";
 
-  const shelved = archivedBuiltins();       // archived built-ins hide by the same rule as Manage algos: one that can trade or holds anything shows
-  const algoVis = window.AlgoVisibility
-    ? window.AlgoVisibility.computeVisibility(s.strategies, s.book, HIDDEN_ALGOS.concat(shelved), s.accounts)
-    : Object.keys(s.strategies).map(n => ({name: n, visible: true}));
-  const visibleNames = new Set(algoVis.filter(a => a.visible).map(a => a.name));
-  const names = Object.keys(s.strategies).filter(n => visibleNames.has(n))
+  const shelved = archivedBuiltins();       // an archived built-in lives in Archive
+  const names = Object.keys(s.strategies).filter(n => !shelved.includes(n))
     .sort((a, b) => (s.strategies[b].cfg.enabled ? 1 : 0) - (s.strategies[a].cfg.enabled ? 1 : 0));   // switched-on first
   if (VIEW.k === "lab" && labSafe(() => DeskLab.onDesk(s.strategies, {name: VIEW.name}), false)) VIEW = {k: "strat", name: "lab_" + VIEW.name};   // the Desk knows it now: its own page
   if (VIEW.k === "strat" && !names.includes(VIEW.name)) VIEW = {k: "today"};
   if (VIEW.k === "group" && DESKGROUPS.ok === true && !groupOf(VIEW.name)) VIEW = {k: "today"};      // a group removed (here or elsewhere)
   ISSUE_LVL = probs.some(c => c.level === "bad") ? "bad" : "warn";
-  renderSide(names, algoVis.filter(a => !a.visible && !shelved.includes(a.name)).length, probs.length);
+  renderSide(names, probs.length);
   renderMain(names, probs.length);
   // the views were rebuilt: an + Assign menu that lived in them is gone -- so is its hold on updates
   if (ASG_OPEN && !document.contains(ASG_OPEN.menu)) {
     ASG_OPEN = null;
     if (!document.getElementById("qedit")) FREEZE = false;
   }
-  if ($("#algoOverlay").classList.contains("open")) renderAlgoMgr();
   if ($("#acctOverlay").classList.contains("open")) tickAccts();         // its read-only cells, in place
   renderGroupMgr();
 
@@ -686,7 +634,6 @@ async function refresh() {
     }
     return;
   }
-  if (DEMO) { ST = demoStatus(); DESK_STALE = false; LAST_FRESH = Date.now(); render(); return; }
   /* Only a real status replaces ST (second review): an HTTP error with a JSON body (the write
      guard's 403) or a body without a boolean `armed` used to become ST -- and the pill then read
      DISARMED, a state nobody reported. Anything else keeps the last-known state, marked stale. */

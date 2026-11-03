@@ -48,7 +48,7 @@ test('the day status: "live" reads "in position", "placed" reads "orders working
   assert.equal(ctx.dayPill('idle'), '<span class="pill idle" title="Today: idle">idle</span>');
 });
 
-test('a live account carries the LIVE tag, a demo account none; the algo manager\'s ON is the ON pill', () => {
+test('a live account carries the LIVE tag, a demo account none', () => {
   const block = HTML.slice(HTML.indexOf('/* ---- account row (rendered inside strategy cards) ---- */'),
     HTML.indexOf('/* ---- the book (assignments) ---- */'));
   const ctx = vm.createContext({
@@ -60,7 +60,6 @@ test('a live account carries the LIVE tag, a demo account none; the algo manager
   vm.runInContext(escDefs + block + '\nglobalThis.acctRow = acctRow;', ctx);
   assert.match(ctx.acctRow('a', {}), /<span class="tag-live" title="A live account — real money">LIVE<\/span>/);
   assert.doesNotMatch(ctx.acctRow('b', {}), /LIVE/);
-  assert.match(HTML, /`<span class="pill on" title="Switched on">ON<\/span>`/);
   assert.match(HTML, /<span class="tag-live" style="vertical-align:middle" title="A live login — real money">LIVE<\/span>/,
     "the connect wizard's LIVE login tag is the account tag too");
 });

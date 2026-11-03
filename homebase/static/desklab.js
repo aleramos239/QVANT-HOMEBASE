@@ -853,7 +853,7 @@
   // (the Desk page script): WP1.7 puts switchOnAsk in it. With an account booked: the machine (`machine`, else window.HB_MACHINE;
   // left out when not known), how many LIVE / demo / paper accounts, and the size -- contracts, or the $ at risk a trade for a
   // strategy that sizes itself. `accounts` = the page's ST.accounts (read from the page when not passed); an account it does not
-  // list counts as LIVE, the page's own rule. Words only: when the switch asks is switchNeedsConfirm's (algo-visibility.js).
+  // list counts as LIVE, the page's own rule. Words only: when the switch asks is needsConfirm's (desk/core.js).
   function machineWords(m) {
     if (m === undefined) m = typeof window !== "undefined" && window ? window.HB_MACHINE : null;
     return m === "server" ? " on the SERVER · Chicago" : m === "mac" ? " on this Mac" : "";

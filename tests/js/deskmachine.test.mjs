@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
    (ST), read at call time. Confirm texts name the machine with machineWords(); unknown says nothing, never "this Mac".
    The button half (no Open in the Lab / Show on chart on the server) is in desklabdesk.test.mjs. */
 import { HTML } from './deskpage.mjs';
-const BLOCK = HTML.slice(HTML.indexOf('/* ---- which machine this Desk runs on'), HTML.indexOf('/* ---- algo manager'));
+const BLOCK = HTML.slice(HTML.indexOf('/* ---- which machine this Desk runs on'), HTML.indexOf('function toast('));
 
 function load(hb, ST) {
   const ctx = vm.createContext({ window: hb === undefined ? {} : { HB_MACHINE: hb }, ST });

@@ -8,10 +8,10 @@ import { HTML } from './deskpage.mjs';
 const BLOCK = HTML.slice(HTML.indexOf('/* ---- Server updates (read-only)'), HTML.indexOf('function openSettings()'));
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-function load({ answer = { ok: true, body: {} }, demo = false } = {}) {
+function load({ answer = { ok: true, body: {} } } = {}) {
   const root = { innerHTML: '' }, fetched = [];
   const ctx = vm.createContext({
-    DEMO: demo, esc, $: (s) => (s === '#settingsDeploy' ? root : null),
+    esc, $: (s) => (s === '#settingsDeploy' ? root : null),
     fetch: async (url, opts) => { fetched.push({ url, opts }); if (answer instanceof Error) throw answer; return { ok: answer.ok, json: async () => answer.body }; },
   });
   vm.runInContext(BLOCK + 'globalThis.api = { deployWords, renderDeploy, loadDeploy };', ctx);
@@ -65,7 +65,7 @@ test('an unchanged answer does not repaint (an open log stays open)', () => {
   assert.equal(root.innerHTML, 'MARK');
 });
 
-test('loadDeploy only GETs the one route; an error says so and a preview asks nothing', async () => {
+test('loadDeploy only GETs the one route; an error says so', async () => {
   let t = load({ answer: { ok: true, body: { available: true, state: 'shipped', main } } });
   await t.api.loadDeploy();
   assert.deepEqual(t.fetched.map((f) => [f.url, f.opts]), [['/api/deploy-status', undefined]]);
@@ -73,7 +73,4 @@ test('loadDeploy only GETs the one route; an error says so and a preview asks no
   t = load({ answer: new Error('down') });
   await t.api.loadDeploy();
   assert.match(t.root.innerHTML, /Could not read it/);
-  t = load({ demo: true });
-  await t.api.loadDeploy();
-  assert.deepEqual(t.fetched, []);
 });

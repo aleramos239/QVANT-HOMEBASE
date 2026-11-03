@@ -14,7 +14,7 @@ function takeGroups(list) {      // only well-formed groups are kept; a wrong sh
       members: (Array.isArray(g.members) ? g.members : []).filter(m => typeof m === "string")}));
 }
 async function loadDeskGroups() {
-  if (DEMO || document.hidden || DESKGROUPS_BUSY) return;
+  if (document.hidden || DESKGROUPS_BUSY) return;
   DESKGROUPS_BUSY = true;
   try {
     const r = await fetch(CHART + "/api/tester/deskgroups");
@@ -28,7 +28,7 @@ async function loadDeskGroups() {
   finally { DESKGROUPS_BUSY = false; }
 }
 async function loadDeskGroupRes() {
-  if (DEMO || document.hidden || DESKGRES_BUSY || VIEW.k !== "group") return;
+  if (document.hidden || DESKGRES_BUSY || VIEW.k !== "group") return;
   DESKGRES_BUSY = true;
   try {
     const r = await fetch(CHART + "/api/tester/deskgroups/results");
@@ -52,7 +52,7 @@ async function groupPost(action, body) {
     loadDeskGroupRes();
     return true;
   }
-  if (!DEMO) toast(String((r && r.detail) || "The group could not be changed."), 6000);
+  toast(String((r && r.detail) || "The group could not be changed."), 6000);
   renderGroupMgr(true);          // put the controls back as they were
   return false;
 }
@@ -288,10 +288,9 @@ async function saveCycle(id, on) {
   if (ask && !await confirmDlg(ask[0], ask[1], ask[2], false)) { refresh(); return false; }
   let r, err = null;
   try { r = await post("/api/setup", body); } catch (e) { err = e || new Error("no answer"); }
-  const why = DEMO ? null : answerWhy(r, err);
+  const why = answerWhy(r, err);
   if (why === "") delete CYC_DRAFT[id];   // saved: the card shows the desk's values again
   refresh();
-  if (DEMO) return false;
   toast(why ? `NOT saved — ${why}.` : on !== was ? (on ? "Trading ON." : "Trading OFF.") : "Saved.", why ? 8000 : 4200);
   return !why;
 }
@@ -441,13 +440,13 @@ function dayTimeline(names) {
 
 /* Today's journal for a few strategies (or a group), read from GET /api/journal at most once a minute -- not the /api/status
    tail, 60 lines for the whole desk, which would miss most of them. One slot a page part; a new query starts its slot afresh.
-   Never in the demo or while the page is hidden. null until the first answer (the pieces that need it are then left out). */
+   Never while the page is hidden. null until the first answer (the pieces that need it are then left out). */
 const JREAD = {};
 function journalToday(slot, q) {
   let c = JREAD[slot];
   if (!c || c.q !== q) c = JREAD[slot] = {q, at: 0, rows: null};
   // one read a minute, timed from its start; a read that hangs is cut off at 30 s, so it never holds a connection to the desk
-  if (!DEMO && !document.hidden && Date.now() - c.at >= 60000) {
+  if (!document.hidden && Date.now() - c.at >= 60000) {
     const at = c.at = Date.now();
     fetch(q, {signal: AbortSignal.timeout(30000)}).then(r => r.ok ? r.json() : null).then(j => { if (j && JREAD[slot] === c && c.at === at) c.rows = Array.isArray(j.events) ? j.events : []; })
       .catch(() => {});

@@ -180,7 +180,6 @@ async function toggleStrat(name, enabled) {
   let r, err = null;
   try { r = await post("/api/strategy", {strategy: name, enabled}); } catch (e) { err = e || new Error("no answer"); }
   if (lab) await refresh(); else refresh();     // a Lab strategy's toast reads the state the Desk answers with
-  if (DEMO) return;                        // preview mode: post() already said nothing is sent
   const why = answerWhy(r, err);
   if (!why) toast(lab ? (enabled ? DeskLab.switchOnToast(N, ST.strategies[name], (ST.book && ST.book[name]) || []) : DeskLab.switchOffToast(N, (ST.book && ST.book[name]) || []))
     : N + (enabled ? " is ON." : " is OFF — it ignores signals; open positions are untouched."));
@@ -198,7 +197,6 @@ async function setStratRr(name, rr, slPts) {      // rr null + slPts: change the
   if (slPts != null) body.sl_pts = slPts;
   try { r = await post("/api/strategy-rr", body); } catch (e) { err = e || new Error("no answer"); }
   refresh();
-  if (DEMO) return "";
   if (err) return answerWhy(null, err);
   if (r && r.ok === true) { toast(`${N}: stop ${r.sl_pts} pts, target 1:${r.rr} (${r.tp_pts} pts).`); return ""; }
   return killText(r && (r.detail || r.error)) || "the desk's answer was unreadable";
@@ -218,7 +216,6 @@ async function setLabSetting(name, key, value, opts) {
   let r, err = null;
   try { r = await post("/api/lab-settings", {strategy: name, settings: {[key]: value}}); } catch (e) { err = e || new Error("no answer"); }
   refresh();
-  if (DEMO) return "";
   if (err) return answerWhy(null, err);
   if (r && r.ok === true) { toast(r.changed === false ? `${N}: nothing changed.` : `${N} setting saved. It applies from its next session.`); return ""; }
   return killText(r && (r.detail || r.error)) || "the desk's answer was unreadable";
@@ -244,7 +241,6 @@ async function flattenStrat(name) {
   let r, err = null;
   try { r = await post("/api/strategy-flatten", {strategy: name}); } catch (e) { err = e || new Error("no answer"); }
   refresh();
-  if (DEMO) return;
   const why = answerWhy(r, err);
   if (why) return alertBar(`${N} flatten NOT confirmed — ${why}. Check its positions at the broker now.`);
   const res = r.results && typeof r.results === "object" ? (lab ? DeskLab.flattenSteps(r.results) : r.results) : null;
@@ -373,43 +369,6 @@ $("#acctOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeAccts();
 });
 
-/* ---- algo manager popup: choose which algos show on the home page ---- */
-function renderAlgoMgr() {
-  if (!ST || !window.AlgoVisibility) return;
-  const shelved = archivedBuiltins();       // an archived built-in lives in Archive, not here (unless it can trade or holds anything)
-  const rows = window.AlgoVisibility.computeVisibility(ST.strategies, ST.book, HIDDEN_ALGOS, ST.accounts)
-    .filter(a => a.locked || !shelved.includes(a.name));
-  $("#algoCount").textContent = rows.length + " algo" + (rows.length === 1 ? "" : "s");
-  $("#algoList").innerHTML = rows.length
-    ? rows.map(a => {
-        const statusPill = dayPill(a.day_status);
-        const onPill = a.enabled
-          ? `<span class="pill on" title="Switched on">ON</span>` : `<span class="pill idle" title="Switched off">OFF</span>`;
-        const note = a.locked
-          ? `<span class="mcap" style="margin:2px 0 0">${a.lockReason}</span>` : "";
-        return `<div class="acct" style="padding:9px 0;align-items:flex-start">
-          <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span class="nm" style="font-size:13px">${esc(stratLabel(a.name))}</span>
-              <span class="hint" style="font-size:11.5px">${a.symbol}</span>
-              ${onPill}${statusPill}
-            </div>
-            ${note}
-          </div>
-          <span class="spacer"></span>
-          <label class="hint" style="display:flex;align-items:center;gap:6px;cursor:${a.locked ? "default" : "pointer"};font-size:12px"
-            title="${a.locked ? a.lockReason : "Show on home page"}">
-            Show on home page
-            <button class="switch" role="switch" aria-label="Show ${esc(stratLabel(a.name))} on the home page" aria-checked="${a.visible}" ${a.locked ? "disabled" : ""}
-              onclick="toggleAlgoHidden('${a.name}', ${a.visible})"></button>
-          </label>
-        </div>`;
-      }).join("")
-    : `<div class="mcap" style="padding:14px 0">no algos configured yet</div>`;
-}
-function openAlgoMgr() { renderAlgoMgr(); showOverlay("algoOverlay"); }
-function closeAlgoMgr() { hideOverlay("algoOverlay"); }
-
 /* ---- group manager popup: add, rename and delete groups, and say which group each strategy is in (no type picker since
    2026-10-18: a new group is "together"). Every change is one write to the chart service (groupPost) and a repaint from its
    answer; nothing here touches a strategy or an account. ---- */
@@ -456,7 +415,7 @@ async function removeOrphanCycle(id) {
   let r, err = null;
   try { r = await post("/api/groups/delete", {id}); } catch (e) { err = e || new Error("no answer"); }
   refresh();
-  const why = DEMO ? "" : answerWhy(r, err);
+  const why = answerWhy(r, err);
   toast(why ? `Account group NOT removed — ${why}.` : `${c.name} account group removed.`, why ? 8000 : 4200);
 }
 function closeGroupMgr() { hideOverlay("groupOverlay"); }
@@ -490,26 +449,6 @@ async function moveToGroup(strategy, group) {
 $("#groupOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeGroupMgr();
 });
-/* "Show on home page" never asks, either way, under the desk's one confirm policy (S6):
-   hiding a card is display only and changes nothing that trades -- switchNeedsConfirm(
-   "visibility", ...) is false both ways -- and a card that could trade is locked visible. */
-function toggleAlgoHidden(name, currentlyVisible) {
-  if (!window.AlgoVisibility) return;
-  // currentlyVisible -> user wants to hide it; already-hidden -> unhide.
-  // withHidden() itself also refuses to hide a locked algo, so a stale
-  // click on a supposedly-disabled control can't sneak one past the rule.
-  const rows = window.AlgoVisibility.computeVisibility(ST.strategies, ST.book, HIDDEN_ALGOS, ST.accounts);
-  const row = rows.find(r => r.name === name);
-  const locked = !!(row && row.locked);
-  HIDDEN_ALGOS = window.AlgoVisibility.withHidden(HIDDEN_ALGOS, name, currentlyVisible, locked);
-  window.AlgoVisibility.saveHidden(HIDDEN_ALGOS);
-  renderAlgoMgr();
-  render();
-}
-$("#algoOverlay").addEventListener("click", (e) => {
-  if (e.target === e.currentTarget) closeAlgoMgr();
-});
-
 /* ---- strategy LIVE popup: calendar + metrics + trade log ---- */
 let LIVE = {name: "", d: new Date(), data: null};
 async function openLive(name) {

@@ -9,7 +9,6 @@ import vm from 'node:vm';
    desklab.js. The pure words are tested in desklab.test.mjs; here: one row never two, what each control sends, what each
    answer says, and that a repaint never touches the Limits dialog. */
 const require = createRequire(import.meta.url);
-const AV = require('../../homebase/static/algo-visibility.js');
 const D = require('../../homebase/static/desklab.js');
 import { HTML } from './deskpage.mjs';
 const SKIN = readFileSync(new URL('../../homebase/static/apple/desk.js', import.meta.url), 'utf8');
@@ -36,12 +35,12 @@ const ACCOUNTS = { a1: { label: 'Lucid Eval #1', env: 'demo', connected: true },
 
 /* The whole Desk-views part of the page (sidebar, rows, strategy page, the Lab part) with a fake document around it. */
 function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book = {}, rows = [ROW()], view = { k: 'today' }, accounts = ACCOUNTS,
-  answer = { ok: true }, confirm = true, readOk = true, demo = false, deskLab = D, journal = [] } = {}) {
+  answer = { ok: true }, confirm = true, readOk = true, deskLab = D, journal = [] } = {}) {
   const els = {}, posts = [], toasts = [], confirms = [], alerts = [], shown = [], hidden = [], refreshes = [];
   const el = (id) => (els[id] = els[id] || { id, innerHTML: '', textContent: '', value: '', hidden: false, disabled: false, attrs: {},
     setAttribute(k, v) { this.attrs[k] = String(v); }, classList: { contains: () => false } });
   const ctx = vm.createContext({
-    console, DOUBLE_CLICK_MS: 400, DEMO: demo, CHART: 'http://x', DESK_STALE: false, window: { AlgoVisibility: AV },
+    console, DOUBLE_CLICK_MS: 400, CHART: 'http://x', DESK_STALE: false, window: {},
     location: { hash: '', protocol: 'http:', hostname: 'x' }, history: { replaceState() {} }, document: { hidden: false, getElementById: () => null, querySelectorAll: () => [], addEventListener() {}, activeElement: null },
     $: (sel) => el(sel.replace(/^#/, '')), ...(deskLab ? { DeskLab: deskLab } : {}),
     ST: { armed: true, et_now: '2026-10-10T10:00:00-0400', timer: { strategies: {} }, accounts: plain(accounts), book: plain(book), journal: plain(journal), strategies: plain(strategies) },
@@ -56,11 +55,11 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
     switchBounced: () => false, render() {}, loadDeskLab() {}, refresh: async () => { refreshes.push(1); },
     fetch: async () => ({ ok: false }), setView() {}, URLSearchParams, AbortSignal,
   });
-  const code = SLICE('/* ---- which machine this Desk runs on', '/* ---- algo manager') + SLICE('const esc = (v) =>', 'async function chartPost(') + SLICE('const stratLabel = ', 'const actStrat = ') + SLICE('const fmt = ', 'const usd = ') +
+  const code = SLICE('/* ---- which machine this Desk runs on', 'function toast(') + SLICE('const esc = (v) =>', 'async function chartPost(') + SLICE('const stratLabel = ', 'const actStrat = ') + SLICE('const fmt = ', 'const usd = ') +
     'const usd = (v) => v == null ? "—" : (v < 0 ? "-$" : "$") + fmt(Math.abs(v));\n' +
     SLICE('const killText = ', 'function killFailures(') + SLICE('const actErr = ', 'const actFail = ') + SLICE('const STEP_OK = ', 'const REFUSED_WHY') +
     SLICE('const SWITCH_AT = {};', 'function cfDone(') +
-    'function needsConfirm(kind, turningOn, opts) { return window.AlgoVisibility.switchNeedsConfirm(kind, turningOn, opts); }\n' +
+    SLICE('function needsConfirm(', '/* A double-click on a switch') +
     SLICE('const labAct = ', 'let FEED_ROWS') + SLICE('/* ---- Changes (7 days) (WP1.15)', '/* ---- end of Changes') +
     SLICE('const actDay = ', '/* Activity for one strategy or one group') +
     SLICE('/* ===== Desk views', 'function render() {') +
@@ -70,7 +69,7 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
     `\nDESKLAB = { strategies: ${JSON.stringify(rows)}, runner: { alive: true } }; DESKLAB_OK = ${readOk};` +
     `\nVIEW = ${JSON.stringify(view)};` +
     '\nglobalThis.api = { renderSide, renderMain, labDeskView, stratView, stratState, stratDotCls, todayRow, specOf, setBook, pickAsg, liveBookingNote, toggleStrat,' +
-    ' setLabSetting, setStratRr, pickAsg, removeAsg, deskChangesHtml, deskChangeList, putBackChange, flattenStrat, dayHeadline, dayTimeline, journalShown, todayFoot, openLabLimits, closeLabLimits, saveLabLimits, removeLabStrat, clearLabBlock, labRowsHtml, calView, shadowData, shadowStatsHtml, deleteLabStrat, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
+    ' setLabSetting, setStratRr, pickAsg, removeAsg, deskChangesHtml, deskChangeList, putBackChange, flattenStrat, dayHeadline, dayTimeline, journalShown, todayFoot, openLabLimits, closeLabLimits, saveLabLimits, clearLabBlock, labRowsHtml, calView, shadowData, shadowStatsHtml, deleteLabStrat, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
   vm.runInContext(code, ctx);
   return { ctx, api: ctx.api, els, el, posts, toasts, confirms, alerts, shown, hidden, refreshes,
     side: () => { ctx.api.renderSide(['nq930', 'lab_nq_orb'].filter((n) => ctx.ST.strategies[n]), 0, 0); return els.side.innerHTML; },
@@ -539,7 +538,6 @@ test('the page: state, note, Limits, Today, Matched the backtest, Set up, and th
   assert.match(html, /<h2>Set up<\/h2>/);
   assert.match(html, /flattenStrat\(&quot;lab_nq_orb&quot;\)" title="Flattens its positions and switches it off">Flatten &amp; turn off</);
   assert.match(html, /openDeskLabInLab\(&quot;nq_orb&quot;\)[^>]*>Open in the Lab</);
-  assert.match(html, /removeLabStrat\(&quot;lab_nq_orb&quot;\)"[^>]*>Remove from Desk</);
   assert.doesNotMatch(html, /Test fire|testFire/);
   assert.doesNotMatch(html, /Accounts come with the Desk update/, 'the Step A caption is not on the Desk\'s page');
   assert.doesNotMatch(html, /<div class="figs">/, 'no Backtest figures: its backtest is the 3:1 build + unseen block (owner 2026-10-18)');
@@ -572,12 +570,11 @@ test('until limits exist the picker is one line that says so, not a dead button'
   assert.match(html, /Edit limits/);
 });
 
-test('read_only: "Another copy of the Desk is using the Lab strategies." and Limits, the picker and Remove are disabled; the switch and Flatten are not', () => {
+test('read_only: "Another copy of the Desk is using the Lab strategies." and Limits and the picker are disabled; the switch and Flatten are not', () => {
   const t = load({ strategies: { lab_nq_orb: deskStrat({ read_only: true }) } });
   const html = t.view();
   assert.match(html, /<div class="sd-note">Another copy of the Desk is using the Lab strategies\.<\/div>/);
   assert.match(html, /openLabLimits\([^)]*\)" disabled>Edit limits/);
-  assert.match(html, /removeLabStrat\([^)]*\)" disabled title/);
   assert.match(html, /<div class="mcap">Another copy of the Desk is using the Lab strategies\.<\/div>/);
   assert.doesNotMatch(html, /\+ Assign an account/);
   assert.doesNotMatch(html, /toggleAsgMenu|pickAsg/);
@@ -588,13 +585,11 @@ test('read_only: "Another copy of the Desk is using the Lab strategies." and Lim
   assert.deepEqual(t.shown, []);
 });
 
-test('state "check": the page still offers Limits and Remove', () => {
+test('state "check": the page still offers Limits', () => {
   const t = load({ strategies: { lab_nq_orb: deskStrat({ state: 'check', why: 'The Desk cannot read its limits.', limits: null }) } });
   const html = t.view();
   assert.match(html, /<b>Check it<\/b>/);
   assert.match(html, /openLabLimits\([^)]*\)">Edit limits/);
-  assert.match(html, /removeLabStrat\([^)]*\)" title="Takes it off the Desk/);
-  assert.doesNotMatch(html, /removeLabStrat\([^)]*\)" disabled/);
 });
 
 test('today\'s trades: a line each with the account, the net, and a failed entry\'s reason with the broker\'s words under it', () => {
@@ -1003,22 +998,6 @@ test('Enter in a field saves, a held key does not; Escape closes through the pag
   assert.match(HTML, /labLimitsOverlay: \(\) => closeLabLimits\(\)/);
 });
 
-// ---- Remove -----------------------------------------------------------------------------------------------------------
-test('Remove asks, posts the desk id to /api/lab-remove, and goes to Today; a refusal is shown as the Desk\'s sentence', async () => {
-  const t = load({ view: { k: 'strat', name: 'lab_nq_orb' } });
-  await t.api.removeLabStrat('lab_nq_orb');
-  assert.deepEqual(t.confirms, [{ title: 'Remove NQ ORB from the Desk?', body: 'Its history is kept. Its accounts come off.', action: 'Remove', destructive: false }]);
-  assert.deepEqual(t.posts, [{ url: '/api/lab-remove', body: { strategy: 'lab_nq_orb' } }]);
-  assert.match(t.toasts[0], /^NQ ORB is off the Desk\. Its history is kept/);
-  assert.equal(t.api.VIEW.k, 'today');
-  const no = load({ answer: { detail: 'Flatten it first.' } });
-  await no.api.removeLabStrat('lab_nq_orb');
-  assert.deepEqual(no.toasts, ['Flatten it first.']);
-  const cancel = load({ confirm: false });
-  await cancel.api.removeLabStrat('lab_nq_orb');
-  assert.deepEqual(cancel.posts, []);
-});
-
 // ---- the rest of the page ---------------------------------------------------------------------------------------------
 test('the Activity lines for the Lab\'s journal events are in the ACTIVITY map', () => {
   const act = SLICE('const ACTIVITY = {', 'function activityLine(');
@@ -1052,7 +1031,7 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=52"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=53"><\/script>/);
   assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=6"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
@@ -1417,12 +1396,6 @@ test('m10 a flatten with a failed step and a switch that did not turn off says w
   assert.match(off.alerts[0], /It is switched OFF; flatten what is left at the broker now\./);
 });
 
-test('m13 the Remove confirm says its accounts come off', async () => {
-  const t = load();
-  await t.api.removeLabStrat('lab_nq_orb');
-  assert.equal(t.confirms[0].body, 'Its history is kept. Its accounts come off.');      // (the owner removed the promote gate, 2026-10-28: a removed one can be promoted again)
-});
-
 test('m14 in shadow the Today row, the sidebar and the page show what the day would have made, as Step A did', () => {
   const row = ROW({ today: { date: '2026-10-10', state: 'running', why: null, orders: [], trades: [], net: 120 } });
   const t = load({ rows: [row] });
@@ -1605,18 +1578,16 @@ test('final wave B6 (rehearsal o1): a cancel time equal to the flat time is one 
 
 
 /* ---- a built-in Desk straddle (nq930, gc_nfp) has the same actions as a Lab one (2026-10-11) ---- */
-test('a built-in strategy page: Open in the Lab, Show on chart, Remove from Desk, its unseen blocks, and the actions stay in view', () => {
+test('a built-in strategy page: Open in the Lab, Show on chart, its unseen blocks, and the actions stay in view', () => {
   const start = HTML.indexOf('function stratView(name)'), end = HTML.indexOf('/* ---- A Lab strategy the Desk itself knows');
   const view = HTML.slice(start, end);
   assert.ok(start > 0 && end > start);
   assert.match(view, /Flatten &amp; turn off/);
   assert.match(view, /openBuiltinInLab\(\$\{jsArg\(name\)\}\)/);
   assert.match(view, /openBuiltinInLab\(\$\{jsArg\(name\)\}, true\)"\$\{hasRun \? "" : " disabled"\}/);
-  assert.match(view, /removeBuiltin\(\$\{jsArg\(name\)\}\)"\$\{hide\.locked \? " disabled" : ""\}/);
   assert.match(view, /twin \? labCurveHtml\(name\) \+ labResHtml\(name, name\)/);
-  // the twin and a hide that the rule locks come from the chart service's answer and Manage algos' own rule
+  // the twin comes from the chart service's answer
   assert.match(HTML, /const twin = DESKRES\[name\] && typeof DESKRES\[name\]\.twin === "string"/);
-  assert.match(HTML, /computeVisibility\(ST\.strategies, ST\.book, HIDDEN_ALGOS, ST\.accounts\)\.find\(r => r\.name === name\)/);
   assert.match(HTML, /\{name: twin, builtin: true/);
   assert.match(HTML, /#builtin=/);
   const css = readFileSync(new URL('../../homebase/static/apple/desk.css', import.meta.url), 'utf8');
@@ -1735,11 +1706,11 @@ test('B: a read that never answers is cut off at 30 s, so the next minute\'s rea
   assert.match(row(), /Last signal 09:30<\/div>/, 'a later answer is read as usual');
 });
 
-test('1.10: no read in the demo or while the page is hidden, and a refused read leaves the row as it was', async () => {
-  for (const [opts, hide] of [[{ demo: true }, false], [{}, true]]) {
-    const t = load(opts), urls = [];
+test('1.10: no read while the page is hidden, and a refused read leaves the row as it was', async () => {
+  {
+    const t = load(), urls = [];
     t.ctx.fetch = jsonAnswer([], urls);
-    t.ctx.document.hidden = hide;
+    t.ctx.document.hidden = true;
     t.api.todayRow('nq930', t.ctx.ST.strategies.nq930);
     await tick();
     assert.deepEqual(urls, []);
