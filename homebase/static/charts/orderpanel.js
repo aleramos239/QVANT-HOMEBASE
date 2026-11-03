@@ -187,8 +187,9 @@ function build() {
     b.type = 'button';
     b.setAttribute('aria-pressed', 'false');
     b.append(mk('span', 'op-tlbl', side));
-    // the owner, 2026-11-02: one click enters -- a Buy / Sell press picks the side and sends, as Send would
-    b.onclick = () => { st.side = side; paint(); send(); };
+    // the owner, 2026-11-02: a Buy / Sell press NEVER sends -- it only picks the side (the Send button below and the
+    // chart preview follow) and brings the preview back if it was off; the Send button sends, in one click
+    b.onclick = () => { st.side = side; if (look.on) paint(); else setLook('on', true); };
     ui.tile[side] = { b };
   }
   tiles.append(ui.tile.Sell.b, ui.tile.Buy.b);
