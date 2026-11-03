@@ -23,6 +23,10 @@ function statusLine(id, checks, st, stale) {      // id: a strategy, or the memb
   const rank = {trading: 0, shadow: 1, off: 2}, strategies = (st && st.strategies) || {}, book = (st && st.book) || {};
   const kinds = ids.filter(m => strategies[m]).map(m => sideKind(strategies[m], book[m] || []));      // a set is the best of its members, as in the sidebar
   const k = kinds.length ? kinds.reduce((a, b) => rank[b] < rank[a] ? b : a) : "off", s = strategies[ids[0]], bk = [...new Set(ids.flatMap(m => (book[m] || []).map(r => r.account)))];
+  if (k === "trading" && st.armed === false) {      // readiness says Desk OFF only as info: a booked strategy still does not trade
+    reasons.push({text: "Desk is OFF: signals are written down only.", fix: "", account: ""});
+    worst = Math.max(worst, 1);
+  }
   const lvl = worst === 2 ? "bad" : worst ? "warn" : null;
   if (k === "off") return {level: lvl || "off", text: "OFF", reasons};
   if (k === "shadow") {

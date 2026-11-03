@@ -181,3 +181,12 @@ test('statusLine of a set: Trading when any member trades, red for a bad check o
   assert.deepEqual(JSON.parse(JSON.stringify(L.reasons.map((r) => r.text))), ['m2 · pp: bad thing']);
   assert.equal(f(['m1', 'm2'], [], { ...st, book: {} }, false).text, 'Shadow · no account · would be +$9,999 today'.replace('9,999', '9999'));
 });
+
+test('statusLine: with the Desk OFF a booked strategy is Not ready, saying the Desk is OFF; shadow and OFF are as they were', () => {
+  const st = { ...ST15, armed: false };
+  assert.deepEqual(JSON.parse(JSON.stringify(sl()('t', [], st, false))), { level: 'warn', text: 'Not ready · trades on 2 accounts · today +$412',
+    reasons: [{ text: 'Desk is OFF: signals are written down only.', fix: '', account: '' }] });
+  assert.deepEqual(JSON.parse(JSON.stringify(sl({ sh: 80 })('sh', [], st, false))), { level: 'shadow', text: 'Shadow · no account · would be +$80 today', reasons: [] });
+  assert.deepEqual(JSON.parse(JSON.stringify(sl()('off', [], st, false))), { level: 'off', text: 'OFF', reasons: [] });
+  assert.equal(sl()('t', [], { ...ST15, armed: true }, false).text, 'Ready · trades on 2 accounts · today +$412');
+});
