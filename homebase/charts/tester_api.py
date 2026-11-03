@@ -238,7 +238,7 @@ from .paperbook import DESK_ORIGINS, _cors, desk_origin_refusal
 # through ctx.api at call time; the rest are re-exported.
 from .tester_routes import common, desklab, jobs, lab
 from .tester_routes.common import PROP_CACHE    # noqa: F401
-from .tester_routes.desklab import (ARCHIVE_GROUP, DESKGROUP_ACTIONS, DESKLAB_ACTIONS, DESKLAB_ALIVE_S,  # noqa: F401
+from .tester_routes.desklab import (ARCHIVE_GROUP, DESKLAB_ACTIONS, DESKLAB_ALIVE_S,  # noqa: F401
                                     DESKLAB_DAY_KEYS, DESKLAB_DAYS, DESKLAB_PROP, DESKLAB_SHADOW_DAYS, DESKLAB_TAKE_OFF)
 from .tester_routes.jobs import MC_CACHE    # noqa: F401
 from .tester_routes.lab import NOT_TRASHED, ON_THE_DESK, _STRATEGIES_DIR, builtin_source    # noqa: F401

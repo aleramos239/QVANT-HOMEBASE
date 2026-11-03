@@ -24,6 +24,7 @@ import asyncio
 import json
 import re
 import sys
+from pathlib import Path
 from typing import Optional
 
 from ..config import assignments
@@ -276,27 +277,40 @@ class GroupMixin:
                     self.set_rotation(m, True)
         return self.groups_view()[gid]
 
-    def follow_group(self, gid: str, name: str | None = None, members: list | None = None) -> dict:
-        """The charts service's Desk group changed (a rename, a strategy moved in or out): its cycle follows, in the same
-        request, server side (never left to a page). Members the Desk does not hold as Lab strategies are left out; a cycle
-        left with no strategy goes off. GroupMissing when the group has no cycle (nothing to follow). The books follow too
-        in routes/setup.py (the route the charts service calls)."""
-        return self.set_group(gid, self.follow_body(gid, name, members))
+    def new_team_id(self) -> str:
+        """The first "g<n>" (n from 1) no team holds."""
+        n = 1
+        while f"g{n}" in self.groups:
+            n += 1
+        return f"g{n}"
 
-    def follow_body(self, gid: str, name: str | None = None, members: list | None = None) -> dict:
-        """follow_group's change as a set_group body."""
-        if gid not in self.groups:
-            raise GroupMissing("No such group.")
-        body: dict = {}
-        if name is not None:
-            body["name"] = str(name)[:MAX_NAME]
-        if members is not None:
-            body["members"] = [m for m in members if isinstance(m, str) and getattr(self.cfg.strategies.get(m), "kind", None) == LAB]
-            if not body["members"]:
-                body["on"] = False
-            elif not self.groups[gid]["members"]:        # an emptied team that gets a strategy back routes again
-                body["on"] = bool(self.groups[gid]["accounts"])
-        return body
+    def adopt_teams(self, path: Path) -> list:
+        """Each team of a leftover charts team file (deskgroups.json: {"groups": [{id, name, members}]}) whose id the Desk
+        does not hold joins it OFF, with no account, its Lab strategies only. A clash or a refusal leaves the Desk as it is
+        (said on stderr). -> the ids added. Safe twice: an id the Desk holds is never written again."""
+        try:
+            raw = json.loads(path.read_text())
+        except FileNotFoundError:
+            return []
+        except ValueError as e:
+            print(f"homebase engine: leftover teams in {path.name} unreadable: {e!r}", file=sys.stderr)
+            return []
+        added = []
+        for t in (raw.get("groups") if isinstance(raw, dict) else None) or []:
+            gid = t.get("id") if isinstance(t, dict) else None
+            if not isinstance(gid, str) or gid in self.groups:
+                continue
+            members = [m for m in t.get("members") or [] if isinstance(m, str)
+                       and getattr(self.cfg.strategies.get(m), "kind", None) == LAB]
+            try:
+                old, new = self.group_checked(gid, {"name": str(t.get("name") or gid).strip()[:MAX_NAME] or gid,
+                                                    "members": members, "accounts": [], "mode": "cycle", "on": False})
+            except GroupError as e:
+                print(f"homebase engine: leftover team {gid!r} not adopted: {e}", file=sys.stderr)
+                continue
+            self.write_group(gid, old, new)
+            added.append(gid)
+        return added
 
     def delete_group(self, gid: str) -> None:
         if gid not in self.groups:
@@ -362,3 +376,12 @@ class GroupMixin:
             self.journal("group_skipped", group=gid, strategy=name, reason=GROUP_NONE,
                          accounts={a: r.get("reason") for a, r in tried.items()})
         return {"armed": bool(self.cfg.armed), "accounts": tried}
+
+
+def retire(path: Path) -> bool:
+    """Rename `path` to <name>.retired once it is read (never deleted, never over an earlier .retired). -> renamed."""
+    to = path.with_name(path.name + ".retired")
+    if not path.exists() or to.exists():
+        return False
+    path.rename(to)
+    return True

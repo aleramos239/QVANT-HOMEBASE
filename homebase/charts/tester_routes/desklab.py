@@ -12,8 +12,6 @@ import json
 import re
 import threading
 import time
-import urllib.error
-import urllib.request
 from collections import OrderedDict
 from typing import Callable
 
@@ -26,7 +24,6 @@ from ...backtest.stats.stats import _sharpe
 from ...backtest.runner import _settled, read_json
 from ...backtest.tape import TapeStore
 from ...labrun import door, store
-from ..desk import DESK_URL
 from ...labrun.host import session_today
 from .. import deskfamilies, deskgroups, deskresults
 from ..paperbook import DESK_ORIGINS, _cors, desk_origin_refusal
@@ -36,7 +33,6 @@ from .jobs import WF_RESULT_FILES, wf_stamp
 DESKLAB_ACTIONS = ("promote", "remove", "delete", "onoff", "open", "archive", "filed", "restore", "archive_builtin",
                    "restore_builtin")
 ARCHIVE_GROUP = "Archive"     # the Lab group an archived strategy's draft is filed under (the owner, 2026-10-18)
-DESKGROUP_ACTIONS = ("create", "rename", "kind", "delete", "move")
 DESKLAB_ALIVE_S = 20     # the Lab-strategy runner is alive while its heartbeat is at most this old
 DESKLAB_TAKE_OFF = "Take its accounts off on the Desk first."   # Promote again / Remove while the desk has it booked
 DESKLAB_TO = ("mac", "vps", "both")   # where Promote puts it: "vps" and "both" also send the record to the server's Desk (OFF, no account)
@@ -623,83 +619,11 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
         except HTTPException as e:
             return watch_answer(request, {"ok": False, "detail": e.detail}, e.status_code)
 
-    # ---- Desk groups (deskgroups.py): named sets of Desk strategies, kept beside the Lab records. A group trades only through
-    # ---- its account cycle, kept by the Desk's engine and made to follow here, server side, before a change is written.
-    def desk_post(path_: str, payload: dict) -> tuple:
-        """POST JSON to this host's Desk -> (HTTP status, detail); (None, why) when it does not answer."""
-        req = urllib.request.Request(f"{DESK_URL}{path_}", data=json.dumps(payload).encode(), method="POST",
-                                     headers={"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req, timeout=3.0) as r:
-                return r.status, None
-        except urllib.error.HTTPError as e:
-            try:
-                return e.code, json.loads(e.read() or b"{}").get("detail")
-            except ValueError:
-                return e.code, None
-        except (OSError, ValueError) as e:
-            return None, type(e).__name__
-
-    async def cycle_follow(what: str, body: dict) -> str | None:
-        """Before a delete, a rename or a move is written: the Desk's account cycle of each group it changes follows it
-        (delete: the cycle goes; move / rename: its strategies and name). None when in step or there is no cycle to follow;
-        else the sentence that refuses the change -- nothing is written then, so the two never fall out of step."""
-        if what not in ("delete", "move", "rename"):
-            return None
-        before = {g["id"]: g for g in deskgroups.load()}
-        after = await asyncio.to_thread(deskgroups.preview, what, body)
-        changed = [{"id": g["id"], "name": g["name"], "members": g["members"]}
-                   for g in after if g["id"] in before and (before[g["id"]]["members"], before[g["id"]]["name"]) != (g["members"], g["name"])]
-        # every group a move changes in ONE call: a strategy moved from one team to another is booked over in one write
-        calls = [("/api/groups/delete", {"id": body.get("id")})] if what == "delete" else \
-            [("/api/groups/follow", {"groups": changed})] if changed else []
-        for path_, payload in calls:
-            code, detail = await asyncio.to_thread(desk_post, path_, payload)
-            if code not in (200, 404):                      # 404: that group has no cycle
-                return (f"The Desk refused the account cycle's change: {detail}" if code else
-                        "The Desk did not answer, so the group's account cycle could not follow. Nothing changed: try again.")
-        return None
-
+    # ---- Teams (deskgroups.py): read only, off the Desk's own team file.
     @r.get("/deskgroups")
     def deskgroups_list(request: Request):
         watch_guard(request)
         return watch_answer(request, {"groups": deskgroups.load()})
-
-    @r.options("/deskgroups/{what}")
-    def deskgroups_preflight(what: str, request: Request):
-        o = request.headers.get("origin")
-        if what not in DESKGROUP_ACTIONS or o not in DESK_ORIGINS:
-            return JSONResponse({"detail": "origin not allowed"}, status_code=403)
-        return Response(status_code=204, headers={
-            "access-control-allow-origin": o, "vary": "Origin", "access-control-allow-methods": "POST",
-            "access-control-allow-headers": "content-type", "access-control-max-age": "600"})
-
-    @r.post("/deskgroups/{what}")
-    async def deskgroups_write(what: str, request: Request):
-        """create {name, kind?} | rename {id, name} | kind {id, kind} | delete {id} | move {strategy, group: id | null}
-        -> {ok: true, groups} | {ok: false, detail} (a refusal in words)."""
-        watch_guard(request)
-        try:
-            write_ok(request)
-            json_body(request)
-            if what not in DESKGROUP_ACTIONS:
-                raise HTTPException(404, f"unknown group action {what!r}")
-            try:
-                body = await request.json()
-            except ValueError:
-                raise HTTPException(400, "the body is JSON") from None
-            if not isinstance(body, dict):
-                raise HTTPException(400, "the body is a JSON object")
-            try:
-                why = await cycle_follow(what, body)
-                if why is not None:
-                    raise HTTPException(409, why)
-                groups = await asyncio.to_thread(deskgroups.apply, what, body)
-            except deskgroups.GroupError as e:
-                raise HTTPException(409, str(e)) from None
-            return watch_answer(request, {"ok": True, "groups": groups})
-        except HTTPException as e:
-            return watch_answer(request, {"ok": False, "detail": e.detail}, e.status_code)
 
     # ---- Desk families (deskfamilies.py): variants of one idea folded under one sidebar row. Display only: nothing trades.
     @r.get("/deskfamilies")
@@ -804,7 +728,7 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
         with desk_res_lock:
             for g in deskgroups.load():
                 members, left_out, sides = group_sides(g, ensure_wf)
-                res_g = {"id": g["id"], "name": g["name"], "kind": g["kind"], "members": members, "left_out": left_out,
+                res_g = {"id": g["id"], "name": g["name"], "members": members, "left_out": left_out,
                          "walkforward": True}
                 for key, chosen in sides.items():
                     ledger, owners, prop_key = side_ledger(key, chosen)

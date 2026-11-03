@@ -1,13 +1,15 @@
 """/desklab/results keeps each done walk-forward's card block and works it out again only when one of its files changed
 (2026-10-26); a prop sim that failed is never kept. The warm-up also scores the Desk groups, so their first ask is a hit."""
 import datetime as dt
+import json
 import os
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from homebase import paths
 from homebase.backtest import runner
-from homebase.charts import deskgroups, tester_api
+from homebase.charts import tester_api
 from homebase.labrun import store
 from tests.test_tester_desklab import DESK, HEAD, at_et, c, draft, make_run, promote, wf_result, write_wf  # noqa: F401 -- fixtures and helpers
 
@@ -74,9 +76,8 @@ def test_a_failed_prop_sim_is_not_kept(c, tmp_path, drafts_dir, make_run, monkey
 
 def test_the_warm_up_scores_the_groups_and_starts_nothing(c, tmp_path, drafts_dir, make_run, monkeypatch):  # noqa: F811
     rt, wdir, scored, fail, reads, ask = setup(c, tmp_path, drafts_dir, make_run, monkeypatch)
-    deskgroups.apply("create", {"name": "Eval group", "kind": "eval"})           # the store itself: no Desk is asked
-    for sid in ("lab_nq_bars", "nq930"):
-        deskgroups.apply("move", {"strategy": sid, "group": "g1"})
+    monkeypatch.setattr(paths, "state_dir", lambda: tmp_path)                    # the Desk's team file, read only
+    (tmp_path / "groups.json").write_text(json.dumps({"g1": {"name": "Eval group", "members": ["lab_nq_bars", "nq930"]}}))
     started = []
     monkeypatch.setattr(rt.wfs, "submit", lambda req: started.append(req))
     monkeypatch.setattr(rt.manager, "submit", lambda req: started.append(req))

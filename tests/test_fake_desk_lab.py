@@ -1306,13 +1306,13 @@ def test_the_config_guard_reads_the_configs_own_mark_never_an_attribute_made_up_
 
 
 def test_an_account_cycle_group_is_made_switched_and_deleted(desk):
-    """POST /api/groups (routes/strategies.py `group_set`, copied line for line): made off, switched on, refused when wrong."""
-    r = desk.post("/api/groups", json={"id": "g1", "name": "Apex", "members": [LAB], "accounts": [A1, A2],
-                                       "risk_usd": 1000, "max_minis": 17})
-    assert r.status_code == 200 and r.json()["on"] is False
-    r = desk.post("/api/groups", json={"id": "g1", "on": True})
-    assert r.json()["on"] is True and r.json()["next"] == A1
+    """A team through /api/setup (routes/setup.py, the server's own): made, routing, refused when wrong, deleted."""
+    body = {"team": "g1", "name": "Apex", "members": [LAB], "accounts": [A1, A2], "mode": "cycle", "risk_usd": 1000,
+            "max_minis": 17, "on": False}
+    assert desk.post("/api/lab-limits", json={"strategy": LAB, "limits": LIMITS}).status_code == 200
+    r = desk.post("/api/setup", json=body)
+    assert r.status_code == 200 and r.json()["group"]["on"] is True and r.json()["group"]["next"] == A1
     assert desk.get("/api/status").json()["groups"]["g1"]["accounts"] == [A1, A2]
-    assert desk.post("/api/groups", json={"id": "g1", "accounts": ["nope"]}).status_code == 400
+    assert desk.post("/api/setup", json={**body, "accounts": ["nope"]}).status_code == 400
     assert desk.post("/api/groups/delete", json={"id": "g1"}).json() == {"ok": True}
     assert desk.post("/api/groups/delete", json={"id": "g1"}).status_code == 404

@@ -303,15 +303,54 @@ def test_saving_an_on_cycle_leaves_a_take_turns_switched_off_by_hand(tmp_path):
     assert not eng.rotating(TWO) and eng.rotating(tlab.LAB)
 
 
-def test_follow_group_keeps_name_and_members_in_step(tmp_path):
-    from homebase.desk.engine_groups import GroupMissing
+def test_a_new_team_gets_the_first_free_id(tmp_path):
     eng, ads, _ = mk(tmp_path)
-    group(eng)
-    v = eng.follow_group("g", "Apex 300k", [TWO, "nq930_not_lab"])
-    assert (v["name"], v["members"], v["on"]) == ("Apex 300k", [TWO], True)
-    assert eng.follow_group("g", None, [])["on"] is False                # no strategy left: off
-    with pytest.raises(GroupMissing):
-        eng.follow_group("zz", "x", [])
+    assert eng.new_team_id() == "g1"
+    eng.set_group("g1", {"name": "A"})
+    eng.set_group("g3", {"name": "C"})
+    assert eng.new_team_id() == "g2"
+
+
+def _leftover(tmp_path, groups):
+    import json
+    p = tmp_path / "deskgroups.json"
+    p.write_text(json.dumps({"groups": groups, "next": 9}))
+    return p
+
+
+def test_leftover_team_is_adopted_off_with_no_accounts(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    p = _leftover(tmp_path, [{"id": "g2", "name": "Eval", "kind": "eval", "members": [TWO, "nq930_not_lab"]}])
+    assert eng.adopt_teams(p) == ["g2"]
+    g = eng.groups["g2"]
+    assert (g["name"], g["members"], g["accounts"], g["mode"], g["on"]) == ("Eval", [TWO], [], "cycle", False)
+    assert not eng.rotating(TWO), "an OFF team switches no Take turns on"
+    assert len(tlab.events(tmp_path, "group_set")) == 1
+
+
+def test_adopted_file_is_renamed_retired_once(tmp_path):
+    from homebase.desk.engine_groups import retire
+    eng, ads, _ = mk(tmp_path)
+    p = _leftover(tmp_path, [{"id": "g2", "name": "Eval", "members": [TWO]}])
+    assert eng.adopt_teams(p) == ["g2"] and retire(p) is True
+    retired = tmp_path / "deskgroups.json.retired"
+    assert not p.exists() and retired.exists()
+    kept = retired.read_text()
+    assert eng.adopt_teams(p) == [] and retire(p) is False             # a second start: nothing there, nothing changes
+    assert retired.read_text() == kept and eng.groups["g2"]["members"] == [TWO]
+    p.write_text("{}")                                                  # a new leftover never overwrites the first
+    assert retire(p) is False and p.exists() and retired.read_text() == kept
+
+
+def test_a_leftover_team_id_clash_never_overwrites_the_desk_team(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    eng.set_group("g1", {"name": "Apex", "members": [tlab.LAB], "accounts": ["a1"], "on": True})
+    before = dict(eng.groups["g1"])
+    p = _leftover(tmp_path, [{"id": "g1", "name": "Old", "members": [TWO]},
+                             {"id": "g2", "name": "Clash", "members": [tlab.LAB]},     # already in g1: a GroupError
+                             {"id": "g3", "name": "Fine", "members": [TWO]}])
+    assert eng.adopt_teams(p) == ["g3"]
+    assert eng.groups["g1"] == before and "g2" not in eng.groups
 
 
 def test_an_account_done_for_the_day_passes_the_cycle_turn_on(tmp_path):

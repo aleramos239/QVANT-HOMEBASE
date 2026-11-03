@@ -34,7 +34,6 @@ def test_a_strategy_sits_in_one_family_with_its_short_name(at):
     assert f[1]["members"] == [] and f[1]["short"] == {}
     deskfamilies.apply("rename", {"id": "f2", "name": "First 15m follow"})
     assert [x["id"] for x in deskfamilies.apply("delete", {"id": "f1"})] == ["f2"]
-    assert deskgroups.load() == [], "families never touch the account cycles' file"
 
 
 @pytest.mark.parametrize("action, body, said", [

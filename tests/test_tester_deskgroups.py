@@ -1,11 +1,12 @@
-"""Desk groups on the chart service: the store (deskgroups.py), its routes and the combined results. Saved files only: nothing
-is run and nothing is booked. The runs are written by hand into the tester's runs folder, the store into a temp folder."""
-import io
+"""Teams on the chart service: a read-only view of the Desk's own team file (<state>/groups.json, engine_groups.py), its
+routes and the combined results. Saved files only: nothing is run and nothing is booked. The runs are written by hand into the
+tester's runs folder, the team file into a temp folder."""
 import json
 
 import pytest
 from fastapi.testclient import TestClient
 
+from homebase import paths
 from homebase.charts import deskgroups, tester_api
 from homebase.labrun import store
 from tests.test_tester_api import EVIL, app
@@ -17,87 +18,39 @@ DESK = {"origin": "http://localhost:8850"}
 def c(tmp_path, monkeypatch):
     monkeypatch.setenv(store.ENV_ROOT, str(tmp_path / "desklab"))
     monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", False)
+    monkeypatch.setattr(paths, "state_dir", lambda: tmp_path / "state")
     return TestClient(app(tmp_path), base_url="http://localhost:8852")
 
 
-def post(c, what, body, **kw):
-    return c.post(f"/api/tester/deskgroups/{what}", json=body, headers=DESK, **kw)
+def teams(tmp_path, groups: dict):
+    """The Desk's team file, as engine_groups writes it: {id: {name, members, accounts, ...}}."""
+    (tmp_path / "state").mkdir(exist_ok=True)
+    (tmp_path / "state" / "groups.json").write_text(json.dumps(groups))
 
 
-def test_the_store_creates_renames_moves_and_deletes_with_one_group_per_strategy(tmp_path, monkeypatch):
-    monkeypatch.setenv(store.ENV_ROOT, str(tmp_path / "desklab"))
-    assert deskgroups.load() == []
-    a = deskgroups.apply("create", {"name": "  Eval   group ", "kind": "eval"})
-    assert a == [{"id": "g1", "name": "Eval group", "kind": "eval", "members": []}]
-    deskgroups.apply("create", {"name": "Funded", "kind": "funded"})
-    deskgroups.apply("move", {"strategy": "lab_nq_a", "group": "g1"})
-    deskgroups.apply("move", {"strategy": "nq930", "group": "g1"})
-    g = deskgroups.apply("move", {"strategy": "lab_nq_a", "group": "g2"})
-    assert [(x["id"], x["members"]) for x in g] == [("g1", ["nq930"]), ("g2", ["lab_nq_a"])], "one group at most: moving takes it out of the first"
-    g = deskgroups.apply("move", {"strategy": "lab_nq_a", "group": None})
-    assert [x["members"] for x in g] == [["nq930"], []]
-    deskgroups.apply("rename", {"id": "g2", "name": "Funded group"})
-    deskgroups.apply("kind", {"id": "g2", "kind": "together"})
-    assert [(x["name"], x["kind"]) for x in deskgroups.load()] == [("Eval group", "eval"), ("Funded group", "together")]
-    g = deskgroups.apply("delete", {"id": "g1"})
-    assert [x["id"] for x in g] == ["g2"]
-    assert deskgroups.apply("create", {"name": "Again"})[-1]["id"] == "g3", "a deleted group's id is never given again"
-    deskgroups.apply("delete", {"id": "g3"})
-    assert deskgroups.apply("create", {"name": "Once more"})[-1]["id"] == "g4", "not even the last one deleted"
-    assert deskgroups.path() == tmp_path / "deskgroups.json", "beside the records' folder, never inside it (it lists *.json)"
-    assert store.listing() == []
+def test_load_reads_the_desks_team_file(tmp_path):
+    assert deskgroups.load(tmp_path) == []
+    (tmp_path / "groups.json").write_text("not json")
+    assert deskgroups.load(tmp_path) == []
+    (tmp_path / "groups.json").write_text("{}")
+    assert deskgroups.load(tmp_path) == []
+    (tmp_path / "groups.json").write_text(json.dumps({
+        "g1": {"name": "Apex", "members": ["lab_nq_a", 5, "Bad!"], "accounts": ["a1"], "on": True, "mode": "cycle"},
+        "g2": "junk", "g3": {"members": []}}))
+    assert deskgroups.load(tmp_path) == [{"id": "g1", "name": "Apex", "members": ["lab_nq_a"]},
+                                         {"id": "g3", "name": "g3", "members": []}]
 
 
-@pytest.mark.parametrize("action,body,said", [
-    ("create", {"name": ""}, "1 to 40 characters"),
-    ("create", {"name": "x" * 41}, "1 to 40 characters"),
-    ("create", {"name": "Fine", "kind": "live"}, "eval, a funded account"),
-    ("create", {"name": "EVAL group"}, "with that name already"),
-    ("rename", {"id": "gone", "name": "x"}, "not there any more"),
-    ("rename", {"id": "g1", "name": "eval group"}, None),            # its own name in another case is fine
-    ("move", {"strategy": "Bad Name", "group": "g1"}, "not a strategy"),
-    ("move", {"strategy": "nq930", "group": "gone"}, "not there any more"),
-    ("delete", {"id": "gone"}, "not there any more"),
-    ("nope", {}, "unknown"),
-])
-def test_the_store_refuses_in_words_and_writes_nothing(tmp_path, monkeypatch, action, body, said):
-    monkeypatch.setenv(store.ENV_ROOT, str(tmp_path / "desklab"))
-    deskgroups.apply("create", {"name": "Eval group", "kind": "eval"})
-    before = deskgroups.path().read_text()
-    if said is None:
-        assert deskgroups.apply(action, body)[0]["name"] == "eval group"
-        return
-    with pytest.raises(deskgroups.GroupError, match=said):
-        deskgroups.apply(action, body)
-    assert deskgroups.path().read_text() == before
-
-
-def test_the_store_caps_the_number_of_groups_and_survives_a_bad_file(tmp_path, monkeypatch):
-    monkeypatch.setenv(store.ENV_ROOT, str(tmp_path / "desklab"))
-    for i in range(deskgroups.MAX_GROUPS):
-        deskgroups.apply("create", {"name": f"G {i}"})
-    with pytest.raises(deskgroups.GroupError, match="12 groups"):
-        deskgroups.apply("create", {"name": "One more"})
-    deskgroups.path().write_text("not json")
-    assert deskgroups.load() == []
-    deskgroups.path().write_text(json.dumps({"groups": [{"id": "g1", "name": "A", "kind": "weird", "members": ["ok_1", "Bad!", 5, "ok_1"]},
-                                                        "junk", {"id": "g1", "name": "dup"}]}))
-    assert deskgroups.load() == [{"id": "g1", "name": "A", "kind": "together", "members": ["ok_1"]}]
-
-
-def test_the_routes_answer_the_desk_page_only_and_say_a_refusal_in_words(c):
+def test_the_routes_answer_the_desk_page_only_and_list_the_desks_teams(c, tmp_path):
     assert c.get("/api/tester/deskgroups", headers=EVIL).status_code == 403
     assert c.get("/api/tester/deskgroups", headers=DESK).json() == {"groups": []}
-    assert c.options("/api/tester/deskgroups/create", headers={"origin": "http://evil.example"}).status_code == 403
-    pre = c.options("/api/tester/deskgroups/create", headers=DESK)
-    assert pre.status_code == 204 and pre.headers["access-control-allow-origin"] == DESK["origin"]
-    assert post(c, "create", {"name": "Eval", "kind": "eval"}, ).json()["groups"][0]["id"] == "g1"
-    assert c.post("/api/tester/deskgroups/create", json={"name": "x"}, headers=EVIL).status_code == 403
-    r = post(c, "create", {"name": "eval"})
-    assert r.status_code == 409 and r.json() == {"ok": False, "detail": "There is a group with that name already."}
-    assert post(c, "move", {"strategy": "lab_nq_a", "group": "g1"}).json()["groups"][0]["members"] == ["lab_nq_a"]
-    assert post(c, "wat", {}).status_code in (404, 403)
-    assert c.get("/api/tester/deskgroups", headers=DESK).json()["groups"][0]["members"] == ["lab_nq_a"]
+    teams(tmp_path, {"g1": {"name": "Apex", "members": ["lab_nq_a"], "accounts": [], "on": False}})
+    assert c.get("/api/tester/deskgroups", headers=DESK).json() == {"groups": [{"id": "g1", "name": "Apex", "members": ["lab_nq_a"]}]}
+
+
+def test_dead_team_routes_are_gone(c):
+    assert c.post("/api/tester/deskgroups/create", json={"name": "x"}, headers=DESK).status_code in (404, 405)
+    assert c.options("/api/tester/deskgroups/create", headers=DESK).status_code in (404, 405)
 
 
 def test_summarize_and_merged(tmp_path):
@@ -155,13 +108,11 @@ def test_a_groups_results_are_its_members_3to1_walkforwards_put_together(c, tmp_
         (draftstore.drafts_dir() / f"{n}.py").write_text(CODE.replace("nq_bars", n))
         rec = store.get(n)
         write_wf(tmp_path, rec, dt.date(2026, 10, 25), result=wf_result(), sha256=rec["sha256"])
-    post(c, "create", {"name": "Eval group", "kind": "eval"})
-    for sid in ("lab_nq_a", "lab_nq_b", "lab_nq_c", "nq930"):
-        post(c, "move", {"strategy": sid, "group": "g1"})
-    post(c, "create", {"name": "Empty"})
+    teams(tmp_path, {"g1": {"name": "Eval group", "members": ["lab_nq_a", "lab_nq_b", "lab_nq_c", "nq930"]},
+                     "g2": {"name": "Empty", "members": []}})
     got = c.get("/api/tester/deskgroups/results", headers=DESK).json()["results"]
     g = got["g1"]
-    assert (g["name"], g["kind"], g["walkforward"]) == ("Eval group", "eval", True)
+    assert (g["name"], g["walkforward"]) == ("Eval group", True)
     assert [m["state"] for m in g["members"]] == ["done", "done", "changed"]     # nq_c has no Lab draft (S4: still said with the start off)
     assert g["members"][0]["unseen"]["net"] == 1234.5 and g["members"][0]["build"]["net"] == 4000.0 and g["members"][2]["unseen"] is None
     assert [x["strategy"] for x in g["left_out"]] == ["lab_nq_c", "nq930"]
@@ -193,9 +144,7 @@ def test_a_member_with_an_older_3to1_says_which_months_it_lacks(c, tmp_path, mon
         (draftstore.drafts_dir() / f"{n}.py").write_text(CODE.replace("nq_bars", n))
         rec = store.get(n)
         write_wf(tmp_path, rec, asked, result=wf_result(), sha256=rec["sha256"])
-    post(c, "create", {"name": "Eval group", "kind": "eval"})
-    for sid in ("lab_nq_a", "lab_nq_b"):
-        post(c, "move", {"strategy": sid, "group": "g1"})
+    teams(tmp_path, {"g1": {"name": "Eval group", "members": ["lab_nq_a", "lab_nq_b"]}})
     g = c.get("/api/tester/deskgroups/results", headers=DESK).json()["results"]["g1"]
     a, b = g["members"]
     assert (a["state"], b["state"]) == ("done", "done") and g["left_out"] == []
@@ -203,73 +152,3 @@ def test_a_member_with_an_older_3to1_says_which_months_it_lacks(c, tmp_path, mon
     assert (b["through"], b["to"]) == ("2026-08", "2026-09")
     assert g["in"]["unseen"] == ["lab_nq_a", "lab_nq_b"], "still counted: the page says the months differ"
     assert calls == []
-
-
-
-class _Answer:
-    def __init__(self, status=200):
-        self.status = status
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *a):
-        return False
-
-
-def _desk(monkeypatch, answer):
-    """The Desk the charts service asks to make a group's account cycle follow: `answer(path, body)` -> a status, or an
-    exception to raise (no answer). -> the calls it got."""
-    import urllib.error
-    calls = []
-
-    def urlopen(req, timeout=None):
-        path, body = req.full_url.split(":8850", 1)[1], json.loads(req.data)
-        calls.append((path, body))
-        got = answer(path, body)
-        if isinstance(got, Exception):
-            raise got
-        if got != 200:
-            raise urllib.error.HTTPError(req.full_url, got, "x", {}, io.BytesIO(b'{"detail": "refused here"}'))
-        return _Answer(got)
-    monkeypatch.setattr(tester_api.urllib.request, "urlopen", urlopen)
-    return calls
-
-
-def test_a_group_change_makes_its_account_cycle_follow_first(c, monkeypatch):
-    post(c, "create", {"name": "Apex"})
-    post(c, "create", {"name": "Other"})
-    post(c, "move", {"strategy": "lab_nq_b", "group": "g2"})
-    calls = _desk(monkeypatch, lambda path, body: 200)
-    assert post(c, "move", {"strategy": "lab_nq_a", "group": "g1"}).json()["ok"] is True
-    assert calls == [("/api/groups/follow", {"groups": [{"id": "g1", "name": "Apex", "members": ["lab_nq_a"]}]})]
-    calls.clear()
-    post(c, "move", {"strategy": "lab_nq_b", "group": "g1"})                  # out of g2, into g1: both follow, in ONE call
-    assert [[g["id"] for g in b["groups"]] for _, b in calls] == [["g1", "g2"]]
-    calls.clear()
-    post(c, "rename", {"id": "g1", "name": "Apex 300k"})
-    assert calls == [("/api/groups/follow", {"groups": [{"id": "g1", "name": "Apex 300k", "members": ["lab_nq_a", "lab_nq_b"]}]})]
-    calls.clear()
-    assert post(c, "delete", {"id": "g1"}).json()["ok"] is True
-    assert calls == [("/api/groups/delete", {"id": "g1"})]
-
-
-def test_a_group_without_a_cycle_changes_freely(c, monkeypatch):
-    _desk(monkeypatch, lambda path, body: 404)                              # the Desk: no cycle for this group
-    post(c, "create", {"name": "Apex"})
-    assert post(c, "move", {"strategy": "lab_nq_a", "group": "g1"}).json()["ok"] is True
-    assert post(c, "delete", {"id": "g1"}).json()["ok"] is True
-
-
-def test_no_answer_from_the_desk_changes_nothing(c, monkeypatch):
-    post(c, "create", {"name": "Apex"})
-    post(c, "move", {"strategy": "lab_nq_a", "group": "g1"})
-    _desk(monkeypatch, lambda path, body: OSError("refused"))
-    r = post(c, "delete", {"id": "g1"})
-    assert r.json()["ok"] is False and "did not answer" in r.json()["detail"]
-    assert [g["id"] for g in deskgroups.load()] == ["g1"], "the group stays: its cycle could not follow"
-    r = post(c, "move", {"strategy": "lab_nq_a", "group": None})
-    assert r.json()["ok"] is False and deskgroups.load()[0]["members"] == ["lab_nq_a"]
-    _desk(monkeypatch, lambda path, body: 400)
-    r = post(c, "move", {"strategy": "lab_nq_a", "group": None})
-    assert r.json()["ok"] is False and "refused here" in r.json()["detail"]

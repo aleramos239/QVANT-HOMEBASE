@@ -72,16 +72,49 @@ def test_a_bad_team_is_refused_before_anything_is_written(desk):
     assert r.status_code == 400 and st(desk)["groups"] == {} and LAB not in st(desk)["book"]
 
 
-def test_follow_books_a_strategy_that_joins_and_unbooks_one_that_leaves(desk):
+def test_team_off_switches_take_turns_off_for_its_strategies(desk):
+    limits(desk)
+    assert team(desk).status_code == 200
+    assert st(desk)["strategies"][LAB]["rotation"]["on"] is True
+    assert team(desk, on=False).status_code == 200
+    assert st(desk)["strategies"][LAB]["rotation"]["on"] is False
+
+
+def test_team_on_in_take_turns_mode_switches_it_back_on(desk):
+    limits(desk)
+    team(desk, on=False)
+    assert st(desk)["strategies"][LAB]["rotation"]["on"] is False
+    assert team(desk).status_code == 200
+    assert st(desk)["strategies"][LAB]["rotation"]["on"] is True
+    assert team(desk, mode="share").status_code == 200                          # ON, not Take turns: off
+    assert st(desk)["strategies"][LAB]["rotation"]["on"] is False
+
+
+def test_a_new_team_gets_the_next_free_id(desk):
+    body = {"team": "", "members": [], "accounts": [], "mode": "cycle", "on": False}
+    r = desk.post("/api/setup", json={**body, "name": "A"})
+    assert r.status_code == 200 and r.json()["team"] == "g1"
+    assert desk.post("/api/setup", json={**body, "name": "B"}).json()["team"] == "g2"
+    assert sorted(st(desk)["groups"]) == ["g1", "g2"]
+
+
+def test_team_save_moves_a_member_from_another_team_in_one_book_write(desk):
     limits(desk)
     team(desk)
-    r = desk.post("/api/groups/follow", json={"id": "g1", "members": []})
-    assert r.status_code == 200 and r.json()["on"] is False
-    assert st(desk)["book"].get(LAB, []) == []                                  # left: the team's accounts go with it
-    r = desk.post("/api/groups/follow", json={"id": "g1", "members": [LAB]})
-    assert r.status_code == 200 and r.json()["on"] is True                      # back in an emptied team: it routes again
-    assert st(desk)["book"][LAB] == [{"account": A1, "qty": 1}, {"account": A2, "qty": 1}]
-    assert desk.post("/api/groups/follow", json={"id": "nope", "members": []}).status_code == 404
+    r = desk.post("/api/setup", json={"team": "g2", "name": "B", "members": [LAB], "accounts": [LIVE], "mode": "cycle",
+                                      "risk_usd": 500, "max_minis": 5, "on": True})
+    assert r.status_code == 200, r.text
+    s = st(desk)
+    assert s["groups"]["g2"]["members"] == [LAB] and s["groups"]["g2"]["on"] is True
+    assert s["groups"]["g1"]["members"] == [] and s["groups"]["g1"]["on"] is False      # the old team's record is written
+    assert s["book"][LAB] == [{"account": LIVE, "qty": 1}]
+    books = [j for j in s["journal"] if j["event"] == "book_updated" and j.get("strategy") == LAB]
+    assert len(books) == 2 and books[0]["assignments"] == [{"account": LIVE, "qty": 1}]   # the team's, then the move: one write
+
+
+def test_dead_team_routes_are_gone(desk):
+    assert desk.post("/api/groups", json={"id": "g1", "name": "A"}).status_code in (404, 405)
+    assert desk.post("/api/groups/follow", json={"id": "g1", "members": []}).status_code in (404, 405)
 
 
 def cfg_of(book):
@@ -102,21 +135,6 @@ def test_team_books_plans_every_mode_and_leaver():
     assert out["s1"] == [{"account": "a2", "qty": 1}] and "s2" not in out       # s2: no account, no change
     same = cfg_of({"s1": [{"account": "a1", "qty": 1}, {"account": "a2", "qty": 1}]})
     assert team_books(same, {}, {"members": ["s1"], "accounts": ["a1", "a2"], "mode": "share", "assign": {}}) == {}
-
-
-def test_a_move_between_teams_is_one_book_write_never_empty(desk):
-    limits(desk)
-    team(desk)
-    assert desk.post("/api/setup", json={"team": "g2", "name": "B", "members": [], "accounts": [LIVE], "mode": "cycle",
-                                          "risk_usd": 500, "max_minis": 5, "on": False}).status_code == 200
-    r = desk.post("/api/groups/follow", json={"groups": [{"id": "g2", "members": [LAB]}, {"id": "g1", "members": []},
-                                                         {"id": "nope", "members": []}]})
-    assert r.status_code == 200, r.text                         # g2 first: checked with the leaver out of g1 already
-    s = st(desk)
-    assert s["groups"]["g2"]["members"] == [LAB] and s["groups"]["g2"]["on"] is True and s["groups"]["g1"]["members"] == []
-    assert s["book"][LAB] == [{"account": LIVE, "qty": 1}]
-    books = [j for j in s["journal"] if j["event"] == "book_updated" and j.get("cause") == "setup"]
-    assert len(books) == 2 and books[0]["assignments"] == [{"account": LIVE, "qty": 1}]   # the move: one write (newest first)
 
 
 def book_a1(c, **row):
