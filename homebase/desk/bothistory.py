@@ -15,9 +15,11 @@ account. Statuses: traded | skipped | refused | no_fill | killed | error.
               from the engine's brackets_moved re-price, same sign convention)
               and gap_through (true when that slip is >= 2 ticks)
   pnl_usd     (exit - entry) x side x point value x qty, less $4 per contract per
-              round trip (a Lab round whose lab_round line names a symbol: that
-              contract's point value and round-trip fee); left out when the fills
-              cannot be matched
+              round trip; left out when the fills cannot be matched. Only a Lab
+              round whose lab_round line names a contract DIFFERENT from the
+              strategy's own is priced in that contract (its point value and
+              commission_rt); a round on the strategy's own contract, and an old
+              line with no symbol, keep the strategy's point value and the $4
   fire_ms     09:30:00.000 ET on the run's date (the self-timer's fixed fire
               time); placed_ms is the journal ts of "placed"; latency_ms is
               their difference. Present whenever a "placed" landed, else left
@@ -40,7 +42,7 @@ from pathlib import Path
 from typing import Iterable, Optional
 from zoneinfo import ZoneInfo
 
-from ..contracts import commission_rt, point_value, tick_size
+from ..contracts import commission_rt, point_value, same_contract, tick_size
 from ..core.num import float_or_none as _num
 
 COMMISSION_RT = 4.0              # $ per contract per round trip
@@ -360,8 +362,10 @@ def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,
                                            slip >= GAP_THROUGH_TICKS - _TICK_EPS)
             row["exit"] = exit_row
         rsym = r.get("symbol")
-        pnl = (_pnl(entry, ex, r["qty"], rsym, commission_rt(rsym)) if rsym
-               else _pnl(entry, ex, r["qty"], symbol))
+        if rsym and not same_contract(rsym, symbol):     # a row that trades another contract than the strategy's own
+            pnl = _pnl(entry, ex, r["qty"], rsym, commission_rt(rsym))
+        else:                                            # the strategy's own contract, or an old line: as it always was
+            pnl = _pnl(entry, ex, r["qty"], symbol)
         if pnl is not None:
             row["pnl_usd"] = pnl
         out.append(row)

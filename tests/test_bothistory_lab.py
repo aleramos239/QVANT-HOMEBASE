@@ -115,3 +115,15 @@ def test_a_round_that_names_its_contract_is_priced_and_charged_in_it():
     assert rows("NQ")[0]["pnl_usd"] == 196.0                       # 10 points x $20 less $4
     assert rows("MNQ")[0]["pnl_usd"] == 19.0                       # 10 points x $2 less $1
     assert rows("NQ")[0]["pnl_usd"] == 200.0 - contracts.commission_rt("NQ")
+
+
+def test_a_round_on_the_strategys_own_contract_keeps_the_old_price_and_fee():
+    def pnl(symbol):                                               # an MNQ strategy: its default contract is MNQ
+        recs = [rec("lab_round", D, "09:40:00", strategy=LAB, account="a1", round=1, qty=1, source="lab",
+                    **({"symbol": symbol} if symbol else {})),
+                leg("09:40:00"), fill("09:41:00", 100.0), out("09:50:00", 110.0, "tp")]
+        return runs(recs, LAB, symbol="MNQ", today=TODAY, days=120)[0]["pnl_usd"]
+
+    assert pnl(None) == 16.0                                       # old line: 10 points x $2 less the old $4
+    assert pnl("MNQ") == 16.0                                      # new line, same contract: exactly the same
+    assert pnl("NQ") == 200.0 - contracts.commission_rt("NQ")      # another contract: its own dollars and fee
