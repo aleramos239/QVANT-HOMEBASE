@@ -69,7 +69,7 @@ test('rowFrom "own": {account, qty, stop_after?} only, never size or most', () =
   assert.deepEqual(plain(r), { account: 'a', qty: 4, stop_after: 'win' });
 });
 
-test('needsAsk: a LIVE plain row given a size asks; a plain qty raise asks; Most up or removed on a risk row asks, on contracts not', () => {
+test('needsAsk: a LIVE plain row given a size asks; a plain qty raise asks; Most up or removed on a risk or contracts row asks', () => {
   const legacy = { account: 'a', qty: 2 }, r = { account: 'a', qty: 1, size: 'risk', risk_usd: 500, most: 20 };
   const c = { account: 'a', qty: 2, size: 'contracts', most: 20 };
   assert.equal(A.needsAsk(legacy, { ...legacy, stop_after: 'win' }, true), false);
@@ -79,13 +79,31 @@ test('needsAsk: a LIVE plain row given a size asks; a plain qty raise asks; Most
   assert.equal(A.needsAsk(r, { ...r, most: 40 }, true), true);
   assert.equal(A.needsAsk(r, { account: 'a', qty: 1, size: 'risk', risk_usd: 500 }, true), true, 'Most removed');
   assert.equal(A.needsAsk(r, { ...r, most: 10 }, true), false);
-  assert.equal(A.needsAsk(c, { ...c, most: 40 }, true), false, 'a contracts row needs no ask for Most');
+  assert.equal(A.needsAsk(c, { ...c, most: 40 }, true), true, 'a contracts row\'s Most raised asks too (Task 10)');
 });
 
 // ---- final fixes (final-review.md) -----------------------------------------------------------------------
 test('words: label, then Most when asked, then the stop-after tag', () => {
   assert.equal(A.words({ qty: 3 }), '×3');
-  assert.equal(A.words({ qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win', most: 4 }), '$500 risk, stops after a win');
-  assert.equal(A.words({ qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win', most: 4 }, true), '$500 risk, most 4, stops after a win');
-  assert.equal(A.words({ qty: 2, stop_after: 'profit' }, true), '×2, stops in profit');
+  assert.equal(A.words({ qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win', most: 4 }), '$500 risk · stops after a win');
+  assert.equal(A.words({ qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win', most: 4 }, undefined, true), '$500 risk · most 4 · stops after a win');
+  assert.equal(A.words({ qty: 2, stop_after: 'profit' }, undefined, true), '×2 · stops in profit');
+});
+
+test('words, ownWords, switchContract: the gear\'s pure helpers', () => {
+  assert.deepEqual(plain(A.switchContract({contract:'MNQ', size:'contracts', qty:3, most:20}, 'NQ', {MNQ:20, NQ:2})),
+                   {contract:'NQ', size:'contracts', qty:1, most:2});
+  assert.equal(A.switchContract({contract:'MNQ', size:'risk', risk_usd:500, most:20}, 'NQ', {MNQ:20, NQ:2}).risk_usd, 500);
+  assert.equal(A.words({contract:'NQ', size:'contracts', qty:1}, 'FLEX'), 'FLEX · 1 NQ');
+  assert.equal(A.words({contract:'MNQ', size:'risk', risk_usd:500, qty:1}, 'FAST'), 'FAST · $500 risk · MNQ');
+  assert.equal(A.words({contract:'MNQ', qty:3}), '3 MNQ');
+  assert.equal(A.words({qty:3}), '×3');
+  assert.equal(A.words({contract:'MNQ', size:'contracts', qty:3, most:20}, undefined, true), '3 MNQ · most 20');
+  assert.equal(A.ownWords(650), 'its own $650 a trade');
+  const C = ['MNQ', 'NQ'];
+  assert.equal(A.needsAsk({contract:'MNQ', qty:1}, {contract:'NQ', qty:1}, true, C), true);
+  assert.equal(A.needsAsk({qty:1}, {contract:'NQ', qty:1}, true, C), true);
+  assert.equal(A.needsAsk({contract:'NQ', qty:1}, {contract:'MNQ', qty:1}, true, C), false);
+  assert.equal(A.needsAsk({contract:'MNQ', qty:1}, {contract:'NQ', qty:1}, false, C), false);
+  assert.equal(A.needsAsk({contract:'MNQ', size:'contracts', qty:1, most:20}, {contract:'MNQ', size:'contracts', qty:1, most:30}, true, C), true);
 });

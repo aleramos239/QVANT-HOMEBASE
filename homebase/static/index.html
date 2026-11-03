@@ -13,7 +13,7 @@
 </script>
 <link rel="stylesheet" href="/static/shadcn.css?v=4">
 <script src="/static/vendor/lightweight-charts.js"></script>
-<script src="/static/desklab.js?v=53"></script>
+<script src="/static/desklab.js?v=54"></script>
 <script src="/static/desklabset.js?v=6"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
@@ -136,7 +136,7 @@
      sits in a fixed slot (it hugs Arm; the slot fits its longest text, "desk unreachable"), Arm has
      a fixed width and is hidden by visibility (its space kept), and the clock has a fixed width. */
   .pill-slot{ display:inline-flex; justify-content:flex-end; width:7.75rem; flex:none; }
-  #armBtn{ width:4.75rem; flex:none; }
+  #armBtn{ width:5.5rem; flex:none; }
   #armBtn.gone{ visibility:hidden; }
   .inset-topbar > *{ flex-shrink:0; }
   /* page switcher (Desk · Charts · Backtest): plain links, one segmented group; the current page is aria-current */
@@ -573,7 +573,7 @@
       <span class="bulb" id="bulb" role="button" tabindex="0" aria-label="Readiness" onclick="openChecks()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openChecks()}" title="connecting…"></span>
       <div class="master" role="group" aria-label="Desk master controls">
         <span class="pill-slot"><span id="statusPill" class="pill idle" role="status" title="Desk status unknown — connecting…">connecting…</span></span>
-        <button class="btn btn-outline btn-sm gone" type="button" id="armBtn" disabled aria-hidden="true">Arm</button>
+        <button class="btn btn-outline btn-sm gone" type="button" id="armBtn" disabled aria-hidden="true">Turn ON</button>
         <button class="btn btn-sm btn-kill holdbtn" type="button" id="killBtn"
           title="Kill everything — press and hold for 1 second. Cancels every working order and flattens every position on every connected account, then disarms."
           aria-label="Kill everything (press and hold)">
@@ -661,7 +661,7 @@
         <span><span class="t">Add paper account</span><br><span class="sub">Simulated fills on live prices — never sent to a broker</span></span>
         <span class="spacer"></span><span class="radio"></span></div>
       <div class="seg" id="envSeg">
-        <button class="sel" type="button" id="envDemo" aria-pressed="true" onclick="setEnv('demo')">Demo — practice money</button>
+        <button class="sel" type="button" id="envDemo" aria-pressed="true" onclick="setEnv('demo')">Demo — simulated money</button>
         <button type="button" id="envLive" aria-pressed="false" onclick="setEnv('live')">Live — real money</button>
       </div>
       <p class="wnote" id="envNote">Demo is the safe default.</p>
@@ -800,7 +800,7 @@
     <div class="field"><label for="llTrades">Trades a day</label>
       <input id="llTrades" onkeydown="labLimKey(event)" type="text" inputmode="numeric" autocomplete="off" data-autofocus aria-describedby="llTradesErr">
       <div class="mcap warn" id="llTradesErr" role="alert" hidden></div></div>
-    <div class="field"><label for="llQty">Most contracts per account</label>
+    <div class="field"><label for="llQty">Most contracts, for accounts without their own Most</label>
       <input id="llQty" onkeydown="labLimKey(event)" type="text" inputmode="numeric" autocomplete="off" aria-describedby="llQtyErr">
       <div class="mcap warn" id="llQtyErr" role="alert" hidden></div></div>
     <div class="field"><label for="llRisk">Most at risk per trade</label>
@@ -855,18 +855,18 @@
 <div class="overlay" id="groupOverlay">
   <div class="modal" style="width:780px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="groupTitle">
     <div class="cal-head">
-      <span style="font-weight:600" id="groupTitle">Account groups</span>
+      <span style="font-weight:600" id="groupTitle">Teams</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="groupCount"></span>
       <span class="spacer" style="flex:1"></span>
       <button class="cal-nav" onclick="closeGroupMgr()" title="Close" aria-label="Close">&times;</button>
     </div>
-    <p class="mcap" style="margin:0 0 10px">An <b>account group</b> shows its strategies' results together and, once you switch it on
-      on its page, makes them take turns across the accounts you tick. A strategy can be in one account group.</p>
-    <div class="field" style="margin-bottom:6px"><label for="groupNewName">New account group</label>
+    <p class="mcap" style="margin:0 0 10px">An <b>team</b> shows its strategies' results together and, once you switch it on
+      on its page, makes them take turns across the accounts you tick. A strategy can be in one team.</p>
+    <div class="field" style="margin-bottom:6px"><label for="groupNewName">New team</label>
       <div style="display:flex;gap:8px;align-items:center">
         <input id="groupNewName" autocomplete="off" spellcheck="false" maxlength="40" placeholder="e.g. Apex 300K"
           onkeydown="if(event.key==='Enter'&&!event.repeat){event.preventDefault();addGroup()}">
-        <button class="btn btn-default btn-sm" onclick="addGroup()">Add account group</button>
+        <button class="btn btn-default btn-sm" onclick="addGroup()">Add team</button>
       </div></div>
     <div id="groupList"></div>
   </div>
@@ -924,16 +924,16 @@
   <button type="button" id="alertX" title="Dismiss" aria-label="Dismiss">&times;</button></div>
 
 <script src="/static/desk/core.js?v=6"></script>
-<script src="/static/desk/topbar.js?v=6"></script>
-<script src="/static/desk/activity.js?v=14"></script>
+<script src="/static/desk/topbar.js?v=7"></script>
+<script src="/static/desk/activity.js?v=15"></script>
 <script src="/static/desk/views.js?v=4"></script>
-<script src="/static/desk/groups.js?v=20"></script>
-<script src="/static/desk/strategy.js?v=23"></script>
-<script src="/static/desk/labdesk.js?v=20"></script>
-<script src="/static/desk/book.js?v=17"></script>
-<script src="/static/desk/acctset.js?v=7"></script>
-<script src="/static/desk/settings.js?v=9"></script>
-<script src="/static/desk/popups.js?v=10"></script>
+<script src="/static/desk/groups.js?v=21"></script>
+<script src="/static/desk/strategy.js?v=24"></script>
+<script src="/static/desk/labdesk.js?v=21"></script>
+<script src="/static/desk/book.js?v=18"></script>
+<script src="/static/desk/acctset.js?v=8"></script>
+<script src="/static/desk/settings.js?v=10"></script>
+<script src="/static/desk/popups.js?v=11"></script>
 <script src="/static/desk/start.js?v=3"></script>
 <script src="/static/hb-glass.js?v=2"></script>
 </body>

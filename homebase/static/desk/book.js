@@ -5,7 +5,8 @@ function tradeWords(a) {
   const n = Array.isArray(a && a.open_positions) ? a.open_positions.length : 0, w = Number(a && a.working_orders) || 0;
   return [n ? "in a trade " + n : "", w ? w + " working" : ""].filter(Boolean).join(" · ");
 }
-const DEMO_TAG = '<span class="tag" title="A demo account — the broker\'s practice money">DEMO</span>';
+const PROP_TAG = '<span class="tag" title="A prop-firm account — an eval or a funded PA">PROP</span>';
+const DEMO_TAG = '<span class="tag" title="A demo account — the broker\'s simulated money">DEMO</span>';
 /* The size on an account row: "×N" (a Lab row with settings: "$X risk", and a small tag when it stops after a win or in profit).
    A Lab row with a size shows its words only (settings dropped, owner 2026-11-02); any other row keeps the inline size box. */
 function acctQtyHtml(id, extra) {
@@ -28,14 +29,14 @@ function acctRow(id, extra) {
     <span class="nm">${esc(a.label)}</span>
     ${a.env !== "demo" && a.env !== "paper" ? '<span class="tag-live" title="A live account — real money">LIVE</span>' : ""}
     ${a.env === "paper" ? '<span class="tag-paper" title="A paper account — simulated fills on the live prints, no money">PAPER</span>' : ""}
-    ${a.env === "demo" ? DEMO_TAG : ""}
+    ${a.env === "demo" ? (a.prop === true ? PROP_TAG : DEMO_TAG) : ""}
     ${extra.qty ? acctQtyHtml(id, extra) : ""}
     ${err}<span class="spacer"></span>
     <span class="kvi" data-ro="bal">${usd(a.balance)}</span>
     <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}" data-ro="pnl" title="Today, 18:00 to 16:00 ET: balance now minus balance at 18:00">${DAY_PNL_WORDS(pnl)}</span>
     <button class="btn btn-outline btn-sm" onclick="openCal(${jsArg(a.account || a.label)})">Calendar</button>
     ${extra.strategy ? `<button class="x"${extra.locked ? " disabled" : ""} style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
-      ${extra.locked ? "" : `onclick="removeAsg('${extra.strategy}',${jsArg(id)})" `}title="Unassign">&times;</button>` : ""}
+      ${extra.locked ? "" : `onclick="removeAsg('${extra.strategy}',${jsArg(id)})" `}title="Archive">&times;</button>` : ""}
   </div>`;
 }
 
@@ -64,7 +65,7 @@ function rotationHtml(name) {
     <button class="switch" role="switch" aria-label="Take turns" aria-checked="${!!rot.on}"
       title="${rot.on ? "ON — each trade goes to the next account in the list" : "OFF — every trade goes to every account"}"
       onclick="setRotation(${jsArg(name)}, ${!rot.on})"></button></div>
-    ${cyc ? `<div class="feed-row"><span class="h">In the ${esc(cyc.name)} account group: it picks the account (next: ${esc(acctShort(cyc.next || ""))})</span></div>`
+    ${cyc ? `<div class="feed-row"><span class="h">In the ${esc(cyc.name)} team: it picks the account (next: ${esc(acctShort(cyc.next || ""))})</span></div>`
           : rot.on && rot.next ? `<div class="feed-row"><span class="h">Next account: ${esc(acctShort(rot.next))}</span></div>` : ""}</div>`;
 }
 async function setRotation(name, on) {
@@ -136,6 +137,12 @@ function isRealAcct(id) {
   const a = ((ST && ST.accounts) || {})[id];
   return !(a && a.env === "paper");
 }
+/* The account's word: PAPER (simulated fills), PROP (a prop-firm eval or funded PA, the status says `prop`), LIVE (real money, or an
+   account the desk does not list), else DEMO. A label only: the ask keys on isRealAcct, never on this. */
+function acctTag(id) {
+  const a = ((ST && ST.accounts) || {})[id];
+  return !a ? "LIVE" : a.env === "paper" ? "PAPER" : a.prop === true ? "PROP" : a.env === "demo" ? "DEMO" : "LIVE";
+}
 /* "APEX…048" / "…885": a broker's long numbered name shortened the way the chart page shows it,
    keeping a short letter prefix when there is one; a plain label ("Lucid Funded") stays whole. */
 function acctShort(id) {
@@ -162,7 +169,7 @@ function liveBookingNote(strategy, account) {
   const when = c.kind === "bars" ? "on its next signal" : c.self_fire ? `at the next ${fireHM(strategy)} fire` : "on its next signal";
   const idle = [];
   if (!c.enabled) idle.push(stratLabel(strategy) + " is off");
-  if (ST && !ST.armed) idle.push("the desk is disarmed");
+  if (ST && !ST.armed) idle.push("Desk OFF");
   return `It will trade real money ${when}.` +
     (idle.length ? ` Right now ${idle.join(" and ")}, so nothing is placed until that changes.` : "") + acct;
 }
@@ -473,7 +480,7 @@ const wizOnDesk = (a) => a.on_desk !== undefined ? !!a.on_desk
 const vestKind = (a) => WIZ.broker !== "vest" ? "" : ({demo: "Demo", eval: "Eval", funded: "Funded", primary: "Primary"}[a.kind]
   || (a.demo === undefined ? "" : a.demo ? "Demo" : "Funded"));
 /* A TopstepX row (it carries `practice`): practice or funded, from the listed row itself. */
-const tsxKind = (a) => a.practice === undefined ? "" : a.practice ? "practice" : "funded";
+const tsxKind = (a) => a.practice === undefined ? "" : a.practice ? "demo" : "funded";
 const wizAddable = () => WIZ.accounts.filter(a => !wizOnDesk(a));
 function renderAcctList() {
   const el = $("#acctList");

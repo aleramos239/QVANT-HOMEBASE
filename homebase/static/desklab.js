@@ -388,7 +388,7 @@
   }
 
   /* ---- Desk groups (chart service, GET /api/tester/deskgroups and /deskgroups/results): named sets of strategies that run
-     together. A group trades only through its account group (index.html cycleHtml, off by default). Its combined results are its
+     together. A group trades only through its team (index.html cycleHtml, off by default). Its combined results are its
      members' SAVED runs put together as one account's trades. ---- */
   var GROUP_KINDS = [
     { k: "eval", label: "Eval", note: "Leads with the odds of passing the eval." },
@@ -397,7 +397,7 @@
   ];
   var NO_GROUP = "No group";
   var EMPTY_GROUP = "No strategy is in this group yet. Add one from Manage groups.";
-  var GROUP_NOTE = "Its results are its strategies' saved runs put together as one account's trades. The group trades only through its Account group (below), and only once that is switched on.";
+  var GROUP_NOTE = "Its results are its strategies' saved runs put together as one account's trades. The group trades only through its Team (below), and only once that is switched on.";
   var GROUP_MISSING = "That group is not there any more.";
   var NO_GROUP_RUNS = "No saved run to put together yet.";
   // a curve's first and last day as a run's range (perWeek counts the weeks between them)
@@ -508,7 +508,7 @@
       ["Kind", kindLabel(text(g.kind))],
       ["Strategies", String(count)],
       ["Account", text(isObj(p) ? p.account : "") || DASH],
-      ["Orders", c && c.on ? "Account group: " + n + " account" + (n === 1 ? "" : "s") + ", one a trade" : "None: account group off"],
+      ["Orders", c && c.on ? "Team: " + n + " account" + (n === 1 ? "" : "s") + ", one a trade" : "None: team off"],
     ];
   }
 
@@ -560,7 +560,7 @@
   var STATE_WORDS = {
     off: "Off", shadow: "Running in shadow", waiting: "Waiting for the session", watching: "Watching", working: "Order working",
     in_position: "In position", done: "Done for today", runner_down: "Runner down", check: "Check it",
-    disarmed: "Disarmed: written down only",
+    disarmed: "Desk OFF: written down only",
   };
   var NEXT_SESSION = "Starts with the next session.";
   // booked after today's session opened: the runner changes the day over once the strategy has no open trade or order

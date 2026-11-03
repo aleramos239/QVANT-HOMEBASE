@@ -147,22 +147,22 @@ test('ST == null: the pill asserts nothing, no Arm/Disarm (fail closed), and Kil
   assert.equal(els.statusPill.textContent, 'desk unreachable');
 });
 
-test('disarmed: the pill says DISARMED and the button is Arm -- the SAME confirm and POST as before', async () => {
+test('disarmed: the pill says DISARMED and the button is Turn ON -- the SAME confirm and POST as before', async () => {
   const { api, els, confirms, posts, refreshes, toasts } = load({ st: { armed: false } });
   api.renderMaster();
-  assert.equal(els.statusPill.textContent, 'DISARMED');
+  assert.equal(els.statusPill.textContent, 'Desk OFF');
   assert.equal(els.statusPill.className, 'pill idle');
   assert.ok(!els.armBtn.classList.contains('gone'));
   assert.equal(els.armBtn.disabled, false);
   assert.equal(els.armBtn.attrs['aria-hidden'], undefined);
-  assert.equal(els.armBtn.textContent, 'Arm');
+  assert.equal(els.armBtn.textContent, 'Turn ON');
   assert.equal(els.armBtn.onclick, api.doArm);
   await els.armBtn.onclick();
   assert.equal(confirms.length, 1);
-  assert.equal(confirms[0].title, 'Arm the desk?');
+  assert.equal(confirms[0].title, 'Turn the Desk ON?');
   assert.deepEqual(plain(posts), [{ url: '/api/arm', body: { armed: true } }]);
   assert.equal(refreshes.length, 1);
-  assert.match(toasts[0], /Armed/);
+  assert.match(toasts[0], /Desk ON/);
 });
 
 test('a declined Arm confirm never POSTs', async () => {
@@ -175,9 +175,9 @@ test('a declined Arm confirm never POSTs', async () => {
 test('armed: the pill says ARMED and the button is Disarm -- immediate, no confirm, same POST', async () => {
   const { api, els, confirms, posts, refreshes } = load({ st: { armed: true } });
   api.renderMaster();
-  assert.equal(els.statusPill.textContent, 'ARMED');
+  assert.equal(els.statusPill.textContent, 'Desk ON');
   assert.equal(els.statusPill.className, 'pill armed', 'ARMED has its own unmistakable look');
-  assert.equal(els.armBtn.textContent, 'Disarm');
+  assert.equal(els.armBtn.textContent, 'Turn OFF');
   assert.equal(els.armBtn.onclick, api.doDisarm);
   await els.armBtn.onclick();
   assert.equal(confirms.length, 0, 'Disarm only makes things safer: it never asks');
@@ -188,7 +188,7 @@ test('armed: the pill says ARMED and the button is Disarm -- immediate, no confi
 test('a stale desk keeps the last-known state but says it is stale', () => {
   const { api, els } = load({ st: { armed: true }, stale: true });
   api.renderMaster();
-  assert.equal(els.statusPill.textContent, 'ARMED · stale');
+  assert.equal(els.statusPill.textContent, 'Desk ON · stale');
   assert.match(els.statusPill.className, /\bstale\b/);
   assert.match(els.statusPill.title, /Last known state — the desk is not answering\./);
 });
@@ -219,7 +219,7 @@ test('a pointer hold fires Kill once after HOLD_MS -- the SAME confirm and POST 
   assert.deepEqual(plain(posts), [{ url: '/api/kill' }]);
   assert.equal(refreshes.length, 1);
   assert.equal(toasts[toasts.length - 1],
-    'Kill sent — orders cancelled and positions flattened on 2 accounts; the desk is disarmed.', 'words, not raw JSON');
+    'Kill sent — orders cancelled and positions flattened on 2 accounts; Desk OFF.', 'words, not raw JSON');
   assert.ok(!kill.classList.contains('holding'));
   clock.advance(5000);   // still held down: never a second fire from the same hold
   await tick();
@@ -399,7 +399,7 @@ test('an account whose flatten or cancel failed: Kill FAILED on it, with the rea
 
 test('a clean Kill with no connected account still says what happened', async () => {
   const s = await kill({ answer: { ok: true, results: {} } });
-  assert.equal(s.toasts[s.toasts.length - 1], 'Kill sent — the desk is disarmed (no connected account to flatten).');
+  assert.equal(s.toasts[s.toasts.length - 1], 'Kill sent — Desk OFF (no connected account to flatten).');
 });
 
 test('nits: a missing error reads "no reason given" (no stray quotes); ok with no results is NOT confirmed, not "refused"', async () => {
@@ -425,7 +425,7 @@ test('a Kill in flight says so at once; no answer in 6 s escalates to the red al
   s.answer(KILL_OK);                                  // the desk answers after 8 s
   await done;
   assert.equal(s.toasts[s.toasts.length - 1],
-    'Kill sent — orders cancelled and positions flattened on 2 accounts; the desk is disarmed. (the desk answered after 8 s)');
+    'Kill sent — orders cancelled and positions flattened on 2 accounts; Desk OFF. (the desk answered after 8 s)');
   assert.equal(s.els.alertBar.hidden, true, 'its "hasn\'t answered" alert comes down: it is no longer true');
 });
 
@@ -434,7 +434,7 @@ test('a late Kill success never takes down a DIFFERENT failure that replaced the
   const done = s.api.doKill();
   await tick();
   s.clock.advance(7000);                              // the timeout alert is up ...
-  s.els.alertText.textContent = 'Disarm NOT confirmed — the desk refused it: x.';   // ... then another failure replaces it
+  s.els.alertText.textContent = 'Desk OFF NOT confirmed — the desk refused it: x.';   // ... then another failure replaces it
   s.answer(KILL_OK);
   await done;
   assert.equal(s.els.alertBar.hidden, false, 'the Disarm failure stays up');
@@ -519,7 +519,7 @@ test('the alert is solid, red, above every dialog, and stays until dismissed', (
 test('the pill, Arm and the clock have fixed widths, and Arm hides without giving up its space', () => {
   const css = (sel) => { const i = HTML.indexOf('  ' + sel + '{'); assert.ok(i >= 0, sel); return HTML.slice(i, HTML.indexOf('}', i) + 1); };
   assert.match(css('.pill-slot'), /width:7\.75rem; flex:none;/, 'fits "desk unreachable", the longest pill text');
-  assert.match(css('#armBtn'), /width:4\.75rem; flex:none;/, 'fits "Disarm"');
+  assert.match(css('#armBtn'), /width:5\.5rem; flex:none;/, 'fits "Turn OFF"');
   assert.match(css('#armBtn.gone'), /visibility:hidden;/);
   assert.match(css('.clock'), /display:inline-block; width:11rem;/);
   assert.match(css('.inset-topbar > *'), /flex-shrink:0;/);
@@ -611,38 +611,38 @@ test('a refused Disarm (403) is the red alert, never "Disarmed"', async () => {
   await s.els.armBtn.onclick();
   assert.deepEqual(plain(s.posts), [{ url: '/api/arm', body: { armed: false } }]);
   assert.deepEqual(s.toasts, []);
-  assert.deepEqual(s.alerts, ['Disarm NOT confirmed — the desk refused it: origin not allowed. The desk may still be ARMED: ' +
-    'press Kill, or disarm again.']);
+  assert.deepEqual(s.alerts, ['Desk OFF NOT confirmed — the desk refused it: origin not allowed. The Desk may still be ON: ' +
+    'press Kill, or turn it OFF again.']);
 });
 
 test('a Disarm whose connection drops is the red alert -- never an uncaught error', async () => {
   const s = load({ st: { armed: true }, answer: new TypeError('Failed to fetch') });
   s.api.renderMaster();
   await s.els.armBtn.onclick();
-  assert.match(s.alerts[0], /^Disarm NOT confirmed — the desk didn't answer \(Failed to fetch\)\./);
+  assert.match(s.alerts[0], /^Desk OFF NOT confirmed — the desk didn't answer \(Failed to fetch\)\./);
   assert.equal(s.refreshes.length, 1);
 });
 
 test('a desk that answers ok but still says ARMED is not a Disarm', async () => {
   const s = load({ st: { armed: true }, answer: () => ({ ok: true, armed: true }) });
   await s.api.doDisarm();
-  assert.match(s.alerts[0], /^Disarm NOT confirmed — the desk says it is still ARMED\./);
+  assert.match(s.alerts[0], /^Desk OFF NOT confirmed — the desk says it is still ON\./);
 });
 
-test('a refused or dropped Arm says NOT armed (the safe side: a toast), never "Armed"', async () => {
+test('a refused or dropped Arm says Desk NOT turned ON (the safe side: a toast), never "Armed"', async () => {
   const s = load({ st: { armed: false }, answer: { error: 'origin not allowed' } });
   await s.api.doArm();
-  assert.deepEqual(s.toasts, ['NOT armed — the desk refused it: origin not allowed.']);
+  assert.deepEqual(s.toasts, ['Desk NOT turned ON — the desk refused it: origin not allowed.']);
   assert.deepEqual(s.alerts, []);
   const d = load({ st: { armed: false }, answer: new TypeError('Failed to fetch') });
   await d.api.doArm();
-  assert.deepEqual(d.toasts, ["NOT armed — the desk didn't answer (Failed to fetch)."]);
+  assert.deepEqual(d.toasts, ["Desk NOT turned ON — the desk didn't answer (Failed to fetch)."]);
   const u = load({ st: { armed: false }, answer: new SyntaxError('Unexpected token <') });
   await u.api.doArm();
-  assert.deepEqual(u.toasts, ["NOT armed — the desk's answer was unreadable."]);
+  assert.deepEqual(u.toasts, ["Desk NOT turned ON — the desk's answer was unreadable."]);
 });
 
-test('double-clicking Disarm is one flip: the re-painted Arm under the second click never pops "Arm the desk?"', async () => {
+test('double-clicking Disarm is one flip: the re-painted Arm under the second click never pops "Turn the Desk ON?"', async () => {
   const s = load({ st: { armed: true } });
   s.api.renderMaster();
   await s.els.armBtn.onclick();                        // click 1: Disarm
@@ -650,7 +650,7 @@ test('double-clicking Disarm is one flip: the re-painted Arm under the second cl
   s.api.renderMaster();                                // the button is Arm now
   s.clock.advance(250);
   await s.els.armBtn.onclick();                        // click 2 lands on Arm
-  assert.equal(s.confirms.length, 0, 'no "Arm the desk?"');
+  assert.equal(s.confirms.length, 0, 'no "Turn the Desk ON?"');
   assert.deepEqual(plain(s.posts), [{ url: '/api/arm', body: { armed: false } }]);
   s.clock.advance(400);
   const later = s.api.doArm();                         // a deliberate Arm later asks as usual
@@ -711,10 +711,10 @@ test('1.7: Arm names the machine and the LIVE accounts booked (demo/paper left o
   const st = { armed: false, book: { s1: [{ account: 'L1', qty: 1 }, { account: 'D1', qty: 1 }], s2: [{ account: 'L1', qty: 2 }, { account: 'L2', qty: 1 }] } };
   const { api, confirms, posts, toasts } = load({ st, machine: 'server', demoAccts: ['D1'] });
   await api.doArm();
-  assert.equal(confirms[0].title, 'Arm the desk?');
+  assert.equal(confirms[0].title, 'Turn the Desk ON?');
   assert.equal(confirms[0].body, 'Signals will place REAL bracketed orders on every account assigned in the book (on the SERVER · Chicago, 2 LIVE accounts).');
   assert.deepEqual(plain(posts), [{ url: '/api/arm', body: { armed: true } }]);
-  assert.equal(toasts[0], 'Armed on the SERVER · Chicago — signals now place real orders.');
+  assert.equal(toasts[0], 'Desk ON on the SERVER · Chicago — signals now place real orders.');
 });
 
 test('1.7: Kill names the machine and the connected LIVE accounts; it still asks every time', async () => {
@@ -746,5 +746,5 @@ test('1.7: Disarm still never asks; its toast names the machine', async () => {
   const { api, confirms, toasts } = load({ st: { armed: true }, machine: 'server' });
   await api.doDisarm();
   assert.equal(confirms.length, 0);
-  assert.equal(toasts[0], 'Disarmed on the SERVER · Chicago — dry-run journaling only.');
+  assert.equal(toasts[0], 'Desk OFF on the SERVER · Chicago — dry-run journaling only.');
 });

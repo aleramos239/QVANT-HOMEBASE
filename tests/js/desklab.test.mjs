@@ -488,7 +488,7 @@ test('deskState: one word for each state the server sends, from the design\'s ta
   assert.equal(at('done'), 'Done for today');
   assert.equal(at('runner_down'), 'Runner down');
   assert.equal(at('check'), 'Check it');
-  assert.equal(at('disarmed'), 'Disarmed: written down only');
+  assert.equal(at('disarmed'), 'Desk OFF: written down only');
 });
 
 test('deskState: booked after its session opened, the day runs in shadow today and the card says so (2026-10-21)', () => {
@@ -1381,7 +1381,7 @@ test('a group page before its first answer says so, and a hostile name or senten
   assert.match(ctx.html, /<i data-chg="g:g1"><\/i>/, 'the group page lists its Changes (7 days)');
 });
 
-test('the group writes go to the chart service by name (the account group to the desk), and a group id is only a JS string literal in a handler', () => {
+test('the group writes go to the chart service by name (the team to the desk), and a group id is only a JS string literal in a handler', () => {
   const urls = [...new Set([...GROUP_PAGE.matchAll(/["'`](\/api\/[^"'`$?]*)/g)].map((m) => m[1]))].sort();
   // the Desk is reached only by the team's one Set-up save (owner 2026-11-02): group, books, turns and ON/OFF in one call
   assert.deepEqual(urls, ['/api/setup', '/api/tester/deskgroups', '/api/tester/deskgroups/', '/api/tester/deskgroups/results']);

@@ -122,7 +122,7 @@ test('the rest of the book is read after the answer -- a row removed meanwhile i
 test('the dialog says when nothing trades yet, and names the moment it will', () => {
   const off = load({ armed: false, strategies: { ...STRATS, nq930_1030: { cfg: { ...STRATS.nq930_1030.cfg, enabled: false } } } });
   assert.match(off.api.liveBookingNote('nq930_1030', '1234567885'),
-    /Right now NQ930_1030 is off and the desk is disarmed, so nothing is placed until that changes\./);
+    /Right now NQ930_1030 is off and Desk OFF, so nothing is placed until that changes\./);
   const s = load();
   assert.match(s.api.liveBookingNote('bars_test', '1234567885'), /on its next signal/);
   assert.match(s.api.liveBookingNote('gc_pine', '1234567885'), /on its next signal/);

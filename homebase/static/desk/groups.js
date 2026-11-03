@@ -103,8 +103,8 @@ function groupView(id) {
       <button class="btn btn-outline btn-sm" onclick="deleteGroup(${jsArg(g.id)})" title="The strategies stay on the Desk, in no group.">Delete group</button></div>`;
 }
 /* Set up a team (the owner, 2026-11-02: "easy to set up impossible to get confused and mess it up"). A team = this Desk group
-   and its account group, always together. ONE card: the accounts to tick, how they share the trades, the size, Hold overnight
-   per strategy, ONE Trading switch and ONE Save. Both send the whole card to POST /api/setup, which writes the account group,
+   and its team, always together. ONE card: the accounts to tick, how they share the trades, the size, Hold overnight
+   per strategy, ONE Trading switch and ONE Save. Both send the whole card to POST /api/setup, which writes the team,
    every strategy's accounts and ON / OFF in one go, checked whole first (a refusal writes nothing). A strategy in a team
    trades only the team's accounts; one that leaves the group loses them (the server does both). */
 function cycleMembers(g) {
@@ -186,7 +186,7 @@ function teamStatus(cyc, mem) {
   const accts = cyc && cyc.on ? (cyc.accounts || []).filter(a => a in (ST.accounts || {})) : [], bad = [];
   if (!ST.armed) bad.push("the Desk is OFF");
   if (!mem.length) bad.push("no strategy in this team yet (Manage groups)");
-  else if (!accts.length) bad.push("no account ticked: its strategies run as practice");
+  else if (!accts.length) bad.push("no account ticked: its strategies run in shadow");
   for (const a of accts) {
     const x = ST.accounts[a] || {};
     if (!x.connected) bad.push(`account ${acctShort(a)} is offline`);
@@ -299,7 +299,7 @@ async function deleteGroup(id) {
   const g = groupOf(id);
   if (!g) return;
   const on = !!(((ST && ST.groups) || {})[id] || {}).on && cycleCopies(cycleMembers(g)).length > 0;
-  if (!await confirmDlg(`Delete ${g.name}?`, on ? `Its account group stops too: ${cycleCopies(cycleMembers(g)).length} of its strategies then send each trade to EVERY account booked${cycleLive(cycleCopies(cycleMembers(g)))}. Its strategies stay on the Desk, in no group.`
+  if (!await confirmDlg(`Delete ${g.name}?`, on ? `Its team stops too: ${cycleCopies(cycleMembers(g)).length} of its strategies then send each trade to EVERY account booked${cycleLive(cycleCopies(cycleMembers(g)))}. Its strategies stay on the Desk, in no group.`
                                              : "Its strategies stay on the Desk and go back under Strategies. Nothing is switched off.", "Delete", on)) return;
   if (await groupPost("delete", {id})) toast(`${g.name} is deleted. Its strategies are in no group.`);     // its cycle went first, server side
 }
@@ -371,15 +371,15 @@ function dayHeadline(names) {
   const n = live.length, now = etMin(ST.et_now);
   const dow = new Date(String(ST.et_now).slice(0, 10) + "T12:00:00Z").getUTCDay();
   const stale = DESK_STALE ? " Last known state." : "";
-  if (!ST.armed) return ["Disarmed.", "Signals are journaled only. Nothing is sent to a broker." + stale];
-  const onTxt = "Desk armed · " + plural(n, "strategy", "strategies") + " on." + stale;      // the desk is armed; strategies are on or off
+  if (!ST.armed) return ["Desk OFF.", "Signals are journaled only. Nothing is sent to a broker." + stale];
+  const onTxt = "Desk ON · " + plural(n, "strategy", "strategies") + " on." + stale;      // the desk is armed; strategies are on or off
   // Sunday from 18:00 ET the futures trade again: the Desk's day is the 9:30 session, so say when that is, not "closed"
   if (dow === 0 && now != null && now >= 18 * 60) return ["Futures are open. The Desk's day starts Monday at 9:30.", onTxt];
   if (dow === 0 || dow === 6) return ["Markets are closed.", onTxt];
   const flat = live.some(v => v.cfg.kind === "lab")      // a booked Lab strategy armed: the day ends at the latest armed flat time
     ? Math.max(...live.map(v => hmin(v.cfg.flat_et) ?? 955))
     : hmin((live[0] || nonLab[0] || strategies[0] || {cfg: {}}).cfg.flat_et) ?? 955;
-  if (now == null) return ["Armed.", onTxt];
+  if (now == null) return ["Desk ON.", onTxt];
   if (now < OPEN_MIN) return [`Opens in ${lenTxt(OPEN_MIN - now)}.`, onTxt];
   if (now < flat) {
     const inPos = live.filter(v => v.day_status === "live").length;
@@ -527,7 +527,7 @@ function todayRow(name, s) {
   const go = `setView('strat','${name}')`;
   return `<div class="srow" role="button" tabindex="0" onclick="${go}"
       onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();${go}}">
-    <div><div class="n">${esc(stratLabel(name))}${c.shadow ? '<span class="tag" title="Signals are journaled only — nothing is placed, even when armed">Shadow</span>' : (c.kind === "lab" ? labSafe(() => labShadowTag(name, s), "") : "") + labSafe(() => bookEnvTag(name), "")}</div>
+    <div><div class="n">${esc(stratLabel(name))}${c.shadow ? '<span class="tag" title="Signals are journaled only — nothing is placed, even when the Desk is ON">Shadow</span>' : (c.kind === "lab" ? labSafe(() => labShadowTag(name, s), "") : "") + labSafe(() => bookEnvTag(name), "")}</div>
       <div class="sp mono">${esc([specOf(c, name), ...extra].join(" · "))}</div></div>
     <div class="rs">${esc(state)}</div>
     <div class="rp mono${sh ? " dim" : p < 0 ? " neg" : p > 0 ? " pos" : ""}"${sh ? ` title="${esc(sh.title)}"` : ""}>${usdS(sh ? sh.net : p)}</div>${sw}</div>`;

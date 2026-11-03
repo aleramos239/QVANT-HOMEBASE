@@ -106,7 +106,7 @@ function buildTrading() {
   if (!root) return null;
   root.innerHTML = `
     <div class="slabel">CHART TRADING</div>
-    <p class="wnote" style="margin-top:0">Arm, Disarm and Kill everything are in the top bar.</p>
+    <p class="wnote" style="margin-top:0">Turn ON / OFF and Kill everything are in the top bar.</p>
     <div class="acct" style="padding:4px 0;gap:12px;flex-wrap:wrap">
       <button class="switch" id="ctSwitch" role="switch" aria-label="Chart trading" aria-checked="false"
         title="OFF — the chart page cannot trade"></button>

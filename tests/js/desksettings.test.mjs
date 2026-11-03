@@ -175,7 +175,7 @@ test('Settings holds no Arm / Disarm / Kill any more -- it says they are in the 
   const { api, els } = load();
   api.renderSettings();
   const html = els.settingsTrading.innerHTML;
-  assert.match(html, /Arm, Disarm and Kill everything are in the top bar\./);
+  assert.match(html, /Turn ON \/ OFF and Kill everything are in the top bar\./);
   assert.doesNotMatch(html, /tradeKillBtn|tradeArmBtn|tradingPill|>Kill everything</);
   assert.doesNotMatch(BLOCK, /post\("\/api\/(arm|kill)"/, 'the Settings block never arms, disarms or kills');
 });

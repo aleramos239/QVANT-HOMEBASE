@@ -83,7 +83,7 @@ test('turning it OFF asks first; No sends nothing; already off or a new take ask
   const t = ctx({ yes: false, accounts: on });
   await t.c.setDayTake('a047', '0');
   assert.equal(t.asked.length, 1);
-  assert.equal(t.asked[0][0], 'Day take OFF for …047: nothing stops it today?');
+  assert.equal(t.asked[0][0], 'Day stop OFF for …047: nothing stops it today?');
   assert.equal(t.sent.length, 0);
   const y = ctx({ accounts: on });
   await y.c.setDayTake('a047', '0');
@@ -98,7 +98,7 @@ test('turning it OFF asks first; No sends nothing; already off or a new take ask
 test('a take that stops the day at once says so in words', async () => {
   const t = ctx({ reply: { ok: true, locked: 'day_lock', closed_net: 1250, day_lock: 1000 } });
   await t.c.setDayTake('a047', '1000');
-  assert.equal(t.toasts[0], 'Day take set: $1000. …047 has already made $1250 today, so it takes no new trade for the rest of the day. Open trades run to their stop or target.');
+  assert.equal(t.toasts[0], 'Day stop set: $1000. …047 has already made $1250 today, so it takes no new trade for the rest of the day. Open trades run to their stop or target.');
 });
 
 test('the desk refusing it is shown in its own words', async () => {
@@ -111,7 +111,7 @@ test('J: setting the take to 0 always says it is off, even when the desk says th
   const { c, sent, toasts } = ctx({ reply: { ok: true, locked: 'day_lock', closed_net: 1250 }, accounts: { a1: { day: { day_lock: 1000 } } } });
   await c.setDayTake('a1', '0');
   assert.deepEqual(JSON.parse(JSON.stringify(sent)), [['/api/account-day-lock', { account: 'a1', day_lock: 0 }]], 'the body is as before');
-  assert.deepEqual(toasts, ['Day take off.']);
+  assert.deepEqual(toasts, ['Day stop off.']);
 });
 
 test('the loss lock: shown while set, and a loss-locked day says it was the loss lock', () => {

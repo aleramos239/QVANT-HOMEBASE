@@ -86,9 +86,9 @@ test('the strategy name reaches the handler as one JS string literal', () => {
   assert.deepEqual(calls, [["x');alert(1);('", true]]);
 });
 
-test('in an ON account group the page says the cycle picks the account', () => {
+test('in an ON team the page says the cycle picks the account', () => {
   const groups = { g4: { name: 'apex 300k', on: true, members: ['s1'], next: 'b' } };
   const h = ctx({ rotation: { on: true, next: 'a' }, groups }).c.rotationHtml('s1');
-  assert.match(h, /In the apex 300k account group: it picks the account \(next: B\)/);
-  assert.doesNotMatch(ctx({ groups: { g4: { ...groups.g4, on: false } } }).c.rotationHtml('s1'), /account group/);
+  assert.match(h, /In the apex 300k team: it picks the account \(next: B\)/);
+  assert.doesNotMatch(ctx({ groups: { g4: { ...groups.g4, on: false } } }).c.rotationHtml('s1'), /team/);
 });

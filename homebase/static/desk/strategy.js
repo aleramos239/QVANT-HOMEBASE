@@ -23,7 +23,7 @@ function renderSide(names, issues) {
   const loose = names.concat(labIds).map(id => rowOf[id] || "").join("");
   const cycRows = DESKGROUPS.groups.map(g => {
     const gr = (ST.groups || {})[g.id] || {}, on = !!gr.on, n = g.members.length, word = {share: "shared", split: "split"}[gr.mode] || "cycle";
-    return `<button class="item one${sel("group", g.id)}" onclick="setView('group',${jsArg(g.id)})" aria-current="${sel("group", g.id) ? "page" : "false"}" title="${on ? "Its account group is on" : "Its account group is off"}">
+    return `<button class="item one${sel("group", g.id)}" onclick="setView('group',${jsArg(g.id)})" aria-current="${sel("group", g.id) ? "page" : "false"}" title="${on ? "Its team is on" : "Its team is off"}">
       <i class="sd ${on ? "ok" : "off"}"></i><span class="it"><b>${esc(g.name)}${on ? `<span class="tag">${word}</span>` : ""}</b></span>
       <span class="ir mono dim">${n}</span></button>`;
   }).join("") || `<button class="side-more" onclick="openGroupMgr()">None yet · add one</button>`;
@@ -45,10 +45,10 @@ function renderSide(names, issues) {
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span>Today</span><span></span></button>
-    ${head("strat", "Strategies", names.length + labIds.length, `<span class="sh-acts"><button class="sh-btn grp-new" title="Account groups: new, delete, add or remove strategies" aria-label="Manage account groups" onclick="openGroupMgr()">+</button></span>`)}
+    ${head("strat", "Strategies", names.length + labIds.length, `<span class="sh-acts"><button class="sh-btn grp-new" title="Teams: new, delete, add or remove strategies" aria-label="Manage teams" onclick="openGroupMgr()">+</button></span>`)}
     ${SIDE_FOLD.strat ? "" : loose
       + ((DESKLAB.archived || []).length || VIEW.k === "archive" ? `<button class="side-more${sel("archive")}" onclick="setView('archive')">Archive · ${(DESKLAB.archived || []).length}</button>` : "")}
-    ${head("cyc", "Account groups", DESKGROUPS.groups.length, `<button class="sh-btn" title="Account groups: new, delete, add or remove strategies" aria-label="Manage account groups" onclick="openGroupMgr()">+</button>`)}
+    ${head("cyc", "Teams", DESKGROUPS.groups.length, `<button class="sh-btn" title="Teams: new, delete, add or remove strategies" aria-label="Manage teams" onclick="openGroupMgr()">+</button>`)}
     ${SIDE_FOLD.cyc ? "" : cycRows}
     ${head("accts", "Accounts", accts.length, `<button class="sh-btn" title="Add account" aria-label="Add account" onclick="openConnect()">+</button>`)}
     ${SIDE_FOLD.accts ? "" : acctRows + more}
@@ -261,7 +261,7 @@ function stratView(name) {
   const c = s.cfg, state = stratState(name, s), lv = s.live, p = todayPnl(s);
   const execTxt = (c.kind === "bars" ? "A price-action rule on the app's own live bars."
     : c.self_fire ? "The app computes and fires this signal itself." : "Self-fire is off: nothing fires this strategy.")
-    + (c.shadow ? " Shadow: signals are journaled, nothing is placed — even when armed." : "");
+    + (c.shadow ? " Shadow: signals are journaled, nothing is placed — even when the Desk is ON." : "");
   const fig = (k, v, title) => `<div class="f"${title ? ` title="${esc(title)}"` : ""}><div class="k">${k}</div><div class="v mono">${v}</div></div>`;
   // the same trades as the curve above it, so the three add up: before fees - fees = after fees (the curve's total)
   const eqd = Object.values((EQ[name] && EQ[name].days) || {}), sum = (k) => eqd.reduce((a, d) => a + (d[k] || 0), 0);
@@ -312,7 +312,7 @@ function setupHtml(name, s) {
   const c = s.cfg || {}, lab = c.kind === "lab" ? (s.lab || {}) : null, book = (ST.book && ST.book[name]) || [], accts = ST.accounts || {};
   const kind = (id) => isDemoAcct(id) ? accts[id].env : "live", word = (id) => kind(id) === "live" ? "LIVE" : kind(id);   // as isDemoAcct
   const red = [...(lab && DeskLab.accountsLock(s).caption === DeskLab.LIMITS_CAPTION ? ["Limits needed first"] : []),
-    ...(ST.armed ? [] : ["Desk not armed"])];
+    ...(ST.armed ? [] : ["Desk OFF"])];
   const cyc = Object.values(ST.groups || {}).find(g => (g.members || []).includes(name));
   const dg = cyc ? null : DESKGROUPS.groups.find(g => g.members.includes(name));
   const qs = [...new Set(book.map(a => +a.qty || 1))], whole = (v) => usd(v).replace(/\.00$/, "");
@@ -330,7 +330,7 @@ function setupHtml(name, s) {
     ["Window", lab ? specOf(c, name) : [c.kind === "bars" ? `${c.bar_minutes}-minute bars` : c.fire_et ? `fires ${String(c.fire_et).slice(0, 5)} ET` : "",
       c.flat_et ? `flat by ${c.flat_et} ET` : "", (c.only_dates || []).length ? `only on ${c.only_dates.length} set day${c.only_dates.length === 1 ? "" : "s"}` : "every weekday"]
       .filter(Boolean).join(" · ")],
-    ["Group", cyc ? `${cyc.name} (account group ${cyc.on ? "ON" : "OFF"}${cyc.mode === "share" ? ", every account" : cyc.mode === "split"
+    ["Group", cyc ? `${cyc.name} (team ${cyc.on ? "ON" : "OFF"}${cyc.mode === "share" ? ", every account" : cyc.mode === "split"
       ? `, ${(cyc.assign || {})[name] ? "its account " + acctShort(cyc.assign[name]) : "no account of its own"}` : ""}${cyc.on && cyc.next ? `, next ${acctShort(cyc.next)}` : ""})` : dg ? dg.name : "none"],
     ...(machineWords() ? [["Machine", machineWords().replace(/^on /, "")]] : []),
   ];

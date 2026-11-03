@@ -61,11 +61,11 @@ function actWould(r) {
 }
 const labAct = (k) => (r) => DeskLab.activity[k](r, actStrat(r), actOn(r), acctShort);      // the Lab's journal lines: the words are in desklab.js
 const ACTIVITY = {
-  armed_toggled: (r) => [r.armed ? "Desk ARMED — signals place real orders" : "Desk disarmed — signals are journaled only"],
+  armed_toggled: (r) => [r.armed ? "Desk ON — signals place real orders" : "Desk OFF — signals are journaled only"],
   kill_switch: (r) => {
     const n = Object.keys(r.results || {}).length, bad = killFailures(r.results);   // the account-wide sweep is the truth
-    return bad.length ? [`Kill everything — FAILED on ${bad.join(" · ")}; desk disarmed`, "neg"]
-      : [`Kill everything — ${n} account${n === 1 ? "" : "s"} cancelled and flattened, desk disarmed`, "warn"];
+    return bad.length ? [`Kill everything — FAILED on ${bad.join(" · ")}; Desk OFF`, "neg"]
+      : [`Kill everything — ${n} account${n === 1 ? "" : "s"} cancelled and flattened, Desk OFF`, "warn"];
   },
   chart_trading_set: (r, prev) => {
     if (r.cause) return [`Chart trading switched OFF by ${r.cause === "kill" ? "Kill everything" : r.cause}`, "warn"];
@@ -218,7 +218,7 @@ const ACTIVITY = {
     if (!p) return [on, ""];
     if (!p.ok) return [`${on} — refused: ${actErr(p.error)}`, "warn"];
     const ok = (k) => (r[k] ? r[k].ok : undefined);      // the route's trace: cancelled, cancel_all_fallback, emergency_flatten (true | false | not run)
-    const gone = ok("cancelled") === true, swept = ok("cancel_all_fallback") === true;      // swept: cancel-all ran (paper, or disarmed)
+    const gone = ok("cancelled") === true, swept = ok("cancel_all_fallback") === true;      // swept: cancel-all ran (paper, or Desk OFF)
     const lost = !gone && !swept, flat = ok("emergency_flatten") === true, open = ok("emergency_flatten") === false;      // open: held (armed) or failed
     const head = gone ? "placed and cancelled" : swept ? "placed; its own cancel failed, so every order on the account was cancelled"
       : r.cancelled ? "placed, but its cancel failed: it may still be on the account" : "placed, but it has no order id, so it was not cancelled: it may still be on the account";
@@ -237,10 +237,10 @@ const ACTIVITY = {
   },
   group_save_failed: (r) => [`${actCycle(r)}: the next account could not be saved — ${actErr(r.error)}`, "neg"],
 };
-/* "Account group "apex 300k"": the journal line's own name, else the Desk group's, else its id. */
+/* "Team "apex 300k"": the journal line's own name, else the Desk group's, else its id. */
 function actCycle(r) {
   const g = typeof DESKGROUPS !== "undefined" ? DESKGROUPS.groups.find(x => x.id === r.group) : null;
-  return `Account group "${r.name || (g && g.name) || r.group}"`;
+  return `Team "${r.name || (g && g.name) || r.group}"`;
 }
 const actSides = (s) => (Array.isArray(s) ? s : []).map(x => x === "Buy" ? "long" : x === "Sell" ? "short" : String(x)).join(" and ") || "trade";
 /* A Lab strategy's flatten answers with plain steps that are not failures ("This trade had already ended."): read them as plain, for a Lab strategy only. */
@@ -310,7 +310,7 @@ function renderActivity(journal) {
 const actDay = (d) => { try { return new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric", timeZone: "UTC"}); } catch (_) { return d; } };
 /* Activity for one strategy or one group, or for more than today (owner 2026-10-26: "see which strategy copied on which account
    and when"): the Desk's journal for those days (GET /api/journal, strategy/group/days), read again every 15 s while the page is
-   open. Everything, today, stays the status poll's own tail. A group shows its strategies' lines and its account group's. */
+   open. Everything, today, stays the status poll's own tail. A group shows its strategies' lines and its team's. */
 let ACT_WHO = "", ACT_DAYS = 1, ACT_EVENT = "", ACT_ACCT = "", ACT_DATE = "", ACT_ROWS = null, ACT_BUSY = false, ACT_AT = 0;
 const ACT_SEEN = {events: new Set(), accts: new Set()};      // the event types and accounts any rows shown carried: the choices of the two menus
 const actFiltered = () => ACT_WHO !== "" || ACT_DAYS > 1 || ACT_EVENT !== "" || ACT_ACCT !== "" || ACT_DATE !== "";
@@ -489,7 +489,7 @@ const CHG_WORDS = {
     const now = r.assignments || [], A = (a) => acctShort(a.account);
     // locked as the Assign control is: another Desk owns it, or a Lab strategy with no limits yet
     const locked = (s.lab && s.lab.read_only === true) || ((s.cfg || {}).kind === "lab" && DeskLab.accountsLock(s).locked);
-    const W = (a) => AcctSet.words(a, true);
+    const W = (a) => AcctSet.words(a, undefined, true);
     if (!prior) return {text: "Accounts: " + (now.map(a => `${A(a)} ${W(a)}`).join(" · ") || "none")};
     const old = prior.assignments || [], q = (l, a) => l.find(b => b.account === a.account);
     const plainQty = (a, b) => !(a.size || b.size || a.stop_after || b.stop_after || a.hold || b.hold);      // two plain rows: "qty 1 → 3", as before
@@ -500,10 +500,10 @@ const CHG_WORDS = {
   },
   group_set: (r, prior) => {
     const money = (v) => +v > 0 ? usd(v).replace(/\.00$/, "") + " at risk a trade" : "each at its own size";
-    if (!prior) return {text: `Account group ${r.on ? "ON" : "OFF"} · ${money(r.risk_usd)}`};
+    if (!prior) return {text: `Team ${r.on ? "ON" : "OFF"} · ${money(r.risk_usd)}`};
     const list = (k, word) => [...(r[k] || []).filter(x => !(prior[k] || []).includes(x)).map(x => `${word(x)} added`),
       ...(prior[k] || []).filter(x => !(r[k] || []).includes(x)).map(x => `${word(x)} taken out`)];
-    const parts = [...(r.on !== prior.on ? [`Account group ${prior.on ? "ON" : "OFF"} → ${r.on ? "ON" : "OFF"}`] : []),
+    const parts = [...(r.on !== prior.on ? [`Team ${prior.on ? "ON" : "OFF"} → ${r.on ? "ON" : "OFF"}`] : []),
       ...(r.risk_usd !== prior.risk_usd ? [`Size ${money(prior.risk_usd)} → ${money(r.risk_usd)}`] : []),
       ...[...new Set([...Object.keys(r.risk_by || {}), ...Object.keys(prior.risk_by || {})])]
         .filter(m => (+(r.risk_by || {})[m] || 0) !== (+(prior.risk_by || {})[m] || 0))

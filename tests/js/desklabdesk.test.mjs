@@ -110,7 +110,7 @@ test('the shadow forward record: live beside the full 3:1 backtest, row by row, 
   const bt = { trades: 2799, months: 60, net: 168944, win_rate: 58.49, rr: 0.767, rr_label: '1:0.77', sharpe: 0.7613 };
   const html = k.api.shadowStatsHtml(st, bt);
   const r = (key, a, b) => new RegExp(`>${key}</span><span class="t net"[^>]*>${a}</span><span class="t dim"[^>]*>${b}</span>`);
-  assert.match(html, /<h2>Shadow, forward<\/h2>/);
+  assert.match(html, /<h2>Shadow<\/h2>/);
   assert.match(html, r('', 'Live', 'Backtest'));
   assert.match(html, r('Trades', '6', '2799'));
   assert.match(html, r('Win rate', '50%', '58%'));
@@ -124,7 +124,7 @@ test('the shadow forward record: live beside the full 3:1 backtest, row by row, 
   assert.match(k.api.shadowStatsHtml({ trades: 0, since: '2026-10-26' }, bt), /No shadow trades yet since/);
   assert.match(k.api.shadowStatsHtml(undefined, bt), /Reading its shadow days/);
   assert.match(k.api.shadowStatsHtml(false, bt), /could not be read/);
-  assert.match(k.view(), /<h2>Shadow, forward<\/h2>[\s\S]*<h2>Calendar<\/h2>/, 'above the calendar on the strategy page');
+  assert.match(k.view(), /<h2>Shadow<\/h2>[\s\S]*<h2>Calendar<\/h2>/, 'above the calendar on the strategy page');
 });
 
 // ---- ONE ROW, NEVER TWO ------------------------------------------------------------------------------------------------
@@ -273,8 +273,8 @@ test('per-account settings: a settings-only change is a Changes line, and Put ba
   changes(t, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, now] }),
     chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, RISK] })]);
   const [x, first] = t.api.deskChangeList('s:lab_nq_orb');
-  assert.equal(x.text, 'APEX…048 $500 risk, most 4, stops after a win → $300 risk');
-  assert.equal(first.text, 'Accounts: Lucid Eval #1 ×1 · APEX…048 $500 risk, most 4, stops after a win');
+  assert.equal(x.text, 'APEX…048 $500 risk · most 4 · stops after a win → $300 risk');
+  assert.equal(first.text, 'Accounts: Lucid Eval #1 ×1 · APEX…048 $500 risk · most 4 · stops after a win');
   assert.ok(x.back, 'still in force: Put back');
   await t.api.putBackChange('s:lab_nq_orb', x.key);
   assert.deepEqual(t.posts, [{ url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [{ account: 'a1', qty: 1 }, RISK] } }]);
@@ -287,7 +287,7 @@ test('per-account settings: Put back of a qty change keeps the row\'s settings; 
   changes(t, [chg('book_updated', { strategy: 'lab_nq_orb', assignments: [{ account: 'a2', qty: 2, size: 'contracts', stop_after: 'win', most: 4 }] }),
     chg('book_updated', { strategy: 'lab_nq_orb', assignments: [was] })]);
   const [x] = t.api.deskChangeList('s:lab_nq_orb');
-  assert.equal(x.text, 'APEX…048 ×3, most 4, stops after a win → ×2, most 4, stops after a win');
+  assert.equal(x.text, 'APEX…048 ×3 · most 4 · stops after a win → ×2 · most 4 · stops after a win');
   await t.api.putBackChange('s:lab_nq_orb', x.key);
   assert.deepEqual(t.posts[0], { url: '/api/book', body: { strategy: 'lab_nq_orb', assignments: [was] } });
   const off = load({ accounts: PAPER_A1, book: { lab_nq_orb: [{ account: 'a2', qty: 1 }] } });
@@ -304,7 +304,7 @@ test('per-account settings: Setup names each account\'s own size and stop-after 
   const t = load({ strategies: { nq930: nq930(), lab_nq_orb: deskStrat({ own_size: true, params: { risk: 1000 } }) },
     book: { lab_nq_orb: [{ account: 'a1', qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win' }, { account: 'a2', qty: 3, size: 'contracts' }] } });
   const html = t.view();
-  assert.equal(setupRow(html, 'Accounts'), 'Lucid Eval #1 demo $500 risk, stops after a win · APEX…048 LIVE ×3');
+  assert.equal(setupRow(html, 'Accounts'), 'Lucid Eval #1 demo $500 risk · stops after a win · APEX…048 LIVE ×3');
   assert.equal(setupRow(html, 'Size'), 'set on each account (see Accounts)', 'never the strategy\'s own $1,000');
   const plainBook = load({ strategies: { nq930: nq930(), lab_nq_orb: deskStrat({ own_size: true, params: { risk: 1000 } }) },
     book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } }).view();
@@ -346,7 +346,7 @@ test('WP1.15 a change no longer in force, or any group row (even on its own page
   changes(t, [chg('group_set', { group: 'g3', name: 'apex', members: [], accounts: [], risk_usd: 750, max_minis: 17, on: true }),
     chg('group_set', { group: 'g3', name: 'apex', members: [], accounts: [], risk_usd: 500, max_minis: 17, on: true })], 'g:g3');
   const g = t.api.deskChangeList('g:g3');
-  assert.deepEqual(plain(g.map((x) => [x.text, !!x.back])), [['Size $500 at risk a trade → $750 at risk a trade', false], ['Account group ON · $500 at risk a trade', false]]);
+  assert.deepEqual(plain(g.map((x) => [x.text, !!x.back])), [['Size $500 at risk a trade → $750 at risk a trade', false], ['Team ON · $500 at risk a trade', false]]);
   vm.runInContext('VIEW = {k: "group", name: "g3"}', t.ctx);
   assert.deepEqual(plain(t.api.deskChangeList('g:g3').map((x) => !!x.back)), [false, false], 'on its own page too: the cycle card is the one place it changes');
   assert.doesNotMatch(t.api.deskChangesHtml('g:g3'), /Put back/);
@@ -385,17 +385,17 @@ test('WP1.14 a Lab strategy\'s Setup: accounts, LIVE / paper, the group\'s $ ris
   assert.equal(setupRow(html, 'Size'), '$500 at risk a trade (the apex 300k group sizes it)');
   assert.equal(setupRow(html, 'Limits'), 'Trades a day 2 · Most contracts per account 1 · Most at risk per trade $300 · Last entry 11:00 ET · Flat by 15:55 ET');
   assert.equal(setupRow(html, 'Window'), 'NQ · 09:25-16:00 ET · from the Lab', 'the Lab strategy\'s own spec line');
-  assert.equal(setupRow(html, 'Group'), 'apex 300k (account group ON, next APEX…048)');
+  assert.equal(setupRow(html, 'Group'), 'apex 300k (team ON, next APEX…048)');
   assert.equal(setupRow(html, 'Machine'), 'the SERVER · Chicago');
   assert.doesNotMatch(setupOf(html), /mcap warn/, 'nothing missing: no red line');
   assert.doesNotMatch(setupOf(html), /<button|<input|onclick/, 'shown only: nothing here edits the window or anything else');
 });
 
-test('WP1.14 what still stops it is a red line at the top: "Limits needed first", "Desk not armed"', () => {
+test('WP1.14 what still stops it is a red line at the top: "Limits needed first", "Desk OFF"', () => {
   const t = load({ strategies: { lab_nq_orb: deskStrat({ limits: null }) } });
   t.ctx.ST.armed = false;
   const box = setupOf(t.view());
-  assert.match(box, /^<div class="sec setup"><h2>Setup<\/h2><div class="mcap warn">Limits needed first<\/div><div class="mcap warn">Desk not armed<\/div>/);
+  assert.match(box, /^<div class="sec setup"><h2>Setup<\/h2><div class="mcap warn">Limits needed first<\/div><div class="mcap warn">Desk OFF<\/div>/);
   assert.equal(setupRow(t.view(), 'LIVE / paper'), 'no account: it runs in shadow');
   assert.equal(setupRow(t.view(), 'Limits'), undefined);
   assert.equal(setupRow(t.view(), 'Machine'), undefined, 'an unknown machine is not named');
@@ -480,7 +480,7 @@ test('WP1.8 sidebar accounts: a LIVE / DEMO / PAPER tag on every row, what it ho
 
 test('the Strategies count in a folded sidebar does not count the same strategy twice', () => {
   const side = SLICE('function renderSide(', '/* ---- strategy detail ---- */');
-  // the count is the rows under Strategies: a Lab row the Desk holds is its own row (one row, never two); account groups are their own section
+  // the count is the rows under Strategies: a Lab row the Desk holds is its own row (one row, never two); teams are their own section
   assert.match(side, /DESKLAB\.strategies\.filter\(w => !labOnDesk\(w\)\)\.map/);
   assert.match(side, /head\("strat", "Strategies", names\.length \+ labIds\.length/);
   assert.match(side, /SIDE_FOLD\.strat \? "" : loose/);
@@ -514,7 +514,7 @@ test('the Desk\'s row for a Lab strategy: the state word, the dot, the spec line
 
 test('a Lab strategy\'s state is the server\'s word, whatever the Desk\'s own timers say', () => {
   for (const [state, why, word, dot] of [['working', null, 'Order working', 'live'], ['in_position', null, 'In position', 'live'], ['check', null, 'Check it', 'warn'],
-    ['runner_down', null, 'Runner down', 'warn'], ['disarmed', null, 'Disarmed: written down only', 'warn'], ['stopped', 'off', 'Starts with the next session.', ''],
+    ['runner_down', null, 'Runner down', 'warn'], ['disarmed', null, 'Desk OFF: written down only', 'warn'], ['stopped', 'off', 'Starts with the next session.', ''],
     ['stopped', 'Could not pick up where it left off.', 'Stopped: Could not pick up where it left off.', 'warn']]) {
     const t = load({ strategies: { lab_nq_orb: deskStrat({ state, why }) } });
     const s = t.ctx.ST.strategies.lab_nq_orb;
@@ -796,7 +796,7 @@ test('the Limits dialog is static markup, built once; no template of the page wr
     assert.equal((HTML.match(new RegExp(`id="${id}"`, 'g')) || []).length, 1, id);
   }
   const markup = HTML.slice(HTML.indexOf('<div class="overlay" id="labLimitsOverlay">'), HTML.indexOf('<div class="overlay" id="settingsOverlay">'));
-  for (const w of ['Trades a day', 'Most contracts per account', 'Most at risk per trade', 'Last entry', 'Flat by', 'Cancel', 'Save limits']) assert.ok(markup.includes(w), w);
+  for (const w of ['Trades a day', 'Most contracts, for accounts without their own Most', 'Most at risk per trade', 'Last entry', 'Flat by', 'Cancel', 'Save limits']) assert.ok(markup.includes(w), w);
   assert.match(markup, /role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="llTitle"/);
   assert.match(markup, /id="llTrades"[^>]*data-autofocus/);
   // render() and the views never write its fields or markup
@@ -1031,7 +1031,7 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=53"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=54"><\/script>/);
   assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=6"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
@@ -1323,7 +1323,7 @@ test('solo status: red with every reason, the Desk OFF and an offline account na
   t.ctx.ST.accounts.a2.connected = false;
   assert.match(t.view(), /<div class="mcap warn">Not trading: the Desk is OFF · account APEX…048 is offline\.<\/div>/);
   const none = load();
-  assert.match(none.view(), /<div class="mcap pos">No account: it runs as practice\.<\/div>/);
+  assert.match(none.view(), /<div class="mcap pos">No account: it runs in shadow\.<\/div>/);
   const dead = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
   dead.ctx.ST.strategies.lab_nq_orb.lab.state = 'runner_down';
   assert.match(dead.view(), /Not trading: its runner is not running/);
@@ -1763,7 +1763,7 @@ test('1.19: each member\'s state, last signal, position and today; the group tod
   assert.match(html, /<span class="t dim">Last signal 09:30<\/span><span class="t net pos">\+\$120<\/span>/);
   assert.match(html, new RegExp(`<span class="h">Last turn 10:41: NQ ORB on ${a1}</span>`));
   assert.ok(html.indexOf('Next account: ' + a2) < html.indexOf('Last turn'), 'beside the next account, in the cycle card');
-  assert.ok(html.indexOf('<h2>Account group</h2>') < html.indexOf('<h2>Today</h2>'), 'the members under the cycle card, as drawn');
+  assert.ok(html.indexOf('<h2>Team</h2>') < html.indexOf('<h2>Today</h2>'), 'the members under the cycle card, as drawn');
   assert.ok(html.indexOf('<h2>Today</h2>') < html.indexOf('<h2>Changes (7 days)</h2>'), 'the group\'s Changes (7 days) under Today (WP1.15)');
   assert.match(html, /onclick="openGroupMember\(&quot;lab_nq_orb&quot;\)"/);
 });
@@ -1791,10 +1791,10 @@ test('1.19: a piece with no data is left out: no answer, no turn, the cycle off,
 });
 
 // ---- families are gone (2026-11-03): loose rows, a flat Archive, an old saved family view falls back to Today ----
-test('no family: the sidebar lists strategies loose, the Archive is one list, the account group stays its own section', () => {
+test('no family: the sidebar lists strategies loose, the Archive is one list, the team stays its own section', () => {
   const t = groupDesk({});
   const side = t.side();
-  assert.match(side, /<span>Account groups<\/span>/);
+  assert.match(side, /<span>Teams<\/span>/);
   assert.equal((side.match(/setView\('strat','lab_nq_orb'\)/g) || []).length, 1, 'a strategy shows once');
   assert.equal(vm.runInContext('typeof DESKFAM + typeof familyView + typeof archiveFamily', t.ctx), 'undefinedundefinedundefined');
   vm.runInContext(`DESKLAB.archived = [{name: "nq_orb", label: "NQ ORB 1.5R", root: "NQ", archived_utc: "2026-10-30T20:00:00Z"},

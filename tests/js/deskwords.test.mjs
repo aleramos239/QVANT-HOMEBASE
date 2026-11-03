@@ -48,3 +48,16 @@ test('no 09:20 / 09:35 refusal is left on the Desk page', () => {
     .filter((l) => !/et: "2026-09-16T09:20:04", event: "timer_gate"/.test(l));
   assert.deepEqual(hits, []);
 });
+
+test('acctTag: PAPER, PROP, LIVE (also an unknown account), else DEMO', () => {
+  const ctx = vm.createContext({ ST: { accounts: { p: { env: 'paper' }, q: { env: 'demo', prop: true }, l: { env: 'live' }, d: { env: 'demo' } } } });
+  vm.runInContext(between('function acctTag(', '/* "APEX') + ';this.acctTag = acctTag;', ctx);
+  assert.deepEqual(['p', 'q', 'l', 'zz', 'd'].map((id) => ctx.acctTag(id)), ['PAPER', 'PROP', 'LIVE', 'LIVE', 'DEMO']);
+});
+
+test('the page uses one word per thing', () => {
+  const code = HTML.replace(/\/\*[\s\S]*?\*\//g, '').replace(/<!--[\s\S]*?-->/g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/ .*$/gm, '')
+    .replace(/\.practice\b/g, '');
+  for (const w of ['account group', 'account cycle', 'ARMED', 'DISARMED', 'Remove from Desk', 'Day take', 'practice'])
+    assert.ok(!(w === w.toUpperCase() ? code.includes(w) : code.toLowerCase().includes(w.toLowerCase())), `the page still says "${w}"`);
+});

@@ -66,7 +66,7 @@ test('the card: one Trading switch, every account a tick, How, the size, hold pe
   assert.equal((h.match(/class="cyc-acct"/g) || []).length, 2);
   assert.equal((h.match(/<option value="(cycle|share|split)"/g) || []).length, 3);
   assert.match(h, /class="cyc-hold" data-m="lab_x"/);
-  assert.match(h, /<div class="mcap warn">Not ready: no account ticked: its strategies run as practice · lab_x is still on A, outside this team · lab_x is OFF\.<\/div>/);
+  assert.match(h, /<div class="mcap warn">Not ready: no account ticked: its strategies run in shadow · lab_x is still on A, outside this team · lab_x is OFF\.<\/div>/);
   assert.doesNotMatch(h, /Book every|Update the cycle|Account group/, 'no second button to keep things in step');
 });
 

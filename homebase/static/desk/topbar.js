@@ -18,16 +18,16 @@ async function setArmed(want) {
   refresh();
   if (!err && r && r.ok === true && r.armed === want) {
     const where = machineWords();
-    toast(want ? `Armed${where ? " " + where : ""} — signals now place real orders.` : `Disarmed${where ? " " + where : ""} — dry-run journaling only.`);
+    toast(want ? `Desk ON${where ? " " + where : ""} — signals now place real orders.` : `Desk OFF${where ? " " + where : ""} — dry-run journaling only.`);
     return;
   }
   const why = err ? (err.name === "SyntaxError" ? "the desk's answer was unreadable"
                                                : `the desk didn't answer (${killText(err.message || String(err))})`)
     : !r || typeof r !== "object" ? "the desk's answer was unreadable"
     : r.ok !== true ? `the desk refused it: ${killText(r.error || r.detail)}`
-    : `the desk says it is ${r.armed ? "still ARMED" : "disarmed"}`;
-  if (want) toast(`NOT armed — ${why}.`, 8000);
-  else alertBar(`Disarm NOT confirmed — ${why}. The desk may still be ARMED: press Kill, or disarm again.`);
+    : `the desk says it is ${r.armed ? "still ON" : "OFF"}`;
+  if (want) toast(`Desk NOT turned ON — ${why}.`, 8000);
+  else alertBar(`Desk OFF NOT confirmed — ${why}. The Desk may still be ON: press Kill, or turn it OFF again.`);
 }
 /* "on the SERVER · Chicago, 3 LIVE accounts": which machine a master control acts on, and how many LIVE accounts it reaches
    (isDemoAcct: an unknown account counts as LIVE). Words only -- when Arm / Kill ask does not change. */
@@ -42,9 +42,9 @@ function masterReach(ids) {
 async function doArm() {
   if (switchBounced("desk")) return;
   const reach = masterReach(() => Object.values(ST.book || {}).flat().map(r => r && r.account).filter(Boolean));
-  if (!await confirmDlg("Arm the desk?",
+  if (!await confirmDlg("Turn the Desk ON?",
       `Signals will place REAL bracketed orders on every account assigned in the book${reach ? ` (${reach})` : ""}.`,
-      "Arm", false)) return;
+      "Turn ON", false)) return;
   await setArmed(true);
 }
 async function doDisarm() {
@@ -102,15 +102,15 @@ function killReport(r, lateSecs) {
   if (bad.length) return alertBar(`Kill FAILED on ${bad.join(" · ")}. Flatten ${bad.length === 1 ? "it" : "them"} at the broker now.`);
   // its "hasn't answered" is no longer true -- but only take down THAT alert, never another failure's
   if (lateSecs && $("#alertText").textContent === KILL_SLOW_TEXT) $("#alertBar").hidden = true;
-  toast((n ? `Kill sent — orders cancelled and positions flattened on ${n} account${n === 1 ? "" : "s"}; the desk is disarmed.`
-           : "Kill sent — the desk is disarmed (no connected account to flatten).") + late, 6000);
+  toast((n ? `Kill sent — orders cancelled and positions flattened on ${n} account${n === 1 ? "" : "s"}; Desk OFF.`
+           : "Kill sent — Desk OFF (no connected account to flatten).") + late, 6000);
 }
 /* One account, flat: every working order on it cancelled and every position on it closed. The desk stays
    armed and the strategies stay on; what they had working on this account today is over for today. */
 async function flattenAcct(id) {
   const N = acctShort(id);
   if (!await confirmDlg("Flatten " + N + "?",
-      "Cancels every working order and market-flattens every position on this account only. The desk stays armed and your strategies stay on. Anything they had working on this account today is over for today.",
+      "Cancels every working order and market-flattens every position on this account only. The Desk stays ON and your strategies stay on. Anything they had working on this account today is over for today.",
       "Flatten account", true)) return;
   let r, err = null;
   try { r = await post("/api/account-flatten", {account: id}); } catch (e) { err = e || new Error("no answer"); }
@@ -157,7 +157,7 @@ function renderMaster() {
   if (ST == null) {
     pill.className = "pill idle";
     pill.textContent = DESK_STALE ? "desk unreachable" : "connecting…";
-    pill.title = "Desk status unknown — Arm/Disarm show once the desk answers. Kill is still offered, " +
+    pill.title = "Desk status unknown — Turn ON / OFF show once the desk answers. Kill is still offered, " +
       "but only the desk can carry it out: if it does not answer, flatten at the broker.";
     arm.classList.add("gone");          // fail closed: no Arm/Disarm while the state is unknown --
     arm.disabled = true;                // hidden by visibility, its space kept, so nothing moves Kill
@@ -167,15 +167,15 @@ function renderMaster() {
   }
   const armed = !!ST.armed;
   pill.className = (armed ? "pill armed" : "pill idle") + (DESK_STALE ? " stale" : "");
-  pill.textContent = (armed ? "ARMED" : "DISARMED") + (DESK_STALE ? " · stale" : "");
-  pill.title = (armed ? "ARMED — signals place REAL orders; SL/TP ride broker-side"
-                      : "Disarmed — signals are validated and journaled only") +
+  pill.textContent = (armed ? "Desk ON" : "Desk OFF") + (DESK_STALE ? " · stale" : "");
+  pill.title = (armed ? "Desk ON — signals place REAL orders; SL/TP ride broker-side"
+                      : "Desk OFF — signals are validated and journaled only") +
     (DESK_STALE ? `. Last known state — ${STALE_WHY || "the desk is not answering"}.` : "");
   arm.classList.remove("gone");
   arm.disabled = false;
   arm.removeAttribute("aria-hidden");
-  arm.textContent = armed ? "Disarm" : "Arm";
-  arm.title = armed ? "Disarm: signals are journaled only" : "Arm: signals place real orders (asks first)";
+  arm.textContent = armed ? "Turn OFF" : "Turn ON";
+  arm.title = armed ? "Turn OFF: signals are journaled only" : "Turn ON: signals place real orders (asks first)";
   arm.onclick = armed ? doDisarm : doArm;
 }
 

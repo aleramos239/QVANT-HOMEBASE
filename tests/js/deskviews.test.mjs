@@ -28,20 +28,20 @@ const status = (et, over = {}) => ({ armed: true, et_now: et, strategies: { nq93
 
 test('a disarmed desk says so, and that nothing goes to a broker', () => {
   const [a, b] = load(status('2026-10-01T09:12:00-0400', { armed: false })).dayHeadline([]);
-  assert.equal(a, 'Disarmed.');
+  assert.equal(a, 'Desk OFF.');
   assert.match(b, /journaled only/);
 });
 
 test('armed before the open: how long until 9:30 and how many strategies are armed', () => {
   const api = load(status('2026-10-01T09:12:00-0400'));
-  assert.deepEqual([...api.dayHeadline([])], ['Opens in 18 min.', 'Desk armed · 1 strategy on.']);
+  assert.deepEqual([...api.dayHeadline([])], ['Opens in 18 min.', 'Desk ON · 1 strategy on.']);
   const early = load(status('2026-10-01T07:00:00-0400')).dayHeadline([]);
   assert.equal(early[0], 'Opens in 2 h 30 min.');
 });
 
 test('a shadow strategy is not counted as armed; an off one neither', () => {
   const st = status('2026-10-01T09:12:00-0400', { strategies: { a: strat(), b: strat({ shadow: true }), c: strat({ enabled: false }) } });
-  assert.equal(load(st).dayHeadline([])[1], 'Desk armed · 1 strategy on.');
+  assert.equal(load(st).dayHeadline([])[1], 'Desk ON · 1 strategy on.');
 });
 
 test('in session: who is in a position, and a closed session reports the day with a real minus sign', () => {
@@ -119,5 +119,5 @@ test('1.9: paper only says Paper; a loss has a real minus; the Mac says it is th
 test('1.9: no account day figures: the line is what it was; out of session it is unchanged too', () => {
   assert.equal(load(status('2026-10-01T10:00:00-0400', { accounts: { L1: { env: 'live' } } })).dayHeadline([])[1], '1 on · 0 done today.');
   const pre = status('2026-10-01T09:12:00-0400', { accounts: { L1: acct('live', 50) } });
-  assert.deepEqual([...load(pre).dayHeadline([])], ['Opens in 18 min.', 'Desk armed · 1 strategy on.']);
+  assert.deepEqual([...load(pre).dayHeadline([])], ['Opens in 18 min.', 'Desk ON · 1 strategy on.']);
 });

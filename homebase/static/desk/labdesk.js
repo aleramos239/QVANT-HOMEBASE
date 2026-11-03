@@ -151,7 +151,7 @@ function shadowStatsHtml(st, bt) {
       + row("Avg / trade", usdS(st.net / st.trades), b && bn && num(b.net) != null ? usdS(b.net / bn) : "—", "Per contract, after costs")
       + `</div><div class="mcap">Since ${esc(shortDay(st.since))} · net ${esc(usdS(st.net))} · per contract, after costs`
       + `${st.trades < SHADOW_MIN_TRADES ? ` · too early to judge (${st.trades} of ${SHADOW_MIN_TRADES} trades)` : ""}</div>`;
-  return `<div class="sec"><h2>Shadow, forward</h2>${body}</div>`;
+  return `<div class="sec"><h2>Shadow</h2>${body}</div>`;
 }
 function labDeskView(name, s) {
   const c = s.cfg, lab = s.lab || {}, on = c.enabled === true, p = todayPnl(s), nm = stratLabel(name), busy = DESKLAB_BUSY === name;
@@ -522,7 +522,7 @@ function soloStatus(name, s, now) {
     else if ((accts[a].day || {}).locked) bad.push(`account ${acctShort(a)} is stopped for today`);
   }
   if (bad.length) return {ok: false, text: "Not trading: " + bad.join(" · ")};
-  if (!now.accounts.length) return {ok: true, text: "No account: it runs as practice"};
+  if (!now.accounts.length) return {ok: true, text: "No account: it runs in shadow"};
   return {ok: true, text: `Ready: trades on ${now.accounts.map(acctShort).join(" and ")}${now.accounts.length > 1 ? (now.turns ? ", take turns" : ", every account") : ""}, ${plural(now.qty, "contract", "contracts")}`};
 }
 function soloSetupHtml(name, s, ro, lock) {

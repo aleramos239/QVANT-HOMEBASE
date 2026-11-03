@@ -94,18 +94,18 @@ test('money rows carry their prices, sizes, accounts and P&L; failures are marke
   assert.match(sib.text, /^NQ930 sold 3 @ 30,706 on …049 \(-0\.25 vs trigger\) — the other side was NOT cancelled: timeout$/);
   const kill = line({ event: 'kill_switch', results: { apex2941870000048: { cancel_all: { ok: true }, flatten_all: { ok: false, error: 'x' } },
     b: { cancel_all: { ok: true }, flatten_all: { ok: true } } } });
-  assert.deepEqual({ ...kill }, { text: 'Kill everything — FAILED on APEX…048 (FLATTEN FAILED: x); desk disarmed', tone: 'neg' });
+  assert.deepEqual({ ...kill }, { text: 'Kill everything — FAILED on APEX…048 (FLATTEN FAILED: x); Desk OFF', tone: 'neg' });
   assert.deepEqual({ ...line({ event: 'kill_switch', results: { b: { cancel_all: { ok: true }, flatten_all: { ok: true } } } }) },
-    { text: 'Kill everything — 1 account cancelled and flattened, desk disarmed', tone: 'warn' });
+    { text: 'Kill everything — 1 account cancelled and flattened, Desk OFF', tone: 'warn' });
 });
 
 test('the desk\'s own events read plainly: arm, book, toggle, timer, refusals', () => {
-  assert.equal(line({ event: 'armed_toggled', armed: true }).text, 'Desk ARMED — signals place real orders');
+  assert.equal(line({ event: 'armed_toggled', armed: true }).text, 'Desk ON — signals place real orders');
   assert.equal(line({ event: 'book_updated', strategy: 'nq930_1030', assignments: [{ account: '1234567049', qty: 3 }] }).text,
     'NQ930_1030 booked on …049 ×3');
   assert.equal(line({ event: 'book_updated', strategy: 'nq930', assignments: [] }).text, 'NQ930 unbooked from every account');
   assert.equal(line({ event: 'book_updated', strategy: 'lab_x', assignments: [{ account: '1234567049', qty: 1, size: 'risk', risk_usd: 500, stop_after: 'win' },
-    { account: 'lucid-eval-1', qty: 2, size: 'contracts' }] }).text, 'LAB_X booked on …049 $500 risk, stops after a win · Lucid Eval #1 ×2', 'each account\'s own setting (minor 19)');
+    { account: 'lucid-eval-1', qty: 2, size: 'contracts' }] }).text, 'LAB_X booked on …049 $500 risk · stops after a win · Lucid Eval #1 ×2', 'each account\'s own setting (minor 19)');
   assert.equal(line({ event: 'strategy_toggled', strategy: 'nq930', enabled: false, cause: 'manual_flatten' }).text,
     'NQ930 switched OFF (Flatten & turn off)');
   assert.equal(line({ event: 'timer_fired', strategy: 'nq930', anchor: 30716.25, result: true, note: 'disarmed — journaled only' }).text,
@@ -341,14 +341,14 @@ test("a kill step the engine reports as a no-op ('already killed — nothing to 
     { text: 'NQ930 flattened on 1 account', tone: '' });
 });
 
-// ---- the account group's lines (2026-10-26) ----------------------------------------------------------------------------------
-test('the account group says what it skipped and why, and which accounts it runs on', () => {
+// ---- the team's lines (2026-10-26) ----------------------------------------------------------------------------------
+test('the team says what it skipped and why, and which accounts it runs on', () => {
   const l = (r) => line(r, null, { accounts: ACCTS });
   assert.equal(l({ event: 'group_hedge_skipped', group: 'g4', strategy: 'lab_x', sides: ['Buy'], open: ['Sell'] }).text,
-    'LAB_X skipped a long — a short is open on another account of account group "g4" (no hedging)');
+    'LAB_X skipped a long — a short is open on another account of team "g4" (no hedging)');
   assert.equal(l({ event: 'group_hedge_skipped', group: 'g4', strategy: 'lab_x', sides: ['Buy'], open: ['Sell'] }).tone, 'warn');
   assert.match(l({ event: 'group_set', group: 'g4', name: 'apex 300k', on: true, members: ['a', 'b'], accounts: ['1234567049'], risk_usd: 1000 }).text,
-    /^Account group "apex 300k" ON — 2 strategies on .*049 · \$1,000/);
+    /^Team "apex 300k" ON — 2 strategies on .*049 · \$1,000/);
   assert.match(l({ event: 'group_skipped', group: 'g4', strategy: 'lab_x', reason: 'No account of its group could take this trade.',
     accounts: { '1234567049': 'busy' } }).text, /skipped — No account of its group could take this trade\. \(.*049: busy\)/);
 });

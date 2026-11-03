@@ -249,7 +249,7 @@ test('Tab stays inside the open dialog, both ways', () => {
 // ---- a held key ---------------------------------------------------------------------------------
 test('a held Enter/Space never re-activates a button (auto-repeat is swallowed), typing is untouched', () => {
   const s = load();
-  const answer = s.api.confirmDlg('Arm the desk?', 'body', 'Arm', false);   // focus: Cancel
+  const answer = s.api.confirmDlg('Turn the Desk ON?', 'body', 'Arm', false);   // focus: Cancel
   const rep = s.doc.key({ key: 'Enter', repeat: true });
   assert.equal(rep.defaultPrevented, true, 'the held Enter that opened the dialog cannot press a button in it');
   assert.equal(s.doc.key({ key: ' ', repeat: true }).defaultPrevented, true);
@@ -298,7 +298,7 @@ test('a closing dialog is inert at once: nothing in it takes focus, no key reach
   const s = load();
   const box = s.confirm.children[0];
   let answers = 0;
-  const p = s.api.confirmDlg('Arm the desk?', 'body', 'Arm', false).then((v) => { answers += 1; return v; });
+  const p = s.api.confirmDlg('Turn the Desk ON?', 'body', 'Arm', false).then((v) => { answers += 1; return v; });
   s.api.cfDone(true);                                        // Confirm pressed: the exit fade starts
   assert.ok(box.hasAttribute('inert'), 'inert the moment it starts closing, not when the fade ends');
   assert.ok(!s.confirm.classList.contains('open'));
