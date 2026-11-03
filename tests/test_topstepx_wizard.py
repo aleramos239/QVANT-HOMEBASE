@@ -66,5 +66,5 @@ def test_the_code_is_cleared_on_a_new_login_pick_and_after_every_post():
 
 
 def test_step_3_shows_a_tsx_row_as_practice_or_funded():
-    assert 'const tsxKind = (a) => a.practice === undefined ? "" : a.practice ? "practice" : "funded";' in BOOK
+    assert 'const tsxKind = (a) => a.practice === undefined ? "" : a.practice ? "demo" : "funded";' in BOOK
     assert "vestKind(a) || tsxKind(a) ||" in _fn("function renderAcctList")

@@ -58,5 +58,5 @@ def test_the_password_and_code_are_cleared_on_close():
 
 def test_step_3_shows_an_atr_row_as_practice_or_funded():
     # the rows carry practice true/false; the same kind label serves TopstepX and AlphaTrader
-    assert 'const tsxKind = (a) => a.practice === undefined ? "" : a.practice ? "practice" : "funded";' in BOOK
+    assert 'const tsxKind = (a) => a.practice === undefined ? "" : a.practice ? "demo" : "funded";' in BOOK
     assert "vestKind(a) || tsxKind(a) ||" in _fn("function renderAcctList")
