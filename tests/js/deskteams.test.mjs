@@ -96,3 +96,13 @@ test('a move into an ON team with a real account asks first; no posts when the o
   assert.deepEqual(off.confirms, []);
   assert.equal(off.posts[0][1].on, false);
 });
+
+test('a mixed team (one ON, one OFF): rename and move post on: null, so nobody is switched', async () => {
+  const t = load({ enabled: true });
+  t.run('ST.groups.g1.members = ["a", "b"]');                 // a ON, b OFF
+  await t.run('renameGroup("g1", "Apex 2")');
+  assert.equal(t.posts[0][1].on, null);
+  t.posts.length = 0;
+  await t.run('moveToGroup("a", "")');
+  assert.equal(t.posts[0][1].on, null);
+});

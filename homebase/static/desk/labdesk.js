@@ -547,7 +547,16 @@ const soloKey = (f) => JSON.stringify([f.contract, f.size, f.size === "contracts
 function soloEntry(f) {
   const n = (v) => { const x = Math.round(cycNum(v)); return Number.isFinite(x) && String(v).trim() !== "" ? x : null; }, e = {contract: f.contract};
   if (f.size === "own") return {...e, size: null, most: null, risk_usd: null};
-  return {...e, size: f.size, ...(f.size === "risk" ? {risk_usd: n(f.risk_usd)} : {qty: n(f.qty)}), most: n(f.most)};
+  return {...e, size: f.size, ...(f.size === "risk" ? {risk_usd: n(f.risk_usd)} : {qty: n(f.qty) == null ? null : Math.max(1, n(f.qty))}), most: n(f.most)};
+}
+/* a changed row whose chosen size box is empty, not whole or below 1: Save says so and sends nothing (the server keeps the old count) */
+function soloBad(name, b) {
+  for (const a of Object.keys(b.settings || {})) {
+    const f = soloForm(name, a);
+    if (f.size === "contracts" && !(/^\s*\d+\s*$/.test(String(f.qty)) && +f.qty >= 1)) return "Contracts: a whole number above 0.";
+    if (f.size === "risk" && !(cycNum(f.risk_usd) > 0)) return "$ risk: a number above 0.";
+  }
+  return "";
 }
 function soloMake(name, accounts, turns, hold) {      // settings[account] only for ticked rows the owner changed in the gear
   const settings = {};
@@ -685,6 +694,8 @@ async function toggleSet(id, on) {
    while ON (today is over for it; it trades again tomorrow). */
 async function saveSolo(name) {
   const s = ST.strategies[name], vs = soloVs(name), now = soloNow(name), b = soloBody(name), N = vs ? vs.name : stratLabel(name);
+  const bad = soloBad(name, b);
+  if (bad) { toast(`${N} NOT saved — ${bad}`, 8000); return; }
   const on = vs ? vs.members.some(m => ST.strategies[m].cfg.enabled === true) : s.cfg.enabled === true;      // a set keeps what trades trading
   const parts = soloDiff(now, b), liveIn = b.accounts.filter(a => !now.accounts.includes(a) && isRealAcct(a)), live = b.accounts.filter(isRealAcct);
   const orderOf = (m) => { const mb = soloLab(m).most_default_by || {}; return [...soloContracts(m)].sort((x, y) => (mb[y] || 0) - (mb[x] || 0)); };      // the micro first

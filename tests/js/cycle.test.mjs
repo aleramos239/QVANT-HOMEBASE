@@ -182,3 +182,29 @@ test('a strategy booked before it joined: the line names the accounts outside th
   const fresh = ctx({ members: ['lab_x'] }).html();        // no team saved yet: Save adds it
   assert.match(fresh, /Save: \+ lab_x · lab_x off A</);
 });
+
+function mixed(over = {}) {
+  const t = ctx({ cyc: { ...ON, members: ['lab_x', 'lab_y'] }, enabled: true, ticked: ['a', 'b'], members: ['lab_x', 'lab_y'], ...over });
+  t.c.ST.strategies.lab_y = { cfg: { kind: 'lab', enabled: false }, lab: {} };
+  return t;
+}
+
+test('Save on a mixed team (one ON, one OFF) sends on: null and says Saved; the switch still sends true or false', async () => {
+  const t = mixed({ risk: '500' });
+  await t.c.saveCycle('g1');
+  assert.equal(t.sent[0][1].on, null);
+  assert.deepEqual(t.toasts, ['Saved.']);
+  const s = mixed();
+  await s.c.toggleTeam('g1');
+  assert.equal(s.sent[0][1].on, true);
+});
+
+test('Save sends Hold overnight only for a strategy whose box changed; the others keep each row\'s own', async () => {
+  const book = { lab_x: [{ account: 'a', qty: 1, hold: true }, { account: 'b', qty: 1 }], lab_y: [] };
+  const t = mixed({ book, hold: { lab_x: true, lab_y: true } });              // lab_x as it is; lab_y ticked
+  await t.c.saveCycle('g1');
+  assert.deepEqual(t.sent[0][1].hold, { lab_y: true });
+  const u = mixed({ book, hold: { lab_x: true, lab_y: false } });             // nothing changed
+  await u.c.saveCycle('g1');
+  assert.deepEqual(u.sent[0][1].hold || {}, {});
+});

@@ -1965,3 +1965,33 @@ test('a refused set OFF stays on screen in the alert bar; a refused ON is a toas
   assert.match(t.alerts[0], /nq_orb NOT switched off — .*switch it off again, or Kill\./);
   assert.deepEqual(t.toasts, []);
 });
+
+test('a set member\'s Today switch is the whole set\'s (toggleSet), never one variant alone', () => {
+  const t = setT({ strategies: { lab_nq_orb: deskStrat(GC, { enabled: false }), lab_nq_orb2: deskStrat({ ...GC, name: 'nq_orb2' }, { label: 'NQ ORB 2', enabled: true }) } });
+  for (const m of ['lab_nq_orb', 'lab_nq_orb2']) {
+    const row = t.api.todayRow(m, t.ctx.ST.strategies[m]);
+    assert.match(row, /aria-checked="true"[\s\S]*onclick="event\.stopPropagation\(\);toggleSet\(&quot;v1&quot;, false\)"/, m);
+    assert.doesNotMatch(row, /toggleStrat/, m);
+  }
+  const plainRow = load().api.todayRow('lab_nq_orb', deskStrat());
+  assert.match(plainRow, /toggleStrat\('lab_nq_orb', false\)/);
+});
+
+test('gear: an empty, non-whole or 0 Contracts box (or an empty $ risk) blocks Save with a word and sends nothing', async () => {
+  for (const [k, v, size, word] of [['qty', '', 'contracts', 'Contracts: a whole number above 0.'], ['qty', '1.5', 'contracts', 'Contracts: a whole number above 0.'],
+    ['qty', '0', 'contracts', 'Contracts: a whole number above 0.'], ['qty', 'abc', 'contracts', 'Contracts: a whole number above 0.'],
+    ['risk_usd', '', 'risk', '$ risk: a number above 0.']]) {
+    const t = gearT(GC, { lab_nq_orb: [{ account: 'a1', qty: 2 }] });
+    soloRoot(t, { ticked: ['a1'] });
+    vm.runInContext(`soloSet("lab_nq_orb","a1","size","${size}")`, t.ctx);
+    vm.runInContext(`soloSet("lab_nq_orb","a1","${k}","${v}",true)`, t.ctx);
+    await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+    assert.deepEqual(t.posts, [], `${k}=${v}`);
+    assert.deepEqual(t.toasts, [`NQ ORB NOT saved — ${word}`], `${k}=${v}`);
+  }
+  const ok = gearT(GC, { lab_nq_orb: [{ account: 'a1', qty: 2 }] });
+  soloRoot(ok, { ticked: ['a1'] });
+  vm.runInContext('soloSet("lab_nq_orb","a1","qty","3",true)', ok.ctx);
+  await vm.runInContext('saveSolo("lab_nq_orb")', ok.ctx);
+  assert.equal(ok.posts[0].body.settings.a1.qty, 3);
+});

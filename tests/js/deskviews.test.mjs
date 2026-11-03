@@ -101,7 +101,7 @@ test('the controls on the new views call the same handlers the old cards did', (
 });
 
 test('the switch on a row never also opens the strategy', () => {
-  assert.match(HTML, /onclick="event\.stopPropagation\(\);toggleStrat\('\$\{name\}', \$\{!c\.enabled\}\)"/);
+  assert.match(HTML, /onclick="event\.stopPropagation\(\);\$\{vs \? `toggleSet\(\$\{jsArg\(vs\.id\)\}, \$\{!on\}\)` : `toggleStrat\('\$\{name\}', \$\{!c\.enabled\}\)`\}"/);
   assert.match(HTML, /if\(event\.target===event\.currentTarget&&/, 'a key on the inner switch must not navigate the row');
 });
 

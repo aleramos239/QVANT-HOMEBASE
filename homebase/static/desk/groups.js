@@ -21,11 +21,11 @@ async function loadDeskGroupRes() {
 }
 /* One change to a team, sent to the Desk: `body` is the team's WHOLE current body (teamBody) with the change. A refusal says why
    and changes nothing here. */
-// `on` is the members' own Trading state (as the Set-up card reads it), never the Desk group's `on`: that one is true whenever the team has strategies and accounts.
+// `on` is the members' own Trading state (teamSent), never the Desk group's `on`: that one is true whenever the team has strategies and accounts.
 const teamBody = (id, over) => {
   const g = ((ST && ST.groups) || {})[id] || {};
   return {team: id, name: g.name, members: g.members || [], accounts: g.accounts || [], mode: g.mode, assign: g.assign,
-    risk_usd: g.risk_usd, risk_by: g.risk_by, max_minis: g.max_minis, on: teamOn(cycleMembers(groupOf(id) || {members: []})), ...over};
+    risk_usd: g.risk_usd, risk_by: g.risk_by, max_minis: g.max_minis, on: teamSent(cycleMembers(groupOf(id) || {members: []})), ...over};
 };
 async function teamSave(body) {
   let r, err = null;
@@ -113,6 +113,8 @@ const cycleEnvWord = (a) => !isDemoAcct(a) ? "LIVE" : ((((ST && ST.accounts) || 
 const riskWord = (as) => as.some(a => cycleEnvWord(a) === "LIVE") ? "LIVE" : "DEMO";
 const holdOf = (m) => ((ST.book || {})[m] || []).some(r => r.hold === true);
 const teamOn = (mem) => mem.length > 0 && mem.every(m => ST.strategies[m].cfg.enabled === true);
+// what a Save that does not flip the switch sends: all ON true, all OFF false, some ON null (the server switches nobody then)
+const teamSent = (mem) => teamOn(mem) ? true : mem.some(m => ST.strategies[m].cfg.enabled === true) ? null : false;
 /* The accounts each strategy ends on after a save (as routes/setup.team_books): the team's ticked ones, or (One account each) its own. */
 const teamWant = (b, m) => (b.mode || "cycle") === "split" ? ((b.assign || {})[m] ? [b.assign[m]] : []) : b.accounts;
 // accounts a member is booked on that the team does not give it (booked before it joined): a save takes them off
@@ -255,14 +257,15 @@ function cycleBody(id) {
           ...(modeEl ? {mode: modeEl.value} : {}),
           // an account unticked takes its strategy with it (the server refuses an account outside the team)
           ...(asEls.length ? {assign: Object.fromEntries(asEls.filter(el => accounts.includes(el.value)).map(el => [el.dataset.m, el.value]))} : {}),
-          ...(holdEls.length ? {hold: Object.fromEntries(holdEls.map(el => [el.dataset.m, !!el.checked]))} : {})};
+          // Hold overnight only for a box the owner changed: the others keep each row's own (never spread to every row)
+          ...(holdEls.length ? {hold: Object.fromEntries(holdEls.filter(el => !!el.checked !== holdOf(el.dataset.m)).map(el => [el.dataset.m, !!el.checked]))} : {})};
 }
 /* Save (on: as now) and the Trading switch (on: flipped) both send the whole card. It asks first when: the team goes ON;
    it goes OFF; it is ON on an account that is not paper (LIVE or DEMO) and the change sizes up or ticks one in; or a strategy
    loses its last account mid-day (its day ends; it trades again tomorrow). Lowering, unticking and paper-only changes save at once. */
 async function saveCycle(id, on) {
   const g = groupOf(id), mem = g ? cycleMembers(g) : [], was = teamOn(mem);
-  if (on === undefined) on = was;
+  if (on === undefined) on = teamSent(mem);      // Save: a mixed team sends null (each member keeps its own ON / OFF)
   const body = {...cycleBody(id), on}, cyc = ((ST && ST.groups) || {})[id] || null, d = cycleDiff(cyc, body);
   const live = body.accounts.filter(isRealAcct), where = machineWords();
   const ends = body.members.filter(m => ((ST.book || {})[m] || []).length && !teamWant(body, m).length && ST.strategies[m].cfg.enabled);
@@ -280,7 +283,7 @@ async function saveCycle(id, on) {
   const why = answerWhy(r, err);
   if (why === "") delete CYC_DRAFT[id];   // saved: the card shows the desk's values again
   refresh();
-  toast(why ? `NOT saved — ${why}.` : on !== was ? (on ? "Trading ON." : "Trading OFF.") : "Saved.", why ? 8000 : 4200);
+  toast(why ? `NOT saved — ${why}.` : on !== null && on !== was ? (on ? "Trading ON." : "Trading OFF.") : "Saved.", why ? 8000 : 4200);
   return !why;
 }
 const toggleTeam = (id) => { if (switchBounced("team:" + id)) return; const g = groupOf(id); return saveCycle(id, !teamOn(g ? cycleMembers(g) : [])); };
@@ -520,9 +523,12 @@ function todayRow(name, s) {
   const accts = ((ST.book && ST.book[name]) || []).map(b => `${acctShort(b.account)} ${AcctSet.words(b)}`).join(", ");      // Trading: each account's size, in words
   const extra = [accts, openText(s), sig ? "Last signal " + sig : ""].filter(Boolean);      // the position and the last signal: each only when known
   const sh = c.kind === "lab" ? labSafe(() => labShadowNet(name, s), null) : null;      // a Lab strategy with no account: what the day would have made
-  const sw = `<button class="switch" role="switch" aria-label="${esc(stratLabel(name))} on or off" aria-checked="${c.enabled}"
+  const set = c.kind === "lab" ? labSafe(() => labSetOf(name), null) : null;      // a set member: the set's one switch, as on its page
+  const vs = set && labSafe(() => soloVs(set.members.find(m => ST.strategies[m])), null);
+  const on = vs ? vs.members.some(m => ST.strategies[m].cfg.enabled === true) : c.enabled;
+  const sw = `<button class="switch" role="switch" aria-label="${esc(stratLabel(name))} on or off" aria-checked="${on}"
     title="${c.kind === "lab" ? esc(labSafe(() => DeskLab.deskSwitchTitle(s, (ST.book && ST.book[name]) || []), "")) : c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
-    onclick="event.stopPropagation();toggleStrat('${name}', ${!c.enabled})"></button>`;
+    onclick="event.stopPropagation();${vs ? `toggleSet(${jsArg(vs.id)}, ${!on})` : `toggleStrat('${name}', ${!c.enabled})`}"></button>`;
   const go = `setView('strat','${name}')`;
   return `<div class="srow" role="button" tabindex="0" onclick="${go}"
       onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();${go}}">
