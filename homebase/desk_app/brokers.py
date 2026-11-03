@@ -46,9 +46,10 @@ def is_vest_key(key: str) -> bool:
 
 def is_prop(a) -> bool:
     """A prop-firm eval or funded account (a label only: nothing asks or refuses by it)."""
-    n = a.account_name.upper()
+    n = (a.account_name or "").upper()
+    key = a.keyring_key or ""
     return not a.paper and bool(
-        a.prop or is_tsx_key(a.keyring_key) or is_atr_key(a.keyring_key) or is_vest_key(a.keyring_key)
+        a.prop or is_tsx_key(key) or is_atr_key(key) or is_vest_key(key)
         or n.startswith("PA") or any(w in n for w in ("APEX", "LUCID", "TOPSTEP", "FUNDEDNEXT", "ALPHA")))
 
 
