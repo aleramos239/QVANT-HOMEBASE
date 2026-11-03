@@ -58,7 +58,8 @@ Anti-goals (it fails even if it "works" when)
   desk_app_names, labrun_restart x2, server_lab promoted, tester_api prop rules, tester_range_parity, topstepx_wizard);
   node 7 (charts-wp5, keyboardfocus, lab-charts-catchup, deskaddaccounts pins). Ledger:
   `.superpowers/sdd/2026-11-02-desk-per-account-settings-and-variants/`.
-- A LIVE account asks before any change that can send more (bigger size, NQ instead of MNQ, a new LIVE account). The 10%
+- Any account that is not paper asks before a change that can send more (bigger size, NQ instead of MNQ, a new
+  account), as `saveSolo` does today (call 11). The 10%
   leeway on $ risk stays. A row without its own contract behaves exactly as today.
 
 ## 4. What the owner decided
@@ -132,9 +133,10 @@ See `today-page.html`. Top to bottom:
 ### 4.5 Per-account settings and variant sets (earlier answers: "Real NQ too", "One per account", "Desk suggests, I OK")
 
 - The gear (4.3 item 3) is the only place a strategy's size is set. It writes the book row's `contract`, `size`
-  (`contracts` | `risk`), `qty`, `risk_usd`, `most` (server side done: `labcfg.row_ok/row_symbol/row_cap`, `book_row`).
+  (`contracts` | `risk`, or Its own for a strategy that sizes itself: call 10), `qty`, `risk_usd`, `most` (server side
+  done: `labcfg.row_ok/row_symbol/row_cap`, `book_row`).
   Defaults: MNQ, 1 contract, Most 20 MNQ / 2 NQ. Switching the contract resets qty to 1 and Most to that contract's
-  default; $ risk is kept. A change that can send more on a LIVE account asks first.
+  default; $ risk is kept. A change that can send more on any account that is not paper asks first (call 11).
 - A **variant set** is several Lab strategies (e.g. 1R / 1.5R / 2R of one idea) shown and set up as ONE strategy. Each
   account picks one variant in its gear ("One per account"). A strategy is in a team OR a set, never both.
 - The Desk **suggests** combines from name tails (`_r075 _r1 _r15 _r2 _fast _flex _desk _apex300 _s25 _s60 _g10 _g25`)
@@ -239,6 +241,20 @@ new layout (double work, and two different gears live for a while).
 8. **The toolbar shield word stays** and opens Today's "Needs a look" (no separate checks popup).
 9. **Results**: the three calendars become one (per strategy, Accounts / Shadow). The per-account calendar stays in the
    Accounts popup; the LIVE popup's calendar goes (the strategy page and Accounts popup cover it).
+10. **Strategies that size their own trades** (`lab.own_size: true`, e.g. every `nq_candle_break_*` with its own $ risk,
+    both `nq_candle_sweep_*`): the gear's Size has a third choice, **Its own** ("its own $650 a trade"), first and the
+    default for them, as the old sheet's `own` size did. A row is only rewritten when the owner changes that row: a Save
+    never converts an existing plain `{account, qty}` row to Contracts / $ risk by itself.
+11. **The ask stays on every account that is not paper** (LIVE, PROP and DEMO), exactly as `saveSolo` asks today
+    (`isRealAcct`, `book.js:135-140`): funded PA accounts report env "demo", so a name rule is never trusted to skip an
+    ask. PROP is a label only; a misread name changes a word, never a confirm.
+12. **A set's variants are compared one at a time, never summed**: the Results Shadow side gets a variant picker (the
+    set's variant labels as a `.seg`), and "Matched the backtest" follows the picked variant. The Accounts side shows real
+    account dollars, whichever variant made them. The family compare view goes; nothing adds variants' shadow dollars.
+13. **The open money-path gaps are fixed before the gear offers NQ** (per-account ledger, Task 3 parked minors): Vest's
+    contract map is persisted (or its fills named by known order ids) so an NQ round's exit after an adapter restart is
+    booked; NQ-round tests for `_kill_both_filled`, `_lab_end_unfilled`, `_lab_close_retry`, `reconcile_account`,
+    `_guard_placed`. Until both land, the gear shows NQ disabled on Vest accounts.
 
 ## 7. Where it lives
 
@@ -268,6 +284,10 @@ Server:
   the Desk.
 
 ## 8. Before it ships
+
+- **Waiting on the owner (one question):** is the gear's Most contracts the only cap on that account, or does the
+  strategy's own Desk limit (`max_qty`) still cap it too? Today a row with its own size already answers to its own Most
+  only (per-account ledger, Task 4 ruling, flagged to raise with the owner). The answer decides call 4's last part.
 
 - **Built-in page gate.** A read of the VPS Desk config was refused by the permission check on 2026-11-02 (production
   read). Ask the owner either to OK one read-only look at the server's strategy config, or to confirm no built-in
