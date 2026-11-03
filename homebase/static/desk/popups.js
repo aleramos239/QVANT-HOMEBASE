@@ -369,15 +369,14 @@ $("#acctOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeAccts();
 });
 
-/* ---- group manager popup: add, rename and delete groups, and say which group each strategy is in (no type picker since
-   2026-10-18: a new group is "together"). Every change is one write to the chart service (groupPost) and a repaint from its
-   answer; nothing here touches a strategy or an account. ---- */
+/* ---- team manager popup: add, rename and delete teams, and say which team each strategy is in. Every change goes to the Desk
+   (teamSave / teamDelete in groups.js) and the page repaints from its next status; nothing here touches a strategy or an account. ---- */
 function renderGroupMgr(force) {
   const ov = $("#groupOverlay");
   if (!ov || !ST || !ov.classList.contains("open")) return;
   const a = document.activeElement;
   if (!force && a && ov.contains(a) && a.matches("#groupList input, #groupList select")) return;      // never wipe a field being used
-  const groups = DESKGROUPS.groups;
+  const groups = teams();
   $("#groupCount").textContent = `${groups.length} team${groups.length === 1 ? "" : "s"}`;
   const known = [];                    // every strategy a group may take: [id, label]
   const shelved = archivedBuiltins();       // an archived built-in is not offered (one already in a group still shows)
@@ -398,38 +397,22 @@ function renderGroupMgr(force) {
         <option value="">${esc(DeskLab.NO_GROUP)}</option>${groups.map(g => `<option value="${esc(g.id)}"${cur && cur.id === g.id ? " selected" : ""}>${esc(g.name)}</option>`).join("")}
       </select></div>`;
   }).join("");
-  // an team whose Desk group is gone (a delete from before the chart service kept them in step): shown, so it can be removed
-  const orphans = DESKGROUPS.ok === true ? Object.entries((ST && ST.groups) || {}).filter(([id]) => !groupOf(id)) : [];
-  const olist = orphans.map(([id, c]) => `<div class="acct" style="padding:8px 0;gap:8px;align-items:center">
-      <span class="nm" style="font-size:13px;flex:1;min-width:0">${esc(c.name)} · team ${c.on ? "<b>ON</b>" : "off"}, no group</span>
-      <button class="btn btn-outline btn-sm" onclick="removeOrphanCycle(${jsArg(id)})">Remove</button></div>`).join("");
-  $("#groupList").innerHTML = (olist ? `<div class="mcap warn" style="margin:8px 0 2px">Teams with no group</div>${olist}` : "")
-    + (groups.length ? `<div class="mcap" style="margin:8px 0 2px">Teams</div>${glist}` : "")
+  $("#groupList").innerHTML = (groups.length ? `<div class="mcap" style="margin:8px 0 2px">Teams</div>${glist}` : "")
     + (known.length ? `<div class="mcap" style="margin:12px 0 2px;display:flex;gap:8px"><span style="flex:1">Strategies</span><span>Team</span></div>${slist}` : `<div class="mcap" style="padding:14px 0">No strategies on the Desk yet.</div>`);
 }
 function openGroupMgr() { renderGroupMgr(true); showOverlay("groupOverlay"); renderGroupMgr(true); }
-async function removeOrphanCycle(id) {
-  const c = ((ST && ST.groups) || {})[id];
-  if (!c || !await confirmDlg(`Remove the ${c.name} team?`, c.on ? `It is ON with no group. Its strategies then trade their own booked accounts again${cycleLive(c.members || [])}.`
-      : "It has no group and is off.", "Remove", !!c.on)) return;
-  let r, err = null;
-  try { r = await post("/api/groups/delete", {id}); } catch (e) { err = e || new Error("no answer"); }
-  refresh();
-  const why = answerWhy(r, err);
-  toast(why ? `Team NOT removed — ${why}.` : `${c.name} team removed.`, why ? 8000 : 4200);
-}
 function closeGroupMgr() { hideOverlay("groupOverlay"); }
-async function addGroup() {
-  const name = $("#groupNewName").value.trim();
+async function addGroup(name) {
+  name = String(name == null ? $("#groupNewName").value : name).trim();
   if (!name) { toast("Give the team a name."); $("#groupNewName").focus(); return; }
-  if (await groupPost("create", {name})) {
+  if (await teamSave({team: "", name, members: [], accounts: [], mode: "cycle", on: false})) {
     $("#groupNewName").value = "";
     toast(`${name} is added. Pick its strategies below.`);
   }
 }
-const renameGroup = (id, name) => groupPost("rename", {id, name: String(name).trim()});
+const renameGroup = (id, name) => teamSave(teamBody(id, {name: String(name).trim()}));
 async function moveToGroup(strategy, group) {
-  const old = DESKGROUPS.groups.find(g => g.members.includes(strategy)), oc = old ? ((ST && ST.groups) || {})[old.id] : null;
+  const old = teams().find(g => g.members.includes(strategy)), oc = old ? ((ST && ST.groups) || {})[old.id] : null;
   if (oc && oc.on && oc.members.includes(strategy) && cycleCopies([strategy]).length && !await confirmDlg(
       `Take ${stratLabel(strategy)} out of the team?`,
       `Its next trade goes to EVERY account it is booked on${cycleLive([strategy])}, not one at a time.`, "Take it out", true)) {
@@ -444,7 +427,9 @@ async function moveToGroup(strategy, group) {
     renderGroupMgr(true);
     return;
   }
-  await groupPost("move", {strategy, group: group || null});      // the chart service makes the cycle follow, server side
+  // into a team: the Desk takes it out of its old team itself; out of a team: that team without it
+  if (group) await teamSave(teamBody(group, {members: [...(nc.members || []), strategy]}));
+  else if (old) await teamSave(teamBody(old.id, {members: old.members.filter(m => m !== strategy)}));
 }
 $("#groupOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeGroupMgr();

@@ -237,9 +237,9 @@ const ACTIVITY = {
   },
   group_save_failed: (r) => [`${actCycle(r)}: the next account could not be saved — ${actErr(r.error)}`, "neg"],
 };
-/* "Team "apex 300k"": the journal line's own name, else the Desk group's, else its id. */
+/* "Team "apex 300k"": the journal line's own name, else the Desk's team, else its id. */
 function actCycle(r) {
-  const g = typeof DESKGROUPS !== "undefined" ? DESKGROUPS.groups.find(x => x.id === r.group) : null;
+  const g = typeof groupOf !== "undefined" ? groupOf(r.group) : null;
   return `Team "${r.name || (g && g.name) || r.group}"`;
 }
 const actSides = (s) => (Array.isArray(s) ? s : []).map(x => x === "Buy" ? "long" : x === "Sell" ? "short" : String(x)).join(" and ") || "trade";
@@ -352,9 +352,9 @@ async function loadActivity(force) {
 function fillActWho() {
   const sel = $("#actWho");
   if (!sel || document.activeElement === sel) return;
-  const groups = typeof DESKGROUPS !== "undefined" ? DESKGROUPS.groups : [];
+  const groups = typeof teams !== "undefined" ? teams() : [];
   const strats = Object.keys((ST && ST.strategies) || {}).sort((a, b) => stratLabel(a).localeCompare(stratLabel(b)));
-  const opts = [["", "Everything"]].concat(groups.map(g => ["g:" + g.id, "Group: " + g.name]), strats.map(n => ["s:" + n, stratLabel(n)]));
+  const opts = [["", "Everything"]].concat(groups.map(g => ["g:" + g.id, "Team: " + g.name]), strats.map(n => ["s:" + n, stratLabel(n)]));
   if (ACT_WHO && !opts.some(([v]) => v === ACT_WHO)) opts.push([ACT_WHO, ACT_WHO.slice(2)]);
   const sig = JSON.stringify(opts);
   if (sel._sig !== sig) {

@@ -481,8 +481,7 @@ function renderMain(names, issues) {
    Take turns, Hold overnight and one Save (POST /api/setup: its accounts and Take turns in one go, checked whole first). ON / OFF is
    the page's own switch. A strategy in a team is set up on the team's page (the server refuses a solo save for it). */
 let SOLO_DRAFT = {};
-const soloTeam = (name) => DESKGROUPS.groups.find(g => g.members.includes(name))
-  || Object.entries((ST && ST.groups) || {}).map(([id, g]) => ({id, name: g.name, members: g.members || []})).find(g => g.members.includes(name)) || null;
+const soloTeam = (name) => teams().find(g => g.members.includes(name)) || null;
 function soloNow(name) {      // what the desk has now, in the card's terms
   const s = ST.strategies[name], book = ((ST.book || {})[name] || []).filter(r => r.account in (ST.accounts || {}));
   return {accounts: book.map(r => r.account), qty: +(book[0] || {}).qty || +s.cfg.qty || 1, turns: !!((s.rotation || {}).on), hold: book.some(r => r.hold === true)};
@@ -604,7 +603,7 @@ function render() {
     .sort((a, b) => (s.strategies[b].cfg.enabled ? 1 : 0) - (s.strategies[a].cfg.enabled ? 1 : 0));   // switched-on first
   if (VIEW.k === "lab" && labSafe(() => DeskLab.onDesk(s.strategies, {name: VIEW.name}), false)) VIEW = {k: "strat", name: "lab_" + VIEW.name};   // the Desk knows it now: its own page
   if (VIEW.k === "strat" && !names.includes(VIEW.name)) VIEW = {k: "today"};
-  if (VIEW.k === "group" && DESKGROUPS.ok === true && !groupOf(VIEW.name)) VIEW = {k: "today"};      // a group removed (here or elsewhere)
+  if (VIEW.k === "group" && !groupOf(VIEW.name)) VIEW = {k: "today"};      // a group removed (here or elsewhere)
   ISSUE_LVL = probs.some(c => c.level === "bad") ? "bad" : "warn";
   renderSide(names, probs.length);
   renderMain(names, probs.length);

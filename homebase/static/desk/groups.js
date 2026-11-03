@@ -1,32 +1,11 @@
-/* ---- DESK GROUPS (2026-10-11): named sets of strategies that run together (an eval group, a funded group ...), kept by the chart
-   service (GET /api/tester/deskgroups). A group trades only through its ACCOUNT CYCLE (cycleHtml below; the Desk's engine keeps it, and
-   the chart service makes it follow every rename, move and delete, server side). Group ids are never reused. A
-   strategy is in ONE group at most; the same code tried two ways (say for an eval and for a funded account) is two strategies, each
-   in its own group. A group's combined results are its members' SAVED runs put together as one account's trades
-   (GET /api/tester/deskgroups/results, asked only while a group's page is open). The words are DeskLab.groupPage. ---- */
-let DESKGROUPS = {groups: [], ok: null}, DESKGROUPS_BUSY = false;       // ok: null = no read finished yet
+/* ---- TEAMS (2026-10-11; owner 2026-11-02: one record, the Desk's): a team is a named set of strategies that trade together on its
+   accounts. The Desk keeps it (ST.groups, from /api/status); new, rename, move and delete go to the Desk (POST /api/setup with the
+   team's whole body, POST /api/groups/delete). A strategy is in ONE team at most. A team's combined results are its members' SAVED
+   runs put together as one account's trades (GET /api/tester/deskgroups/results, asked only while a team's page is open). The words
+   are DeskLab.groupPage. ---- */
 let DESKGRES = {}, DESKGRES_BUSY = false;
-const GROUP_ID = /^g\d{1,4}$/;
-const groupOf = (id) => DESKGROUPS.groups.find(g => g.id === id) || null;
-function takeGroups(list) {      // only well-formed groups are kept; a wrong shape is dropped, never thrown on
-  return (Array.isArray(list) ? list : []).filter(g => g && typeof g === "object" && GROUP_ID.test(String(g.id)) && typeof g.name === "string")
-    .map(g => ({id: g.id, name: g.name, kind: ["eval", "funded", "together"].includes(g.kind) ? g.kind : "together",
-      members: (Array.isArray(g.members) ? g.members : []).filter(m => typeof m === "string")}));
-}
-async function loadDeskGroups() {
-  if (document.hidden || DESKGROUPS_BUSY) return;
-  DESKGROUPS_BUSY = true;
-  try {
-    const r = await fetch(CHART + "/api/tester/deskgroups");
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const j = await r.json(), next = takeGroups(j && j.groups);
-    const changed = DESKGROUPS.ok !== true || JSON.stringify(next) !== JSON.stringify(DESKGROUPS.groups);
-    DESKGROUPS = {groups: next, ok: true};
-    if (changed && ST && !FREEZE) render();
-    if (VIEW.k === "group") loadDeskGroupRes();
-  } catch (_) { /* the chart service does not answer: keep what was shown */ }
-  finally { DESKGROUPS_BUSY = false; }
-}
+const teams = () => Object.entries((ST && ST.groups) || {}).map(([id, g]) => ({id, name: g.name, members: g.members || []}));
+const groupOf = (id) => teams().find(g => g.id === id) || null;
 async function loadDeskGroupRes() {
   if (document.hidden || DESKGRES_BUSY || VIEW.k !== "group") return;
   DESKGRES_BUSY = true;
@@ -40,21 +19,31 @@ async function loadDeskGroupRes() {
   } catch (_) { /* keep what was shown */ }
   finally { DESKGRES_BUSY = false; }
 }
-/* One change to the groups: create {name, kind} | rename {id, name} | kind {id, kind} | delete {id} | move {strategy, group|null}.
-   The service answers with all the groups; a refusal says why in words and changes nothing. */
-async function groupPost(action, body) {
-  const r = await chartPost("/api/tester/deskgroups/" + action, body);
-  if (r && r.ok === true && Array.isArray(r.groups)) {
-    DESKGROUPS = {groups: takeGroups(r.groups), ok: true};
-    if (VIEW.k === "group" && !groupOf(VIEW.name)) VIEW = {k: "today"};
-    if (ST) render();
-    renderGroupMgr(true);
-    loadDeskGroupRes();
-    return true;
-  }
-  toast(String((r && r.detail) || "The group could not be changed."), 6000);
-  renderGroupMgr(true);          // put the controls back as they were
-  return false;
+/* One change to a team, sent to the Desk: `body` is the team's WHOLE current body (teamBody) with the change. A refusal says why
+   and changes nothing here. */
+const teamBody = (id, over) => {
+  const g = ((ST && ST.groups) || {})[id] || {};
+  return {team: id, name: g.name, members: g.members || [], accounts: g.accounts || [], mode: g.mode, assign: g.assign,
+    risk_usd: g.risk_usd, risk_by: g.risk_by, max_minis: g.max_minis, on: !!g.on, ...over};
+};
+async function teamSave(body) {
+  let r, err = null;
+  try { r = await post("/api/setup", body); } catch (e) { err = e || new Error("no answer"); }
+  const why = answerWhy(r, err);
+  if (why) toast(`NOT saved — ${why}.`, 8000);
+  refresh();
+  renderGroupMgr(true);
+  return !why;
+}
+async function teamDelete(id) {
+  let r, err = null;
+  try { r = await post("/api/groups/delete", {id}); } catch (e) { err = e || new Error("no answer"); }
+  const why = answerWhy(r, err);
+  if (why) toast(`NOT deleted — ${why}.`, 8000);
+  else if (VIEW.k === "group" && VIEW.name === id) VIEW = {k: "today"};
+  refresh();
+  renderGroupMgr(true);
+  return !why;
 }
 /* A group's page (VIEW {k: "group", name: <id>}): its members' saved runs put together -- the unseen days first (curve), the build days
    beside them, the prop sim on LucidPro -- then the members and any left out of the sum, with why. Nothing here runs a backtest. */
@@ -84,7 +73,6 @@ function groupView(id) {
   const curve = p.curve ? `<div class="sec"><h2>${esc(p.curve.title)}</h2>${eqPlot(p.curve.vals, p.curve.label, p.curve.total, p.curve.aria, p.curve.ends, p.curve.days, p.curve.notes, p.curve.build, p.curve.both)}</div>` : "";
   return `<button class="back" onclick="setView('today')">‹ Today</button>
     <div class="sd-top"><div><h1 class="sd-title">${esc(p.title)}</h1><div class="sp mono">${esc(p.lead)}</div></div></div>
-    <div class="sd-state"><b>${esc(p.kind)}</b> · ${esc(p.kindNote)}</div>
     <div class="sd-note">${esc(p.note)}</div>
     ${actBtn("g:" + g.id)}
     ${p.empty ? `<div class="eq-empty">${esc(DeskLab.EMPTY_GROUP)}</div>` : ""}
@@ -100,7 +88,7 @@ function groupView(id) {
     ${labSafe(() => groupTodayHtml(g), "")}
     ${labSafe(() => deskChangesHtml("g:" + g.id), "")}
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openGroupMgr()">Manage groups</button>
-      <button class="btn btn-outline btn-sm" onclick="deleteGroup(${jsArg(g.id)})" title="The strategies stay on the Desk, in no group.">Delete group</button></div>`;
+      <button class="btn btn-outline btn-sm" onclick="deleteGroup(${jsArg(g.id)})" title="The strategies stay on the Desk, in no team.">Delete team</button></div>`;
 }
 /* Set up a team (the owner, 2026-11-02: "easy to set up impossible to get confused and mess it up"). A team = this Desk group
    and its team, always together. ONE card: the accounts to tick, how they share the trades, the size, Hold overnight
@@ -299,9 +287,9 @@ async function deleteGroup(id) {
   const g = groupOf(id);
   if (!g) return;
   const on = !!(((ST && ST.groups) || {})[id] || {}).on && cycleCopies(cycleMembers(g)).length > 0;
-  if (!await confirmDlg(`Delete ${g.name}?`, on ? `Its team stops too: ${cycleCopies(cycleMembers(g)).length} of its strategies then send each trade to EVERY account booked${cycleLive(cycleCopies(cycleMembers(g)))}. Its strategies stay on the Desk, in no group.`
+  if (!await confirmDlg(`Delete ${g.name}?`, on ? `Its team stops too: ${cycleCopies(cycleMembers(g)).length} of its strategies then send each trade to EVERY account booked${cycleLive(cycleCopies(cycleMembers(g)))}. Its strategies stay on the Desk, in no team.`
                                              : "Its strategies stay on the Desk and go back under Strategies. Nothing is switched off.", "Delete", on)) return;
-  if (await groupPost("delete", {id})) toast(`${g.name} is deleted. Its strategies are in no group.`);     // its cycle went first, server side
+  if (await teamDelete(id)) toast(`${g.name} is deleted. Its strategies are in no team.`);     // its cycle went first, server side
 }
 
 const hmin = (t) => { const m = /^(\d{1,2}):(\d\d)/.exec(String(t || "")); return m ? +m[1] * 60 + +m[2] : null; };

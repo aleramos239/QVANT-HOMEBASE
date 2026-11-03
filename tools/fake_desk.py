@@ -727,8 +727,7 @@ TICKS_REFUSED = frozenset({8850, 8852})      # the real desk and the real chart 
 PAGE_CHART_LINE = 'const CHART = location.protocol + "//" + location.hostname + ":8852";'
 PAGE_CHART_SWAP = 'const CHART = location.origin + "/chart";'
 CHART_GETS = ("api/tester/desklab", "api/tester/watch", "api/paper/accounts", "api/status", "api/settings",
-              "api/tester/deskgroups", "api/tester/deskgroups/results")
-CHART_POSTS = tuple(f"api/tester/deskgroups/{a}" for a in ("create", "rename", "kind", "delete", "move"))   # the Desk groups
+              "api/tester/deskgroups/results")
 RIG_FAULTS = ("stream_drop", "silent_s", "timer_placing_s", "chart_kill", "account")
 TIMER_STATE = "fake_timer@timer"             # the made-up state of timer_placing_s (no such strategy, no such account)
 
@@ -1266,19 +1265,6 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
             raise HTTPException(404, "not passed on")
         try:
             r = await chart.get("/" + path, params=dict(request.query_params))
-        except httpx.HTTPError:
-            return JSONResponse({"detail": "the private chart service is not reachable"}, 502)
-        return Response(content=r.content, status_code=r.status_code,
-                        media_type=r.headers.get("content-type", "application/json"))
-
-    @app.post("/chart/{path:path}")
-    async def chart_post(path: str, request: Request):
-        """The page's Desk-group changes (create, rename, kind, delete, move), passed on to the PRIVATE chart service like
-        the reads above. Nothing else is written through here (405)."""
-        if chart is None or path not in CHART_POSTS:
-            raise HTTPException(405, "not passed on")
-        try:
-            r = await chart.post("/" + path, content=await request.body(), headers={"Content-Type": "application/json"})
         except httpx.HTTPError:
             return JSONResponse({"detail": "the private chart service is not reachable"}, 502)
         return Response(content=r.content, status_code=r.status_code,

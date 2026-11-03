@@ -1031,7 +1031,7 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=54"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=55"><\/script>/);
   assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=6"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
@@ -1741,8 +1741,7 @@ function groupDesk({ events = null, on = true, rounds = [{ account: 'a1', round:
   const built = nq930();
   built.accounts = [{ account: 'a2', date: '2026-10-10', status: 'done', pnl: 120 }];
   const t = load({ strategies: { nq930: built, lab_nq_orb: lab }, book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
-  t.ctx.ST.groups = { g1: { id: 'g1', name: 'Apex', members: ['lab_nq_orb'], accounts: ['a1', 'a2'], risk_usd: 1000, max_minis: 17, on, next: 'a2', outside: {} } };
-  vm.runInContext('DESKGROUPS = {groups: [{id: "g1", name: "Apex", kind: "together", members: ["lab_nq_orb", "nq930"]}], ok: true};', t.ctx);
+  t.ctx.ST.groups = { g1: { id: 'g1', name: 'Apex', members: ['lab_nq_orb', 'nq930'], accounts: ['a1', 'a2'], risk_usd: 1000, max_minis: 17, on, next: 'a2', outside: {} } };
   const urls = [];
   t.ctx.fetch = events ? jsonAnswer(events, urls) : async (u) => { urls.push(u); return { ok: false }; };
   return { ...t, urls, page: () => vm.runInContext('groupView("g1")', t.ctx) };

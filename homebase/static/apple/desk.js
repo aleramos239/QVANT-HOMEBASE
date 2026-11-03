@@ -116,8 +116,8 @@
       setupBox.replaceChildren(...rows);
     }
 
-    /* A GROUP (the page's DESKGROUPS, words in desklab.js): its kind, how many strategies, the account it is scored on, its account group. */
-    const groupped = () => { try { return VIEW && VIEW.k === 'group' ? ((DESKGROUPS.groups || []).find((g) => g && g.id === VIEW.name) || null) : null; } catch (_) { return null; } };
+    /* A GROUP (the page's teams(), words in desklab.js): its kind, how many strategies, the account it is scored on, its account group. */
+    const groupped = () => { try { return VIEW && VIEW.k === 'group' ? (teams().find((g) => g && g.id === VIEW.name) || null) : null; } catch (_) { return null; } };
     function setupGroup(g) {
       let res = null, cycle = null;
       try { res = DESKGRES[g.id] || null; } catch (_) {}

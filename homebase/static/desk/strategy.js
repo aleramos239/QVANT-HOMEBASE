@@ -21,7 +21,7 @@ function renderSide(names, issues) {
     return id;
   }), []);
   const loose = names.concat(labIds).map(id => rowOf[id] || "").join("");
-  const cycRows = DESKGROUPS.groups.map(g => {
+  const cycRows = teams().map(g => {
     const gr = (ST.groups || {})[g.id] || {}, on = !!gr.on, n = g.members.length, word = {share: "shared", split: "split"}[gr.mode] || "cycle";
     return `<button class="item one${sel("group", g.id)}" onclick="setView('group',${jsArg(g.id)})" aria-current="${sel("group", g.id) ? "page" : "false"}" title="${on ? "Its team is on" : "Its team is off"}">
       <i class="sd ${on ? "ok" : "off"}"></i><span class="it"><b>${esc(g.name)}${on ? `<span class="tag">${word}</span>` : ""}</b></span>
@@ -48,7 +48,7 @@ function renderSide(names, issues) {
     ${head("strat", "Strategies", names.length + labIds.length, `<span class="sh-acts"><button class="sh-btn grp-new" title="Teams: new, delete, add or remove strategies" aria-label="Manage teams" onclick="openGroupMgr()">+</button></span>`)}
     ${SIDE_FOLD.strat ? "" : loose
       + ((DESKLAB.archived || []).length || VIEW.k === "archive" ? `<button class="side-more${sel("archive")}" onclick="setView('archive')">Archive · ${(DESKLAB.archived || []).length}</button>` : "")}
-    ${head("cyc", "Teams", DESKGROUPS.groups.length, `<button class="sh-btn" title="Teams: new, delete, add or remove strategies" aria-label="Manage teams" onclick="openGroupMgr()">+</button>`)}
+    ${head("cyc", "Teams", teams().length, `<button class="sh-btn" title="Teams: new, delete, add or remove strategies" aria-label="Manage teams" onclick="openGroupMgr()">+</button>`)}
     ${SIDE_FOLD.cyc ? "" : cycRows}
     ${head("accts", "Accounts", accts.length, `<button class="sh-btn" title="Add account" aria-label="Add account" onclick="openConnect()">+</button>`)}
     ${SIDE_FOLD.accts ? "" : acctRows + more}
@@ -314,7 +314,6 @@ function setupHtml(name, s) {
   const red = [...(lab && DeskLab.accountsLock(s).caption === DeskLab.LIMITS_CAPTION ? ["Limits needed first"] : []),
     ...(ST.armed ? [] : ["Desk OFF"])];
   const cyc = Object.values(ST.groups || {}).find(g => (g.members || []).includes(name));
-  const dg = cyc ? null : DESKGROUPS.groups.find(g => g.members.includes(name));
   const qs = [...new Set(book.map(a => +a.qty || 1))], whole = (v) => usd(v).replace(/\.00$/, "");
   const n = (e) => book.filter(a => kind(a.account) === e).length, set = book.some(a => a.size);   // a row with its own size wins
   const own = (a) => a.size || a.stop_after || a.hold ? AcctSet.words(a) : `×${+a.qty || 1}`;
@@ -331,7 +330,7 @@ function setupHtml(name, s) {
       c.flat_et ? `flat by ${c.flat_et} ET` : "", (c.only_dates || []).length ? `only on ${c.only_dates.length} set day${c.only_dates.length === 1 ? "" : "s"}` : "every weekday"]
       .filter(Boolean).join(" · ")],
     ["Group", cyc ? `${cyc.name} (team ${cyc.on ? "ON" : "OFF"}${cyc.mode === "share" ? ", every account" : cyc.mode === "split"
-      ? `, ${(cyc.assign || {})[name] ? "its account " + acctShort(cyc.assign[name]) : "no account of its own"}` : ""}${cyc.on && cyc.next ? `, next ${acctShort(cyc.next)}` : ""})` : dg ? dg.name : "none"],
+      ? `, ${(cyc.assign || {})[name] ? "its account " + acctShort(cyc.assign[name]) : "no account of its own"}` : ""}${cyc.on && cyc.next ? `, next ${acctShort(cyc.next)}` : ""})` : "none"],
     ...(machineWords() ? [["Machine", machineWords().replace(/^on /, "")]] : []),
   ];
   return `<div class="sec setup"><h2>Setup</h2>${red.map(t => `<div class="mcap warn">${esc(t)}</div>`).join("")}

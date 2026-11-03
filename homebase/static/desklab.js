@@ -387,14 +387,9 @@
     };
   }
 
-  /* ---- Desk groups (chart service, GET /api/tester/deskgroups and /deskgroups/results): named sets of strategies that run
+  /* ---- Desk groups (teams: the Desk's, ST.groups; results: the chart service, GET /api/tester/deskgroups/results): named sets of strategies that run
      together. A group trades only through its team (index.html cycleHtml, off by default). Its combined results are its
      members' SAVED runs put together as one account's trades. ---- */
-  var GROUP_KINDS = [
-    { k: "eval", label: "Eval", note: "Leads with the odds of passing the eval." },
-    { k: "funded", label: "Funded", note: "Leads with the odds of a payout." },
-    { k: "together", label: "Together", note: "Run together; shows the eval and the payout odds." },
-  ];
   var NO_GROUP = "No group";
   var EMPTY_GROUP = "No strategy is in this group yet. Add one from Manage groups.";
   var GROUP_NOTE = "Its results are its strategies' saved runs put together as one account's trades. The group trades only through its Team (below), and only once that is switched on.";
@@ -406,11 +401,6 @@
     return d.length ? { start: d[0], end: d[d.length - 1] } : {};
   }
   var GROUP_FIG_ROWS = ["Net", "Win rate", "Trades", "Profit factor", "Deepest drawdown"];
-  function kindOf(k) {
-    for (var i = 0; i < GROUP_KINDS.length; i++) if (GROUP_KINDS[i].k === k) return GROUP_KINDS[i];
-    return GROUP_KINDS[2];
-  }
-  function kindLabel(k) { return kindOf(k).label; }
   function summaryCells(s) {       // one side's combined figures, in GROUP_FIG_ROWS' order; all "—" with none
     s = isObj(s) ? s : {};
     var wr = num(s.win_rate), pf = num(s.profit_factor), n = num(s.trades);
@@ -438,11 +428,11 @@
     return " Not up to date: " + old.map(function (m) { return groupLabelOf(m.strategy, members) + " through " + monthOf(m.through + "-01"); }).join(", ") +
       "; " + lateMonths(first.through, first.to) + " not run" + (mixed ? ", so the sum is not all on the same months" : "") + ".";
   }
-  /* A group's page: `group` = its record {id, name, kind, members}, `res` = its entry of /deskgroups/results (undefined while
+  /* A group's page: `group` = its record {id, name, members}, `res` = its entry of /deskgroups/results (undefined while
      the first answer is on its way). Plain text everywhere; the page escapes it. */
   function groupPage(group, res) {
     var g = isObj(group) ? group : {};
-    var kind = kindOf(text(g.kind)).k, count = Array.isArray(g.members) ? g.members.length : 0;
+    var count = Array.isArray(g.members) ? g.members.length : 0;
     var wait = !isObj(res);
     var b = !wait && isObj(res.build) ? res.build : null, u = !wait && isObj(res.unseen) ? res.unseen : null;
     var bo = !wait && isObj(res.both) ? res.both : null, wf = !wait && res.walkforward === true;   // the 3:1: build, unseen, both
@@ -452,7 +442,7 @@
     var members = !wait && Array.isArray(res.members) ? res.members : [];
     var account = text((pu || pb || pbo || {}).account);
     var cb = summaryCells(b), cu = summaryCells(u), cbo = summaryCells(bo), pcb = propCells(pb), pcu = propCells(pu), pcbo = propCells(pbo);
-    var want = kind === "eval" ? [0, 1, 2] : kind === "funded" ? [3, 4] : [0, 1, 2, 3, 4];
+    var want = [0, 1, 2, 3, 4];
     // the owner, 2026-10-30: a 3:1 group shows its full sample (Both) only, in one column; an older chart service without Both keeps the columns
     var fullFigs = !!(wf && bo), fullProp = !!(wf && pbo), d = fullFigs ? bo : u;
     var days = d ? [
@@ -470,8 +460,8 @@
       days);
     var note = wait ? RES_WAIT : count === 0 ? EMPTY_GROUP : NO_GROUP_RUNS;
     return {
-      title: text(g.name), kind: kindLabel(kind), kindNote: kindOf(kind).note, note: GROUP_NOTE + groupLate(members),
-      lead: count + (count === 1 ? " strategy" : " strategies") + " · " + kindLabel(kind),
+      title: text(g.name), note: GROUP_NOTE + groupLate(members),
+      lead: count + (count === 1 ? " strategy" : " strategies"),
       empty: count === 0,
       figs: { head: fullFigs ? null : heads(w31, wf), full: fullFigs,
         rows: fullFigs ? fullRows
@@ -505,7 +495,6 @@
     var c = isObj(cycle) ? cycle : null, n = c && Array.isArray(c.accounts) ? c.accounts.length : 0;
     var p = isObj(res) && isObj(res.prop) ? (res.prop.unseen || res.prop.build) : null;
     return [
-      ["Kind", kindLabel(text(g.kind))],
       ["Strategies", String(count)],
       ["Account", text(isObj(p) ? p.account : "") || DASH],
       ["Orders", c && c.on ? "Team: " + n + " account" + (n === 1 ? "" : "s") + ", one a trade" : "None: team off"],
@@ -1097,8 +1086,8 @@
     usd: usd, label: label, stateText: stateText, dotClass: dotClass, todayNet: todayNet, netTitle: netTitle,
     rebuiltNote: rebuiltNote, orderLine: orderLine,
     tradeLine: tradeLine, matchLine: matchLine, specLine: specLine, figures: figures, results: results, curve: curve, smoothPath: smoothPath, setupRows: setupRows,
-    GROUP_KINDS: GROUP_KINDS, NO_GROUP: NO_GROUP, EMPTY_GROUP: EMPTY_GROUP, GROUP_NOTE: GROUP_NOTE, GROUP_MISSING: GROUP_MISSING,
-    kindLabel: kindLabel, groupPage: groupPage, groupSetupRows: groupSetupRows,
+    NO_GROUP: NO_GROUP, EMPTY_GROUP: EMPTY_GROUP, GROUP_NOTE: GROUP_NOTE, GROUP_MISSING: GROUP_MISSING,
+    groupPage: groupPage, groupSetupRows: groupSetupRows,
     missingText: missingText, switchTitle: switchTitle, removeAsk: removeAsk,
     // Step B: the strategy the Desk itself knows
     deskId: deskId, onDesk: onDesk, deskState: deskState, deskDot: deskDot, startsNext: startsNext, readOnly: readOnly, windowNote: windowNote,

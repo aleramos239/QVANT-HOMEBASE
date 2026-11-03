@@ -1272,9 +1272,9 @@ test('curve: the unseen run\'s running total, or nothing', () => {
 });
 
 // ---- Desk groups (2026-10-11): the words, and the page's markup for a group ---------------------------------------------
-const GROUP_PAGE = HTML.slice(HTML.indexOf('/* ---- DESK GROUPS (2026-10-11)'), HTML.indexOf('const hmin = (t) =>'));
+const GROUP_PAGE = HTML.slice(HTML.indexOf('/* ---- TEAMS (2026-10-11; owner 2026-11-02'), HTML.indexOf('const hmin = (t) =>'));
 
-test('a group page: the combined figures, the prop rows that fit its kind, and the members left out', () => {
+test('a group page: the combined figures, all five prop rows, and the members left out', () => {
   const res = { members: [{ strategy: 'lab_nq_a', label: 'NQ A', state: 'done', build: { net: 500 }, unseen: { net: 700 } },
       { strategy: 'lab_nq_c', label: 'NQ C', state: 'pending', build: { net: 10 }, unseen: null }],
     left_out: [{ strategy: 'lab_nq_c', why: 'no unseen-days run yet' }, { strategy: 'nq930', why: 'built in: it has no unseen-days run to add' }],
@@ -1283,17 +1283,17 @@ test('a group page: the combined figures, the prop rows that fit its kind, and t
       curve: { days: ['2025-07-01', '2025-07-02'], vals: [800, 500] } },
     prop: { build: null, unseen: { account: 'LucidPro 50K', eval_pass_p: 0.4, bust_p: 0.6, median_days_to_pass: 5, funded_payout_p: 0.3, funded_expected_cheque: 500 } } };
   const ev = D.groupPage({ id: 'g1', name: 'Eval', kind: 'eval', members: ['lab_nq_a', 'lab_nq_c', 'nq930'] }, res);
-  assert.equal(ev.lead, '3 strategies · Eval');
+  assert.equal(ev.lead, '3 strategies');
   assert.deepEqual(ev.figs.rows[0], { k: 'Net', build: '+$200', unseen: '+$500' });
-  assert.deepEqual(ev.prop.rows.map((r) => r.k), ['Passes the eval', 'Busts the eval', 'Days to pass'], 'an eval group leads with the eval odds');
+  assert.equal(ev.prop.rows.length, 5, 'a team has no kind: every prop row');
   assert.equal(ev.prop.title, 'Prop sim · LucidPro 50K');
   assert.deepEqual(ev.days.rows.map((r) => r.k), ['Days traded', 'Best day', 'Worst day']);
   assert.equal(ev.curve.total, 500);
   assert.deepEqual(ev.members.map((m) => [m.label, m.build, m.unseen, m.state]), [['NQ A', '+$500', '+$700', ''], ['NQ C', '+$10', '—', 'Running the 3:1 walk-forward…']]);
   assert.deepEqual(ev.leftOut.map((x) => [x.label, x.why]), [['NQ C', 'no unseen-days run yet'], ['nq930', 'built in: it has no unseen-days run to add']]);
   const fu = D.groupPage({ id: 'g2', name: 'Funded', kind: 'funded', members: [] }, res);
-  assert.deepEqual(fu.prop.rows.map((r) => r.k), ['Gets a payout', 'Expected payout']);
-  assert.equal(D.groupPage({ id: 'g3', name: 'T', kind: 'together', members: [] }, res).prop.rows.length, 5);
+  assert.equal(fu.prop.rows.length, 5);
+  assert.equal(fu.kind, undefined, 'no kind on a team');
   assert.equal(fu.empty, true);
 });
 
@@ -1366,13 +1366,12 @@ test('a group page before its first answer says so, and a hostile name or senten
   assert.deepEqual([wait.figs.rows, wait.members, wait.leftOut, wait.curve], [[], [], [], null]);
   const hostile = '<img src=x onerror=alert(1)>';
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const ctx = vm.createContext({ DeskLab: D, esc, usdS: D.usd, fmt: (v) => String(v), ST: { strategies: {}, accounts: {} },
-    DESKGROUPS: { groups: [{ id: 'g1', name: hostile, kind: 'eval', members: [hostile] }], ok: true },
+  const ctx = vm.createContext({ DeskLab: D, esc, usdS: D.usd, fmt: (v) => String(v), ST: { strategies: {}, accounts: {}, groups: { g1: { name: hostile, members: [hostile] } } },
     DESKGRES: { g1: { members: [{ strategy: hostile, label: hostile, state: 'done', build: { net: 1 }, unseen: { net: 1 } }],
       left_out: [{ strategy: hostile, why: hostile }], build: null, unseen: null, prop: { build: null, unseen: null } } },
     eqPlot: () => '', actBtn: () => '', deskChangesHtml: (who) => `<i data-chg="${who}"></i>`, labSafe: (f, d) => { try { return f(); } catch (_) { return d; } } });
   vm.runInContext(`const jsArg = (v) => esc(JSON.stringify(String(v == null ? "" : v)));
-    const groupOf = (id) => DESKGROUPS.groups.find(g => g.id === id) || null;
+    const groupOf = (id) => Object.entries(ST.groups).map(([i, g]) => ({id: i, ...g})).find(g => g.id === id) || null;
     ${GROUP_PAGE.slice(GROUP_PAGE.indexOf('const GROUP_FAULT'), GROUP_PAGE.indexOf('async function deleteGroup('))}
     globalThis.html = groupView("g1"); globalThis.gone = groupView("g9");`, ctx);
   assert.doesNotMatch(ctx.html, /<img/);
@@ -1381,11 +1380,11 @@ test('a group page before its first answer says so, and a hostile name or senten
   assert.match(ctx.html, /<i data-chg="g:g1"><\/i>/, 'the group page lists its Changes (7 days)');
 });
 
-test('the group writes go to the chart service by name (the team to the desk), and a group id is only a JS string literal in a handler', () => {
+test('the team writes go to the desk by name (only the results come from the chart service), and a group id is only a JS string literal in a handler', () => {
   const urls = [...new Set([...GROUP_PAGE.matchAll(/["'`](\/api\/[^"'`$?]*)/g)].map((m) => m[1]))].sort();
   // the Desk is reached only by the team's one Set-up save (owner 2026-11-02): group, books, turns and ON/OFF in one call
-  assert.deepEqual(urls, ['/api/setup', '/api/tester/deskgroups', '/api/tester/deskgroups/', '/api/tester/deskgroups/results']);
-  assert.doesNotMatch(GROUP_PAGE.replace(/\/\*[\s\S]*?\*\//g, ''), /\/api\/(strategy|status|arm|kill|rotation|book|groups)\b/, 'nothing else of the desk');
+  assert.deepEqual(urls, ['/api/groups/delete', '/api/setup', '/api/tester/deskgroups/results']);
+  assert.doesNotMatch(GROUP_PAGE.replace(/\/\*[\s\S]*?\*\//g, ''), /\/api\/(strategy|status|arm|kill|rotation|book|groups(?!\/delete))\b/, 'nothing else of the desk');
   const handlers = [...GROUP_PAGE.matchAll(/on(?:click|keydown)="([^"]*)"/g)].map((m) => m[1]);
   assert.ok(handlers.length >= 4);
   for (const h of handlers) for (const m of h.matchAll(/\$\{([^}]*)\}/g)) assert.match(m[1], /^jsArg\([\w.]+\)$/, h);
