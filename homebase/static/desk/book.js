@@ -7,6 +7,16 @@ function tradeWords(a) {
 }
 const PROP_TAG = '<span class="tag" title="A prop-firm account — an eval or a funded PA">PROP</span>';
 const DEMO_TAG = '<span class="tag" title="A demo account — the broker\'s simulated money">DEMO</span>';
+const ACCT_TAG_HTML = {
+  LIVE: '<span class="tag-live" title="A live account — real money">LIVE</span>',
+  PAPER: '<span class="tag-paper" title="A paper account — simulated fills on the live prints, no money">PAPER</span>',
+  PROP: PROP_TAG, DEMO: DEMO_TAG};
+/* The account's word: PAPER (simulated fills), PROP (a prop-firm eval or funded PA, the status says `prop`), LIVE (real money, or an
+   account the desk does not list), else DEMO. A label only: the ask keys on isRealAcct, never on this. */
+function acctTag(id) {
+  const a = ((ST && ST.accounts) || {})[id];
+  return !a ? "LIVE" : a.env === "paper" ? "PAPER" : a.prop === true ? "PROP" : a.env === "demo" ? "DEMO" : "LIVE";
+}
 /* The size on an account row: "×N" (a Lab row with settings: "$X risk", and a small tag when it stops after a win or in profit).
    A Lab row with a size shows its words only (settings dropped, owner 2026-11-02); any other row keeps the inline size box. */
 function acctQtyHtml(id, extra) {
@@ -27,9 +37,7 @@ function acctRow(id, extra) {
   return `<div class="acct">
     <span class="dot ${a.connected ? "on" : "off"}" data-ro="dot"></span>
     <span class="nm">${esc(a.label)}</span>
-    ${a.env !== "demo" && a.env !== "paper" ? '<span class="tag-live" title="A live account — real money">LIVE</span>' : ""}
-    ${a.env === "paper" ? '<span class="tag-paper" title="A paper account — simulated fills on the live prints, no money">PAPER</span>' : ""}
-    ${a.env === "demo" ? (a.prop === true ? PROP_TAG : DEMO_TAG) : ""}
+    ${ACCT_TAG_HTML[acctTag(id)]}
     ${extra.qty ? acctQtyHtml(id, extra) : ""}
     ${err}<span class="spacer"></span>
     <span class="kvi" data-ro="bal">${usd(a.balance)}</span>
@@ -136,12 +144,6 @@ function isDemoAcct(id) {
 function isRealAcct(id) {
   const a = ((ST && ST.accounts) || {})[id];
   return !(a && a.env === "paper");
-}
-/* The account's word: PAPER (simulated fills), PROP (a prop-firm eval or funded PA, the status says `prop`), LIVE (real money, or an
-   account the desk does not list), else DEMO. A label only: the ask keys on isRealAcct, never on this. */
-function acctTag(id) {
-  const a = ((ST && ST.accounts) || {})[id];
-  return !a ? "LIVE" : a.env === "paper" ? "PAPER" : a.prop === true ? "PROP" : a.env === "demo" ? "DEMO" : "LIVE";
 }
 /* "APEX…048" / "…885": a broker's long numbered name shortened the way the chart page shows it,
    keeping a short letter prefix when there is one; a plain label ("Lucid Funded") stays whole. */

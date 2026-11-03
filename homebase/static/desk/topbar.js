@@ -127,7 +127,7 @@ async function doKill() {
   if (killInFlight()) return killRunning();
   const reach = masterReach(() => Object.entries(ST.accounts || {}).filter(([, a]) => a && a.connected).map(([id]) => id));
   if (!await confirmDlg("Kill everything?",
-      `Cancels every working order and market-flattens every position on EVERY connected account${reach ? ` (${reach})` : ""}, then disarms.`,
+      `Cancels every working order and market-flattens every position on EVERY connected account${reach ? ` (${reach})` : ""}, then turns the Desk OFF.`,
       "Kill", true)) { toast("Kill cancelled — nothing sent."); return; }
   if (killInFlight()) return killRunning();
   const at = KILL_AT = Date.now();

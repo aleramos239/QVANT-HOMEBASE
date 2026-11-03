@@ -722,7 +722,7 @@ test('1.7: Kill names the machine and the connected LIVE accounts; it still asks
   const { api, confirms, posts } = load({ st, machine: 'mac', demoAccts: ['D1'] });
   await api.doKill();
   assert.equal(confirms.length, 1);
-  assert.equal(confirms[0].body, 'Cancels every working order and market-flattens every position on EVERY connected account (on this Mac, 1 LIVE account), then disarms.');
+  assert.equal(confirms[0].body, 'Cancels every working order and market-flattens every position on EVERY connected account (on this Mac, 1 LIVE account), then turns the Desk OFF.');
   assert.equal(confirms[0].destructive, true);
   assert.deepEqual(plain(posts), [{ url: '/api/kill' }]);
 });
@@ -730,7 +730,7 @@ test('1.7: Kill names the machine and the connected LIVE accounts; it still asks
 test('1.7: no machine and no desk state: the old words, and Kill still asks and sends', async () => {
   const { api, confirms, posts } = load({ st: null });
   await api.doKill();
-  assert.equal(confirms[0].body, 'Cancels every working order and market-flattens every position on EVERY connected account, then disarms.');
+  assert.equal(confirms[0].body, 'Cancels every working order and market-flattens every position on EVERY connected account, then turns the Desk OFF.');
   assert.deepEqual(plain(posts), [{ url: '/api/kill' }]);
 });
 
