@@ -33,20 +33,20 @@ KEPT = ("size", "risk_usd", "most", "contract", "stop_after")
 
 
 def _rows(cur: list, accounts: list, hold, qty=None, settings=None) -> list:
-    """Rows on `accounts`: a booked account keeps its own qty (unless the gear's `settings` change it), a new one gets `qty` or 1; Hold overnight as `hold` (None: as
-    the strategy holds now). A solo save (`settings` a dict, maybe empty) also keeps each row's size / risk / most / contract
+    """Rows on `accounts`: a booked account keeps its own qty (unless the gear's `settings` change it), a new one gets `qty` or 1; Hold overnight as `hold` (None: a booked row keeps its own, a new one is held as the strategy holds now). A solo save (`settings` a dict, maybe empty) also keeps each row's size / risk / most / contract
     and lets `settings[account]` change them (and qty); a team (None) keeps only the contract, its own size rules win."""
     by = {r["account"]: r for r in cur}
     h = any(r.get("hold") is True for r in cur) if hold is None else hold is True
     out = []
     for a in accounts:
         old, new = by.get(a) or {}, (settings or {}).get(a) or {}
+        h_a = h if hold is not None or a not in by else old.get("hold") is True      # None: a booked row keeps ITS OWN hold (never spread to the others)
         row = {"account": a, "qty": int(new.get("qty") or old.get("qty") or qty or 1)}
         for k in KEPT if settings is not None else ("contract",):
             v = new.get(k, old.get(k))
             if v is not None:
                 row[k] = v
-        out.append({**row, **({"hold": True} if h else {})})
+        out.append({**row, **({"hold": True} if h_a else {})})
     return out
 
 

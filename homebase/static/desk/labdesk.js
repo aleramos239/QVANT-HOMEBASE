@@ -674,10 +674,11 @@ async function toggleSet(id, on) {
   if (on && real.length && !await confirmDlg(`Turn ON ${N}?`, real.map(([m, a]) => `${soloVarLabel(m)}: ${riskWord(a)} account${a.length === 1 ? "" : "s"} ${a.map(acctShort).join(", ")}.`).join(" ") +
       " It will run and execute on its assigned accounts from the next signal.", "Turn on", false)) { refresh(); return; }
   let r, err = null;
-  try { r = await post("/api/setup", {set: id, accounts: now.accounts, pick: now.pick, settings: {}, turns: now.turns, hold: now.hold, on}); } catch (e) { err = e || new Error("no answer"); }
+  try { r = await post("/api/setup", {set: id, accounts: now.accounts, pick: now.pick, settings: {}, turns: now.turns, hold: null, on}); } catch (e) { err = e || new Error("no answer"); }
   const w = answerWhy(r, err);
   refresh();
-  toast(w ? `${N} NOT switched ${on ? "on" : "off"} — ${w}.` : `${N} is ${on ? "ON." : "OFF."}`, w ? 8000 : 4200);
+  if (w && !on) alertBar(`${N} NOT switched off — ${w}. It may still trade: switch it off again, or Kill.`);      // the safe side: stays on screen
+  else toast(w ? `${N} NOT switched on — ${w}.` : `${N} is ${on ? "ON." : "OFF."}`, w ? 8000 : 4200);
 }
 /* Asks first when (ON, on any account that is not paper -- LIVE or DEMO, as its tag says): one is ticked in; a row's gear can
    send more (AcctSet.needsAsk: NQ instead of MNQ, bigger size, Most up); it stops taking turns; or it loses its last account
@@ -707,7 +708,8 @@ async function saveSolo(name) {
   if (why.length && !await confirmDlg(`Change ${N}?`, `${parts.join(" · ")}. ${why.join(" ")}${machineWords() ? " It runs " + machineWords() + "." : ""}`, "Save", false)) { refresh(); return; }
   let r, err = null;
   const {strategy: _s, ...sent} = b;      // the set body names the set, not a strategy
-  try { r = await post("/api/setup", {...(vs ? sent : b), on}); } catch (e) { err = e || new Error("no answer"); }
+  const hold = b.hold === now.hold ? null : b.hold;      // Hold overnight only when this Save changed the box; else each row keeps its own
+  try { r = await post("/api/setup", {...(vs ? sent : b), hold, on}); } catch (e) { err = e || new Error("no answer"); }
   const w = answerWhy(r, err);
   if (w === "") { delete SOLO_DRAFT[name]; delete SOLO_FORMS[name]; delete SOLO_PICK[name]; }
   refresh();

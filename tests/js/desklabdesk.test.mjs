@@ -1923,7 +1923,7 @@ test('set switch: ON when any member is ON; pressing it posts on:false for the s
   assert.match(html, /aria-checked="true"\s+title="[^"]*"\s*onclick="toggleSet\(&quot;v1&quot;, false\)"/);
   await vm.runInContext('toggleSet("v1", false)', t.ctx);
   assert.equal(t.confirms.length, 0);
-  assert.deepEqual(plain(t.posts[0].body), { set: 'v1', accounts: ['a2'], pick: { a2: 'lab_nq_orb2' }, settings: {}, turns: false, hold: false, on: false });
+  assert.deepEqual(plain(t.posts[0].body), { set: 'v1', accounts: ['a2'], pick: { a2: 'lab_nq_orb2' }, settings: {}, turns: false, hold: null, on: false });
 });
 
 test('set switch ON asks once, naming the live account of the member it turns on', async () => {
@@ -1941,4 +1941,27 @@ test('a mixed set Save names the member it turns on and asks for its live accoun
   await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
   assert.match(t.confirms[0].body, /turns on 2R/);
   assert.match(t.confirms[0].body, /2R turns on: LIVE account APEX…048\./);
+});
+
+test('Hold overnight is sent only when the box changed; the set switch never sends it', async () => {
+  const book = { lab_nq_orb: [{ account: 'a1', qty: 1, hold: true }, { account: 'a2', qty: 1 }] };
+  const t = gearT(GC, book);
+  soloRoot(t, { ticked: ['a1', 'a2'], hold: true });                       // the box shows what any row does: ticked
+  vm.runInContext('soloSet("lab_nq_orb","a2","qty","3",true)', t.ctx);     // a size change only
+  await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+  assert.equal(t.posts[0].body.hold, null);
+  const u = gearT(GC, BOOKED0);
+  soloRoot(u, { ticked: ['a1'], hold: true });                             // the owner ticked Hold
+  await vm.runInContext('saveSolo("lab_nq_orb")', u.ctx);
+  assert.equal(u.posts[0].body.hold, true);
+  const s = setT({ book: { lab_nq_orb: [{ account: 'a1', qty: 1, hold: true }, { account: 'a2', qty: 1 }] } });
+  await vm.runInContext('toggleSet("v1", false)', s.ctx);
+  assert.equal(s.posts[0].body.hold, null);
+});
+
+test('a refused set OFF stays on screen in the alert bar; a refused ON is a toast', async () => {
+  const t = setT({ answer: { ok: false, detail: 'no' } });
+  await vm.runInContext('toggleSet("v1", false)', t.ctx);
+  assert.match(t.alerts[0], /nq_orb NOT switched off — .*switch it off again, or Kill\./);
+  assert.deepEqual(t.toasts, []);
 });

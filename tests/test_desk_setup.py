@@ -360,3 +360,11 @@ def test_a_solo_save_never_resizes_a_booked_row():
     assert _rows(cur[::-1], ["a2", "a1"], True, 2, {}) == [{"account": "a2", "qty": 3, "hold": True}, {"account": "a1", "qty": 1, "hold": True}]
     assert _rows(cur, ["a1", "a3"], None, 2, {})[1] == {"account": "a3", "qty": 2}       # a new row takes the sent qty
     assert _rows(cur, ["a2"], None, 1, {"a2": {"qty": 5}}) == [{"account": "a2", "qty": 5}]      # the gear wins
+
+
+def test_rows_with_hold_none_keep_each_rows_own_hold():
+    from homebase.routes.setup import _rows
+    cur = [{"account": "a1", "qty": 1, "hold": True}, {"account": "a2", "qty": 1}]
+    assert _rows(cur, ["a1", "a2"], None, None, {}) == [{"account": "a1", "qty": 1, "hold": True}, {"account": "a2", "qty": 1}]
+    assert _rows(cur, ["a1", "a2"], True, None, {})[1].get("hold") is True       # the box ticked: every row
+    assert _rows(cur, ["a1", "a2"], False, None, {}) == [{"account": "a1", "qty": 1}, {"account": "a2", "qty": 1}]
