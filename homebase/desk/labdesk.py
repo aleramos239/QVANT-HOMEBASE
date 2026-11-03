@@ -723,6 +723,9 @@ class LabDesk:
             if rows and limits is None:
                 raise Refused(SET_LIMITS_FIRST)
             for r in rows:
+                why = labcfg.row_ok(rec, r) if rec else None
+                if why:
+                    raise Refused(why)
                 if r.get("size") is None and int(r["qty"]) > limits.max_qty:     # a row with settings is not held to the backtested cap
                     raise Refused(f"Size is capped at {limits.max_qty} here.")
                 if r.get("size") == "contracts" and r.get("most") is not None and int(r["qty"]) > r["most"]:

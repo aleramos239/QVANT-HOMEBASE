@@ -116,3 +116,45 @@ def test_a_move_between_teams_is_one_book_write_never_empty(desk):
     assert s["book"][LAB] == [{"account": LIVE, "qty": 1}]
     books = [j for j in s["journal"] if j["event"] == "book_updated" and j.get("cause") == "setup"]
     assert len(books) == 2 and books[0]["assignments"] == [{"account": LIVE, "qty": 1}]   # the move: one write (newest first)
+
+
+def book_a1(c, **row):
+    r = c.post("/api/book", json={"strategy": LAB, "assignments": [{"account": A1, "qty": 1, **row}]})
+    assert r.status_code == 200, r.text
+
+
+A1_ROW = {"size": "risk", "risk_usd": 500, "most": 2, "contract": "NQ"}
+
+
+def test_a_solo_save_keeps_every_rows_settings_and_takes_new_ones(desk):
+    limits(desk)
+    book_a1(desk, **A1_ROW)
+    assert solo(desk, turns=False).status_code == 200                      # a2 ticks in, no settings touched
+    book = st(desk)["book"][LAB]
+    assert book[0] == {"account": A1, "qty": 1, **A1_ROW}
+    assert book[1] == {"account": A2, "qty": 1}
+    mine = {A2: {"qty": 3, "size": "contracts", "most": 20, "contract": "MNQ"}, "nobody": {"qty": 9}}
+    assert solo(desk, turns=False, settings=mine).status_code == 200       # a setting for an unticked account is ignored
+    book = st(desk)["book"][LAB]
+    assert book[0] == {"account": A1, "qty": 1, **A1_ROW}
+    assert book[1] == {"account": A2, "qty": 3, "size": "contracts", "most": 20, "contract": "MNQ"}
+    assert len(book) == 2
+
+
+def test_a_solo_save_with_a_contract_the_strategy_cannot_trade_writes_nothing(desk):
+    limits(desk)
+    book_a1(desk)
+    before = st(desk)["book"][LAB]
+    r = solo(desk, turns=False, settings={A2: {"contract": "ES"}})
+    assert r.status_code == 409 and "ES" in r.json()["detail"]
+    assert st(desk)["book"][LAB] == before
+    r = desk.post("/api/book", json={"strategy": LAB, "assignments": [{"account": A1, "qty": 1, "contract": "ES"}]})
+    assert r.status_code == 409 and st(desk)["book"][LAB] == before        # the book route says no too
+
+
+def test_a_team_save_keeps_a_rows_contract():
+    cur = [{"account": "a1", "qty": 2, "contract": "NQ"}]
+    cfg = SimpleNamespace(book={"s": cur}, accounts={"a1": 1, "a2": 1})
+    new = {"members": ["s"], "assign": {}, "mode": "cycle", "accounts": ["a1", "a2"]}
+    out = team_books(cfg, {}, new)["s"]
+    assert out[0] == {"account": "a1", "qty": 2, "contract": "NQ"} and out[1] == {"account": "a2", "qty": 1}

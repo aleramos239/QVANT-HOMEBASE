@@ -59,3 +59,16 @@ def test_hold_is_yes_or_no_and_no_is_dropped():
     assert labcfg.book_row({"account": "A", "qty": 1, "hold": False}) == {"account": "A", "qty": 1}
     with pytest.raises(ValueError, match="Hold overnight is yes or no"):
         labcfg.book_row({"account": "A", "qty": 1, "hold": "yes"})
+
+
+def test_a_row_may_name_its_contract_only_as_the_strategys_market_or_its_micro():
+    nq = {"root": "NQ", "exec_root": "MNQ"}
+    assert labcfg.book_row({"account": "a1", "qty": 1, "contract": "NQ"})["contract"] == "NQ"
+    assert labcfg.row_ok(nq, {"account": "a1", "contract": "NQ"}) is None
+    assert labcfg.row_ok(nq, {"account": "a1", "contract": "MNQ"}) is None
+    assert labcfg.row_ok(nq, {"account": "a1", "contract": "ES"})          # a sentence
+    with pytest.raises(ValueError):
+        labcfg.book_row({"account": "a1", "qty": 1, "contract": "XYZ"})
+    assert labcfg.row_symbol(nq, {"account": "a1"}) == "MNQ"
+    assert labcfg.row_symbol(nq, {"account": "a1", "contract": "NQ"}) == "NQ"
+    assert labcfg.row_symbol(nq, {"account": "a1", "contract": "ES"}) == "MNQ"

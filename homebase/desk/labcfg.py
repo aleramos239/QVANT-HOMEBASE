@@ -64,7 +64,7 @@ import math
 from dataclasses import asdict, dataclass
 
 from ..config import AppCfg, StrategyCfg
-from ..contracts import commission_rt, exec_ok
+from ..contracts import commission_rt, exec_ok, spec_for
 from ..core.clock import HHMM, desk_minutes as _dm, hhmm_minutes as _minutes, is_hhmm as _hhmm, window_minutes
 from ..labrun import store
 
@@ -250,6 +250,20 @@ def exec_symbol(rec: dict) -> str:
     never reaches here (usable() drops the record); were it to, the record's own market is used."""
     ex = rec.get("exec_root")
     return ex if isinstance(ex, str) and exec_ok(rec["root"], ex) else rec["root"]
+
+
+def row_ok(rec: dict, row: dict) -> str | None:
+    """The sentence when a book row names a contract this strategy cannot trade (its own market or that market's micro),
+    else None. A row with no `contract` is always fine: it trades exec_symbol(rec), as before."""
+    c = row.get("contract")
+    if c is None or c == rec["root"] or exec_ok(rec["root"], c):
+        return None
+    return f"{c} is not a contract this strategy can trade."
+
+
+def row_symbol(rec: dict, row: dict) -> str:
+    """The contract a book row's orders go to: its own `contract` when the strategy can trade it, else exec_symbol(rec)."""
+    return row["contract"] if row.get("contract") and row_ok(rec, row) is None else exec_symbol(rec)
 
 
 def strategy_cfg(rec: dict, limits: LabLimits | None) -> StrategyCfg:
@@ -527,7 +541,7 @@ def _files(snap) -> set:
 
 def book_row(r) -> dict:
     """One book row as a sidecar holds it: account, qty (whole, above 0), then size ("contracts" | "risk"), risk_usd
-    (with "risk" only), stop_after ("win" | "profit"; "none" is not stored), most (whole, 1..1000) and hold (True: Hold
+    (with "risk" only), contract (a known upper-case root; whether THIS strategy can trade it is row_ok), stop_after ("win" | "profit"; "none" is not stored), most (whole, 1..1000) and hold (True: Hold
     overnight; false is not stored) when set. A row
     with none of the new fields is {account, qty}, as always. ValueError with the sentence on a bad row."""
     if not isinstance(r, dict):
@@ -557,6 +571,11 @@ def book_row(r) -> dict:
         if not _whole(r["most"], 1, 1000):
             raise ValueError("Most contracts must be a whole number from 1 to 1000.")
         out["most"] = r["most"]
+    c = r.get("contract")
+    if c is not None:
+        if not (isinstance(c, str) and c == c.upper() and spec_for(c).known):
+            raise ValueError("Contract is a known market, like NQ or MNQ.")
+        out["contract"] = c
     if r.get("hold") not in (None, False, True):
         raise ValueError("Hold overnight is yes or no.")
     if r.get("hold") is True:

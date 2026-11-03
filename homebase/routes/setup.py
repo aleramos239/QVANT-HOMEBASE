@@ -7,8 +7,9 @@ safe order: the account group -> each strategy's accounts (the final rows at onc
 
 Rules built in: a team member is booked ONLY on its team's accounts (split: only its own one); a strategy that leaves a team
 loses the team's accounts; the account group is on whenever it has a strategy and an account (the one switch the owner
-sees is Trading ON / OFF, every member's own). The per-account extras (size per account, stop after, most) are dropped
-(owner, 2026-11-02); Hold overnight stays, one choice per strategy."""
+sees is Trading ON / OFF, every member's own). A team drops the per-account extras (size per account, stop after, most;
+owner, 2026-11-02) and keeps only each row's contract; Hold overnight stays, one choice per strategy. A solo save keeps every
+row's size / risk / most / contract and takes new ones from `settings`."""
 from __future__ import annotations
 
 from fastapi import HTTPException, Request
@@ -25,12 +26,25 @@ def _cur(cfg, name: str) -> list:
     return [dict(r) for r in cfg.book.get(name) or [] if r.get("account") in cfg.accounts]
 
 
-def _rows(cur: list, accounts: list, hold, qty=None) -> list:
+KEPT = ("size", "risk_usd", "most", "contract")
+
+
+def _rows(cur: list, accounts: list, hold, qty=None, settings=None) -> list:
     """Rows on `accounts`: a booked account keeps its size (unless `qty`), a new one is 1; Hold overnight as `hold` (None: as
-    the strategy holds now). Nothing else rides along."""
+    the strategy holds now). A solo save (`settings` a dict, maybe empty) also keeps each row's size / risk / most / contract
+    and lets `settings[account]` change them (and qty); a team (None) keeps only the contract, its own size rules win."""
     by = {r["account"]: r for r in cur}
     h = any(r.get("hold") is True for r in cur) if hold is None else hold is True
-    return [{"account": a, "qty": int(qty or (by.get(a) or {}).get("qty") or 1), **({"hold": True} if h else {})} for a in accounts]
+    out = []
+    for a in accounts:
+        old, new = by.get(a) or {}, (settings or {}).get(a) or {}
+        row = {"account": a, "qty": int(new.get("qty") or qty or old.get("qty") or 1)}
+        for k in KEPT if settings is not None else ("contract",):
+            v = new.get(k, old.get(k))
+            if v is not None:
+                row[k] = v
+        out.append({**row, **({"hold": True} if h else {})})
+    return out
 
 
 def team_books(cfg, old: dict, new: dict, hold: dict | None = None) -> dict:
@@ -132,8 +146,11 @@ def register(app, *, cfg, engine, labdesk) -> None:
             raise HTTPException(400, "Contracts: a whole number above 0.")
         if not isinstance(turns, bool) or not (hold is None or isinstance(hold, bool)):
             raise HTTPException(400, "turns and hold must be true or false")
+        settings = body.get("settings") or {}
+        if not isinstance(settings, dict) or not all(isinstance(v, dict) for v in settings.values()):
+            raise HTTPException(400, "settings: a dict of settings for each account.")
         cur = _cur(cfg, name)
-        rows = _rows(cur, accounts, hold, qty)
+        rows = _rows(cur, accounts, hold, qty, settings)
         books = checked({name: rows} if rows != cur else {}, {name: on})
         await write(books, {name: turns}, {name: on})
         engine.journal("setup_saved", strategy=name, accounts=accounts, qty=qty, turns=turns, on=on)
