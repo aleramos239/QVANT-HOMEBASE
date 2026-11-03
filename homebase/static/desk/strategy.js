@@ -45,7 +45,7 @@ function renderSide(names, issues) {
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span>Today</span><span></span></button>
-    ${head("strat", "Strategies", names.length + labIds.length, `<span class="sh-acts"><button class="sh-btn grp-new" title="Account groups: new, delete, add or remove strategies" aria-label="Manage account groups" onclick="openGroupMgr()">+</button><button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button></span>`)}
+    ${head("strat", "Strategies", names.length + labIds.length, `<span class="sh-acts"><button class="sh-btn grp-new" title="Account groups: new, delete, add or remove strategies" aria-label="Manage account groups" onclick="openGroupMgr()">+</button></span>`)}
     ${SIDE_FOLD.strat ? "" : loose
       + ((DESKLAB.archived || []).length || VIEW.k === "archive" ? `<button class="side-more${sel("archive")}" onclick="setView('archive')">Archive · ${(DESKLAB.archived || []).length}</button>` : "")}
     ${head("cyc", "Account groups", DESKGROUPS.groups.length, `<button class="sh-btn" title="Account groups: new, delete, add or remove strategies" aria-label="Manage account groups" onclick="openGroupMgr()">+</button>`)}

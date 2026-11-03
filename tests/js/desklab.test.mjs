@@ -1498,3 +1498,12 @@ test('results: a 3:1 card with its full sample (Both) shows that one column only
   assert.equal(two.unseen.full, false);
   assert.equal('o' in two.unseen.rows[0] || 'both' in two.prop.rows[0], false);
 });
+
+test('shelvedBuiltins hides an archived built-in only when it cannot trade', () => {
+  const fn = HTML.slice(HTML.indexOf('function archivedBuiltins()'), HTML.indexOf('async function archiveBuiltin('));
+  const strat = (enabled, day_status = 'idle') => ({ cfg: { enabled }, day_status });
+  const ctx = vm.createContext({ DESKLAB: { archived: ['off', 'on', 'booked', 'live', 'gone'].map((name) => ({ name, builtin: true })) },
+    ST: { strategies: { off: strat(false), on: strat(true), booked: strat(false), live: strat(false, 'live') }, book: { booked: [{ account: 'a', qty: 1 }] } } });
+  vm.runInContext(fn + '\nglobalThis.out = shelvedBuiltins();', ctx);
+  assert.deepEqual([...ctx.out].sort(), ['gone', 'off']);
+});

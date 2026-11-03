@@ -390,6 +390,13 @@ async function restoreArchived(name) {
    chart service, and the page hides it. Refused while an account is assigned or it has anything open today (the hide rule). Restore shows it
    again, switched off. */
 function archivedBuiltins() { return (DESKLAB.archived || []).filter(w => w && w.builtin === true).map(w => w.name); }
+/* The archived built-ins the sidebar hides: only one that cannot trade (OFF, no account, nothing happening today). */
+function shelvedBuiltins() {
+  return archivedBuiltins().filter(n => {
+    const s = ST && ST.strategies && ST.strategies[n];
+    return !(s && (s.cfg.enabled || ((ST.book && ST.book[n]) || []).length || ["placing", "placed", "live", "error"].includes(s.day_status)));
+  });
+}
 async function archiveBuiltin(name) {
   const s = ST && ST.strategies && ST.strategies[name];
   if (!s || DESKLAB_BUSY) return;
@@ -592,7 +599,7 @@ function render() {
          onclick="dismissReady()">&times;</button>`;
   } else strip.style.display = "none";
 
-  const shelved = archivedBuiltins();       // an archived built-in lives in Archive
+  const shelved = shelvedBuiltins();       // an archived built-in lives in Archive, unless it can trade
   const names = Object.keys(s.strategies).filter(n => !shelved.includes(n))
     .sort((a, b) => (s.strategies[b].cfg.enabled ? 1 : 0) - (s.strategies[a].cfg.enabled ? 1 : 0));   // switched-on first
   if (VIEW.k === "lab" && labSafe(() => DeskLab.onDesk(s.strategies, {name: VIEW.name}), false)) VIEW = {k: "strat", name: "lab_" + VIEW.name};   // the Desk knows it now: its own page

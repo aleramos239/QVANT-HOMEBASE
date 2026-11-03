@@ -145,7 +145,7 @@ html.hb-apple .hb-side .sh-t i { font-style: normal; font-weight: 510; font-size
 @media (prefers-reduced-motion: reduce) { html.hb-apple .hb-side .sh-chev, html.hb-apple .hb-side .sh-t { transition: none; } }
 html.hb-apple .hb-side .sh-btn { -webkit-appearance: none; appearance: none; border: 0; width: 22px; height: 19px; border-radius: var(--hb-bubble-r); padding: 0; font-size: 0; line-height: 0; display: block;
   background: var(--a-label-pane-2); -webkit-mask: var(--sf-plus) center / 11px 11px no-repeat; mask: var(--sf-plus) center / 11px 11px no-repeat; }
-html.hb-apple .hb-side .sh-btn[onclick^="openAlgoMgr"], html.hb-apple .hb-side .sh-btn[onclick^="openGroupMgr"] { -webkit-mask: var(--sf-ellipsis) center / 13px auto no-repeat; mask: var(--sf-ellipsis) center / 13px auto no-repeat; }
+html.hb-apple .hb-side .sh-btn[onclick^="openGroupMgr"] { -webkit-mask: var(--sf-ellipsis) center / 13px auto no-repeat; mask: var(--sf-ellipsis) center / 13px auto no-repeat; }
 /* a group's own "open its page" button: a chevron, lit while its page is the one shown */
 html.hb-apple .hb-side .sh-btn[onclick^="setView('group'"] { -webkit-mask: var(--sf-chevron-right) center / 7px 10px no-repeat; mask: var(--sf-chevron-right) center / 7px 10px no-repeat; }
 /* a group inside Strategies: a smaller, indented header that folds its own rows; Strategies' own buttons sit side by side */
