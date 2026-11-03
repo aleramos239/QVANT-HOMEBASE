@@ -71,8 +71,7 @@ test('Needs a look escapes a check\'s label and detail', () => {
   assert.match(els.needsLook.innerHTML, /&lt;script&gt;x&lt;\/script&gt;/);
 });
 
-test('the + Assign menu, the accounts dialog and the connect wizard escape too', () => {
-  assert.match(HTML, /onclick="pickAsg\('\$\{name\}',\$\{jsArg\(id\)\},\$\{c\.qty\}\)">\s*\$\{esc\(accts\[id\]\.label \|\| id\)\}/);
+test('the accounts dialog and the connect wizard escape too', () => {
   assert.match(HTML, /onclick="reconnectAcct\(\$\{jsArg\(id\)\}\)"/);
   assert.match(HTML, /onclick="removeAcct\(\$\{jsArg\(id\)\}\)"/);
   assert.match(HTML, /onchange="wizTick\(\$\{jsArg\(a\.name\)\}, this\.checked\)"/);

@@ -100,10 +100,8 @@ test('"Live results" is "Desk results"; a strategy with no trades says "No Desk 
   assert.ok(!/Live results/.test(apple) && apple.includes("'Desk results'"));
   assert.equal((apple.match(/Desk results/g) || []).length, 2);
   assert.ok(!/No live trades/.test(apple + strat + labd), 'no "No live trades"');
-  assert.ok(apple.includes('/No Desk trades/') && strat.includes('No Desk trades yet.'));
+  assert.ok(apple.includes('/No Desk trades/'));
   assert.ok(labd.includes('"no Desk trades yet"') && labd.includes('"no shadow trades yet"'), 'shadow keeps its own words');
-  assert.ok(strat.includes('>Desk calendar<') && !strat.includes('Live calendar'));
-  assert.ok(strat.includes('Not enough Desk days yet') && !strat.includes('live days'));
 });
 
 test('the two daily limits are "Last entry" and "Flat by" on the Desk and in the Lab', () => {
@@ -154,8 +152,6 @@ test('a win rate prints as 58% (whole, no space) in every Lab table and tile', (
   assert.equal(AM.format('pct', 12.34), '12.3%', 'a return keeps its decimal');
   const mix = read('charts/labmix.js');
   assert.ok(mix.includes('`${Math.round(v * 100)}%`') && mix.includes('`${Math.round(v)}%`') && !/\} %`/.test(mix));
-  const strat = read('desk/strategy.js');
-  assert.ok(strat.includes('Math.round(lv.win_rate) + "%"'));
   const am = read('charts/allmetrics.js');
   for (const k of ['win_rate', 'breakeven_wr', 'long_wr', 'short_wr']) assert.match(am, new RegExp(`\\['${k}', '[^']+', 'wr'`), k);
   assert.ok(read('charts/lab.js').includes("['win_rate', 'wr']"));
@@ -177,10 +173,6 @@ test('the compare table win-rate delta is whole percent, like its two sides', ()
   const r = row(50, 54.2);
   assert.deepEqual([r.a, r.b, r.delta], ['50%', '54%', '+4%']);
   assert.equal(row(54, 50).delta.replace(/[^\d]/g, ''), '4');
-});
-
-test('a missing win rate on the strategy page reads a dash, not 0%', () => {
-  assert.ok(read('desk/strategy.js').includes('lv.win_rate == null ? "—" : Math.round(lv.win_rate) + "%"'));
 });
 
 test('the Mac-skin inspector names the flat time "Flat by" like every other screen', () => {

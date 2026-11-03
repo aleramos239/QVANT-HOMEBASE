@@ -255,7 +255,6 @@ test('the bulb, the toolbar word and the Needs a look list all read the shown re
 
 // ---- labels ------------------------------------------------------------------------------------
 test('the card labels say what they mean', () => {
-  assert.match(HTML, /No Desk trades yet/);   // the strategy page says it plainly when there is nothing to show
   assert.doesNotMatch(HTML, /this strip earns itself/);
   assert.match(HTML, />Flatten &amp; turn off<\/button>/);
   assert.doesNotMatch(HTML, /Flatten · off/);

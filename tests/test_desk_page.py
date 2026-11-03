@@ -197,17 +197,17 @@ def test_the_desk_serves_the_page_uncached_and_every_desk_script_it_names(tmp_pa
 # Each desk/*.js is cached by the browser under its ?v= (no cache-control on /static), so a changed file must get a new ?v=
 # or a fresh page can run with yesterday's code. Edited a desk file? Bump its ?v= in index.html, then its pin here (both).
 DESK_PINS = {
-    "desk/core.js": (7, "62d8ed3388cc9960"),
+    "desk/core.js": (8, "e446d8200b242b8a"),
     "desk/topbar.js": (9, "3294e5372d640161"),
     "desk/activity.js": (16, "2745d717148f29be"),
-    "desk/views.js": (7, "24254d5ff54f2ea9"),
+    "desk/views.js": (8, "5182ceb2075913d5"),
     "desk/groups.js": (26, "7854ff91ee8bbcee"),
-    "desk/strategy.js": (33, "18888d35ca5f26a0"),
-    "desk/labdesk.js": (34, "bf74551af63f0f28"),
-    "desk/book.js": (19, "75ff8e26446c04e1"),
+    "desk/strategy.js": (34, "1912420cc3175c91"),
+    "desk/labdesk.js": (35, "f835f3d89866319c"),
+    "desk/book.js": (20, "3859c686eaf0decc"),
     "desk/acctset.js": (9, "907979eee3b2e1db"),
     "desk/settings.js": (11, "cd9ba277325a3a89"),
-    "desk/popups.js": (15, "cd353bb410678301"),
+    "desk/popups.js": (16, "dd099d6341936f18"),
     "desk/start.js": (4, "6b26f57a63078d23"),
 }
 
@@ -294,3 +294,10 @@ def test_a_variant_suggestion_line_grows_with_its_words():
     css = (STATIC / "apple" / "desk.css").read_text()
     rule = re.search(r"\.side-more\.side-suggest\s*\{([^}]*)\}", css)
     assert rule and "height: auto" in rule.group(1) and "padding" in rule.group(1)
+
+
+def test_the_built_in_strategy_page_is_gone():
+    """No built-in (straddle) strategy runs any more (owner, 2026-11-03): its page, dry run, calendar and archive go."""
+    for gone in ("testFire", "openLive", "archiveBuiltin", "openBuiltinInLab", "restoreBuiltin", "archivedBuiltins",
+                 "toggleAsgMenu", "rotationHtml", 'id="liveOverlay"'):
+        assert gone not in HTML, gone

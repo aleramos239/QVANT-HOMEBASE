@@ -374,8 +374,7 @@ function renderGroupMgr(force) {
   const groups = teams();
   $("#groupCount").textContent = `${groups.length} team${groups.length === 1 ? "" : "s"}`;
   const known = [];                    // every strategy a group may take: [id, label]
-  const shelved = archivedBuiltins();       // an archived built-in is not offered (one already in a group still shows)
-  for (const n of Object.keys(ST.strategies || {})) if (!shelved.includes(n)) known.push([n, stratLabel(n)]);
+  for (const n of Object.keys(ST.strategies || {})) known.push([n, stratLabel(n)]);
   for (const w of labSafe(() => DESKLAB.strategies.filter(x => !labOnDesk(x)), [])) known.push(["lab_" + w.name, labSafe(() => DeskLab.label(w), w.name)]);
   const have = new Set(known.map(k => k[0]));
   for (const g of groups) for (const id of g.members) if (!have.has(id)) { have.add(id); known.push([id, id + " (not on the Desk any more)"]); }
@@ -438,36 +437,8 @@ async function moveToGroup(strategy, group) {
 $("#groupOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeGroupMgr();
 });
-/* ---- strategy LIVE popup: calendar + metrics + trade log ---- */
-let LIVE = {name: "", d: new Date(), data: null};
-async function openLive(name) {
-  LIVE.name = name; LIVE.d = new Date(); LIVE.data = null; LIVE.shadow = false; LIVE.day = "";
-  $("#liveName").textContent = stratLabel(name) + " · LIVE";
-  showOverlay("liveOverlay");
-  renderLive();
-  try {
-    const r = await fetch("/api/strategy-live?strategy=" + encodeURIComponent(name));
-    LIVE.data = r.ok ? await r.json() : {days: {}, trades: [], table: [], error: true};
-  } catch (_) { LIVE.data = {days: {}, trades: [], table: [], error: true}; }
-  renderLive();
-}
-function liveStep(n) { LIVE.d.setMonth(LIVE.d.getMonth() + n); LIVE.day = ""; renderLive(); }
-function liveDay(key) { LIVE.day = LIVE.day === key ? "" : key; renderLive(); }
-function closeLive() { hideOverlay("liveOverlay"); }
-$("#liveOverlay").addEventListener("click", (e) => {
-  if (e.target === e.currentTarget) closeLive();
-});
+
 function fmtTicks(x) { return x == null ? "—" : (x > 0 ? "+" : "") + Number(x).toFixed(1); }
-function renderLive() {
-  const v = calView(LIVE, "liveDay");
-  $("#liveMonth").textContent = v.month;
-  $("#liveSince").textContent = v.since;
-  $("#liveGrid").innerHTML = v.grid;
-  $("#liveTotal").textContent = v.total;
-  $("#liveNote").textContent = v.note;
-  $("#liveTable").innerHTML = v.table;
-  $("#liveTrades").innerHTML = v.trades;
-}
 
 /* ---- P&L calendar ---- */
 let CAL = {account: "", d: new Date()};

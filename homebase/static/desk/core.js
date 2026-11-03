@@ -78,7 +78,7 @@ $("#themeToggle").onclick = () => {
 const OVERLAYS = [];   // the open dialogs, topmost last: {el, trigger}
 const OVERLAY_CLOSE = {confirmOverlay: () => cfDone(false), labLimitsOverlay: () => closeLabLimits(), settingsOverlay: () => closeSettings(),
   connectOverlay: () => closeConnect(), resOverlay: () => closeRes(), acctOverlay: () => closeAccts(),
-  groupOverlay: () => closeGroupMgr(), liveOverlay: () => closeLive(),
+  groupOverlay: () => closeGroupMgr(),
   calOverlay: () => closeCal()};
 const FOCUSABLE = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), " +
   "textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
@@ -184,19 +184,9 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (e.repeat) { e.preventDefault(); return; }            // one layer per press
     if (top) { e.preventDefault(); (OVERLAY_CLOSE[top.el.id] || (() => hideOverlay(top.el.id)))(); }
-    else if (closeAsgMenus(true)) e.preventDefault();
     return;
   }
   if (e.key === "Tab" && top) { trapTab(e, top.el); return; }
-  if (!top && ASG_OPEN && ["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) {
-    const items = [...ASG_OPEN.menu.querySelectorAll(".mi2")];
-    if (!items.length) return;
-    const i = items.indexOf(document.activeElement), n = items.length;
-    const k = e.key === "Home" ? 0 : e.key === "End" ? n - 1
-      : e.key === "ArrowDown" ? (i + 1) % n : (i - 1 + n) % n;
-    e.preventDefault();
-    items[k].focus();
-  }
 }, true);   // capture: ahead of any control's own key handling
 
 /* ---- confirmation popup (every consequential action asks here; Kill is also a hold first) ---- */

@@ -194,8 +194,6 @@ test('WP1.15 Changes (7 days): each row is old → new in words; no Put back whe
   assert.match(html, /<h2>Changes \(7 days\)<\/h2>/);
   assert.equal((html.match(/>Put back</g) || []).length, 2);
   assert.match(t.view(), /<h2>Changes \(7 days\)<\/h2>/, 'on the Lab strategy page');
-  changes(t, [], 's:nq930');
-  assert.match(t.ctx.api.stratView('nq930'), /<h2>Changes \(7 days\)<\/h2>[\s\S]*No changes in the last 7 days\./, 'and on the built-in page');
 });
 
 test('WP1.15 Put back limits: the Limits dialog\'s own Save, with the same body as typing the old values and pressing Save', async () => {
@@ -1530,37 +1528,19 @@ test('final wave B6 (rehearsal o1): a cancel time equal to the flat time is one 
 });
 
 
-/* ---- a built-in Desk straddle (nq930, gc_nfp) has the same actions as a Lab one (2026-10-11) ---- */
-test('a built-in strategy page: Open in the Lab, Show on chart, its unseen blocks, and the actions stay in view', () => {
-  const start = HTML.indexOf('function stratView(name)'), end = HTML.indexOf('/* ---- A Lab strategy the Desk itself knows');
-  const view = HTML.slice(start, end);
-  assert.ok(start > 0 && end > start);
-  assert.match(view, /Flatten &amp; turn off/);
-  assert.match(view, /openBuiltinInLab\(\$\{jsArg\(name\)\}\)/);
-  assert.match(view, /openBuiltinInLab\(\$\{jsArg\(name\)\}, true\)"\$\{hasRun \? "" : " disabled"\}/);
-  assert.match(view, /twin \? labCurveHtml\(name\) \+ labResHtml\(name, name\)/);
-  // the twin comes from the chart service's answer
-  assert.match(HTML, /const twin = DESKRES\[name\] && typeof DESKRES\[name\]\.twin === "string"/);
-  assert.match(HTML, /\{name: twin, builtin: true/);
-  assert.match(HTML, /#builtin=/);
-  const css = readFileSync(new URL('../../homebase/static/apple/desk.css', import.meta.url), 'utf8');
-  assert.match(css, /\.hb-acts \{ position: sticky; bottom: -20px;/);
-});
-
 /* ---- WP1.18: one machine value (deskMachine, desk/core.js); the server's Desk has no Lab or Charts to open ---- */
-test('the server\'s Desk draws no "Open in the Lab" / "Show on chart"; this Mac and an unknown machine keep them', () => {
+test('the server\'s Desk draws no "Open in the Lab"; this Mac and an unknown machine keep it', () => {
   const cases = [[{ machine: 'server' }, false], [{ hb: 'server', machine: 'mac' }, false], [{ machine: 'mac' }, true], [{}, true]];
   for (const [{ hb, machine }, shown] of cases) {
     const t = load({ rows: [ROW(), ROW({ name: 'nq_gap', label: 'NQ Gap' })] });
     t.ctx.ST.machine = machine;
     t.ctx.window.HB_MACHINE = hb;
     vm.runInContext('DESKRES = { nq930: { twin: "nq930_twin", unseen: { id: "r1" } } };', t.ctx);
-    const pages = { lab: t.view(), builtin: t.api.stratView('nq930'), labOnly: vm.runInContext('labView("nq_gap")', t.ctx) };
+    const pages = { lab: t.view(), labOnly: vm.runInContext('labView("nq_gap")', t.ctx) };
     for (const [k, html] of Object.entries(pages)) {
       assert.equal(/>Open in the Lab</.test(html), shown, `${k} with ${hb}/${machine}`);
       assert.match(html, />Archive</, `${k}: the other actions stay`);
     }
-    assert.equal(/>Show on chart</.test(pages.builtin), shown, `builtin with ${hb}/${machine}`);
   }
 });
 

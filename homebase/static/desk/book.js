@@ -62,33 +62,6 @@ async function setBook(strategy, assignments) {
   if (!r.ok) toast("Book update failed — " + (r.detail || "unknown"), 5000);
   refresh();
 }
-/* Take turns (account rotation, the owner 2026-10-19): each trade goes to ONE booked account, the next in the list that
-   can take it. Off (the default) = every booked account takes every trade. Shown once two accounts are booked, or while on.
-   Turning it OFF with a live account booked asks first: the next trade then goes to every account. */
-function rotationHtml(name) {
-  const rot = (((ST.strategies || {})[name]) || {}).rotation || {}, n = ((ST.book && ST.book[name]) || []).length;
-  const cyc = Object.values((ST && ST.groups) || {}).find(g => g.on && (g.members || []).includes(name)) || null;
-  if (n < 2 && !rot.on && !cyc) return "";
-  return `<div class="agroup feed static"><div class="feed-row"><span class="h">Take turns: one account a trade</span>
-    <button class="switch" role="switch" aria-label="Take turns" aria-checked="${!!rot.on}"
-      title="${rot.on ? "ON — each trade goes to the next account in the list" : "OFF — every trade goes to every account"}"
-      onclick="setRotation(${jsArg(name)}, ${!rot.on})"></button></div>
-    ${cyc ? `<div class="feed-row"><span class="h">In the ${esc(cyc.name)} team: it picks the account (next: ${esc(acctShort(cyc.next || ""))})</span></div>`
-          : rot.on && rot.next ? `<div class="feed-row"><span class="h">Next account: ${esc(acctShort(rot.next))}</span></div>` : ""}</div>`;
-}
-async function setRotation(name, on) {
-  if (switchBounced("rotation:" + name)) return;
-  const book = (ST.book && ST.book[name]) || [], N = stratLabel(name);
-  if (!on && book.length > 1 && book.some(a => isRealAcct(a.account)) && !await confirmDlg(
-      `Stop taking turns on ${N}?`, `Its next trade goes to all ${book.length} booked accounts, LIVE ones included.`,
-      "Stop taking turns", false)) { refresh(); return; }
-  let r, err = null;
-  try { r = await post("/api/rotation", {strategy: name, on}); } catch (e) { err = e || new Error("no answer"); }
-  refresh();
-  const why = answerWhy(r, err);
-  if (why) toast(`${N}: take turns NOT changed — ${why}.`, 8000);
-  else toast(on ? `${N} takes turns: one account a trade.` : `${N}: every account takes every trade.`);
-}
 /* Unbooking one account of a Lab strategy that is in a trade there: the Desk refuses ("Flatten it first."); say which account
    and what it holds, in words. null: not that refusal. */
 function unbookRefusal(strategy, before, after, r) {
@@ -104,25 +77,6 @@ function removeAsg(strategy, account) {
   setBook(strategy, cur);
 }
 let FREEZE = false;               // pause re-render while a menu/edit is open
-let ASG_OPEN = null;              // the open + Assign menu: {menu, trigger} (W7: Esc, focus, arrows)
-function toggleAsgMenu(strategy) {
-  const m = $("#amenu-" + strategy);
-  const open = m.hidden;
-  document.querySelectorAll(".amenu").forEach(x => x.hidden = true);
-  m.hidden = !open;
-  FREEZE = !m.hidden;
-  ASG_OPEN = m.hidden ? null : {menu: m, trigger: m.previousElementSibling};
-  if (ASG_OPEN) { const first = m.querySelector(".mi2"); if (first) first.focus(); }   // focus goes in
-}
-/* Close any open + Assign menu; `refocus` (Esc) hands focus back to its + Assign button. */
-function closeAsgMenus(refocus) {
-  const was = ASG_OPEN;
-  document.querySelectorAll(".amenu").forEach(x => x.hidden = true);
-  ASG_OPEN = null;
-  if (!document.getElementById("qedit")) FREEZE = false;
-  if (refocus && was && was.trigger && document.contains(was.trigger)) was.trigger.focus();
-  return !!was;
-}
 /* Booking a LIVE account onto a strategy asks first (2026-09-28, Apple-design audit S3): it is the
    step that makes a live account trade real money, so it gets the same dialog as connecting one
    or arming the desk. A demo account books at once, exactly as before. The account's environment
@@ -178,7 +132,6 @@ function liveBookingNote(strategy, account) {
 const bookMachine = () => machineWords() ? ` It runs ${machineWords()}.` : "";     // the one machine reader (core.js)
 async function pickAsg(strategy, account, qty, row) {
   FREEZE = false;
-  closeAsgMenus(false);
   const was = ((ST.book[strategy] || []).find(a => a.account === account) || {}).qty;
   if (isRealAcct(account) && !await confirmDlg(
       `Book ${stratLabel(strategy)} on ${acctShort(account)} LIVE, ${row && row.size ? AcctSet.label(row) : `qty ${was ? was + " → " : ""}${qty}`}?`,
@@ -231,11 +184,6 @@ function editQty(ev, strategy, account, qty) {
     if (e.key === "Escape") { inp.value = qty; inp.blur(); }
   });
 }
-document.addEventListener("click", (e) => {
-  if (!e.target.closest(".amenu") && !String(e.target.getAttribute?.("onclick") || "").includes("toggleAsgMenu")) {
-    closeAsgMenus(false);
-  }
-});
 function mstrip(rows) {
   return `<div class="mstrip">` + Object.entries(rows).map(([k, v]) =>
     `<span class="mi"><b>${k}</b>${v}</span>`).join("") + `</div>`;

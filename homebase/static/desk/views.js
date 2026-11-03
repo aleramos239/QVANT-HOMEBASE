@@ -9,8 +9,7 @@ const dayPill = (st) => `<span class="${STATUS_PILL[st] || "pill idle"}" title="
 
 /* ===== Desk views (design/apple-pass): Today · Strategy · Activity =============================
    Presentation of what the desk already reports. Every control below calls the handler the old
-   cards called (toggleStrat, flattenStrat, testFire, openRes / openLive, toggleAsgMenu,
-   acctRow ...) -- nothing about arming, killing or booking changed. The day, the states and the
+   cards called (toggleStrat, flattenStrat, acctRow ...) -- nothing about arming, killing or booking changed. The day, the states and the
    numbers are all read from the status the desk sends. */
 let VIEW = {k: "today"};
 try {
@@ -114,20 +113,10 @@ async function openDeskLabInLab(name) {      // the Lab page, on this strategy -
   await chartPost("/api/tester/desklab/open", wf ? {name, wf} : {name});
   location.href = location.protocol + "//" + location.hostname + ":8852/backtest?v=33#strategy=" + encodeURIComponent(name);
 }
-/* A built-in Desk strategy (nq930, gc_nfp) has no Lab copy: the tester holds a twin of it (DESKRES[name].twin, read from the chart service),
-   so "Open in the Lab" opens that twin, built-in. */
-async function openBuiltinInLab(name, withRun) {
-  const twin = DESKRES[name] && DESKRES[name].twin;
-  if (typeof twin !== "string" || !twin) return;
-  const run = withRun ? deskLabRun(name) : null;
-  await chartPost("/api/tester/desklab/open", run ? {name: twin, builtin: true, run} : {name: twin, builtin: true});
-  location.href = location.protocol + "//" + location.hostname + ":8852/backtest?v=33#builtin=" + encodeURIComponent(twin);
-}
 /* "Activity ›" on a strategy's or a group's page (openActivity: the Activity page, filtered to it, the last 7 days). */
 const actBtn = (who) => `<button class="btn btn-quiet btn-sm act-link" onclick="openActivity(${jsArg(who)})"
   title="Every trade, skip and order of the last 7 days: which account and when">Activity ›</button>`;
 function setView(k, name) {
-  closeAsgMenus(false);
   VIEW = k === "strat" || k === "lab" || k === "group" ? {k, name} : {k};
   try { localStorage.setItem("hb_view", JSON.stringify(VIEW)); } catch (_) {}
   if (ST) render();

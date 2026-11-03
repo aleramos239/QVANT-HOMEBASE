@@ -417,53 +417,8 @@ async function restoreArchived(name) {
   await loadDeskLab();
   refresh();
 }
-/* A built-in (nq930, gc_nfp) is the Desk's own: it cannot leave the Desk's config, so Archive switches it off here and notes it on the
-   chart service, and the page hides it. Refused while an account is assigned or it has anything open today (the hide rule). Restore shows it
-   again, switched off. */
-function archivedBuiltins() { return (DESKLAB.archived || []).filter(w => w && w.builtin === true).map(w => w.name); }
-/* The archived built-ins the sidebar hides: only one that cannot trade (OFF, no account, nothing happening today). */
-function shelvedBuiltins() {
-  return archivedBuiltins().filter(n => {
-    const s = ST && ST.strategies && ST.strategies[n];
-    return !(s && (s.cfg.enabled || ((ST.book && ST.book[n]) || []).length || ["placing", "placed", "live", "error"].includes(s.day_status)));
-  });
-}
-async function archiveBuiltin(name) {
-  const s = ST && ST.strategies && ST.strategies[name];
-  if (!s || DESKLAB_BUSY) return;
-  const N = stratLabel(name), book = (ST.book && ST.book[name]) || [];
-  if (book.length) return toast(`${N} has accounts assigned. Take them off first.`, 7000);
-  if (["placing", "placed", "live", "error"].includes(s.day_status)) return toast(`${N} cannot be archived now: it has orders or a position today.`, 7000);
-  if (!await confirmDlg(`Archive ${N}?`, "It is switched off and comes off the Desk's list. Its settings and history stay. Restore it from Archive any time.", "Archive", false)) return;
-  DESKLAB_BUSY = name; if (ST) render();
-  let r = {ok: true}, err = null;
-  if (s.cfg.enabled) { try { r = await post("/api/strategy", {strategy: name, enabled: false}); } catch (e) { err = e || new Error("no answer"); } }
-  const why = s.cfg.enabled ? answerWhy(r, err) : "";
-  if (!why) r = await chartPost("/api/tester/desklab/archive_builtin", {name});
-  DESKLAB_BUSY = "";
-  if (!why && r && r.ok === true) {
-    if (VIEW.k === "strat" && VIEW.name === name) VIEW = {k: "archive"};
-    toast(`${N} is switched off and archived. Restore it from Archive any time.`);
-  } else toast(`Could not archive ${N}: ${why || (r && r.detail) || "no answer"}`, 7000);
-  await loadDeskLab();
-  refresh();
-}
-async function restoreBuiltin(name) {
-  if (DESKLAB_BUSY) return;
-  DESKLAB_BUSY = name; if (ST) render();
-  const r = await chartPost("/api/tester/desklab/restore_builtin", {name});
-  DESKLAB_BUSY = "";
-  toast(r && r.ok === true ? `${stratLabel(name)} is back on the Desk, switched off.` : `Could not restore ${stratLabel(name)}: ${(r && r.detail) || "no answer"}`, 7000);
-  await loadDeskLab();
-  refresh();
-}
 function archiveView() {
   const row = (w) => {
-    if (w.builtin === true) {
-      const day = String(w.archived_utc || "").slice(0, 10);
-      return `<div class="feed-row"><span class="h"><b>${esc(stratLabel(w.name))}</b> · the Desk's own${day ? " · archived " + esc(shortDay(day)) : ""}</span>
-        <button class="btn btn-outline btn-sm" onclick="restoreBuiltin(${jsArg(w.name)})"${DESKLAB_BUSY ? " disabled" : ""} title="Back on the Desk's list, switched off">Restore</button></div>`;
-    }
     const f = DeskLab.figures(w), day = String(w.archived_utc || "").slice(0, 10), busy = DESKLAB_BUSY === w.name;
     return `<div class="feed-row"><span class="h"><b>${esc(DeskLab.label(w))}</b> · ${esc(w.root || "")}${day ? " · archived " + esc(shortDay(day)) : ""}<br>
       <small class="dim">${f.map(x => esc(x.k + " " + x.v)).join(" · ")}</small></span>
@@ -750,8 +705,7 @@ function render() {
   renderBulb(r);
   const probs = r ? r.checks.filter(c => c.level === "bad" || c.level === "warn") : [];
 
-  const shelved = shelvedBuiltins();       // an archived built-in lives in Archive, unless it can trade
-  const names = Object.keys(s.strategies).filter(n => !shelved.includes(n))
+  const names = Object.keys(s.strategies)
     .sort((a, b) => (s.strategies[b].cfg.enabled ? 1 : 0) - (s.strategies[a].cfg.enabled ? 1 : 0));   // switched-on first
   if (VIEW.k === "lab" && labSafe(() => DeskLab.onDesk(s.strategies, {name: VIEW.name}), false)) VIEW = {k: "strat", name: "lab_" + VIEW.name};   // the Desk knows it now: its own page
   if (VIEW.k === "strat" && !names.includes(VIEW.name)) VIEW = {k: "today"};
@@ -759,11 +713,6 @@ function render() {
   ISSUE_LVL = probs.some(c => c.level === "bad") ? "bad" : "warn";
   renderSide(names, probs.length);
   renderMain(names, probs.length);
-  // the views were rebuilt: an + Assign menu that lived in them is gone -- so is its hold on updates
-  if (ASG_OPEN && !document.contains(ASG_OPEN.menu)) {
-    ASG_OPEN = null;
-    if (!document.getElementById("qedit")) FREEZE = false;
-  }
   if ($("#acctOverlay").classList.contains("open")) tickAccts();         // its read-only cells, in place
   renderGroupMgr();
 

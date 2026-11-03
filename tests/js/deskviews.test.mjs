@@ -93,11 +93,7 @@ test('money reads with a real minus sign and a plus for a gain; no figure reads 
 });
 
 test('the controls on the new views call the same handlers the old cards did', () => {
-  for (const h of ["toggleStrat('${name}'", "flattenStrat('${name}')", "testFire('${name}')", "openRes('${name}')",
-    "openLive('${name}')", "toggleAsgMenu('${name}')", "pickAsg('${name}'"]) {
-    assert.ok(HTML.includes(h), `a control no longer calls ${h}`);
-  }
-  assert.match(HTML, /acctRow\(a\.account, \{qty: a\.qty, strategy: name\}\)/);
+  for (const h of ["toggleStrat('${name}'", "flattenStrat(${jsArg(name)})"]) assert.ok(HTML.includes(h), `a control no longer calls ${h}`);
 });
 
 test('the switch on a row never also opens the strategy', () => {

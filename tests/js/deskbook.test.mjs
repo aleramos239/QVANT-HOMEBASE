@@ -90,13 +90,12 @@ test('audit 2026-10-27: booking a demo-env account asks too -- a funded prop acc
   assert.equal(s.confirms[0].title, 'Book NQ930_1030 on Lucid Eval #1 LIVE, qty 3?');
 });
 
-test('Cancel on a live booking sends nothing (the menu closes and the page repaints)', async () => {
+test('Cancel on a live booking sends nothing (the page repaints)', async () => {
   const s = load({ confirm: false });
   await s.api.pickAsg('nq930_1030', '1234567885', 3);
   assert.equal(s.confirms.length, 1);
   assert.deepEqual(s.posts, []);
   assert.equal(s.refreshes.length, 1);
-  assert.equal(s.menus[0].hidden, true);
   assert.equal(s.api.FREEZE, false);
 });
 

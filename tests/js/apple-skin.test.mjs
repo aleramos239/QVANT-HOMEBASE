@@ -86,7 +86,7 @@ test('apple skin: the Desk skin leans only on things the Desk page still has', (
   // the page's own state the skin reads by name (a rename would leave the toolbar words stuck, with no error)
   for (const v of ['ST', 'DESK_STALE', 'STALE_WHY', 'DESKRES', 'DESKGRES']) assert.match(page, new RegExp(`\\blet ${v}\\b`), `${v} is the page's own`);
   // the nodes the inspector borrows from a strategy's render
-  for (const cls of ['figs', 'qlinks', 'sd-actions']) assert.ok(page.includes(`class="${cls}"`), `.${cls} is rendered by the page`);
+  for (const cls of ['figs', 'sd-actions']) assert.ok(page.includes(`class="${cls}"`), `.${cls} is rendered by the page`);
 });
 
 /* The Desk toolbar's words (apple/desk.js, the "toolbar words" block), run for real in a vm sandbox: the plain functions

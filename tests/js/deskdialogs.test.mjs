@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-/* The desk page's (homebase/static/index.html, :8850) dialogs and + Assign menu (2026-09-28,
+/* The desk page's (homebase/static/index.html, :8850) dialogs (2026-09-28,
    Apple-design audit W7), run for real in a vm sandbox over a small DOM: every dialog is
    role="dialog" aria-modal and labelled; opening moves focus in (the confirm's Cancel -- the safe
    default); closing gives it back to the trigger (or its re-rendered twin); Esc closes the topmost
    one exactly like Cancel, one layer per press; Tab stays inside; and a held Enter/Space never
-   re-activates a control through auto-repeat. The menu gets Esc, focus in/out and arrow keys. */
+   re-activates a control through auto-repeat. (The + Assign menu went with the built-in page, 2026-11-03.) */
 import { HTML } from './deskpage.mjs';
 const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
 const OVERLAYS = between('/* ---- overlays: one open/close path', '/* ---- confirmation popup');
@@ -108,30 +108,25 @@ function load() {
     h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', tabindex: '-1', inert: '' },
       h('h2', { id: 'cfTitle' }), h('p', { id: 'cfBody' }), h('input', { id: 'cfInput', hidden: '' }),
       h('button', { id: 'cfCancel', 'data-autofocus': '' }), h('button', { id: 'cfGo' }))));
-  const card = body.append(h('div', { class: 'card' }));
-  const plus = card.append(h('button', { id: 'plus', onclick: "toggleAsgMenu('nq930')" }));
-  const menu = card.append(h('div', { class: 'amenu', id: 'amenu-nq930', role: 'menu', hidden: '' },
-    h('button', { class: 'mi2', role: 'menuitem', id: 'i1' }), h('button', { class: 'mi2', role: 'menuitem', id: 'i2' }),
-    h('button', { class: 'mi2', role: 'menuitem', id: 'i3' })));
   const closes = [];
   const clock = { now: 1_000_000 };
   const ctx = vm.createContext({
     console, document: doc, Date: { now: () => clock.now },
     $: (sel) => doc.getElementById(sel.replace(/^#/, '')),
     closeSettings: () => { closes.push('settings'); ctx.hideOverlay('settingsOverlay'); },
-    closeConnect() {}, closeRes() {}, closeAccts() {}, closeLive() {}, closeChecks() {}, closeCal() {},
+    closeConnect() {}, closeRes() {}, closeAccts() {}, closeChecks() {}, closeCal() {},
   });
   vm.runInContext(OVERLAYS + CONFIRM + BOOK + `
     globalThis.showOverlay = showOverlay; globalThis.hideOverlay = hideOverlay;
-    globalThis.api = { showOverlay, hideOverlay, confirmDlg, cfDone, toggleAsgMenu, closeAsgMenus,
-      get open() { return OVERLAYS.map((o) => o.el.id); }, get asg() { return ASG_OPEN; } };`, ctx);
-  return { api: ctx.api, doc, h, body, trigger, other, settings, confirm, card, plus, menu, closes, clock };
+    globalThis.api = { showOverlay, hideOverlay, confirmDlg, cfDone,
+      get open() { return OVERLAYS.map((o) => o.el.id); } };`, ctx);
+  return { api: ctx.api, doc, h, body, trigger, other, settings, confirm, closes, clock };
 }
 
 // ---- the markup ---------------------------------------------------------------------------------
 test('every dialog is role="dialog" aria-modal and has a name', () => {
   const overlays = HTML.match(/<div class="overlay" id="\w+"[^>]*>\s*<div class="modal"[^>]*>/g) || [];
-  assert.equal(overlays.length, 10);   // the Limits dialog of a Lab strategy (Step B), + Manage groups; the settings sheet and Manage algos went (Task 9); the System checks dialog went (Task 13); + Combine (Task 16)
+  assert.equal(overlays.length, 9);   // the built-in page's Desk calendar went (Task 17); the Limits dialog of a Lab strategy (Step B), + Manage groups; the settings sheet and Manage algos went (Task 9); the System checks dialog went (Task 13); + Combine (Task 16)
   for (const o of overlays) {
     assert.match(o, /role="dialog" aria-modal="true" tabindex="-1" inert/, o);   // inert until opened
     const named = /aria-label="[^"]+"/.exec(o) || /aria-labelledby="(\w+)"/.exec(o);
@@ -140,15 +135,13 @@ test('every dialog is role="dialog" aria-modal and has a name', () => {
   }
   assert.match(HTML, /id="cfCancel" data-autofocus onclick="cfDone\(false\)"/, 'the confirm opens on Cancel');
   assert.doesNotMatch(HTML, /title="Close">&times;/, 'every × has a name');
-  assert.match(HTML, /class="amenu" id="amenu-\$\{name\}" role="menu" hidden/);
-  assert.match(HTML, /class="mi2" role="menuitem"/);
 });
 
 test('every dialog opens and closes through the one path (no stray class flips)', () => {
   const flips = HTML.match(/classList\.(add|remove)\("open"\)/g) || [];
   assert.equal(flips.length, 2, 'only showOverlay/hideOverlay touch .open');
   for (const [open, close] of [['openConnect', 'closeConnect'], ['openSettings', 'closeSettings'],
-    ['openRes', 'closeRes'], ['openAccts', 'closeAccts'], ['openLive', 'closeLive'],
+    ['openRes', 'closeRes'], ['openAccts', 'closeAccts'],
     ['openCal', 'closeCal'], ['openLabLimits', 'closeLabLimits'], ['openGroupMgr', 'closeGroupMgr']]) {
     const o = HTML.slice(HTML.indexOf(`function ${open}(`)), c = HTML.slice(HTML.indexOf(`function ${close}(`));
     assert.match(o.slice(0, o.indexOf('\n}') + 2), /showOverlay\("\w+Overlay"\)/, open);
@@ -258,26 +251,6 @@ test('a held Enter/Space never re-activates a button (auto-repeat is swallowed),
   const input = s.settings.querySelector('input');
   assert.equal(s.doc.key({ key: ' ', repeat: true, target: input }).defaultPrevented, false, 'held Space in a text field still types');
   return answer;
-});
-
-// ---- the + Assign menu --------------------------------------------------------------------------
-test('the + Assign menu: focus goes in, the arrows walk it, Esc closes it and gives focus back', () => {
-  const s = load();
-  s.api.toggleAsgMenu('nq930');
-  assert.equal(s.menu.hidden, false);
-  assert.equal(s.doc.activeElement.id, 'i1');
-  s.doc.key({ key: 'ArrowDown' });
-  assert.equal(s.doc.activeElement.id, 'i2');
-  s.doc.key({ key: 'ArrowUp' });
-  s.doc.key({ key: 'ArrowUp' });
-  assert.equal(s.doc.activeElement.id, 'i3', 'wraps around');
-  s.doc.key({ key: 'Home' });
-  assert.equal(s.doc.activeElement.id, 'i1');
-  const e = s.doc.key({ key: 'Escape' });
-  assert.equal(e.defaultPrevented, true);
-  assert.equal(s.menu.hidden, true);
-  assert.equal(s.api.asg, null);
-  assert.equal(s.doc.activeElement, s.plus, 'back on + Assign');
 });
 
 // ---- glass pass: live at once on open, inert at once on close -----------------------------------

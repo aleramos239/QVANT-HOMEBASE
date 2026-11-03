@@ -140,16 +140,6 @@ function renderSide(names, issues) {
 }
 
 /* ---- strategy detail ---- */
-const EQ = {};
-function loadEq(name) {
-  const e = EQ[name];
-  if (e && (e.busy || Date.now() - e.t < 20000)) return;
-  EQ[name] = {days: e ? e.days : null, t: e ? e.t : 0, busy: true};
-  fetch(`/api/strategy-live?strategy=${encodeURIComponent(name)}`).then(r => r.ok ? r.json() : null).then(d => {
-    EQ[name] = {days: d && d.days ? d.days : {}, t: Date.now()};
-    if (VIEW.k === "strat" && VIEW.name === name && !FREEZE) render();
-  }).catch(() => { EQ[name] = {days: e && e.days || {}, t: Date.now()}; });
-}
 /* A cumulative curve as the page draws it: `vals` = the running total a day, `label` the words on its left, `total` its last value. */
 /* Cumulative P&L by day as straight steps -- a day's close holds flat until the next one, so the line never shows a dip or a
    hump that did not happen -- with a dollar scale on the left and the first and last day under it (`ends`). */
@@ -208,18 +198,6 @@ function eqPlot(vals, label, total, aria, ends, days, notes, second, third) {
     ${xt || (ends ? `<div class="eq-x"><span>${esc(ends[0])}</span><span>${esc(ends[1])}</span></div>` : "")}</div>`;
 }
 const shortDay = (iso) => new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", {month: "short", day: "numeric", timeZone: "UTC"});
-function eqChart(name) {
-  loadEq(name);
-  const days = EQ[name] && EQ[name].days;
-  if (!days) return `<div class="eq"><div class="eq-ph"></div></div>`;
-  const ks = Object.keys(days).sort();
-  if (ks.length < 2) return `<div class="eq-empty">Not enough Desk days yet for a curve.</div>`;
-  let cum = 0;
-  const vals = ks.map(k => (cum += (days[k].net || 0), cum));
-  const notes = ks.map(k => { const t = days[k].trades || 0, w = days[k].wins || 0; return t ? `${t} trade${t === 1 ? "" : "s"} · ${w} win${w === 1 ? "" : "s"}` : ""; });
-  return eqPlot(vals, `After fees since ${shortDay(ks[0])}`, cum, "Cumulative net P&L after fees, by day", [shortDay(ks[0]), shortDay(ks[ks.length - 1])], ks, notes);
-}
-
 /* The hover on an equity curve: the day under the pointer -- its date, that day's result and the running total. One handler for
    every curve on the page (the markup is painted again often); the numbers come from the plot's own data-eq. */
 (function () {
@@ -328,64 +306,6 @@ function labView(name) {
 
 function stratView(name) {
   const s = ST.strategies[name];
-  if (!s) return `<div class="feed-empty">That strategy is not on the desk any more.</div>`;
-  if (s.cfg && s.cfg.kind === "lab") return labSafe(() => labDeskView(name, s), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${LAB_FAULT}</div>`);
-  const c = s.cfg, state = stratState(name, s), lv = s.live, p = todayPnl(s);
-  const execTxt = (c.kind === "bars" ? "A price-action rule on the app's own live bars."
-    : c.self_fire ? "The app computes and fires this signal itself." : "Self-fire is off: nothing fires this strategy.")
-    + (c.shadow ? " Shadow: signals are journaled, nothing is placed — even when the Desk is ON." : "");
-  const fig = (k, v, title) => `<div class="f"${title ? ` title="${esc(title)}"` : ""}><div class="k">${k}</div><div class="v mono">${v}</div></div>`;
-  // the same trades as the curve above it, so the three add up: before fees - fees = after fees (the curve's total)
-  const eqd = Object.values((EQ[name] && EQ[name].days) || {}), sum = (k) => eqd.reduce((a, d) => a + (d[k] || 0), 0);
-  const money = eqd.length
-    ? fig("Before fees", usdS(sum("gross")), "Every closed trade of this strategy, on every account, before commissions") +
-      fig("Fees (est.)", usdS(sum("net") - sum("gross")), "An estimate: $3.10 a contract, in and out") +
-      fig("After fees", usdS(sum("net")), "The total the curve shows")
-    : fig("Before fees", usdS(lv ? lv.net : 0), "Every closed trade of this strategy, on every account, before commissions");
-  const figs = lv && lv.trades
-    ? `<div class="figs">${money}${fig("Win rate", lv.win_rate == null ? "—" : Math.round(lv.win_rate) + "%")}${fig("Trades", lv.trades)}${fig("Avg per trade", usd(lv.avg_trade), "Before fees, per trade")}${fig("Avg slip", (lv.avg_slip_pts ?? "—") + " pts")}</div>`
-    : `<div class="eq-empty">No Desk trades yet.</div>`;
-  const links = `<div class="qlinks">${s.research && s.research.rows ? `<button class="btn btn-quiet btn-sm" onclick="openRes('${name}')">Old backtest (before 3:1)</button>` : ""}
-    <button class="btn btn-quiet btn-sm" onclick="openLive('${name}')">Desk calendar</button>${actBtn("s:" + name)}</div>`;
-  const accts = ST.accounts || {}, asg = (ST.book && ST.book[name]) || [];
-  const rows = asg.map(a => acctRow(a.account, {qty: a.qty, strategy: name})).join("");
-  const free = Object.keys(accts).filter(id => !asg.some(a => a.account === id));
-  const addForm = Object.keys(accts).length
-    ? (free.length ? `<div style="position:relative;display:inline-block;margin-top:10px">
-        <button class="btn btn-quiet noarrow btn-sm" onclick="toggleAsgMenu('${name}')" aria-haspopup="menu">+ Assign an account</button>
-        <div class="amenu" id="amenu-${name}" role="menu" hidden>` +
-        free.map(id => `<button class="mi2" role="menuitem" onclick="pickAsg('${name}',${jsArg(id)},${c.qty})">${esc(accts[id].label || id)}</button>`).join("") + `</div></div>` : "")
-    : `<div class="mcap">Add an account to run this strategy.</div>`;
-  const test = (ST && !ST.armed && c.enabled) ? `<button class="btn btn-outline btn-sm" onclick="testFire('${name}')">Test fire · dry</button>` : "";
-  // the Desk's own straddles: the tester twin that mirrors them (its saved runs are the unseen metrics), and whether the card may be hidden
-  const twin = DESKRES[name] && typeof DESKRES[name].twin === "string" ? DESKRES[name].twin : "";
-  const hasRun = !!(DESKRES[name] && DESKRES[name].unseen && DESKRES[name].unseen.id);
-  const sw = `<button class="switch" role="switch" aria-label="${esc(stratLabel(name))} on or off" aria-checked="${c.enabled}"
-    title="${c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
-    onclick="toggleStrat('${name}', ${!c.enabled})"></button>`;
-  return `<button class="back" onclick="setView('today')">‹ Today</button>
-    <div class="sd-top"><div><h1 class="sd-title">${esc(stratLabel(name))}</h1><div class="sp mono">${esc(specOf(c, name))}</div></div>${sw}</div>
-    <div class="sd-state"><b>${esc(state)}</b>${p != null ? ` · today ${usdS(p)}` : ""}</div>
-    <div class="sd-note">${esc(execTxt)}</div>
-    ${eqChart(name)}${figs}${links}
-    ${twin ? labCurveHtml(name) + labResHtml(name, name) : ""}
-    <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div><div class="mcap acct-note">An account's balance and its green or red figure are the whole account: every strategy and every manual trade on it, not this strategy alone.</div>` : ""}${rotationHtml(name)}${addForm}</div>
-    ${deskChangesHtml("s:" + name)}
-    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat('${name}')" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
-      ${twin && deskMachine() !== "server" ? `<button class="btn btn-outline btn-sm" onclick="openBuiltinInLab(${jsArg(name)})" title="The Lab page, on this strategy's tester twin (it follows the Desk's setting)">Open in the Lab</button>
-      <button class="btn btn-outline btn-sm" onclick="openBuiltinInLab(${jsArg(name)}, true)"${hasRun ? "" : " disabled"} title="Its twin's run on the unseen days, on the chart, trade by trade">Show on chart</button>` : ""}
-      <button class="btn btn-outline btn-sm" onclick="archiveBuiltin(${jsArg(name)})"${DESKLAB_BUSY || ((ST.book && ST.book[name]) || []).length ? " disabled" : ""} title="Switched off and off the Desk's list, kept. Restore it from Archive any time.">Archive</button>${test}</div>`;
-}
-
-/* A dry run of a built-in straddle: what it would send, nothing sent. */
-async function testFire(name) {
-  const r = await post("/api/test-alert", {strategy: name});
-  toast(testFireWords(r), 8000); refresh();
-}
-/* {sent:{upper, lower}, result:{ok, accounts}} or a refusal ({ok:false, reason} / a 404's {detail}) -> one sentence */
-function testFireWords(r) {
-  const res = (r && r.result) || r || {}, s = (r && r.sent) || {}, n = res.accounts;
-  if (!res.ok) return `Dry run refused: ${res.reason || res.detail || "no answer"}.`;
-  return `Dry run: it would have sent a buy stop at ${fmtPx(s.upper)} and a sell stop at ${fmtPx(s.lower)}` +
-    `${typeof n === "number" ? ` on ${n} account${n === 1 ? "" : "s"}` : ""}. Nothing was sent.`;
+  if (!s || !s.cfg || s.cfg.kind !== "lab") return `<div class="feed-empty">That strategy is not on the desk any more.</div>`;      // built-ins are gone (owner 2026-11-03)
+  return labSafe(() => labDeskView(name, s), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${LAB_FAULT}</div>`);
 }

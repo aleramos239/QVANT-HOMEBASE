@@ -182,11 +182,3 @@ test('an equity curve given its days shows dates along the bottom and carries th
   assert.doesNotMatch(bad, /data-eq|eq-xt/, 'a day that is not a date: the plain two-date axis, no hover');
 });
 
-test('the strategy page says what each profit figure is: before fees, the fees, after fees -- and that an account row is the whole account', () => {
-  const view = between('function stratView(name) {', '/* ---- A Lab strategy the Desk itself knows');
-  assert.match(view, /fig\("Before fees", usdS\(sum\("gross"\)\)/);
-  assert.match(view, /fig\("Fees \(est\.\)", usdS\(sum\("net"\) - sum\("gross"\)\)/);
-  assert.match(view, /fig\("After fees", usdS\(sum\("net"\)\)/);
-  assert.doesNotMatch(view, /fig\("Gross"/);
-  assert.match(view, /are the whole account: every strategy and every manual trade on it, not this strategy alone\./);
-});

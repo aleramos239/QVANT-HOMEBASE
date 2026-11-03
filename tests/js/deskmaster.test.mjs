@@ -701,11 +701,6 @@ test('a menu or size edit that opens while a status is in flight is never wiped:
   assert.equal(s.api.stale, false);
 });
 
-test('when the cards are rebuilt anyway, an + Assign menu that lived in them lets go of the update hold', () => {
-  const fn = HTML.slice(HTML.indexOf('function render() {'), HTML.indexOf('async function refresh()'));
-  assert.match(fn, /if \(ASG_OPEN && !document\.contains\(ASG_OPEN\.menu\)\) \{\s*ASG_OPEN = null;\s*if \(!document\.getElementById\("qedit"\)\) FREEZE = false;/);
-});
-
 // ---- WP1.7: the confirms name the machine and the LIVE accounts; WHEN they ask is unchanged ------------------------------
 test('1.7: Arm names the machine and the LIVE accounts booked (demo/paper left out, each account once)', async () => {
   const st = { armed: false, book: { s1: [{ account: 'L1', qty: 1 }, { account: 'D1', qty: 1 }], s2: [{ account: 'L1', qty: 2 }, { account: 'L2', qty: 1 }] } };
