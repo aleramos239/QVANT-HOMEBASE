@@ -33,6 +33,7 @@ from typing import Optional
 
 from ..broker.base import BrokerAdapter, OrderRequest, OrderResult
 from ..config import StrategyCfg, assignments
+from .. import contracts
 from ..contracts import tick_size
 from ..core import atomic
 from ..core.clock import desk_minutes
@@ -893,6 +894,10 @@ class LabMixin:
         return sorted({st.account for st in self.day_states(name)
                        if st.status in ("placing", "placed", "live") or not self._lab_clean(st)})
 
+    def lab_open_on(self, name: str, account: str) -> bool:
+        """True while `account` has a round of `name` that is placing, placed, live or carried (see lab_open)."""
+        return account in self.lab_open(name)
+
     # --- lab_enter ------------------------------------------------------------------------------------
     @staticmethod
     def _lab_num(v) -> bool:
@@ -1041,22 +1046,30 @@ class LabMixin:
                 return LAB_DONE_PROFIT
         return None
 
-    async def _lab_position(self, name: str, cfg: StrategyCfg, account: str, said: bool = True) -> Optional[str]:
-        """Before EVERY Lab entry: the account's net in the strategy's market, read at the broker. Not zero, or
-        not readable -> the sentence, and the account sits the trade out (it uses no round). A round of an
-        earlier day that nobody carried, a position opened by hand, an order nobody recorded: none of them is
-        traded on top of."""
+    async def _lab_position(self, name: str, cfg: StrategyCfg, account: str, said: bool = True,
+                            contract: Optional[str] = None) -> Optional[str]:
+        """Before EVERY Lab entry: the account's net in the strategy's WHOLE market (the full contract and its
+        micro), read at the broker. Not zero, or not readable -> the sentence, and the account sits the trade out
+        (it uses no round). A round of an earlier day that nobody carried, a position opened by hand, an order
+        nobody recorded, the other size of the same market: none of them is traded on top of."""
         ad = self.adapters.get(account)
-        try:
-            net = await ad.get_net_position(cfg.symbol) if ad is not None and ad.connected else None
-            net = None if net is None or isinstance(net, bool) else int(net)
-        except Exception:  # noqa: BLE001 -- unreadable is NOT flat
-            net = None
-        why = LAB_NO_POSITION_READ if net is None else (
-            f"The account already holds {cfg.symbol}. Check it." if net else None)
+        sym = contract or cfg.symbol
+        root = contracts.price_root(sym)
+        market = [sym] + [s for s in (root, contracts.micro_of(root)) if s and s != sym]   # its own contract first
+        nets = []
+        for s in market:
+            try:
+                net = await ad.get_net_position(s) if ad is not None and ad.connected else None
+                net = None if net is None or isinstance(net, bool) else int(net)
+            except Exception:  # noqa: BLE001 -- unreadable is NOT flat
+                net = None
+            nets.append(net)
+        held = next(((s, n) for s, n in zip(market, nets) if n), None)
+        why = LAB_NO_POSITION_READ if None in nets else (
+            f"The account already holds {held[0]}. Check it." if held else None)
         if why is not None and said:
             self.journal("place_skipped", strategy=name, account=account, reason=why,
-                         **({"net": net} if net is not None else {}))
+                         **({"net": held[1]} if held and None not in nets else {}))
         return why
 
     def _lab_may_enter(self, name: str) -> tuple:
@@ -1078,16 +1091,17 @@ class LabMixin:
             return cfg, LAB_DISARMED
         return cfg, None
 
-    def _lab_open_round(self, name: str, account: str, qty, legs: list, max_rounds: int, source: str) -> tuple:
+    def _lab_open_round(self, name: str, account: str, qty, legs: list, max_rounds: int, source: str,
+                        contract: Optional[str] = None) -> tuple:
         """Steps 0-4 of lab_enter for one account, in ONE run with no await: EVERY precondition (the strategy's
         and the account's), the archive of the last round and the new round written to disk can never be
         interleaved with another entry, a fill, a Kill or a disarm.
-        -> (the new round's state | None, the answer, the strategy's cfg as it is now, the pair's requests | None)"""
+        -> (the new round's state | None, the answer, the cfg the round trades under (its contract), the pair's requests | None)"""
         cfg, why = self._lab_may_enter(name)
         if why is None:
             why = self._lab_sits_out(name, cfg, account, qty, max_rounds)
         if why is None:                             # asked here with no await before the round is written: never opposite to
-            why = self.hedge_refusal(name, account, cfg.symbol, legs)    # a trade open on an account cycle's accounts
+            why = self.hedge_refusal(name, account, contract or cfg.symbol, legs)    # a trade open on an account cycle's accounts
         if why is not None:
             if why == LAB_DISARMED:                 # written down only, as the disarmed path of lab_enter does
                 self.journal("shadow_signal" if (self.cfg.armed and cfg.shadow) else "dry_run", strategy=name,
@@ -1107,7 +1121,7 @@ class LabMixin:
         reqs = None
         if len(legs) == 2:
             pair = legs if legs[0].side == "Buy" else legs[::-1]
-            reqs = tuple(OrderRequest(symbol=cfg.symbol, side=g.side, qty=qty, order_type=g.entry,
+            reqs = tuple(OrderRequest(symbol=contract or cfg.symbol, side=g.side, qty=qty, order_type=g.entry,
                                       price=g.entry_price, stop_price=g.sl_px, tp_price=g.tp_px,
                                       text="homebase:entry") for g in pair)
         if cur is not None and cur.date == today and cur.status != "idle":
@@ -1117,6 +1131,8 @@ class LabMixin:
             self._lab_mem().pop(key, None)
         st = self._state(name, account)                                     # 4
         st.qty, st.status = qty, "placing"
+        st.symbol = contract or cfg.symbol          # the round's contract is fixed here and kept with it
+        cfg = self._rcfg(st, cfg)
         self._lab_mem()[key] = x
         self.__dict__.get("_lab_tries", {}).pop(key, None)   # the new round reads on the fast schedule again
         for k2 in (f"settle:{key}", f"flat:{key}", f"wait:{key}"):
@@ -1126,7 +1142,7 @@ class LabMixin:
             self._save()
             self._lab_save(strict=True)
             self.journal("lab_round", strategy=name, account=account, round=n, qty=qty, source=source,
-                         iid=x["iid"], legs=list(x["legs"].values()))
+                         symbol=st.symbol, iid=x["iid"], legs=list(x["legs"].values()))
         except Exception as e:  # noqa: BLE001 -- nothing was sent
             st.status, st.exit_reason, st.note = "error", "error", f"not written: {e}"[:200]
             x["clean"] = True
@@ -1139,18 +1155,19 @@ class LabMixin:
         return st, {"ok": True, "round": n, "reason": None}, cfg, reqs
 
     async def _lab_enter_one(self, name: str, account: str, qty, legs: list, max_rounds: int, source: str,
-                             t0: float) -> dict:
+                             t0: float, contract: Optional[str] = None) -> dict:
         cfg = self.cfg.strategies.get(name)
         why = LAB_NOT_ON_DESK if cfg is None or cfg.kind != LAB else \
             self._lab_sits_out(name, cfg, account, qty, max_rounds)
         if why is not None:
             self.journal("place_skipped", strategy=name, account=account, reason=why)
             return {"ok": False, "round": None, "reason": why}
-        why = await self._lab_position(name, cfg, account)
+        why = await self._lab_position(name, cfg, account, contract=contract)
         if why is not None:
             return {"ok": False, "round": None, "reason": why}
         # the read yielded: from here to the placement nothing awaits, and everything is asked again
-        st, ans, cfg, reqs = self._lab_open_round(name, account, qty, legs, max_rounds, source)
+        st, ans, cfg, reqs = self._lab_open_round(name, account, qty, legs, max_rounds, source,
+                                                  contract)
         if st is None:
             return ans
         x = self._lab_x(st)
@@ -1215,14 +1232,16 @@ class LabMixin:
                 **({"detail": words} if words and words != "None" else {})}
 
     async def lab_enter(self, name: str, legs: list, sizes: dict, *, max_rounds: int,
-                        source: str = "lab") -> dict:
+                        source: str = "lab", contracts: Optional[dict] = None) -> dict:
         """A Lab strategy's entry (one LabLeg, or a buy-stop / sell-stop pair) on every account in `sizes`
         ({account: contracts}), each as a new ROUND: one position at a time per account, a new round only after
         the last one's orders were read terminal, the account's position read first, the round on disk before
-        its order leaves. The accounts go side by side. Disarmed: journaled only (`dry_run`), no state.
+        its order leaves. `contracts` ({account: root}): the contract each account's round trades; an account not
+        named trades the strategy's own. The accounts go side by side. Disarmed: journaled only (`dry_run`), no state.
         -> {"armed": bool, "accounts": {account: {"ok", "round", "reason"[, "detail"][, "warning"]}}}
            (+ "reason" when the whole call was refused)"""
         sizes = dict(sizes or {})
+        contract_of = dict(contracts or {})
 
         def refused(reason: str, armed: Optional[bool] = None) -> dict:
             return {"armed": bool(self.cfg.armed) if armed is None else armed, "reason": reason,
@@ -1247,14 +1266,15 @@ class LabMixin:
         order = list(sizes)
         grp = self.group_of(name)
         if grp is not None:                          # an account cycle group: its turn, never against an open trade
-            return await self._group_enter(grp, name, cfg, legs, sizes, max_rounds, source, t0)
+            return await self._group_enter(grp, name, cfg, legs, sizes, max_rounds, source, t0, contract_of)
         if self.rotating(name):
             # one account takes it: the first in turn that opens a round (one that sits out, or whose position is
             # not flat, passes the turn on). The door's refusals never got here: those accounts are not in `sizes`.
             tried = {}
             for a in (a for a in self._turn_order(name) if a in sizes):
                 try:
-                    tried[a] = await self._lab_enter_one(name, a, sizes[a], legs, max_rounds, source, t0)
+                    tried[a] = await self._lab_enter_one(name, a, sizes[a], legs, max_rounds, source, t0,
+                                                         contract_of.get(a))
                     went = tried[a].get("round") is not None
                 except Exception:  # noqa: BLE001 -- answered as the gather below answers it; the outcome is unknown,
                     tried[a], went = {"ok": False, "round": None, "reason": LAB_BAD_ORDER}, True  # so no other account
@@ -1264,8 +1284,8 @@ class LabMixin:
             else:
                 self._no_turn(name, {a: r.get("reason") for a, r in tried.items()})
             return {"armed": bool(self.cfg.armed), "accounts": tried}
-        outs = await asyncio.gather(*(self._lab_enter_one(name, a, sizes[a], legs, max_rounds, source, t0)
-                                      for a in order), return_exceptions=True)
+        outs = await asyncio.gather(*(self._lab_enter_one(name, a, sizes[a], legs, max_rounds, source, t0,
+                                                         contract_of.get(a)) for a in order), return_exceptions=True)
         return {"armed": bool(self.cfg.armed),
                 "accounts": {a: (o if isinstance(o, dict) else {"ok": False, "round": None, "reason": LAB_BAD_ORDER})
                              for a, o in zip(order, outs)}}

@@ -17,7 +17,7 @@ from homebase.charts.paperbook import PAPER_ID, PaperBook
 from homebase.labrun import deskside, door, store
 from homebase.labrun.deskside import DeskSide
 from homebase.labrun.host import StrategyDay, sized, well_set
-from tests.labdesk_util import DATE, LAB, MARK, entry, mkdesk, rec as desk_rec, send
+from tests.labdesk_util import DATE, LAB, MARK, entry, journal, mkdesk, rec as desk_rec, send
 from tests.test_backtest_engine import D, Script, tape
 from tests.test_charts_paperbook import T0, order
 from tests.test_engine import run
@@ -334,3 +334,23 @@ def test_a_micro_that_is_streamed_itself_keeps_its_own_prints_and_an_annotated_o
     assert b.last == {"NQ": 21000.0, "MNQ": 21000.5} and b.seq == {"NQ": 1, "MNQ": 1}
     src = HEAD + "class X(Strategy):\n    own_size: bool = True\n    def f(self, ctx):\n        ctx.market('long', qty=3, sl=1.0)\n"
     assert door.read_source(src) == ["It sets its own size: the size set on an account is the most it sends there."]
+
+
+# ---------------------------------------------------------------- one contract per account (2026-11-02)
+def test_one_signal_sends_mnq_to_one_account_and_nq_to_another(tmp_path):
+    d = mkdesk(tmp_path, accounts=("a1", "a2"), limits=OWN, rec_kw={"exec_root": "MNQ"})
+    run(d.ld.set_book(LAB, [{"account": "a1", "qty": 3}, {"account": "a2", "qty": 1, "contract": "NQ"}]))
+    out = send(d, entry(kind="market", price=None, ref=100.0, sl=95.0, tp=115.0))
+    assert out["results"][0]["refused"] is None, out
+    assert placed(d, "a1") == [("MNQ", "Buy", "Market", 3)]
+    assert placed(d, "a2") == [("NQ", "Buy", "Market", 1)]
+    assert d.eng.states[f"{LAB}@a2"].symbol == "NQ" and d.eng.states[f"{LAB}@a1"].symbol == "MNQ"
+
+
+def test_an_open_nq_position_blocks_an_mnq_entry_on_that_account(tmp_path):
+    d = mkdesk(tmp_path, rec_kw={"exec_root": "MNQ"})
+    d.ads["a1"].nets = {"NQ": 1}
+    out = send(d, entry(kind="market", price=None, ref=100.0, sl=95.0, tp=115.0))
+    assert placed(d, "a1") == []
+    skipped = [r for r in journal(tmp_path, "place_skipped") if r["account"] == "a1"]
+    assert [r["reason"] for r in skipped] == ["The account already holds NQ. Check it."], out

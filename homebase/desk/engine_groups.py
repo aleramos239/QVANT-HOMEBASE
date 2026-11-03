@@ -307,13 +307,14 @@ class GroupMixin:
 
     # --- an entry ---------------------------------------------------------------------------------------------
     async def _group_enter(self, grp: tuple, name: str, cfg, legs: list, sizes: dict, max_rounds: int,
-                           source: str, t0: float) -> dict:
+                           source: str, t0: float, contract_of: Optional[dict] = None) -> dict:
         """lab_enter for a member of an ON group. "cycle": the first account of the group, in turn, that opens a round
         takes it (one that sits out passes the turn on); "share": every booked account of the group; "split": only the
         member's own account. An entry opposite to a trade open on any of the group's accounts is refused whole: no
         account is asked and the turn stays."""
         gid, g = grp
         mode = g.get("mode", "cycle")
+        contract_of = contract_of or {}
 
         def hedge() -> dict:
             self.journal("group_hedge_skipped", group=gid, strategy=name, sides=sorted({x.side for x in legs}),
@@ -331,7 +332,8 @@ class GroupMixin:
             return {"armed": bool(self.cfg.armed), "reason": why,
                     "accounts": {a: {"ok": False, "round": None, "reason": why} for a in sizes}}
         if mode != "cycle":                          # share: every account at once; split: its one account
-            outs = await asyncio.gather(*(self._lab_enter_one(name, a, sizes[a], legs, max_rounds, source, t0) for a in mine),
+            outs = await asyncio.gather(*(self._lab_enter_one(name, a, sizes[a], legs, max_rounds, source, t0, contract_of.get(a))
+                                       for a in mine),
                                         return_exceptions=True)
             tried = {a: (o if isinstance(o, dict) else {"ok": False, "round": None, "reason": LAB_BAD_ORDER}) for a, o in zip(mine, outs)}
             if not any(r.get("round") is not None for r in tried.values()):
@@ -341,7 +343,7 @@ class GroupMixin:
         tried = {}
         for a in (a for a in self.group_turn(g) if a in sizes):
             try:
-                tried[a] = await self._lab_enter_one(name, a, sizes[a], legs, max_rounds, source, t0)
+                tried[a] = await self._lab_enter_one(name, a, sizes[a], legs, max_rounds, source, t0, contract_of.get(a))
                 went = tried[a].get("round") is not None
             except Exception:  # noqa: BLE001 -- the outcome is unknown: the turn is that account's, no other is asked
                 tried[a], went = {"ok": False, "round": None, "reason": LAB_BAD_ORDER}, True

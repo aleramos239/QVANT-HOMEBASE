@@ -60,3 +60,4 @@ class DayState:
     take_usd: Optional[float] = None   # the net $ the take is sized for (None: the fallback target)
     take_src: str = ""                 # day_take | target_take | fallback
     take_px: Optional[float] = None    # the take price the broker-side limit rests at (from the fill)
+    symbol: Optional[str] = None       # lab: the contract this round trades (its book row's); None = the strategy's own

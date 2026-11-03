@@ -1653,7 +1653,10 @@ class LabDesk:
         legs = [self._leg(ev.intents[j], last, tick) for j in unit]
         unknown = False
         try:
-            got = await self.engine.lab_enter(name, legs, sizes, max_rounds=limits.max_trades_day, source="lab")
+            got = await self.engine.lab_enter(name, legs, sizes, max_rounds=limits.max_trades_day, source="lab",
+                                               contracts={r["account"]: labcfg.row_symbol(rec, r)
+                                                          for r in assignments(self.cfg, name)
+                                                          if rec and r["account"] in sizes})
             per = got.get("accounts") or {}
             whole = got.get("reason")                        # the engine refused the whole call: no account was asked
         except Exception as e:  # noqa: BLE001 -- the outcome is unknown: counted, and no account is said to hold it

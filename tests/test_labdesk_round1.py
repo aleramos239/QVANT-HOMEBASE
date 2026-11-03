@@ -374,7 +374,7 @@ def test_the_engine_is_handed_the_limit_as_its_own_cap(tmp_path):               
         return await real(name, legs, sizes, **kw)
     d.eng.lab_enter = spy
     send(d, entry(1), seq=1)
-    assert seen == [{"max_rounds": 3, "source": "lab"}]
+    assert seen == [{"max_rounds": 3, "source": "lab", "contracts": {"a1": "NQ"}}]
 
 
 def test_a_new_day_starts_a_new_intake_record(tmp_path):

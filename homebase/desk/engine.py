@@ -43,6 +43,7 @@ from zoneinfo import ZoneInfo
 
 from ..broker.base import BrokerAdapter, FillEvent, OrderRequest, OrderResult
 from ..config import AppCfg, StrategyCfg, assignments
+from .. import contracts
 from ..contracts import point_value, tick_size
 from .levels import AccountLeg, Geometry, account_leg
 from ..core import atomic
@@ -566,6 +567,13 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
                                      "ok": bool(results[aid].get("ok"))} for aid in order}, **base)
         return {"ok": any(r.get("ok") for r in results.values()), "armed": True,
                 "accounts": results, "sat_out": sat_out}
+
+    def _rcfg(self, st: DayState, cfg: StrategyCfg) -> StrategyCfg:
+        """The cfg a round is handled under: the strategy's own, unless the round trades another contract (its
+        book row's) -- then the same cfg with that contract and its fee."""
+        if st.symbol is None or st.symbol == cfg.symbol:
+            return cfg
+        return dataclasses.replace(cfg, symbol=st.symbol, fee_rt=contracts.commission_rt(st.symbol))
 
     async def _place_one(self, name: str, cfg: StrategyCfg, account: str, qty: int,
                          sig, source: str, t0: float) -> dict:

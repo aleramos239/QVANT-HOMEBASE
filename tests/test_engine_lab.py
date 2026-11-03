@@ -10,12 +10,14 @@ import json
 
 import pytest
 
+from homebase import contracts
 from homebase.desk import engine as engine_mod
 from homebase.desk import engine_lab
 from homebase.desk import labcfg
 from homebase.broker.base import FillEvent, OrderRequest, OrderResult
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
 from homebase.desk.dayrules import DayBook
+from homebase.desk.daystate import DayState
 from homebase.desk.engine import PLACING_UNKNOWN, Engine, LabLeg
 from tests import test_engine as te
 from tests import test_engine_levels as tl
@@ -39,6 +41,7 @@ class LabAdapter(FakeAdapter):
         self.stuck: set = set()                  # a cancel is accepted and the order keeps working
         self.reject: str | None = None           # the broker's words for the next bracket
         self.net_reads = 0
+        self.nets: dict[str, int] = {}           # a net per contract root; any other symbol reads `net`
 
     async def place_bracket(self, req):
         if self.reject is not None:
@@ -68,6 +71,8 @@ class LabAdapter(FakeAdapter):
 
     async def get_net_position(self, symbol):
         self.net_reads += 1
+        if symbol in self.nets:
+            return self.nets[symbol]
         return await super().get_net_position(symbol)
 
 
@@ -862,7 +867,7 @@ def test_a_group_shares_an_account_one_trade_at_a_time(tmp_path):
     fill_exit(eng, ad, st, 110.0, "tp")
     assert go2(eng, leg(iid=7))["accounts"]["a1"] == BUSY                # over, its orders not read yet
     assert len(ad.brackets) == 1 and f"{LAB2}@a1" not in eng.states
-    assert ad.net_reads == 1                                              # it sat out before the position read
+    assert ad.net_reads == 2                                              # it sat out before the position read (NQ + MNQ: one read of the whole market)
     assert [e["strategy"] for e in events(tmp_path, "place_skipped")] == [LAB2] * 3
     tick(eng)
     assert go2(eng, leg(iid=7))["accounts"]["a1"] == {"ok": True, "round": 1, "reason": None}
@@ -894,7 +899,7 @@ def test_two_of_a_group_entering_at_once_send_one_order(tmp_path):
 
     got = [o["accounts"]["a1"] for o in run(both())]
     assert sorted(g["ok"] for g in got) == [False, True] and BUSY in got
-    assert len(ads["a1"].brackets) == 1 and ads["a1"].net_reads == 2
+    assert len(ads["a1"].brackets) == 1 and ads["a1"].net_reads == 4     # two whole-market reads (NQ + MNQ) each
 
 
 def test_a_member_whose_trade_cannot_be_checked_holds_the_account(tmp_path):
@@ -2158,7 +2163,7 @@ def test_c2_the_position_is_read_before_the_round_exists(tmp_path):
 
     ad.get_net_position = read
     assert go(eng, leg())["accounts"]["a1"]["ok"] is True
-    assert seen == [("NQ", {}, [], [])]                             # one read, before anything was made or sent
+    assert seen == [("NQ", {}, [], []), ("MNQ", {}, [], [])]        # the whole market read, before anything was made or sent
 
 
 # ------------------------------------------------------------------------------------------------ C2 (ii)
@@ -4143,3 +4148,55 @@ def test_hold_a_plain_row_still_closes_at_the_flat_time(tmp_path):
     clock.set_et(15, 55)
     tick(eng)
     assert [o.text for o in ads["a1"].orders] == ["homebase:lab-flat"] and not events(tmp_path, "lab_held")
+
+
+# ------------------------------------------------------------------------------------------------ a round's own contract
+def test_rcfg_is_the_strategy_cfg_unless_the_round_trades_another_contract(tmp_path):
+    eng, _, _ = mk(tmp_path)
+    cfg = eng.cfg.strategies[LAB]
+    st = DayState(strategy=LAB, account="a1", date=eng._today())
+    assert eng._rcfg(st, cfg) is cfg                                  # an old round: no symbol
+    st.symbol = cfg.symbol
+    assert eng._rcfg(st, cfg) is cfg                                  # the strategy's own contract
+    st.symbol = "MNQ"
+    mnq = eng._rcfg(st, cfg)
+    assert (mnq.symbol, mnq.fee_rt) == ("MNQ", contracts.commission_rt("MNQ")) and mnq is not cfg
+    assert cfg.symbol == "NQ"                                         # the strategy's cfg itself is untouched
+
+
+def test_a_round_keeps_its_contract_across_a_restart(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    out = run(eng.lab_enter(LAB, [leg()], {"a1": 1}, max_rounds=3, contracts={"a1": "MNQ"}))
+    assert out["accounts"]["a1"]["round"] == 1, out
+    assert [(q.symbol, q.qty) for q in ads["a1"].brackets] == [("MNQ", 1)]
+    assert eng.states[f"{LAB}@a1"].symbol == "MNQ"
+    assert [e["symbol"] for e in events(tmp_path, "lab_round")] == ["MNQ"]
+    eng2 = restart(eng, tmp_path)
+    assert eng2.states[f"{LAB}@a1"].symbol == "MNQ"
+    assert eng2.lab_open_on(LAB, "a1") and not eng2.lab_open_on(LAB, "a2")
+    day = tmp_path / f"day-{eng._today()}.json"
+    data = json.loads(day.read_text())
+    for rec_ in data.values():                                        # a day file from before this field
+        rec_.pop("symbol")
+    day.write_text(json.dumps(data))
+    assert restart(eng, tmp_path).states[f"{LAB}@a1"].symbol is None
+
+
+def test_an_account_not_named_in_contracts_trades_the_strategys_contract(tmp_path):
+    eng, ads, _ = mk(tmp_path, accounts=("a1", "a2"))
+    run(eng.lab_enter(LAB, [leg()], {"a1": 1, "a2": 1}, max_rounds=3, contracts={"a1": "MNQ"}))
+    assert [q.symbol for q in ads["a1"].brackets] == ["MNQ"] and [q.symbol for q in ads["a2"].brackets] == ["NQ"]
+    assert eng.states[f"{LAB}@a2"].symbol == "NQ"
+
+
+def test_the_flat_check_reads_the_whole_market_not_only_the_round_contract(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ads["a1"].nets = {"NQ": 1}                                        # a full contract held, an MNQ round asked
+    out = run(eng.lab_enter(LAB, [leg()], {"a1": 1}, max_rounds=3, contracts={"a1": "MNQ"}))
+    assert out["accounts"]["a1"] == {"ok": False, "round": None, "reason": "The account already holds NQ. Check it."}
+    assert ads["a1"].brackets == []
+    ads["a1"].nets = {"NQ": 0, "MNQ": -2}                             # ... and the micro held, an NQ round asked
+    out = run(eng.lab_enter(LAB, [leg()], {"a1": 1}, max_rounds=3))
+    assert out["accounts"]["a1"]["reason"] == "The account already holds MNQ. Check it."
+    ads["a1"].nets = {"NQ": 0, "MNQ": 0}
+    assert run(eng.lab_enter(LAB, [leg()], {"a1": 1}, max_rounds=3))["accounts"]["a1"]["round"] == 1
