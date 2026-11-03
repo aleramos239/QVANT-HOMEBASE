@@ -156,6 +156,7 @@ html.hb-apple .hb-side .sh-btn:hover { background: var(--a-label-vibrant); }
 html.hb-apple .hb-side .side-more { -webkit-appearance: none; appearance: none; border: 0; background: transparent; display: block; width: calc(100% - 20px); height: 24px; margin: 0 10px; padding: 0 11px 0 39px;
   text-align: left; font-size: 11px; line-height: 14px; color: var(--a-label-pane-2); }
 html.hb-apple .hb-side .side-more:active { opacity: .6; }
+html.hb-apple .hb-side .side-more.side-suggest { height: auto; padding-top: 4px; padding-bottom: 4px; }      /* a 2-3 line suggestion grows, never spills */
 html.hb-apple .hb-side .nav { margin-bottom: 0; }
 
 /* ---- content: Today ------------------------------------------------------------------------------------------ */

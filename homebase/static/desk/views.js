@@ -156,7 +156,7 @@ function combineBlock(members, labels, book) {
 let COMBINE = null;      // the suggestion being looked at: {members, labels}
 const variantSuggest = () => (ST && ST.variants && ST.variants.suggest) || [];
 function suggestLines() {      // at the top of the Trading list
-  return variantSuggest().map((s, i) => `<button class="side-more" onclick="openCombine(${i})">${esc(`${s.members.length} strategies look like variants of ${s.stem}: Combine?`)}</button>`).join("");
+  return variantSuggest().map((s, i) => `<button class="side-more side-suggest" onclick="openCombine(${i})">${esc(`${s.members.length} strategies look like variants of ${s.stem}: Combine?`)}</button>`).join("");
 }
 function openCombine(i) {
   const s = variantSuggest()[i];
