@@ -195,21 +195,33 @@ test('5.7 the panel keeps only "Show the order on the chart"; its line, thicknes
   assert.deepEqual(Object.keys(OP.look()).sort(), ['labels', 'on', 'shade', 'style', 'width']);
 });
 
-test('owner 2026-11-02: one click enters -- a Buy tile press sends at once, and the chart preview switches off after it', async () => {
+test('owner 2026-11-02: the Buy / Sell tiles never send -- they flip the Send button and the preview; Send sends in one click', async () => {
   cell.cfg.trade = { accounts: ['sim041'] };
   desk.quotes.NQ = { bid: 30000, ask: 30000.25, last: 30000.25, ts_ms: NOW - 1000 };
   desk.prefs.oneClickPanel = true;
   global.document.dispatchEvent = () => true;   // setLook tells the desk's own lines (tradelines.js)
   global.Event = class { constructor(t) { this.type = t; } };
   OP.setRoot();
-  OP.setLook('on', true);
-  const tiles = [];
-  (function walk(n) { for (const c of n.children || []) { if (typeof c !== 'object') continue; if (c.cls.has('op-tile')) tiles.push(c); walk(c); } })(box);
-  const buy = tiles.find((t) => t.textContent === 'Buy');
+  OP.setLook('on', false);
+  const all = [];
+  (function walk(n) { for (const c of n.children || []) { if (typeof c !== 'object') continue; all.push(c); walk(c); } })(box);
+  const tile = (t) => all.find((c) => c.cls.has('op-tile') && c.textContent === t);
+  const sendBtn = all.find((c) => c.cls.has('op-send'));
+  const sendText = all.find((c) => c.cls.has('op-send-t'));
+  const settle = async () => { for (let i = 0; i < 3; i++) await new Promise((r) => setTimeout(r, 0)); };
   const before = desk.sent.length;
-  buy.onclick();
-  for (let i = 0; i < 3; i++) await new Promise((r) => setTimeout(r, 0));
-  assert.equal(desk.sent.length, before + 1, 'one press, one order');
+  tile('Sell').onclick();
+  await settle();
+  assert.equal(desk.sent.length, before, 'a tile press sends nothing');
+  assert.match(sendText.textContent, /^Sell/, 'the Send button now reads Sell');
+  assert.equal(OP.look().on, true, 'the preview is back on');
+  tile('Buy').onclick();
+  await settle();
+  assert.equal(desk.sent.length, before, 'still nothing sent');
+  assert.match(sendText.textContent, /^Buy/, 'the Send button now reads Buy');
+  sendBtn.listeners.click[0]({ detail: 1 });
+  await settle();
+  assert.equal(desk.sent.length, before + 1, 'one Send click, one order');
   assert.equal(desk.sent.at(-1).b.side, 'Buy');
   assert.equal(OP.look().on, false, 'the preview is off once the order went');
 });
