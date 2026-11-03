@@ -1995,3 +1995,18 @@ test('gear: an empty, non-whole or 0 Contracts box (or an empty $ risk) blocks S
   await vm.runInContext('saveSolo("lab_nq_orb")', ok.ctx);
   assert.equal(ok.posts[0].body.settings.a1.qty, 3);
 });
+
+test('gear: $ risk with no amount yet says "risk not set" (never $null); the row summary follows the typing', () => {
+  const t = gearT(GC, BOOKED0);
+  const one = soloRoot(t, { ticked: ['a1'] });
+  vm.runInContext('soloSet("lab_nq_orb","a1","size","risk")', t.ctx);
+  assert.match(one['.solo-save'].innerHTML, /risk not set/);
+  assert.doesNotMatch(one['.solo-save'].innerHTML + t.view(), /\$null|\$undefined/);
+  assert.match(t.view(), /class="mcap solo-words" data-acct="a1">[^<]*risk not set/);
+  const span = { textContent: '', dataset: { acct: 'a1' } };
+  const root = t.ctx.document.querySelector('#viewStrat'), all = root.querySelectorAll;
+  root.querySelectorAll = (sel) => (sel === '.solo-words' ? [span] : all(sel));
+  vm.runInContext('soloSet("lab_nq_orb","a1","risk_usd","500",true)', t.ctx);
+  assert.match(span.textContent, /^\$500 risk · MNQ/);
+  assert.match(one['.solo-save'].innerHTML, /\$500 risk/);
+});

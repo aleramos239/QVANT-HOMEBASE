@@ -598,6 +598,7 @@ function soloEdit(name) {
   else { delete SOLO_DRAFT[name]; delete SOLO_PICK[name]; }
   const slot = root.querySelector(".solo-save");
   if (slot) slot.innerHTML = soloSaveHtml(name, parts);
+  for (const el of root.querySelectorAll(".solo-words")) if (b.accounts.includes(el.dataset.acct)) el.textContent = soloRowWords(name, b, el.dataset.acct);      // in place while typing
 }
 function soloPaint(name) {      // the card again from the draft (ticks, gear): never while a number is being typed in
   const card = document.querySelector("#viewStrat") && document.querySelector("#viewStrat").querySelector(".solo-card");
@@ -640,20 +641,20 @@ function soloSheet(name, a) {      // the gear's sheet under the row (a set: Var
     ${row("Size", soloSeg("Size", sizes, f.size, v => `soloSet(${N},${A},'size','${v}')`) + (f.size === "own" ? "" : " " + (f.size === "risk" ? num("risk_usd", f.risk_usd, "$ risk a trade") : num("qty", f.qty, "Contracts"))))}
     ${f.size === "own" ? "" : row("Most contracts", num("most", f.most, "Most contracts"))}</div>`;
 }
+function soloRowWords(name, b, a) {      // a ticked row's summary: the gear's change, else the row as booked
+  const m = soloMem(b, a);
+  if (b.settings[a]) return soloEntryWords(m, b.settings[a]);
+  const r = soloBookRow(name, a);
+  return !r ? soloWords(m, "") .replace(/ · $/, "") : soloWords(m, !r.size && soloLab(m).own_size === true ? soloOwnWords(m) : AcctSet.words(r, undefined, true));
+}
 function soloCardHtml(name, s, now) {
   const accts = ST.accounts || {}, dr = SOLO_DRAFT[name] || null, chosen = new Set(dr ? dr.accounts : now.accounts), off = ` onchange="soloTick(${jsArg(name)})"`;
   const gear = SOLO_GEAR[name] || {}, b = soloMake(name, [...chosen], dr ? dr.turns : now.turns, dr ? dr.hold : now.hold);
-  const words = (a) => {
-    if (!chosen.has(a)) return "";
-    const m = soloMem(b, a);
-    if (b.settings[a]) return soloEntryWords(m, b.settings[a]);
-    const r = soloBookRow(name, a);
-    return !r ? soloWords(m, "") .replace(/ · $/, "") : soloWords(m, !r.size && soloLab(m).own_size === true ? soloOwnWords(m) : AcctSet.words(r, undefined, true));
-  };
+  const words = (a) => chosen.has(a) ? soloRowWords(name, b, a) : "";
   const rows = Object.keys(accts).map(a => `<div class="solo-row"><div class="feed-row">
       <label class="h" style="cursor:pointer"><input type="checkbox" class="solo-acct" data-acct="${esc(a)}" ${chosen.has(a) ? "checked" : ""}${off}> ${esc(acctShort(a))}
         ${ACCT_TAG_HTML[acctTag(a)]}${accts[a].connected ? "" : ' <span class="neg">offline</span>'}</label>
-      <span class="mcap">${esc(words(a))}</span>
+      <span class="mcap solo-words" data-acct="${esc(a)}">${esc(words(a))}</span>
       ${(p => p == null ? "" : `<span class="mono ${p > 0 ? "pos" : p < 0 ? "neg" : ""}" style="margin-left:auto" title="Today, 18:00 to 16:00 ET">${DAY_PNL_WORDS(p)}</span>`)(accts[a].day_pnl)}
       ${chosen.has(a) ? `<button type="button" class="btn btn-outline btn-sm" aria-label="Settings for ${esc(acctShort(a))}" aria-expanded="${!!gear[a]}" onclick="soloGear(${jsArg(name)},${jsArg(a)})">⚙</button>` : ""}</div>
       ${chosen.has(a) && gear[a] ? soloSheet(name, a) : ""}</div>`).join("");

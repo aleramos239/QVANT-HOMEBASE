@@ -2,14 +2,15 @@
    (Size, Most contracts, Stop after) and the whole account's profit lock and loss lock (owner 2026-10-29). ---- */
 const AcctSet = (() => {
   const risk = (r) => !!r && r.size === "risk";
-  /* "×N" or "$X risk" */
-  const label = (r) => risk(r) ? "$" + r.risk_usd + " risk" : "×" + r.qty;
+  /* "×N" or "$X risk" ("risk not set" before an amount is typed) */
+  const usd = (r) => r.risk_usd == null || String(r.risk_usd).trim() === "" ? "risk not set" : "$" + r.risk_usd + " risk";
+  const label = (r) => risk(r) ? usd(r) : "×" + r.qty;
   const tag = (r) => [r && r.stop_after === "win" ? "stops after a win" : r && r.stop_after === "profit" ? "stops in profit" : "",
     r && r.hold === true ? "holds overnight" : ""].filter(Boolean).join(", ");
   /* "FLEX · 1 NQ", "FAST · $500 risk · MNQ", "3 MNQ · most 20": variant, size, the contract after a $ risk, Most when asked, the tag */
   const words = (r, variant, most) => {
     const c = r && r.contract;
-    return [variant, risk(r) ? "$" + r.risk_usd + " risk" : c ? (+r.qty || 1) + " " + c : "×" + r.qty, risk(r) ? c : "",
+    return [variant, risk(r) ? usd(r) : c ? (+r.qty || 1) + " " + c : "×" + r.qty, risk(r) ? c : "",
       most && r.most != null ? "most " + r.most : "", tag(r)].filter(Boolean).join(" · ");
   };
   const ownWords = (usd) => "its own $" + usd + " a trade";
