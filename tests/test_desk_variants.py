@@ -76,3 +76,11 @@ def test_status_carries_the_sets_and_suggestions(desk):
     assert desk.get("/api/status").json()["variants"]["sets"] == []          # left under 2: dissolved
     r = desk.post("/api/variants/create", json={"members": [LAB]})
     assert r.status_code == 400 and desk.post("/api/variants/nope", json={}).status_code == 400
+
+
+def test_no_names_shrinks_nothing_and_writes_nothing(tmp_path):
+    mk(tmp_path)
+    f = tmp_path / "variants.json"
+    before, mt = f.read_text(), f.stat().st_mtime_ns
+    assert v.load(tmp_path, set())["sets"][0]["members"] == ["a_r1", "a_r2"]
+    assert f.read_text() == before and f.stat().st_mtime_ns == mt

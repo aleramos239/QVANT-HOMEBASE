@@ -39,9 +39,9 @@ def _read(root: Path) -> dict:
 
 
 def load(root: Path, names: set | None = None) -> dict:
-    """The file; with `names`, members no longer there are dropped and a set left under 2 dissolves (written only then)."""
+    """The file; with `names` (non-empty), members no longer there are dropped and a set left under 2 dissolves (written only then)."""
     d = _read(root)
-    if names is not None:
+    if names:                       # no names (Lab side off, or not loaded yet) shrinks nothing: it could not be undone
         sets = []
         for s in d["sets"]:
             m = [x for x in s["members"] if x in names]
