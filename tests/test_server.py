@@ -1161,3 +1161,11 @@ def test_dead_account_routes_are_gone(client):
     assert client.post("/api/accounts/add", json={}).status_code in (404, 405)
     assert client.get("/api/diag-permissions?account=x").status_code in (404, 405)
     assert client.post("/api/selftest-order", json={}).status_code in (404, 405)
+
+
+def test_ui_remove_refuses_a_connected_account_whose_caches_have_not_seeded(client):
+    client.app.state.cfg.accounts["raw"] = AccountCfg(keyring_key="k", account_name="RAW")
+    client.app.state.adapters["raw"] = FakeAdapter("raw")          # connected, caches never seeded
+    r = client.post("/api/accounts/remove", json={"account": "raw"})
+    assert r.status_code == 409 and "seeded" in r.json()["detail"]
+    assert "raw" in client.app.state.cfg.accounts
