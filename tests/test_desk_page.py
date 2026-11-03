@@ -203,7 +203,7 @@ DESK_PINS = {
     "desk/views.js": (2, "6484dfc98afde085"),
     "desk/groups.js": (18, "59877446cd5fb8b3"),
     "desk/strategy.js": (20, "eb2eb4026e14f974"),
-    "desk/labdesk.js": (16, "3a18caa22e2ff5a5"),
+    "desk/labdesk.js": (17, "cf7b2d44d7c89bca"),
     "desk/demo.js": (2, "ced116ced23a333f"),
     "desk/book.js": (16, "6ef4f33023bc1edc"),
     "desk/acctset.js": (6, "63bc23153b1f21da"),
@@ -224,6 +224,12 @@ def test_every_changed_desk_script_gets_a_new_v():
         now = hashlib.sha256((STATIC / f).read_bytes()).hexdigest()[:16]
         assert (int(tags[f]), now) == (v, sha), (f"{f}: index.html has ?v={tags[f]}, file sha {now}; pinned ({v}, {sha!r}). "
                                                      "A changed file needs a higher ?v= in index.html, then that pin here")
+
+
+def test_the_page_has_no_whole_strategy_mini_micro_switch():
+    """The contract is picked on each account (the gear), not for the whole strategy (owner, 2026-11-02)."""
+    texts = [(STATIC / "index.html").read_text(encoding="utf-8")] + [p.read_text(encoding="utf-8") for p in (STATIC / "desk").glob("*.js")]
+    assert not any("switchLabInstrument" in t for t in texts)
 
 
 def test_the_red_behind_white_text_passes_contrast():

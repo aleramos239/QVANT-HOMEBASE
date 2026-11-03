@@ -1034,6 +1034,11 @@ def test_every_change_is_published_as_that_strategys_whole_snapshot(tmp_path):
     d.eng.groups["g1"]["risk_usd"] = 0.0                                           # a cycle with no risk set keeps each size
     assert d.ld.snapshot()["strategies"][LAB]["cycle_sized"] is False
     del d.eng.groups["g1"]
+    book = d.ld.cfg.book[LAB]
+    for row, want in (({"contract": "NQ"}, False), ({"contract": "MNQ"}, True), ({"size": "risk", "risk_usd": 500}, True)):
+        d.ld.cfg.book[LAB] = [{**book[0], **row}]                                  # a row of its own contract / size: the match reads any size
+        assert d.ld.snapshot()["strategies"][LAB]["cycle_sized"] is want, row
+    d.ld.cfg.book[LAB] = book
     assert set(snap["rounds"][0]) == {"account", "round", "status", "date", "carried", "iid", "qty", "entry_side",
                                       "entry_qty", "entry_fill", "exit_qty", "exit_fill", "exit_reason", "sl", "tp",
                                       "pnl", "net", "clean", "entry_ms", "exit_ms", "why"}

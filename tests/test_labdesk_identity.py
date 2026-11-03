@@ -204,3 +204,13 @@ def test_a_most_over_1000_micros_after_the_switch_is_held_at_1000(mini):
     assert mini.post("/api/book", json={"strategy": LAB, "assignments": [row]}).status_code == 200
     assert ident(mini, instrument="micro").status_code == 200
     assert mini.cfg.book[LAB] == [{**row, "qty": 40, "most": 1000}]
+
+
+def test_the_whole_strategy_switch_is_refused_while_a_row_names_its_own_contract(mini):
+    assert set_limits(mini, max_qty=2).status_code == 200
+    r = mini.post("/api/book", json={"strategy": LAB, "assignments": [{"account": "main", "qty": 1, "contract": "MNQ"}]})
+    assert r.status_code == 200, r.text
+    r = ident(mini, instrument="micro")
+    assert r.status_code == 409 and r.json()["detail"] == "Pick the contract on each account (the gear)."
+    assert "exec_root" not in store.get("pp_orb")
+    assert ident(mini, label="Renamed").status_code == 200                       # a rename is still fine

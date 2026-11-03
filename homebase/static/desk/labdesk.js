@@ -203,7 +203,6 @@ function labDeskView(name, s) {
       ${deskMachine() === "server" ? "" : `<button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>`}
       <button class="btn btn-outline btn-sm" onclick="renameLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Change the name the Desk shows for it.">Rename</button>
       <button class="btn btn-outline btn-sm" onclick="duplicateLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="A copy with the same code and settings, OFF, on no account.">Duplicate</button>
-      ${lab.instrument ? `<button class="btn btn-outline btn-sm" onclick="switchLabInstrument(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Its orders go to the ${lab.instrument === "micro" ? "mini" : "micro"} instead. Sizes move at the same exposure.">Switch to ${lab.instrument === "micro" ? "mini" : "micro"}</button>` : ""}
       <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(lab.name || "")}, ${jsArg(name)})"${busy || ro || !lab.name ? " disabled" : ""} title="Off the Desk, switched off, its accounts off, and kept. Restore it from Archive any time.">Archive</button>
       <button class="btn btn-outline btn-sm" onclick="removeLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Takes it off the Desk. Its history is kept. Archive keeps it to restore from the Desk.">Remove from Desk</button>
       <button class="btn btn-outline btn-sm" onclick="deleteLabStrat(${jsArg(name)}, ${jsArg(lab.name || "")})"${busy || ro || !lab.name ? " disabled" : ""} title="Takes it off the Desk and deletes its shadow and day history for good. Its Lab draft stays.">Delete</button></div>`;
@@ -313,14 +312,6 @@ async function duplicateLabStrat(name) {
   if (!await confirmDlg(ask.title, ask.body, "Duplicate", false)) return;
   const r = await labIdentityPost(name, "/api/lab-duplicate", {});
   if (r) { toast(`Copied as ${r.copy}. It is OFF, on no account.`); VIEW = {k: "strat", name: "lab_" + r.copy}; if (ST) render(); }
-}
-async function switchLabInstrument(name) {
-  const s = ST && ST.strategies && ST.strategies[name];
-  if (!s || !s.lab || !s.lab.instrument || DESKLAB_BUSY || DEMO) return;
-  const ask = DeskLab.switchAsk(stratLabel(name), s.lab.instrument);
-  if (!await confirmDlg(ask.title, ask.body, ask.action, false)) return;
-  const r = await labIdentityPost(name, "/api/lab-identity", {instrument: ask.to});
-  if (r) toast(`${stratLabel(name)} now sends its orders to the ${r.instrument}.`);
 }
 /* Remove from the Desk: its accounts come off, its limits go, its history stays. Refused while a trade is open ("Flatten it first."). */
 async function removeLabStrat(name) {

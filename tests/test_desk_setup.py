@@ -168,3 +168,21 @@ def test_a_solo_save_with_a_row_the_cap_cannot_fill_writes_nothing(desk):
     assert r.status_code == 409 and "NQ is over this strategy's Most contracts (5 MNQ). Raise Limits first." in r.json()["detail"]
     assert not st(desk)["book"].get(LAB)
     assert solo(desk, turns=False, settings={A2: {"contract": "NQ", "size": "risk", "risk_usd": 500}}).status_code == 200   # a set row: no cap
+
+
+def test_a_save_that_changes_a_contract_with_a_trade_open_on_it_is_refused_whole(desk):
+    limits(desk)
+    assert solo(desk, turns=False).status_code == 200
+    st_ = desk.d.eng._state(LAB, A2)
+    st_.status, st_.qty = "live", 1                                         # a2 holds a trade, in the strategy's own NQ
+    before = st(desk)["book"][LAB]
+    r = solo(desk, turns=False, qty=2, settings={A1: {"qty": 2}, A2: {"contract": "MNQ"}})
+    assert r.status_code == 409 and "has an open trade on NQ; change it once it is flat." in r.json()["detail"]
+    assert st(desk)["book"][LAB] == before                                  # a1's size went nowhere either
+    assert solo(desk, turns=False, settings={A2: {"contract": "NQ"}}).status_code == 200   # the contract it already trades in
+    assert solo(desk, turns=False, settings={A2: {"qty": 2, "size": "contracts"}}).status_code == 200   # size only: next round
+    st_.symbol = "MNQ"                                                      # a round in MNQ now: NQ is the change
+    r = solo(desk, turns=False, settings={A2: {"contract": "NQ"}})
+    assert r.status_code == 409 and "has an open trade on MNQ; change it once it is flat." in r.json()["detail"]
+    del desk.d.eng.states[f"{LAB}@{A2}"]                                    # the trade is over
+    assert solo(desk, turns=False, settings={A2: {"contract": "NQ"}}).status_code == 200   # flat: allowed

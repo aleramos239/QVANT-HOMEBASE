@@ -603,6 +603,8 @@ class LabDesk:
         if not isinstance(body, dict) or ("label" not in body and "instrument" not in body):
             raise ValueError(labcfg.SAY_IDENTITY)
         rec = labcfg.record_of(self.cfg, name)
+        if "instrument" in body and any(r.get("contract") for r in self.cfg.book.get(name) or []):
+            raise Refused("Pick the contract on each account (the gear).")
         label = labcfg.parse_label(body["label"]) if "label" in body else None
         if self._in_session(rec) and "instrument" in body:
             w = rec.get("session_window") or ["", ""]
@@ -757,6 +759,14 @@ class LabDesk:
             why = self._open_why(name, [aid for aid in self._open(name) if aid not in keep])
             if why is not None:
                 raise Refused(why)
+            rec = labcfg.record_of(self.cfg, name) or {}
+            open_on = getattr(self.engine, "lab_open_on", lambda n, a: False)
+            for r in rows if rec else ():    # a round keeps its contract: a size change waits for the next round, a contract change for flat
+                if open_on(name, r["account"]):
+                    now = next((s.symbol for s in self.engine.day_states(name) if s.account == r["account"] and s.symbol),
+                               labcfg.exec_symbol(rec))
+                    if labcfg.row_symbol(rec, r) != now:
+                        raise Refused(f"{self._label(r['account'])} has an open trade on {now}; change it once it is flat.")
 
     def can_book(self, name: str, rows: list) -> None:
         """set_book's checks alone (Refused with the sentence): so a save of several books refuses as a whole."""
@@ -1911,12 +1921,18 @@ class LabDesk:
                 # account cycle sets each trade's size: the runner's daily match reads them so (owner 2026-10-26)
                 # "share": every account takes every trade, so the lead account's rounds are the day's trades
                 "turns": grp[1].get("mode", "cycle") != "share" if grp is not None else self.engine.rotating(name),
-                "cycle_sized": bool(grp and member_risk(grp[1], name)),
+                "cycle_sized": bool(grp and member_risk(grp[1], name)) or self._row_sized(name),
                 "symbol": str(self.cfg.strategies[name].symbol),     # the market THIS desk's orders go to
                 "enabled": bool(self.cfg.strategies[name].enabled), "armed": bool(self.cfg.armed),
                 "killed": self.engine.killed_today(name), "stopped": d["stopped"],
                 "brain": self._brain(name, rows), "rounds": [{k: r.get(k) for k in keep} for r in rows],
                 "answered": sorted(d["answers"])}
+
+    def _row_sized(self, name: str) -> bool:
+        """A booked row sizes itself or trades another contract than the strategy's: its trades are not the backtest's size."""
+        rec = labcfg.record_of(self.cfg, name) or {}
+        return any(r.get("size") or (r.get("contract") and rec and labcfg.row_symbol(rec, r) != labcfg.exec_symbol(rec))
+                   for r in self.cfg.book.get(name) or [])
 
     def snapshot(self) -> dict:
         """The `state` snapshot: every Lab strategy on this Desk, whole."""
