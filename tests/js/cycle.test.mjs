@@ -208,3 +208,11 @@ test('Save sends Hold overnight only for a strategy whose box changed; the other
   await u.c.saveCycle('g1');
   assert.deepEqual(u.sent[0][1].hold || {}, {});
 });
+
+test('a mixed team with an ON member on LIVE accounts asks before a size-up, though it sends on: null', async () => {
+  const t = mixed({ risk: '1500' });
+  await t.c.saveCycle('g1');
+  assert.equal(t.titles[0], 'Change the team?');
+  assert.match(t.asked[0], /It is ON across 2 LIVE accounts/);
+  assert.equal(t.sent[0][1].on, null);
+});

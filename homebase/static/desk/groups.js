@@ -266,6 +266,7 @@ function cycleBody(id) {
 async function saveCycle(id, on) {
   const g = groupOf(id), mem = g ? cycleMembers(g) : [], was = teamOn(mem);
   if (on === undefined) on = teamSent(mem);      // Save: a mixed team sends null (each member keeps its own ON / OFF)
+  const anyOn = on === true || (on === null && mem.some(m => ST.strategies[m].cfg.enabled === true));      // a mixed team still trades
   const body = {...cycleBody(id), on}, cyc = ((ST && ST.groups) || {})[id] || null, d = cycleDiff(cyc, body);
   const live = body.accounts.filter(isRealAcct), where = machineWords();
   const ends = body.members.filter(m => ((ST.book || {})[m] || []).length && !teamWant(body, m).length && ST.strategies[m].cfg.enabled);
@@ -276,7 +277,7 @@ async function saveCycle(id, on) {
   let ask = null;
   if (on && !was) ask = ["Start trading?", `${plural(body.members.length, "strategy", "strategies")} ${how} ${plural(body.accounts.length, "account", "accounts")}${lv}${where ? " " + where : ""}.${sized}${endWords}`, "Start"];
   else if (!on && was) ask = ["Stop trading?", `${plural(body.members.length, "strategy", "strategies")} switched OFF: today is over for them (unfilled entries are cancelled). Accounts and sizes stay for the next ON.`, "Stop"];
-  else if (ends.length || (on && live.length && (d.up || d.liveIn.length))) ask = ["Change the team?", `${d.parts.join(" · ")}.${d.liveIn.length ? ` ${riskWord(d.liveIn)} account${d.liveIn.length === 1 ? "" : "s"} ticked in: ${d.liveIn.map(acctShort).join(", ")}.` : ""}${endWords}${on && live.length ? ` It is ON across ${live.length} ${riskWord(live)} account${live.length === 1 ? "" : "s"}${where ? " " + where : ""}: the next trade uses this.` : ""}`, "Save"];
+  else if (ends.length || (anyOn && live.length && (d.up || d.liveIn.length))) ask = ["Change the team?", `${d.parts.join(" · ")}.${d.liveIn.length ? ` ${riskWord(d.liveIn)} account${d.liveIn.length === 1 ? "" : "s"} ticked in: ${d.liveIn.map(acctShort).join(", ")}.` : ""}${endWords}${anyOn && live.length ? ` It is ON across ${live.length} ${riskWord(live)} account${live.length === 1 ? "" : "s"}${where ? " " + where : ""}: the next trade uses this.` : ""}`, "Save"];
   if (ask && !await confirmDlg(ask[0], ask[1], ask[2], false)) { refresh(); return false; }
   let r, err = null;
   try { r = await post("/api/setup", body); } catch (e) { err = e || new Error("no answer"); }

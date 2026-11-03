@@ -422,6 +422,15 @@ async function moveToGroup(strategy, group) {
     renderGroupMgr(true);
     return;
   }
+  // into a team whose Save switches it (all ON / all OFF): one plain ask, unless "Start trading?" above already asked
+  const sent = group ? teamBody(group).on : null, me = ST.strategies[strategy] && ST.strategies[strategy].cfg.enabled === true;
+  if (sent !== null && sent !== me && !(sent && live.length)) {
+    const w = sent ? "ON" : "OFF";
+    if (!await confirmDlg(`Switch ${stratLabel(strategy)} ${w}?`, `${stratLabel(strategy)} will be switched ${w} (the team is ${w}). Go on?`, "Move", !sent)) {
+      renderGroupMgr(true);
+      return;
+    }
+  }
   // into a team: the Desk takes it out of its old team itself; out of a team: that team without it
   if (group) await teamSave(teamBody(group, {members: [...(nc.members || []), strategy]}));
   else if (old) await teamSave(teamBody(old.id, {members: old.members.filter(m => m !== strategy)}));

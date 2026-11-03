@@ -106,3 +106,17 @@ test('a mixed team (one ON, one OFF): rename and move post on: null, so nobody i
   await t.run('moveToGroup("a", "")');
   assert.equal(t.posts[0][1].on, null);
 });
+
+test('a move that would switch the strategy OFF or ON asks first in plain words; a no moves nothing', async () => {
+  const off = load({ enabled: true, confirm: false });            // a is ON; g2 is an OFF team
+  await off.run('moveToGroup("a", "g2")');
+  assert.deepEqual(off.confirms, ['Switch a OFF?']);
+  assert.deepEqual(off.posts, []);
+  const on = load({ enabled: true });                             // b is OFF; g1 is all ON, no live account
+  await on.run('moveToGroup("b", "g1")');
+  assert.deepEqual(on.confirms, ['Switch b ON?']);
+  assert.equal(on.posts[0][1].on, true);
+  const same = load();                                            // OFF into OFF: no ask
+  await same.run('moveToGroup("b", "g2")');
+  assert.deepEqual(same.confirms, []);
+});
