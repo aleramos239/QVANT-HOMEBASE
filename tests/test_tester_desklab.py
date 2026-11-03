@@ -1032,3 +1032,10 @@ def test_send_to_vps_never_raises_and_says_why(monkeypatch):
     monkeypatch.setenv("HOMEBASE_SERVER", "root@invalid.invalid")
     out = desklab.send_to_vps("nq_nothere")
     assert len(out) == 1 and out[0].startswith("Not sent to the VPS")
+
+
+def test_family_routes_are_gone(c):
+    assert c.get("/api/tester/desklab/../deskfamilies").status_code == 404
+    for path in ("/api/tester/deskfamilies", "/api/tester/deskfamilies/create"):
+        assert c.get(path).status_code in (404, 405)
+        assert c.post(path, json={"name": "x"}, headers=DESK).status_code in (404, 405)

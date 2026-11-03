@@ -1,7 +1,6 @@
 """Teams, read only: the Desk keeps each team as one record (engine_groups.py, <state>/groups.json); the charts service reads
 that file directly, like its other .state reads, for the team list and the combined results off the members' 3:1
-walk-forwards. (On the Practice Desk the results read the Mac's own .state.) GroupError and STRATEGY_RE stay for
-deskfamilies.py."""
+walk-forwards. (On the Practice Desk the results read the Mac's own .state.)"""
 import json
 import re
 from pathlib import Path

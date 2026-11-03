@@ -481,11 +481,10 @@ test('WP1.8 sidebar accounts: a LIVE / DEMO / PAPER tag on every row, what it ho
 
 test('the Strategies count in a folded sidebar does not count the same strategy twice', () => {
   const side = SLICE('function renderSide(', '/* ---- strategy detail ---- */');
-  // the count is the rows under Strategies: a Lab row the Desk holds is its own row (one row, never two); families fold their
-  // variants inside Strategies (2026-10-29), so a strategy in a family is counted there once; account groups are their own section
+  // the count is the rows under Strategies: a Lab row the Desk holds is its own row (one row, never two); account groups are their own section
   assert.match(side, /DESKLAB\.strategies\.filter\(w => !labOnDesk\(w\)\)\.map/);
   assert.match(side, /head\("strat", "Strategies", names\.length \+ labIds\.length/);
-  assert.match(side, /famBlocks \+ loose/);
+  assert.match(side, /SIDE_FOLD\.strat \? "" : loose/);
 });
 
 test('the Desk\'s own page is shown for a #lab=<name> link or a Lab view once the Desk knows the strategy', () => {
@@ -1820,43 +1819,16 @@ test('1.19: a piece with no data is left out: no answer, no turn, the cycle off,
   assert.match(noPnl.page(), /<h2>Today<\/h2>/);
 });
 
-// ---- families (owner 2026-10-29): variants of one idea fold under one sidebar row; account groups are their own section --------
-test('a family folds its variants by their short names, the rest follow; the cycle is its own section; the family page sets them side by side', () => {
+// ---- families are gone (2026-11-03): loose rows, a flat Archive, an old saved family view falls back to Today ----
+test('no family: the sidebar lists strategies loose, the Archive is one list, the account group stays its own section', () => {
   const t = groupDesk({});
-  vm.runInContext(`DESKFAM = {families: [{id: "f1", name: "NQ ORB", members: ["lab_nq_orb"], short: {lab_nq_orb: "1.5R"}}], ok: true};
-    DESKRES = {nq_orb: {build: {net: 4000, trades: 210}, unseen: {net: -150, trades: 70}, both: {net: 3850, trades: 280}}};`, t.ctx);
   const side = t.side();
-  assert.match(side, /<span>NQ ORB<\/span>/, 'the family is a folding header');
-  assert.match(side, /<b>1\.5R<\/b>/, 'its variant shows by its short name');
-  assert.ok(side.indexOf('NQ ORB') < side.indexOf('nq930') || !/nq930/.test(side), 'families first, then the strategies in no family');
   assert.match(side, /<span>Account groups<\/span>/);
-  assert.match(side, /setView\('group',&quot;g1&quot;\)[^>]*>\s*<i class="sd ok"><\/i><span class="it"><b>Apex<span class="tag">cycle<\/span><\/b>/, 'the cycle is one row, on');
-  assert.equal((side.match(/setView\('strat','lab_nq_orb'\)/g) || []).length, 1, 'a variant in a family and a cycle shows once');
-  const page = vm.runInContext('familyView("f1")', t.ctx);
-  assert.match(page, /<h1 class="sd-title">NQ ORB<\/h1>/);
-  assert.match(page, />1\.5R · <span class="dim">[^<]+<\/span><\/span>\s*<span class="t">\+\$3,850 · 280 tr<\/span>/);
-  assert.match(page, /<span class="t dim">1<\/span><\/div>/, 'booked on one account');
-  assert.match(vm.runInContext('familyView("f9")', t.ctx), /not there any more/);
-});
-
-// ---- a family archived together (owner 2026-10-30): one confirm, each member's three steps; the Archive groups it under its name ----
-test('Archive family: one confirm, each Lab member archived; the Archive lists it under the family; the sidebar drops it', async () => {
-  const t = groupDesk({});
-  vm.runInContext(`DESKFAM = {families: [{id: "f1", name: "NQ ORB", members: ["lab_nq_orb"], short: {}}], ok: true};
-    var CP = []; chartPost = async (u, b) => { CP.push([u, b]); return {ok: true}; };`, t.ctx);
-  assert.match(vm.runInContext('familyView("f1")', t.ctx), /onclick="archiveFamily\(&quot;f1&quot;\)"[^>]*>Archive family<\/button>/);
-  await vm.runInContext('archiveFamily("f1")', t.ctx);
-  assert.equal(t.confirms.length, 1);
-  assert.match(t.confirms[0].title, /Archive the NQ ORB family\?/);
-  assert.deepEqual(plain(vm.runInContext('CP', t.ctx)).map((c) => c[0]), ['/api/tester/desklab/archive', '/api/tester/desklab/filed']);
-  assert.deepEqual(t.posts.map((p) => p.url), ['/api/lab-remove'], 'the Desk takes it off');
-  assert.match(t.toasts.at(-1), /NQ ORB family is archived/);
-  // the chart service now lists it archived: the family sits in the Archive, under its name, with a loose one after it
+  assert.equal((side.match(/setView\('strat','lab_nq_orb'\)/g) || []).length, 1, 'a strategy shows once');
+  assert.equal(vm.runInContext('typeof DESKFAM + typeof familyView + typeof archiveFamily', t.ctx), 'undefinedundefinedundefined');
   vm.runInContext(`DESKLAB.archived = [{name: "nq_orb", label: "NQ ORB 1.5R", root: "NQ", archived_utc: "2026-10-30T20:00:00Z"},
     {name: "nq_gap", label: "NQ gap", root: "NQ"}];`, t.ctx);
-  assert.doesNotMatch(t.side(), /<span>NQ ORB<\/span>/, 'a family all archived leaves the sidebar');
   const arch = vm.runInContext('archiveView()', t.ctx);
-  assert.match(arch, /<h2>NQ ORB · 1<\/h2>[\s\S]*NQ ORB 1\.5R[\s\S]*Restore family[\s\S]*<h2>No family<\/h2>[\s\S]*NQ gap/);
-  await vm.runInContext('restoreFamily("f1")', t.ctx);
-  assert.deepEqual(plain(vm.runInContext('CP', t.ctx)).at(-1), ['/api/tester/desklab/restore', { name: 'nq_orb' }], 'only the family\'s own');
+  assert.match(arch, /NQ ORB 1\.5R[\s\S]*NQ gap/);
+  assert.doesNotMatch(arch, /<h2>|Restore family/);
 });

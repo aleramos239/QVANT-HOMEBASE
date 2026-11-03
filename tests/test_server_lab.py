@@ -2090,3 +2090,19 @@ def test_an_unreadable_leftover_team_file_is_never_retired(paths, monkeypatch):
     app_ = create_app(desk_cfg(), adapters, background=False, lab=True)
     assert app_.state.engine.groups == {}
     assert leftover.read_text() == "not json" and not leftover.with_name("deskgroups.json.retired").exists()
+
+
+def test_families_file_is_retired_once(paths, monkeypatch):
+    """Desk makeover task 4: the old display-only deskfamilies.json is renamed .retired at start, never deleted, never over an earlier one."""
+    monkeypatch.setenv(store.ENV_ROOT, str(paths / "desklab"))
+    store.put(rec())
+    old = store.root().parent / "deskfamilies.json"
+    old.parent.mkdir(parents=True, exist_ok=True)
+    old.write_text('{"families": []}')
+    adapters = {aid: SeededFakeAdapter(aid) for aid in desk_cfg().accounts}
+    create_app(desk_cfg(), adapters, background=False, lab=True)
+    kept = old.with_name("deskfamilies.json.retired")
+    assert not old.exists() and kept.read_text() == '{"families": []}'
+    old.write_text("newer")
+    create_app(desk_cfg(), adapters, background=False, lab=True)      # a second .retired is never written over the first
+    assert old.read_text() == "newer" and kept.read_text() == '{"families": []}'

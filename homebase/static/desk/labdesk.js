@@ -410,49 +410,6 @@ async function archiveSteps(name, deskId) {      // the three steps for one stra
   if (!err && r && r.ok === true) r = await chartPost("/api/tester/desklab/filed", {name});
   return {r, err};
 }
-/* ARCHIVE / RESTORE A FAMILY (the owner, 2026-10-30): one confirm, then each Lab member the Desk or the Lab still holds goes through the same
-   steps; a refusal (an open trade) leaves that one on the Desk and the rest go on. The family keeps its members, so the Archive lists them
-   under its name and the sidebar hides a family once all of it is archived. A built-in member is the Desk's own: archive it on its page. */
-async function archiveFamily(id) {
-  const f = famOf(id);
-  if (!f || DESKLAB_BUSY || DEMO) return;
-  const todo = f.members.filter(sid => sid.indexOf("lab_") === 0).map(sid => {
-    if (ST && ST.strategies && ST.strategies[sid]) return {name: sid.slice(4), deskId: sid, label: stratLabel(sid)};
-    const w = (DESKLAB.strategies || []).find(x => x.name === sid.slice(4));
-    return w ? {name: w.name, deskId: "", label: DeskLab.label(w)} : null;
-  }).filter(Boolean);
-  if (!todo.length) return toast(`The ${f.name} family has nothing on the Desk to archive.`, 6000);
-  const n = todo.length, them = n === 1 ? "It comes" : `All ${n} come`;
-  if (!await confirmDlg(`Archive the ${f.name} family?`, `${them} off the Desk, switched off, and their accounts come off. Their history is kept. Restore the family from Archive any time.`, "Archive", false)) return;
-  const failed = [];
-  for (const t of todo) {
-    DESKLAB_BUSY = t.name; if (ST) render();
-    const {r, err} = await archiveSteps(t.name, t.deskId);
-    if (err || !r || r.ok !== true) failed.push(`${t.label}: ${DeskLab.refusalText(r, err)}`);
-  }
-  DESKLAB_BUSY = "";
-  if (!failed.length) {
-    if (VIEW.k === "family" && VIEW.name === id) VIEW = {k: "archive"};
-    toast(`The ${f.name} family is archived. Restore it from Archive any time.`);
-  } else toast(`Archived ${n - failed.length} of ${n}. Not archived: ${failed.join(" · ")}`, 9000);
-  await refresh();
-  loadDeskLab();
-}
-async function restoreFamily(id) {
-  const f = famOf(id);
-  if (!f || DESKLAB_BUSY || DEMO) return;
-  const ws = (DESKLAB.archived || []).filter(w => f.members.includes(archivedId(w))), failed = [];
-  for (const w of ws) {
-    DESKLAB_BUSY = w.name; if (ST) render();
-    const r = await chartPost(w.builtin === true ? "/api/tester/desklab/restore_builtin" : "/api/tester/desklab/restore", {name: w.name});
-    if (!r || r.ok !== true) failed.push(`${w.builtin === true ? stratLabel(w.name) : DeskLab.label(w)}: ${(r && r.detail) || "no answer"}`);
-  }
-  DESKLAB_BUSY = "";
-  toast(!failed.length ? `The ${f.name} family is back on the Desk, switched off, with no account.`
-    : `Restored ${ws.length - failed.length} of ${ws.length}. Not restored: ${failed.join(" · ")}`, failed.length ? 9000 : 4000);
-  await loadDeskLab();
-  refresh();
-}
 /* DELETE from the Archive (the owner, 2026-10-22: "fully delete and remove them"): the archived copy, the strategy's history and its Lab
    draft (the draft goes to the drafts' trash). Real trades stay in the account history. A built-in is the Desk's own: no Delete. */
 async function deleteArchived(name) {
@@ -522,16 +479,10 @@ function archiveView() {
       <button class="btn btn-outline btn-sm" onclick="restoreArchived(${jsArg(w.name)})"${busy || DESKLAB_BUSY ? " disabled" : ""} title="Back on the Desk, switched off, with no account">Restore</button>
       <button class="btn btn-outline btn-sm" onclick="deleteArchived(${jsArg(w.name)})"${busy || DESKLAB_BUSY ? " disabled" : ""} title="Deletes it for good: its history and its Lab draft">Delete</button></div>`;
   };
-  // grouped by family (the owner, 2026-10-30), in the sidebar's order; the ones in no family last
-  const all = DESKLAB.archived || [], list = (ws) => `<div class="agroup feed static">${ws.map(row).join("")}</div>`;
-  const fams = DESKFAM.families.map(f => ({f, ws: all.filter(w => f.members.includes(archivedId(w)))})).filter(x => x.ws.length);
-  const loose = all.filter(w => !famOfStrat(archivedId(w)));
-  const secs = fams.map(({f, ws}) => `<div class="sec"><h2>${esc(f.name)} · ${ws.length}</h2>${list(ws)}
-      <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="restoreFamily(${jsArg(f.id)})"${DESKLAB_BUSY ? " disabled" : ""} title="All of them back on the Desk, switched off, with no account">Restore family</button></div></div>`).join("")
-    + (loose.length ? `<div class="sec">${fams.length ? "<h2>No family</h2>" : ""}${list(loose)}</div>` : "");
+  const all = DESKLAB.archived || [];
   return `<button class="back" onclick="setView('today')">‹ Today</button>
     <div class="sd-top"><div><h1 class="sd-title">Archive</h1><div class="sp">Off the Desk and switched off. Restore puts one back, switched off, with no account.</div></div></div>
-    ${secs || `<div class="sec"><div class="eq-empty">No archived strategies yet.</div></div>`}`;
+    ${all.length ? `<div class="sec"><div class="agroup feed static">${all.map(row).join("")}</div></div>` : `<div class="sec"><div class="eq-empty">No archived strategies yet.</div></div>`}`;
 }
 /* Clear an old trade the Desk no longer owns: the Desk does it only when the account is flat and no old order is working, and says why not. */
 const LAB_CLEARING = new Map();      // "strategy@account" -> Infinity while a clear is out, then when it was answered ok
@@ -550,7 +501,7 @@ async function clearLabBlock(name, account) {
 
 function renderMain(names, issues) {
   $("#viewToday").hidden = VIEW.k !== "today";
-  $("#viewStrat").hidden = VIEW.k !== "strat" && VIEW.k !== "lab" && VIEW.k !== "group" && VIEW.k !== "family" && VIEW.k !== "archive";
+  $("#viewStrat").hidden = VIEW.k !== "strat" && VIEW.k !== "lab" && VIEW.k !== "group" && VIEW.k !== "archive";
   $("#viewActivity").hidden = VIEW.k !== "activity";
   if (VIEW.k === "today") {
     const [l1, l2] = dayHeadline(names);
@@ -563,7 +514,6 @@ function renderMain(names, issues) {
   } else if (VIEW.k === "strat") $("#viewStrat").innerHTML = stratView(VIEW.name);
   else if (VIEW.k === "lab") $("#viewStrat").innerHTML = labSafe(() => labView(VIEW.name), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${LAB_FAULT}</div>`);
   else if (VIEW.k === "group") $("#viewStrat").innerHTML = labSafe(() => groupView(VIEW.name), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${GROUP_FAULT}</div>`);
-  else if (VIEW.k === "family") $("#viewStrat").innerHTML = labSafe(() => familyView(VIEW.name), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${FAMILY_FAULT}</div>`);
   else if (VIEW.k === "archive") $("#viewStrat").innerHTML = labSafe(() => archiveView(), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${LAB_FAULT}</div>`);
 }
 
@@ -699,7 +649,6 @@ function render() {
   if (VIEW.k === "lab" && labSafe(() => DeskLab.onDesk(s.strategies, {name: VIEW.name}), false)) VIEW = {k: "strat", name: "lab_" + VIEW.name};   // the Desk knows it now: its own page
   if (VIEW.k === "strat" && !names.includes(VIEW.name)) VIEW = {k: "today"};
   if (VIEW.k === "group" && DESKGROUPS.ok === true && !groupOf(VIEW.name)) VIEW = {k: "today"};      // a group removed (here or elsewhere)
-  if (VIEW.k === "family" && DESKFAM.ok === true && !famOf(VIEW.name)) VIEW = {k: "today"};          // a family removed
   ISSUE_LVL = probs.some(c => c.level === "bad") ? "bad" : "warn";
   renderSide(names, algoVis.filter(a => !a.visible && !shelved.includes(a.name)).length, probs.length);
   renderMain(names, probs.length);

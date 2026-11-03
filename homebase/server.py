@@ -102,6 +102,10 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             retire(leftover)        # only after a clean adoption: adopt_teams raises when a team was not read or not adopted
         except Exception as e:  # noqa: BLE001 -- the desk must still start; the file stays for the next start
             print(f"homebase: adopting {leftover} failed: {e!r}", file=sys.stderr)
+        try:        # the old display-only families file: nothing reads it any more
+            retire(lab_store.root().parent / "deskfamilies.json")
+        except Exception as e:  # noqa: BLE001 -- the desk must still start
+            print(f"homebase: retiring deskfamilies.json failed: {e!r}", file=sys.stderr)
     acct_status: dict[str, dict] = {}
     paper_http = paper_client or httpx.AsyncClient(base_url=PAPER_URL, timeout=5.0)   # the paper accounts list
     # logins are budgeted per Tradovate USER (the login key), never per entry: five
