@@ -329,7 +329,7 @@ function setupHtml(name, s) {
     ["Window", lab ? specOf(c, name) : [c.kind === "bars" ? `${c.bar_minutes}-minute bars` : c.fire_et ? `fires ${String(c.fire_et).slice(0, 5)} ET` : "",
       c.flat_et ? `flat by ${c.flat_et} ET` : "", (c.only_dates || []).length ? `only on ${c.only_dates.length} set day${c.only_dates.length === 1 ? "" : "s"}` : "every weekday"]
       .filter(Boolean).join(" · ")],
-    ["Group", cyc ? `${cyc.name} (team ${cyc.on ? "ON" : "OFF"}${cyc.mode === "share" ? ", every account" : cyc.mode === "split"
+    ["Team", cyc ? `${cyc.name} (team ${cyc.on ? "ON" : "OFF"}${cyc.mode === "share" ? ", every account" : cyc.mode === "split"
       ? `, ${(cyc.assign || {})[name] ? "its account " + acctShort(cyc.assign[name]) : "no account of its own"}` : ""}${cyc.on && cyc.next ? `, next ${acctShort(cyc.next)}` : ""})` : "none"],
     ...(machineWords() ? [["Machine", machineWords().replace(/^on /, "")]] : []),
   ];

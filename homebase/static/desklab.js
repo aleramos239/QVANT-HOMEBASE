@@ -390,8 +390,8 @@
   /* ---- Desk groups (teams: the Desk's, ST.groups; results: the chart service, GET /api/tester/deskgroups/results): named sets of strategies that run
      together. A group trades only through its team (index.html cycleHtml, off by default). Its combined results are its
      members' SAVED runs put together as one account's trades. ---- */
-  var NO_GROUP = "No group";
-  var EMPTY_GROUP = "No strategy is in this group yet. Add one from Manage groups.";
+  var NO_GROUP = "No team";
+  var EMPTY_GROUP = "No strategy is in this team yet. Add one from Manage teams.";
   var GROUP_NOTE = "Its results are its strategies' saved runs put together as one account's trades. The group trades only through its Team (below), and only once that is switched on.";
   var GROUP_MISSING = "That group is not there any more.";
   var NO_GROUP_RUNS = "No saved run to put together yet.";

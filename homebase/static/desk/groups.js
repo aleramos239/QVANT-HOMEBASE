@@ -21,10 +21,11 @@ async function loadDeskGroupRes() {
 }
 /* One change to a team, sent to the Desk: `body` is the team's WHOLE current body (teamBody) with the change. A refusal says why
    and changes nothing here. */
+// `on` is the members' own Trading state (as the Set-up card reads it), never the Desk group's `on`: that one is true whenever the team has strategies and accounts.
 const teamBody = (id, over) => {
   const g = ((ST && ST.groups) || {})[id] || {};
   return {team: id, name: g.name, members: g.members || [], accounts: g.accounts || [], mode: g.mode, assign: g.assign,
-    risk_usd: g.risk_usd, risk_by: g.risk_by, max_minis: g.max_minis, on: !!g.on, ...over};
+    risk_usd: g.risk_usd, risk_by: g.risk_by, max_minis: g.max_minis, on: teamOn(cycleMembers(groupOf(id) || {members: []})), ...over};
 };
 async function teamSave(body) {
   let r, err = null;
@@ -87,7 +88,7 @@ function groupView(id) {
     ${labSafe(() => cycleHtml(g), "")}
     ${labSafe(() => groupTodayHtml(g), "")}
     ${labSafe(() => deskChangesHtml("g:" + g.id), "")}
-    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openGroupMgr()">Manage groups</button>
+    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openGroupMgr()">Manage teams</button>
       <button class="btn btn-outline btn-sm" onclick="deleteGroup(${jsArg(g.id)})" title="The strategies stay on the Desk, in no team.">Delete team</button></div>`;
 }
 /* Set up a team (the owner, 2026-11-02: "easy to set up impossible to get confused and mess it up"). A team = this Desk group
@@ -173,7 +174,7 @@ function cycleEdit(id) {
 function teamStatus(cyc, mem) {
   const accts = cyc && cyc.on ? (cyc.accounts || []).filter(a => a in (ST.accounts || {})) : [], bad = [];
   if (!ST.armed) bad.push("the Desk is OFF");
-  if (!mem.length) bad.push("no strategy in this team yet (Manage groups)");
+  if (!mem.length) bad.push("no strategy in this team yet (Manage teams)");
   else if (!accts.length) bad.push("no account ticked: its strategies run in shadow");
   for (const a of accts) {
     const x = ST.accounts[a] || {};
@@ -194,7 +195,7 @@ function teamStatus(cyc, mem) {
 function cycleHtml(g) {
   const cyc = ((ST && ST.groups) || {})[g.id] || null, mem = cycleMembers(g), dr = CYC_DRAFT[g.id] || null;
   if (!mem.length && !cyc) return `<div class="sec"><h2>Set up</h2><div class="mcap">Put this team's strategies in it first
-    (Manage groups): then tick its accounts here and switch it on.</div></div>`;
+    (Manage teams): then tick its accounts here and switch it on.</div></div>`;
   const on = teamOn(mem), some = !on && mem.some(m => ST.strategies[m].cfg.enabled === true);
   const chosen = new Set(dr ? dr.accounts : cyc ? cyc.accounts : []);
   const mode = (dr && dr.mode) || cycMode(cyc), assign = (dr && dr.assign) || (cyc && cyc.assign) || {}, hold = (dr && dr.hold) || {};

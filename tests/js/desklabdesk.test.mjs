@@ -385,7 +385,7 @@ test('WP1.14 a Lab strategy\'s Setup: accounts, LIVE / paper, the group\'s $ ris
   assert.equal(setupRow(html, 'Size'), '$500 at risk a trade (the apex 300k group sizes it)');
   assert.equal(setupRow(html, 'Limits'), 'Trades a day 2 · Most contracts per account 1 · Most at risk per trade $300 · Last entry 11:00 ET · Flat by 15:55 ET');
   assert.equal(setupRow(html, 'Window'), 'NQ · 09:25-16:00 ET · from the Lab', 'the Lab strategy\'s own spec line');
-  assert.equal(setupRow(html, 'Group'), 'apex 300k (team ON, next APEX…048)');
+  assert.equal(setupRow(html, 'Team'), 'apex 300k (team ON, next APEX…048)');
   assert.equal(setupRow(html, 'Machine'), 'the SERVER · Chicago');
   assert.doesNotMatch(setupOf(html), /mcap warn/, 'nothing missing: no red line');
   assert.doesNotMatch(setupOf(html), /<button|<input|onclick/, 'shown only: nothing here edits the window or anything else');
@@ -455,7 +455,7 @@ test('WP1.14 the built-in page has the Setup too: its contracts, when it fires, 
   assert.equal(setupRow(html, 'Accounts'), 'APEX…048 LIVE ×3');
   assert.equal(setupRow(html, 'Size'), '3 contracts an account');
   assert.equal(setupRow(html, 'Window'), 'fires 09:30 ET · flat by 15:55 ET · every weekday');
-  assert.equal(setupRow(html, 'Group'), 'none');
+  assert.equal(setupRow(html, 'Team'), 'none');
   assert.doesNotMatch(setupOf(html), /Limits needed first|<button|<input/);
 });
 
@@ -1031,7 +1031,7 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=55"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=56"><\/script>/);
   assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=6"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));

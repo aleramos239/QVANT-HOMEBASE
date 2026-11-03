@@ -420,10 +420,10 @@ async function moveToGroup(strategy, group) {
     return;
   }
   const nc = group ? ((ST && ST.groups) || {})[group] : null;
-  if (nc && nc.on && !(nc.members || []).includes(strategy) && !await confirmDlg(
-      `Add ${stratLabel(strategy)} to the ${nc.name} team?`,
-      `Its trades then go to ONE account at a time of ${nc.accounts.length}${nc.risk_usd > 0 ? `, each sized to $${Number(nc.risk_usd).toLocaleString("en-US")} at risk` : ""}.`,
-      "Add it", false)) {
+  // into a team that is ON the strategy starts trading on its accounts: a real (not paper) account asks first
+  const live = nc ? (nc.accounts || []).filter(isRealAcct) : [];
+  if (group && teamBody(group).on && live.length && !await confirmDlg(
+      "Start trading?", `${stratLabel(strategy)} then trades on ${live.length} LIVE or demo account${live.length === 1 ? "" : "s"} of the ${nc.name} team.`, "Start", false)) {
     renderGroupMgr(true);
     return;
   }
