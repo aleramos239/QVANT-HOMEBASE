@@ -22,6 +22,22 @@ from ..desk.engine_groups import GroupError
 from .strategies import book_rows, short
 
 IN_TEAM = "It is in the team {}: set it up on the team's page."
+IN_SET = "It is in the set {}: set it up on the set's page."
+QTY = "Contracts: a whole number above 0."
+
+
+def _whole(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and v >= 1
+
+
+def _settings(body: dict) -> dict:
+    """The gear's {account: {qty?, size?, ...}}, checked: a qty that is sent is a whole number above 0 (book_rows drops a row of 0)."""
+    settings = body.get("settings") or {}
+    if not isinstance(settings, dict) or not all(isinstance(v, dict) for v in settings.values()):
+        raise HTTPException(400, "settings: a dict of settings for each account.")
+    if not all(_whole(v["qty"]) for v in settings.values() if v.get("qty") is not None):
+        raise HTTPException(400, QTY)
+    return settings
 
 
 def _cur(cfg, name: str) -> list:
@@ -114,7 +130,7 @@ def register(app, *, cfg, engine, labdesk) -> None:
         vs = next((s for s in variants.load(engine._root)["sets"] if s["id"] == body["set"]), None)
         if vs is None:
             raise HTTPException(404, "No such set.")
-        pick, settings = body.get("pick"), body.get("settings") or {}
+        pick = body.get("pick")
         turns, hold = body.get("turns", False), body.get("hold")
         for m in vs["members"]:
             if not labdesk.is_lab(m) or m not in cfg.strategies:
@@ -122,8 +138,7 @@ def register(app, *, cfg, engine, labdesk) -> None:
         if not isinstance(pick, dict) or set(pick) != set(accounts) or not all(isinstance(v, str) for v in pick.values()) \
                 or not set(pick.values()) <= set(vs["members"]):
             raise HTTPException(400, "Each account picks one variant of the set.")
-        if not isinstance(settings, dict) or not all(isinstance(v, dict) for v in settings.values()):
-            raise HTTPException(400, "settings: a dict of settings for each account.")
+        settings = _settings(body)
         if not isinstance(turns, bool) or not (hold is None or isinstance(hold, bool)):
             raise HTTPException(400, "turns and hold must be true or false")
         for m in vs["members"]:
@@ -144,12 +159,13 @@ def register(app, *, cfg, engine, labdesk) -> None:
     @app.post("/api/setup")
     async def setup_save(request: Request):
         """Team {team, name?, members, accounts, mode, assign?, risk_usd, risk_by?, max_minis, hold?: {strategy: bool}, on}
-        or solo {strategy, accounts, qty, turns, hold?, on}: the whole set-up in one go (module docstring)."""
+        or solo {strategy, accounts, qty, turns, hold?, on}: the whole set-up in one go (module docstring). A team's on may be
+        null (a Save with the Trading switch not flipped): each member keeps its own ON / OFF and its own Take turns."""
         body = await request.json()
         if not isinstance(body, dict):
             raise HTTPException(400, "a JSON object")
         on = body.get("on")
-        if not isinstance(on, bool):
+        if not isinstance(on, bool) and not (on is None and "team" in body and "set" not in body):
             raise HTTPException(400, "on must be true or false")
         accounts = body.get("accounts")
         if not isinstance(accounts, list) or not all(isinstance(a, str) for a in accounts) or len(set(accounts)) != len(accounts):
@@ -186,7 +202,8 @@ def register(app, *, cfg, engine, labdesk) -> None:
                 engine.groups.clear()
                 engine.groups.update(saved)
             # the movers' books come from the new team only: one write each, never empty on the way
-            books = checked(team_books(cfg, old, new, hold), {m: on for m in new["members"]})
+            sw = {} if on is None else {m: on for m in new["members"]}      # on null: no member switched, no Take turns touched
+            books = checked(team_books(cfg, old, new, hold), sw)
             done = []
             try:
                 for oid, _, o_new in others:
@@ -200,7 +217,7 @@ def register(app, *, cfg, engine, labdesk) -> None:
                     engine._save_groups()
                 raise
             # Team OFF ends Take turns; ON in Take turns mode starts it again (after write_group's own switch-on)
-            await write(books, {m: on and new["mode"] == "cycle" for m in new["members"]}, {m: on for m in new["members"]})
+            await write(books, {m: on and new["mode"] == "cycle" for m in sw}, sw)
             engine.journal("setup_saved", team=gid, members=new["members"], accounts=accounts, mode=new["mode"], on=on)
             return {"ok": True, "team": gid, "group": view}
         name = str(body.get("strategy") or "")
@@ -209,14 +226,15 @@ def register(app, *, cfg, engine, labdesk) -> None:
         team = next((g for g in engine.groups.values() if name in g["members"]), None)
         if team is not None:
             raise HTTPException(409, IN_TEAM.format(team["name"]))
+        vs = variants.set_of(engine._root, name)
+        if vs:
+            raise HTTPException(409, IN_SET.format(vs["name"]))
         qty, turns, hold = body.get("qty"), body.get("turns", False), body.get("hold")
-        if qty is not None and (isinstance(qty, bool) or not isinstance(qty, int) or qty < 1):
-            raise HTTPException(400, "Contracts: a whole number above 0.")
+        if qty is not None and not _whole(qty):
+            raise HTTPException(400, QTY)
         if not isinstance(turns, bool) or not (hold is None or isinstance(hold, bool)):
             raise HTTPException(400, "turns and hold must be true or false")
-        settings = body.get("settings") or {}
-        if not isinstance(settings, dict) or not all(isinstance(v, dict) for v in settings.values()):
-            raise HTTPException(400, "settings: a dict of settings for each account.")
+        settings = _settings(body)
         cur = _cur(cfg, name)
         rows = _rows(cur, accounts, hold, qty, settings)
         books = checked({name: rows} if rows != cur else {}, {name: on})

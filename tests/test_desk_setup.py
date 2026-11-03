@@ -256,10 +256,8 @@ def test_a_team_save_refuses_a_set_member(desk):
 B = "lab_qq"
 
 
-def two(desk, labels=("1R", "1.5R")):
-    """The practice Desk with a second Lab strategy (lab_qq) and both in one set `nq_cb`, both with limits."""
-    import json
-
+def second(desk):
+    """The practice Desk with a second Lab strategy (lab_qq), both with limits."""
     from homebase.labrun import store
     from tests.test_broker_paper import run
     from tests.labdesk_util import rec
@@ -267,6 +265,12 @@ def two(desk, labels=("1R", "1.5R")):
     run(desk.d.ld.refresh())
     for n in (LAB, B):
         assert desk.post("/api/lab-limits", json={"strategy": n, "limits": LIMITS}).status_code == 200
+
+
+def two(desk, labels=("1R", "1.5R")):
+    """The practice Desk with a second Lab strategy (lab_qq) and both in one set `nq_cb`, both with limits."""
+    import json
+    second(desk)
     (desk.d.root / "variants.json").write_text(json.dumps(
         {"sets": [{"id": "v1", "name": "nq_cb", "members": [LAB, B], "labels": {LAB: labels[0], B: labels[1]}}],
          "dismissed": [], "next": 2}))
@@ -368,3 +372,64 @@ def test_rows_with_hold_none_keep_each_rows_own_hold():
     assert _rows(cur, ["a1", "a2"], None, None, {}) == [{"account": "a1", "qty": 1, "hold": True}, {"account": "a2", "qty": 1}]
     assert _rows(cur, ["a1", "a2"], True, None, {})[1].get("hold") is True       # the box ticked: every row
     assert _rows(cur, ["a1", "a2"], False, None, {}) == [{"account": "a1", "qty": 1}, {"account": "a2", "qty": 1}]
+
+
+def mixed_team(desk):
+    """Team g1 with LAB (ON, Take turns on) and B (OFF); LAB's rows hold one overnight, one not."""
+    second(desk)
+    body = {"team": "g1", "name": "Apex", "members": [LAB, B], "accounts": [A1, A2], "mode": "cycle", "risk_usd": 1000, "max_minis": 17}
+    assert desk.post("/api/setup", json={**body, "on": True}).status_code == 200
+    assert desk.post("/api/setup", json={"strategy": B, "accounts": [], "on": False}).status_code == 409   # in a team: refused
+    eng = desk.d.eng
+    desk.d.ld.cfg.strategies[B].enabled = False                             # B switched OFF on its own
+    assert desk.post("/api/book", json={"strategy": LAB, "assignments": [{"account": A1, "qty": 1, "hold": True},
+                                                                         {"account": A2, "qty": 1}]}).status_code == 200
+    return body, eng
+
+
+def test_a_mixed_team_saved_with_on_null_switches_nobody_and_keeps_take_turns(desk, monkeypatch):
+    body, eng = mixed_team(desk)
+    stops = []
+    real = desk.d.ld.stop
+
+    async def stop(name, why, flatten=False):
+        stops.append(name)
+        return await real(name, why, flatten)
+    monkeypatch.setattr(desk.d.ld, "stop", stop)
+    before = st(desk)
+    r = desk.post("/api/setup", json={**body, "name": "Apex 2", "on": None})      # a rename: no Trading switch flipped
+    assert r.status_code == 200, r.text
+    s = st(desk)
+    assert s["groups"]["g1"]["name"] == "Apex 2" and stops == []
+    for m in (LAB, B):
+        assert s["strategies"][m]["cfg"]["enabled"] == before["strategies"][m]["cfg"]["enabled"]
+        assert s["strategies"][m]["rotation"]["on"] == before["strategies"][m]["rotation"]["on"]
+    assert s["strategies"][LAB]["cfg"]["enabled"] is True and s["strategies"][B]["cfg"]["enabled"] is False
+    assert s["book"][LAB] == [{"account": A1, "qty": 1, "hold": True}, {"account": A2, "qty": 1}]     # each row's own hold (I2)
+    assert desk.post("/api/setup", json={**body, "on": "yes"}).status_code == 400
+    assert desk.post("/api/setup", json={"strategy": LAB, "accounts": [], "on": None}).status_code == 400   # solo: true or false
+
+
+def test_contracts_in_the_gear_must_be_a_whole_number_above_0(desk):
+    limits(desk)
+    book_a1(desk)
+    before = st(desk)["book"][LAB]
+    for bad in (-1, 0, "abc", "2", 1.5, True):
+        r = solo(desk, turns=False, settings={A1: {"qty": bad}})
+        assert r.status_code == 400 and r.json()["detail"] == "Contracts: a whole number above 0.", (bad, r.text)
+    assert st(desk)["book"][LAB] == before
+    assert solo(desk, turns=False, settings={A1: {"qty": None}}).status_code == 200      # no qty: the row keeps its own
+
+
+def test_set_save_refuses_a_gear_qty_below_1(desk):
+    two(desk)
+    r = vset(desk, {A1: LAB, A2: B}, settings={A1: {"qty": -1}})
+    assert r.status_code == 400 and r.json()["detail"] == "Contracts: a whole number above 0."
+    assert not st(desk)["book"].get(LAB)
+
+
+def test_a_solo_save_refuses_a_set_member(desk):
+    two(desk)
+    r = solo(desk, turns=False)
+    assert r.status_code == 409 and r.json()["detail"] == "It is in the set nq_cb: set it up on the set's page."
+    assert not st(desk)["book"].get(LAB)
