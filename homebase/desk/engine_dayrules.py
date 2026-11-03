@@ -255,6 +255,7 @@ class DayRulesMixin:
             total, known = 0.0, bool(live)
             for s in live:
                 cfg = self.cfg.strategies.get(s.strategy)
+                cfg = None if cfg is None else self._rcfg(s, cfg)     # a round is valued in its own contract
                 px = prices.get(cfg.symbol) if cfg is not None else None
                 if px is None:
                     known = False
@@ -278,6 +279,7 @@ class DayRulesMixin:
                 cfg = self.cfg.strategies.get(s.strategy)
                 if cfg is None or s.status not in ("placed", "live"):
                     continue
+                cfg = self._rcfg(s, cfg)
                 was_live = s.status == "live" and s.entry_fill is not None
                 if cfg.symbol in sold:  # the market-out is already sent: this run only has orders to cancel
                     flat, acts[s.strategy] = await self._cancel_state_orders(s, ad)

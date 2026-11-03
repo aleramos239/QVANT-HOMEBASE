@@ -4356,3 +4356,18 @@ def test_a_vest_fill_of_an_nq_round_is_booked(tmp_path):
     assert (ev.symbol, ev.qty) == ("NQ", 1)
     run(eng.on_fill(ev))
     assert (st.status, st.exit_fill, st.pnl) == ("done", 110.0, 200.0)
+
+
+# ------------------------------------------------------------------------------------------------ P&L in the round's contract
+def test_the_day_take_values_an_nq_round_in_nq_dollars(tmp_path):
+    eng, ads, _ = mnq_desk(tmp_path)
+    ad = ads["a1"]
+    st = nq_round(eng, ad)                                            # long 1 NQ from 100.0 on an MNQ-default strategy
+    eng.cfg.strategies[LAB].day_take = 190.0                          # 10 points = $200 - $4 in NQ; only $19 in MNQ
+    assert eng._open_net(st, eng._rcfg(st, eng.cfg.strategies[LAB]), 110.0) == 200.0 - contracts.commission_rt("NQ")
+    eng._mono = lambda: 1000.0
+    assert run(eng.check_takes({"NQ": 110.0})) == []                  # touched: the grace starts
+    eng._mono = lambda: 1010.0
+    (hit,) = run(eng.check_takes({"NQ": 110.0}))
+    assert hit["open_net"] == 196.0 and (st.status, st.exit_reason) == ("done", "day_take")
+    assert st.pnl == 200.0 and eng.book("a1").closed_net == 196.0     # booked in NQ dollars, NQ's fee

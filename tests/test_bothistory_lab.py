@@ -3,6 +3,7 @@ starts a new run and the row says which round it was; a round is not the 09:30 f
 latency_ms. With no `lab_round` line in the journal the output is what it always was. Pure."""
 from __future__ import annotations
 
+from homebase import contracts
 from homebase.desk.bothistory import runs
 from tests.test_bothistory import TODAY, ms, placed, rec
 
@@ -101,3 +102,16 @@ def test_a_flatten_and_a_kill_end_the_round_that_is_running_not_the_ones_before(
     killed = TWO + [round_(3, "10:30:00"), leg("10:30:00"), fill("10:31:00", 110.25),
                     rec("strategy_killed", D, "10:40:00", strategy=LAB, results={"a1": {"ok": True, "acted": True}})]
     assert [r["status"] for r in history(killed)] == ["traded", "traded", "killed"]
+
+
+def test_a_round_that_names_its_contract_is_priced_and_charged_in_it():
+    def rows(symbol):
+        recs = [rec("lab_round", D, "09:40:00", strategy=LAB, account="a1", round=1, qty=1, source="lab",
+                    **({"symbol": symbol} if symbol else {})),
+                leg("09:40:00"), fill("09:41:00", 100.0), out("09:50:00", 110.0, "tp")]
+        return history(recs)                                       # the strategy's default contract is NQ
+
+    assert rows(None)[0]["pnl_usd"] == 196.0                       # no symbol: priced exactly as before
+    assert rows("NQ")[0]["pnl_usd"] == 196.0                       # 10 points x $20 less $4
+    assert rows("MNQ")[0]["pnl_usd"] == 19.0                       # 10 points x $2 less $1
+    assert rows("NQ")[0]["pnl_usd"] == 200.0 - contracts.commission_rt("NQ")

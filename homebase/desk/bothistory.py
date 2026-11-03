@@ -15,7 +15,9 @@ account. Statuses: traded | skipped | refused | no_fill | killed | error.
               from the engine's brackets_moved re-price, same sign convention)
               and gap_through (true when that slip is >= 2 ticks)
   pnl_usd     (exit - entry) x side x point value x qty, less $4 per contract per
-              round trip; left out when the fills cannot be matched
+              round trip (a Lab round whose lab_round line names a symbol: that
+              contract's point value and round-trip fee); left out when the fills
+              cannot be matched
   fire_ms     09:30:00.000 ET on the run's date (the self-timer's fixed fire
               time); placed_ms is the journal ts of "placed"; latency_ms is
               their difference. Present whenever a "placed" landed, else left
@@ -38,7 +40,7 @@ from pathlib import Path
 from typing import Iterable, Optional
 from zoneinfo import ZoneInfo
 
-from ..contracts import point_value, tick_size
+from ..contracts import commission_rt, point_value, tick_size
 from ..core.num import float_or_none as _num
 
 COMMISSION_RT = 4.0              # $ per contract per round trip
@@ -248,7 +250,9 @@ def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,
             # one before it (when there is one) is over. Every other kind never writes it.
             if (date, account) in acct:
                 earlier.append(((date, account), acct.pop((date, account))))
-            run_of(date, account)["round"] = rec.get("round")
+            r = run_of(date, account)
+            r["round"] = rec.get("round")
+            r["symbol"] = rec.get("symbol") or None      # the contract the round fixed at entry (none on an old line)
         elif ev == "placed" and account:
             r = run_of(date, account)
             r["qty"] = _num(rec.get("qty"))
@@ -355,7 +359,9 @@ def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,
                 exit_row["gap_through"] = (None if slip is None else
                                            slip >= GAP_THROUGH_TICKS - _TICK_EPS)
             row["exit"] = exit_row
-        pnl = _pnl(entry, ex, r["qty"], symbol)
+        rsym = r.get("symbol")
+        pnl = (_pnl(entry, ex, r["qty"], rsym, commission_rt(rsym)) if rsym
+               else _pnl(entry, ex, r["qty"], symbol))
         if pnl is not None:
             row["pnl_usd"] = pnl
         out.append(row)
@@ -377,7 +383,7 @@ def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,
     return out
 
 
-def _pnl(entry, ex, qty, symbol) -> Optional[float]:
+def _pnl(entry, ex, qty, symbol, fee_rt=COMMISSION_RT) -> Optional[float]:
     if not entry or not ex or not qty:
         return None
     e, x = entry.get("price"), ex.get("price")
@@ -385,4 +391,4 @@ def _pnl(entry, ex, qty, symbol) -> Optional[float]:
     if e is None or x is None or pv is None or entry.get("side") not in ("Buy", "Sell"):
         return None
     sign = 1 if entry["side"] == "Buy" else -1
-    return round(sign * (x - e) * pv * qty - COMMISSION_RT * qty, 2)
+    return round(sign * (x - e) * pv * qty - fee_rt * qty, 2)
