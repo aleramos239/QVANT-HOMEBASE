@@ -58,22 +58,20 @@ test('an account row escapes the broker\'s name and error, and its buttons pass 
   }
 });
 
-test('System checks escape a check\'s label and detail', () => {
-  const els = { checksList: { innerHTML: '' }, bulbBig: {}, checksTitle: {} };
+test('Needs a look escapes a check\'s label and detail', () => {
+  const els = { needsLook: { innerHTML: '' } };
   const ctx = vm.createContext({
     ST: { readiness: { ready: false, checks: [{ level: 'bad', label: HOSTILE_TEXT, detail: '<script>x</script>' }] } },
-    $: (sel) => els[sel.replace(/^#/, '')], readinessShown: (r) => r,
-    bulbLevel: () => 'bad', chkKey: () => 'k', CHK_COLOR: { bad: 'var(--neg)', info: 'var(--muted-foreground)' },
+    $: (sel) => els[sel.replace(/^#/, '')], readinessShown: (r) => r, DESK_STALE: false, chkKey: () => 'k', jsArg: (v) => JSON.stringify(String(v)),
   });
-  vm.runInContext(ESC + between('function renderChecks()', 'function openChecks()') + '\nglobalThis.renderChecks = renderChecks;', ctx);
-  ctx.renderChecks();
-  assert.doesNotMatch(els.checksList.innerHTML, /<img|<script>/);
-  assert.match(els.checksList.innerHTML, /&lt;img src=x onerror=alert\(1\)&gt;/);
-  assert.match(els.checksList.innerHTML, /&lt;script&gt;x&lt;\/script&gt;/);
+  vm.runInContext(ESC + between('const LOOK_FIX', 'function lookFix(') + '\nglobalThis.renderNeedsLook = renderNeedsLook;', ctx);
+  ctx.renderNeedsLook();
+  assert.doesNotMatch(els.needsLook.innerHTML, /<img|<script>/);
+  assert.match(els.needsLook.innerHTML, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.match(els.needsLook.innerHTML, /&lt;script&gt;x&lt;\/script&gt;/);
 });
 
-test('the Not-ready strip, the + Assign menu, the accounts dialog and the connect wizard escape too', () => {
-  assert.match(HTML, /<b>\$\{esc\(c\.label\)\}<\/b> \$\{esc\(String\(c\.detail\)\.slice\(0, 70\)\)\}/);
+test('the + Assign menu, the accounts dialog and the connect wizard escape too', () => {
   assert.match(HTML, /onclick="pickAsg\('\$\{name\}',\$\{jsArg\(id\)\},\$\{c\.qty\}\)">\s*\$\{esc\(accts\[id\]\.label \|\| id\)\}/);
   assert.match(HTML, /onclick="reconnectAcct\(\$\{jsArg\(id\)\}\)"/);
   assert.match(HTML, /onclick="removeAcct\(\$\{jsArg\(id\)\}\)"/);

@@ -5,7 +5,7 @@
      - MOVES the page's own controls into the toolbar: the page switcher, the readiness bulb, the status pill, Arm /
        Disarm, the hold-to-Kill button and Settings are the same nodes with the same listeners they had;
      - gives the page's sidebar the glass pane, and adds an inspector that HOLDS nodes the page already renders
-       (readiness, notices, the footer links; a strategy's figures, links and actions), re-collected after each of
+       (notices, the footer links; a strategy's figures, links and actions), re-collected after each of
        the page's repaints;
      - adds a "Setup" card to the strategy inspector, written from the same cfg the page prints as one line; a straddle with
      an RR (nq930) also gets a 5/10-point stop menu and a small RR field; both call the page's own setStratRr().
@@ -65,13 +65,11 @@
     frame.append(insp);
 
     // Today / Activity: the desk's own status nodes, re-housed (the page keeps writing into them by id)
-    const sum = el('button', { class: 'hb-row hb-ready-row', type: 'button', id: 'hbReadyRow', onclick: () => { if (typeof window.openChecks === 'function') window.openChecks(); } },
-      el('i', { class: 'hb-ready-ico' }), el('span', { class: 'hb-row-k', id: 'hbReadyTxt', text: 'Checking…' }), sf('chevron-right', 'hb-chev'));
-    const ready = $('#readyStrip'), foot = $('#todayFoot'), notices = $('#noticeStrip');
+    const foot = $('#todayFoot'), notices = $('#noticeStrip');
+    const noNotices = el('div', { class: 'mcap', id: 'hbNoNotices', text: 'No notices' });      // shown while the strip is empty
     const deskPage = el('div', { class: 'hb-ipage', id: 'hbInspDesk' },
-      el('section', { class: 'hb-isec' }, el('div', { class: 'hb-isec-h', text: 'Readiness' }), el('div', { class: 'hb-box' }, sum, ready)),
       el('section', { class: 'hb-isec hb-isec-foot' }, el('div', { class: 'hb-isec-h', text: 'Desk' }), el('div', { class: 'hb-box' }, foot)),
-      el('section', { class: 'hb-isec hb-isec-notices' }, el('div', { class: 'hb-isec-h', text: 'Notices' }), el('div', { class: 'hb-box' }, notices)));
+      el('section', { class: 'hb-isec hb-isec-notices' }, el('div', { class: 'hb-isec-h', text: 'Notices' }), el('div', { class: 'hb-box' }, notices, noNotices)));
     // a strategy: its setup (read-only but for a straddle's target RR), then the page's own figures, links and actions
     const setupBox = el('div', { class: 'hb-box', id: 'hbSetup' });
     const figsBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbFigs' });
@@ -278,16 +276,7 @@
         const stale = stale_(), [wl, wt] = readyWord(st, stale, staleWhy_());
         if (readyBtn.dataset.lvl !== wl) readyBtn.dataset.lvl = wl;
         if (readyBtn.textContent !== wt) { readyBtn.textContent = wt; readyBtn.setAttribute('aria-label', 'Readiness: ' + wt); }
-        // the inspector's row, in words (the bulb is the page's own verdict; the row opens the page's own System checks); while the
-        // state is old, the toolbar's words -- one answer on screen
-        if (bulb) {
-          const lvl = bulb.classList.contains('bad') ? 'bad' : bulb.classList.contains('warn') ? 'warn' : bulb.classList.contains('ok') ? 'ok' : '';
-          const txt = lvl === 'ok' ? 'Ready to trade' : lvl === 'warn' ? 'Needs attention' : lvl === 'bad' ? 'Not ready' : 'Checking…';
-          const k = stale ? wl : lvl, w = stale ? wt : txt;
-          if (sum.dataset.lvl !== k) sum.dataset.lvl = k;
-          const t = $('#hbReadyTxt');
-          if (t && t.textContent !== w) t.textContent = w;
-        }
+        noNotices.hidden = !notices.hidden;
         const cw = chartWords(st), cs = chartWords(st, true);
         if (ctLong.textContent !== cw) ctLong.textContent = cw;
         if (ctShort.textContent !== cs) ctShort.textContent = cs;
@@ -355,6 +344,7 @@
     if (vStrat) mo.observe(vStrat, { childList: true });
     if (side) mo.observe(side, { childList: true });                  // the page repaints the sidebar on every refresh
     if (bulb) mo.observe(bulb, { attributes: true, attributeFilter: ['class'] });
+    mo.observe(notices, { attributes: true, attributeFilter: ['hidden'] });
     const pill = $('#statusPill');      // its class gains "stale" when the desk stops answering (the page's renderMaster)
     if (pill) new MutationObserver(words).observe(pill, { attributes: true, attributeFilter: ['class'] });
     sync();

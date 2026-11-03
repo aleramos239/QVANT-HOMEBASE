@@ -601,11 +601,11 @@
 
       <section class="view" id="viewToday">
         <h1 class="day-title" id="dayTitle" aria-live="polite"></h1>
+        <div id="needsLook"></div>
         <div class="daytl" id="dayTl"></div>
         <div class="slist" id="stratList"></div>
         <div class="foot" id="todayFoot"></div>
         <div class="notices" id="noticeStrip" role="status" hidden></div>
-        <div class="ready notready" id="readyStrip" style="display:none"></div>
       </section>
 
       <section class="view" id="viewStrat" hidden></section>
@@ -890,20 +890,6 @@
   </div>
 </div>
 
-<div class="overlay" id="checksOverlay">
-  <div class="modal" style="width:560px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="checksTitle">
-    <div class="cal-head">
-      <span class="bulb" id="bulbBig" style="cursor:default"></span>
-      <span style="font-weight:600" id="checksTitle">System checks</span>
-      <span class="spacer" style="flex:1"></span>
-      <button class="cal-nav" onclick="closeChecks()" title="Close" aria-label="Close">&times;</button>
-    </div>
-    <div id="checksList" style="margin-top:6px"></div>
-    <p class="mcap" style="margin:10px 0 0">Green = ready to trade. Amber = attention,
-      not blocking. Red = the algo cannot run right — fix before the open.</p>
-  </div>
-</div>
-
 <div class="overlay" id="calOverlay">
   <div class="modal" style="width:460px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="calAcct">
     <div class="cal-head">
@@ -923,17 +909,17 @@
 <div id="alertBar" role="alert" hidden><span id="alertText"></span>
   <button type="button" id="alertX" title="Dismiss" aria-label="Dismiss">&times;</button></div>
 
-<script src="/static/desk/core.js?v=6"></script>
-<script src="/static/desk/topbar.js?v=8"></script>
+<script src="/static/desk/core.js?v=7"></script>
+<script src="/static/desk/topbar.js?v=9"></script>
 <script src="/static/desk/activity.js?v=16"></script>
 <script src="/static/desk/views.js?v=5"></script>
-<script src="/static/desk/groups.js?v=23"></script>
-<script src="/static/desk/strategy.js?v=27"></script>
-<script src="/static/desk/labdesk.js?v=22"></script>
+<script src="/static/desk/groups.js?v=24"></script>
+<script src="/static/desk/strategy.js?v=28"></script>
+<script src="/static/desk/labdesk.js?v=23"></script>
 <script src="/static/desk/book.js?v=19"></script>
 <script src="/static/desk/acctset.js?v=8"></script>
-<script src="/static/desk/settings.js?v=10"></script>
-<script src="/static/desk/popups.js?v=13"></script>
+<script src="/static/desk/settings.js?v=11"></script>
+<script src="/static/desk/popups.js?v=14"></script>
 <script src="/static/desk/start.js?v=4"></script>
 <script src="/static/hb-glass.js?v=2"></script>
 </body>

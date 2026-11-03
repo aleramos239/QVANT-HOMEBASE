@@ -567,7 +567,7 @@ function loadRefresh({ st = { armed: true }, reply = () => ({ ok: true, status: 
   const clock = { now: 0 }, fetched = [], masters = [], renders = [];
   const clockEl = { textContent: '', classList: { contains: () => false } };
   const ctx = vm.createContext({
-    Date: { now: () => clock.now }, FREEZE: false, DEMO: false, ST: st, DESK_STALE: false, STALE_WHY: '',
+    renderNeedsLook() {}, Date: { now: () => clock.now }, FREEZE: false, DEMO: false, ST: st, DESK_STALE: false, STALE_WHY: '',
     fetch: async (u) => {
       fetched.push(u);
       const a = reply();

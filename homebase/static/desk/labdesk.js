@@ -465,11 +465,14 @@ function renderMain(names, issues) {
   $("#viewActivity").hidden = VIEW.k !== "activity";
   if (VIEW.k === "today") {
     const [l1, l2] = dayHeadline(names);
-    const l2h = esc(l2).replace(/(Today )([−+]?\$[\d,]+)/, (m, a, b) => `${a}<span class="amt${b[0] === "+" ? " pos" : ""}">${b}</span>`);
-    $("#dayTitle").innerHTML = `${esc(l1)}<br><span>${l2h}</span>`;
+    const l2h = esc(l2).replace(/([Tt]oday )([−+]?\$[\d,]+)/, (m, a, b) => `${a}<span class="amt${b[0] === "+" ? " pos" : ""}">${b}</span>`);
+    $("#dayTitle").innerHTML = `${esc(l1)}<br><span title="The day's money counts closed trades only; an open position is not in it.">${l2h}</span>`;
+    renderNeedsLook();
     $("#dayTl").innerHTML = dayTimeline(names);
-    $("#stratList").innerHTML = names.map(n => todayRow(n, ST.strategies[n])).join("") + labRowsHtml(todayLabRow)
-      || `<div class="feed-empty" style="padding:28px 26px">No strategies are showing. Use Manage algos to bring one back.</div>`;
+    // an OFF strategy is not listed here (the sidebar's Off section holds it)
+    $("#stratList").innerHTML = names.filter(n => sideKind(ST.strategies[n], (ST.book || {})[n] || []) !== "off").map(n => todayRow(n, ST.strategies[n])).join("")
+      + labRowsHtml(w => w.enabled === true ? todayLabRow(w) : "")
+      || `<div class="feed-empty" style="padding:28px 26px">No strategy is ON. Open one in the sidebar to switch it on.</div>`;
     $("#todayFoot").innerHTML = todayFoot(issues);
   } else if (VIEW.k === "strat") $("#viewStrat").innerHTML = stratView(VIEW.name);
   else if (VIEW.k === "lab") $("#viewStrat").innerHTML = labSafe(() => labView(VIEW.name), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${LAB_FAULT}</div>`);
@@ -574,29 +577,10 @@ function render() {
   renderChartTrading(s.chart_trading);
   if ($("#settingsOverlay").classList.contains("open")) renderSettings();
 
-  // readiness: silent when fine, loud when not; dismissable — but a
-  // dismissed strip returns the moment the SET of problems changes
+  // readiness: the bulb and the toolbar word here; the list itself is Today's "Needs a look" (renderNeedsLook, with renderMain)
   const r = readinessShown(s.readiness, s);   // a "no signal" that could not have fired reads as info (W4)
   renderBulb(r);
-  const strip = $("#readyStrip");
   const probs = r ? r.checks.filter(c => c.level === "bad" || c.level === "warn") : [];
-  const sig = JSON.stringify(probs.map(c => c.label + "|" + c.detail));
-  let dismissed = "";
-  try { dismissed = localStorage.getItem("hb_ready_dismiss") || ""; } catch (_) {}
-  window.READY_SIG = sig;
-  if (r && !r.ready && sig !== dismissed) {
-    strip.style.display = "";
-    strip.innerHTML = `<span class="headline">Not ready</span>` +
-      probs.map(c => `<span class="ri ${c.level}">
-        <span class="rd ${c.level}"></span><b>${esc(c.label)}</b> ${esc(String(c.detail).slice(0, 70))}${String(c.detail).length > 70 ? "…" : ""}</span>`).join("") +
-      `<span class="spacer"></span>` +
-      (Object.values(s.accounts || {}).some(a => !a.connected)
-        ? `<button class="btn btn-outline btn-sm" onclick="reconnectAcct('')"
-             title="Rebuild every broker connection">Reconnect</button>` : "") +
-      `<button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:15px;padding:0 2px"
-         title="Dismiss — reappears if the problems change"
-         onclick="dismissReady()">&times;</button>`;
-  } else strip.style.display = "none";
 
   const shelved = shelvedBuiltins();       // an archived built-in lives in Archive, unless it can trade
   const names = Object.keys(s.strategies).filter(n => !shelved.includes(n))
@@ -636,7 +620,7 @@ async function refresh() {
   if (FREEZE) {                   // don't wipe an open menu or qty edit
     if (!DESK_STALE && Date.now() - LAST_FRESH > FREEZE_STALE_MS) {
       DESK_STALE = true; STALE_WHY = "updates pause while a menu or a size edit is open";
-      renderMaster();
+      renderMaster(); renderNeedsLook();
     }
     return;
   }
@@ -662,7 +646,7 @@ async function refresh() {
     DESK_STALE = true;   // ST is now the last-known state, not current -- the top bar shows it as stale
     STALE_WHY = refused || "the desk is not answering";
     $("#clock").textContent = refused ? "status error" : "server unreachable";
-    renderMaster();
+    renderMaster(); renderNeedsLook();
     if ($("#settingsOverlay").classList.contains("open")) renderSettings();
   }
 }

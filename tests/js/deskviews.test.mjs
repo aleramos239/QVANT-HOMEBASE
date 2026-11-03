@@ -10,13 +10,15 @@ import vm from 'node:vm';
 import { HTML } from './deskpage.mjs';
 const BLOCK = HTML.slice(HTML.indexOf('/* ===== Desk views'), HTML.indexOf('/* ---- sidebar ---- */'));
 const FMT = HTML.slice(HTML.indexOf('const fmt = '), HTML.indexOf('const usd = '));
+const SIDE = HTML.slice(HTML.indexOf('function sideKind('), HTML.indexOf('function renderSide('));      // the one rule the headline counts by
 
 function load(ST, stale = false, { machine = null } = {}) {
-  const ctx = vm.createContext({ ST, DESK_STALE: stale, esc: (v) => String(v ?? ''),
+  const ctx = vm.createContext({ ST, DESK_STALE: stale, labSafe: (f, d) => { try { return f(); } catch (_) { return d; } }, labShadowNet: () => null,
+    readinessShown: (r) => r, stratLabel: (n) => n, stratDotCls: () => '', esc: (v) => String(v ?? ''),
     isDemoAcct: (id) => { const a = (ST.accounts || {})[id]; return !!a && (a.env === 'demo' || a.env === 'paper'); },   // book.js's
     deskMachine: () => machine });
-  vm.runInContext(FMT + 'const usd = (v) => v == null ? "—" : (v < 0 ? "-$" : "$") + fmt(Math.abs(v));\n' + BLOCK +
-    '\nglobalThis.api = { dayHeadline, stratState, todayPnl, usdS, specOf, hmin, etMin };', ctx);
+  vm.runInContext(FMT + 'const usd = (v) => v == null ? "—" : (v < 0 ? "-$" : "$") + fmt(Math.abs(v));\n' + BLOCK + SIDE +
+    '\nconst dayHeadlineOf = dayHeadline; dayHeadline = (names) => dayHeadlineOf(names.length ? names : Object.keys(ST.strategies));      // the page passes every shown name\nglobalThis.api = { dayHeadline, dayCounts, stratState, todayPnl, usdS, specOf, hmin, etMin };', ctx);
   return ctx.api;
 }
 const strat = (over = {}, extra = {}) => ({
@@ -34,14 +36,14 @@ test('a disarmed desk says so, and that nothing goes to a broker', () => {
 
 test('armed before the open: how long until 9:30 and how many strategies are armed', () => {
   const api = load(status('2026-10-01T09:12:00-0400'));
-  assert.deepEqual([...api.dayHeadline([])], ['Opens in 18 min.', 'Desk ON · 1 strategy on.']);
+  assert.deepEqual([...api.dayHeadline([])], ['Opens in 18 min.', '0 strategies trading on 0 accounts · 1 in shadow']);
   const early = load(status('2026-10-01T07:00:00-0400')).dayHeadline([]);
   assert.equal(early[0], 'Opens in 2 h 30 min.');
 });
 
-test('a shadow strategy is not counted as armed; an off one neither', () => {
+test('a shadow strategy is counted in shadow, never as trading; an off one is not counted', () => {
   const st = status('2026-10-01T09:12:00-0400', { strategies: { a: strat(), b: strat({ shadow: true }), c: strat({ enabled: false }) } });
-  assert.equal(load(st).dayHeadline([])[1], 'Desk ON · 1 strategy on.');
+  assert.equal(load(st).dayHeadline([])[1], '0 strategies trading on 0 accounts · 2 in shadow');
 });
 
 test('in session: who is in a position, and a closed session reports the day with a real minus sign', () => {
@@ -105,19 +107,37 @@ test('the switch on a row never also opens the strategy', () => {
 
 // ---- WP1.9: in session the headline says the day so far in money, LIVE apart from the rest ----
 const acct = (env, net) => ({ env, connected: true, day: { day_lock: null, closed_net: net, closes: 1, locked: null } });
-test('1.9: in session: "Live ±$X · Demo + paper ±$Y so far (strategies\' closed trades)" from each account\'s closed P&L', () => {
+test('1.9: in session: "today ±$T (Live ±$X · Demo + paper ±$Y)" from each account\'s closed P&L', () => {
   const st = status('2026-10-01T10:00:00-0400', { accounts: { L1: acct('live', 120), L2: acct('live', -20), D1: acct('demo', 30), P1: acct('paper', -10) } });
-  assert.equal(load(st).dayHeadline([])[1], '1 on · 0 done today. Live +$100 · Demo + paper +$20 so far (strategies\' closed trades).');
+  assert.equal(load(st).dayHeadline([])[1], '0 strategies trading on 0 accounts · 1 in shadow · today +$120 (Live +$100 · Demo + paper +$20)');
 });
 
-test('1.9: paper only says Paper; a loss has a real minus; the Mac says it is the Mac', () => {
+test('1.9: paper only says Paper; a loss has a real minus', () => {
   const st = status('2026-10-01T10:00:00-0400', { accounts: { L1: acct('live', -250.4), P1: acct('paper', 0) } });
-  assert.equal(load(st, false, { machine: 'mac' }).dayHeadline([])[1], '1 on · 0 done today. This Mac: Live −$250 · Paper $0 so far (strategies\' closed trades).');
-  assert.equal(load(st, false, { machine: 'server' }).dayHeadline([])[1], '1 on · 0 done today. Live −$250 · Paper $0 so far (strategies\' closed trades).');
+  assert.equal(load(st, false, { machine: 'mac' }).dayHeadline([])[1], '0 strategies trading on 0 accounts · 1 in shadow · today −$250 (Live −$250 · Paper $0)');
+  assert.equal(load(st, false, { machine: 'server' }).dayHeadline([])[1], '0 strategies trading on 0 accounts · 1 in shadow · today −$250 (Live −$250 · Paper $0)');
 });
 
 test('1.9: no account day figures: the line is what it was; out of session it is unchanged too', () => {
-  assert.equal(load(status('2026-10-01T10:00:00-0400', { accounts: { L1: { env: 'live' } } })).dayHeadline([])[1], '1 on · 0 done today.');
+  assert.equal(load(status('2026-10-01T10:00:00-0400', { accounts: { L1: { env: 'live' } } })).dayHeadline([])[1], '0 strategies trading on 0 accounts · 1 in shadow');
   const pre = status('2026-10-01T09:12:00-0400', { accounts: { L1: acct('live', 50) } });
-  assert.deepEqual([...load(pre).dayHeadline([])], ['Opens in 18 min.', 'Desk ON · 1 strategy on.']);
+  assert.deepEqual([...load(pre).dayHeadline([])], ['Opens in 18 min.', '0 strategies trading on 0 accounts · 1 in shadow · today +$50 (Live +$50)']);
+});
+
+// ---- Task 13: the headline counts Trading and Shadow apart, by the sidebar's own rule ----
+test('dayHeadline line 2: 2 trading on 2 accounts, 6 in shadow, the money', () => {
+  const sh = Object.fromEntries([1, 2, 3, 4, 5, 6].map((i) => ['s' + i, strat()]));
+  const st = status('2026-10-01T10:00:00-0400', {
+    strategies: { t1: strat(), t2: strat(), off: strat({ enabled: false }), ...sh }, book: { t1: [{ account: 'L1' }, { account: 'D1' }], t2: [{ account: 'L1' }] },
+    accounts: { L1: acct('live', 310), D1: acct('demo', 102) } });
+  assert.equal(load(st).dayHeadline([])[1], '2 strategies trading on 2 accounts · 6 in shadow · today +$412 (Live +$310 · Demo +$102)');
+});
+test('dayHeadline line 2: singulars, and no money when no account says', () => {
+  const st = status('2026-10-01T10:00:00-0400', { book: { nq930: [{ account: 'L1' }] } });
+  assert.equal(load(st).dayHeadline([])[1], '1 strategy trading on 1 account · 0 in shadow');
+});
+test('dayCounts: a variant set is ONE strategy; a live-but-OFF one still trades', () => {
+  const st = status('2026-10-01T10:00:00-0400', { strategies: { a: strat(), b: strat(), c: strat({ enabled: false }, { day_status: 'live' }) },
+    book: { a: [{ account: 'L1' }], b: [{ account: 'L2' }], c: [{ account: 'L1' }] }, variants: { sets: [{ id: 'v', name: 'V', members: ['a', 'b'] }] } });
+  assert.deepEqual({ ...load(st).dayCounts(['a', 'b', 'c'], st) }, { trading: 2, accounts: 2, shadow: 0 });
 });

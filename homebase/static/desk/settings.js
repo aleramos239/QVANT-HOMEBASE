@@ -343,11 +343,10 @@ function healthPreopen() {
   const rows = p && p.available && p.checks ? p.checks.filter(c => c.level !== "ok") : [];
   const said = !p || !p.available || p.at === null ? "Not run yet"
     : rows.length ? rows.length + " to look at" : "All clear";
-  const old = p && p.available && p.at !== null && Date.now() - p.got > PREOPEN_FRESH_MS;   // the banner has dropped it by now
+  const old = p && p.available && p.at !== null && Date.now() - p.got > PREOPEN_FRESH_MS;   // Needs a look has dropped it by now
   const when = old ? ` (last run ${etHM(new Date(p.got).toISOString())} ET, old)` : "";
   return `<p class="wnote" style="margin-top:12px">Pre-open check: ${esc(said + when)}
-      <button class="btn btn-outline btn-sm" type="button" onclick="runPreopen()" ${HEALTH_BUSY ? "disabled" : ""}>${HEALTH_BUSY ? "Running…" : "Run now"}</button></p>`
-    + rows.map(c => `<p class="mcap${c.level === "bad" ? " warn" : ""}" style="margin-top:2px"><b>${esc(c.label)}</b> ${esc(c.detail)}</p>`).join("");
+      <button class="btn btn-outline btn-sm" type="button" onclick="runPreopen()" ${HEALTH_BUSY ? "disabled" : ""}>${HEALTH_BUSY ? "Running…" : "Run now"}</button></p>`;      // its rows are in Today's "Needs a look" (as "Pre-open: ..."), not repeated here
 }
 function renderHealth(h) {
   const root = $("#settingsHealth");

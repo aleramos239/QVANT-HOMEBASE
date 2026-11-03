@@ -52,7 +52,7 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
       return plain(typeof answer === 'function' ? answer(url, body) : answer);
     },
     showOverlay: (id) => shown.push(id), hideOverlay: (id) => hidden.push(id), closeAsgMenus() {},
-    switchBounced: () => false, render() {}, loadDeskLab() {}, refresh: async () => { refreshes.push(1); },
+    switchBounced: () => false, render() {}, renderNeedsLook() {}, loadDeskLab() {}, refresh: async () => { refreshes.push(1); },
     fetch: async () => ({ ok: false }), setView() {}, URLSearchParams, AbortSignal,
   });
   const code = SLICE('/* ---- which machine this Desk runs on', 'function toast(') + SLICE('const esc = (v) =>', 'async function chartPost(') + SLICE('const stratLabel = ', 'const actStrat = ') + SLICE('const fmt = ', 'const usd = ') +
@@ -480,7 +480,8 @@ test('WP1.8 sidebar accounts: a LIVE / DEMO / PAPER tag on every row, what it ho
 
 test('a Lab row the Desk holds is its own row, never two: the sidebar sorts names + the Lab ones it does not hold', () => {
   const side = SLICE('function renderSide(', '/* ---- strategy detail ---- */');
-  assert.match(side, /DESKLAB\.strategies\.filter\(w => !labOnDesk\(w\)\)/);
+  assert.match(side, /sideLabs\(\)/);
+  assert.match(HTML.slice(HTML.indexOf('function sideLabs('), HTML.indexOf('function renderSide(')), /DESKLAB\.strategies\.filter\(w => !labOnDesk\(w\)\)/);
   assert.match(side, /sideSections\(names, ST, .*, labs\)/);
 });
 
@@ -1209,24 +1210,26 @@ test('N2 each Lab event reaches the real Activity feed as a plain line; an event
 });
 
 test('c4 the Today headline and the day bar are what they were when a Lab strategy only runs in shadow', () => {
+  const hl = (x) => x.api.dayHeadline(Object.keys(x.ctx.ST.strategies));      // the page passes every shown name
   const mk = (strategies, book) => load({ strategies, book });
   const off = { nq930: { ...nq930(), cfg: { ...nq930().cfg, enabled: false } } };
   const withLab = { ...off, lab_nq_orb: deskStrat({ state: 'shadow' }, { flat_et: '11:30', cancel_et: '11:30' }) };
   const a = mk(off, {}), b = mk(withLab, {});
   const friday = (...xs) => xs.forEach((x) => { x.ctx.ST.et_now = '2026-10-09T12:00:00-0400'; });
   friday(a, b);
-  assert.deepEqual(plain(b.api.dayHeadline([])), plain(a.api.dayHeadline([])), 'a Lab strategy with no account is not "armed"');
+  assert.equal(hl(b)[0], hl(a)[0], 'a Lab strategy with no account does not change the day');
+  assert.match(hl(b)[1], /^0 strategies trading on 0 accounts/, 'a Lab strategy with no account is never counted as trading');
   assert.equal(b.api.dayTimeline(), a.api.dayTimeline(), 'and its times are never the bar\'s');
   // nq930 and gc_nfp ON: the count is theirs
   const two = { nq930: nq930(), gc_nfp: { ...nq930(), cfg: { ...nq930().cfg, label: 'gc' } } };
   const c = mk(two, {}), d = mk({ ...two, lab_nq_orb: deskStrat({ state: 'shadow' }) }, {});
   friday(c, d);
-  assert.deepEqual(plain(d.api.dayHeadline([])), plain(c.api.dayHeadline([])));
+  assert.equal(hl(d)[0], hl(c)[0]);
   // with an account booked it is armed like any other
   const e = mk({ ...two, lab_nq_orb: deskStrat({ state: 'waiting' }) }, BOOKED);
   friday(e);
-  assert.match(e.api.dayHeadline([])[1], /^3 on/);
-  assert.match(c.api.dayHeadline([])[1], /^2 on/);
+  assert.match(hl(e)[1], /^1 strategy trading on 1 account /);
+  assert.match(hl(c)[1], /^0 strategies trading on 0 accounts · \d+ in shadow/);
 });
 
 test('m1 the switch\'s tooltip says where the orders go, on the page and on the Today row', () => {

@@ -131,7 +131,7 @@ function load() {
 // ---- the markup ---------------------------------------------------------------------------------
 test('every dialog is role="dialog" aria-modal and has a name', () => {
   const overlays = HTML.match(/<div class="overlay" id="\w+"[^>]*>\s*<div class="modal"[^>]*>/g) || [];
-  assert.equal(overlays.length, 10);   // the Limits dialog of a Lab strategy (Step B), + Manage groups; the settings sheet and Manage algos went (Task 9)
+  assert.equal(overlays.length, 9);   // the Limits dialog of a Lab strategy (Step B), + Manage groups; the settings sheet and Manage algos went (Task 9); the System checks dialog went (Task 13)
   for (const o of overlays) {
     assert.match(o, /role="dialog" aria-modal="true" tabindex="-1" inert/, o);   // inert until opened
     const named = /aria-label="[^"]+"/.exec(o) || /aria-labelledby="(\w+)"/.exec(o);
@@ -147,7 +147,7 @@ test('every dialog is role="dialog" aria-modal and has a name', () => {
 test('every dialog opens and closes through the one path (no stray class flips)', () => {
   const flips = HTML.match(/classList\.(add|remove)\("open"\)/g) || [];
   assert.equal(flips.length, 2, 'only showOverlay/hideOverlay touch .open');
-  for (const [open, close] of [['openChecks', 'closeChecks'], ['openConnect', 'closeConnect'], ['openSettings', 'closeSettings'],
+  for (const [open, close] of [['openConnect', 'closeConnect'], ['openSettings', 'closeSettings'],
     ['openRes', 'closeRes'], ['openAccts', 'closeAccts'], ['openLive', 'closeLive'],
     ['openCal', 'closeCal'], ['openLabLimits', 'closeLabLimits'], ['openGroupMgr', 'closeGroupMgr']]) {
     const o = HTML.slice(HTML.indexOf(`function ${open}(`)), c = HTML.slice(HTML.indexOf(`function ${close}(`));

@@ -125,15 +125,15 @@ test('an old pre-open result says when it ran and that it is old', () => {
   assert.match(els.settingsHealth.innerHTML, /All clear\s*<button/);
 });
 
-test('the pre-open part of the card: run button, rows, a note off the Mac', () => {
+test('the pre-open part of the card: run button, the count (rows live in Needs a look), a note off the Mac', () => {
   const { api, els, win } = load();
   api.renderHealth(health);
   assert.match(els.settingsHealth.innerHTML, /Not run yet/);
   assert.match(els.settingsHealth.innerHTML, /onclick="runPreopen\(\)"/);
   win.PREOPEN = { available: true, got: Date.now(), checks: [{ level: 'warn', label: 'ticks NQ', detail: 'thin <b>' }] };
   api.renderHealth(health);
-  assert.match(els.settingsHealth.innerHTML, /ticks NQ/);
-  assert.match(els.settingsHealth.innerHTML, /thin &lt;b&gt;/);
+  assert.match(els.settingsHealth.innerHTML, /1 to look at/);
+  assert.doesNotMatch(els.settingsHealth.innerHTML, /ticks NQ|thin &lt;b&gt;/);
   win.PREOPEN = { available: false, reason: 'Not on this machine: the pre-open check reads the Mac', got: Date.now() };
   api.renderHealth(health);
   assert.match(els.settingsHealth.innerHTML, /Not on this machine: the pre-open check/);

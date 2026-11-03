@@ -246,11 +246,11 @@ test('every other check is untouched: a real red stays red, and a gated amber is
   assert.equal(shown(same), same.readiness, 'nothing to change: the desk\'s own object, as is');
 });
 
-test('the bulb, the Not-ready strip and the checks list all read the shown readiness', () => {
+test('the bulb, the toolbar word and the Needs a look list all read the shown readiness', () => {
   const render = between('function render() {', 'async function refresh()');
   assert.match(render, /const r = readinessShown\(s\.readiness, s\);/);
   assert.match(render, /renderBulb\(r\);/);
-  assert.match(between('function renderChecks()', 'function openChecks()'), /readinessShown\(ST\.readiness, ST\)/);
+  assert.match(between('function renderNeedsLook()', 'function lookFix('), /readinessShown\(ST\.readiness, ST\)/);
 });
 
 // ---- labels ------------------------------------------------------------------------------------

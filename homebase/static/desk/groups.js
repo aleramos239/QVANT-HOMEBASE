@@ -348,7 +348,14 @@ function dayMoney() {
   const other = kinds.size === 2 ? "Demo + paper" : kinds.has("paper") ? "Paper" : "Demo";
   const parts = [sums.live != null ? `Live ${usdS(sums.live)}` : "", sums.other != null ? `${other} ${usdS(sums.other)}` : ""].filter(Boolean);
   if (!parts.length) return "";
-  return `${deskMachine() === "mac" ? "This Mac: " : ""}${parts.join(" · ")} so far (strategies' closed trades).`;
+  return `today ${usdS((sums.live || 0) + (sums.other || 0))} (${parts.join(" · ")})`;      // closed trades only (the title on the headline says so)
+}
+/* How the sidebar sorts the Desk's strategies, as numbers: strategies trading (ON with an account; a variant set is ONE), the
+   accounts they are booked on, and strategies in shadow (ON with none). It IS sideSections, so the headline and the sidebar never disagree. */
+function dayCounts(names, st) {
+  const sec = sideSections(names, st, (st.variants && st.variants.sets) || [], labSafe(sideLabs, [])), accts = new Set();
+  for (const r of sec.trading) for (const id of r.members || [r.id]) for (const b of (st.book || {})[id] || []) if (b && b.account) accts.add(b.account);
+  return {trading: sec.trading.length, accounts: accts.size, shadow: sec.shadow.length};
 }
 /* the one sentence of the day -- two tones: what happens next, then what is armed */
 function dayHeadline(names) {
@@ -357,11 +364,15 @@ function dayHeadline(names) {
   const live = Object.entries(ST.strategies || {}).filter(([n, v]) => v.cfg.enabled && !v.cfg.shadow &&
     !(v.cfg.kind === "lab" && !((ST.book && ST.book[n]) || []).length)).map(([, v]) => v);
   const nonLab = strategies.filter(v => v.cfg.kind !== "lab");
-  const n = live.length, now = etMin(ST.et_now);
+  const now = etMin(ST.et_now);
   const dow = new Date(String(ST.et_now).slice(0, 10) + "T12:00:00Z").getUTCDay();
   const stale = DESK_STALE ? " Last known state." : "";
   if (!ST.armed) return ["Desk OFF.", "Signals are journaled only. Nothing is sent to a broker." + stale];
-  const onTxt = "Desk ON · " + plural(n, "strategy", "strategies") + " on." + stale;      // the desk is armed; strategies are on or off
+  const counts = () => {      // the desk is ON: what trades, on how many accounts, what runs in shadow, and the day's money
+    const c = dayCounts(names, ST), m = dayMoney();
+    return `${plural(c.trading, "strategy", "strategies")} trading on ${plural(c.accounts, "account", "accounts")} · ${c.shadow} in shadow` + (m ? " · " + m : "") + stale;
+  };
+  const onTxt = counts();
   // Sunday from 18:00 ET the futures trade again: the Desk's day is the 9:30 session, so say when that is, not "closed"
   if (dow === 0 && now != null && now >= 18 * 60) return ["Futures are open. The Desk's day starts Monday at 9:30.", onTxt];
   if (dow === 0 || dow === 6) return ["Markets are closed.", onTxt];
@@ -373,10 +384,8 @@ function dayHeadline(names) {
   if (now < flat) {
     const inPos = live.filter(v => v.day_status === "live").length;
     const working = live.filter(v => v.day_status === "placed" || v.day_status === "placing").length;
-    const done = live.filter(v => v.day_status === "done").length;
     const l1 = inPos ? `${plural(inPos, "strategy", "strategies")} in a position.` : working ? "Orders are working." : "In session.";
-    const money = dayMoney();
-    return [l1, `${n} on · ${done} done today.` + (money ? " " + money : "") + stale];
+    return [l1, onTxt];
   }
   const rows = strategies.map(todayPnl).filter(p => p != null);
   const tot = rows.reduce((a, p) => a + p, 0);
@@ -508,7 +517,8 @@ function cycleLastTurn(g) {
 function todayRow(name, s) {
   const c = s.cfg, state = stratState(name, s), p = todayPnl(s);
   const sig = labSafe(() => lastSignal(name, todaySignals()), "");
-  const extra = [openText(s), sig ? "Last signal " + sig : ""].filter(Boolean);      // the position and the last signal: each only when known
+  const accts = ((ST.book && ST.book[name]) || []).map(b => `${acctShort(b.account)} ${AcctSet.words(b)}`).join(", ");      // Trading: each account's size, in words
+  const extra = [accts, openText(s), sig ? "Last signal " + sig : ""].filter(Boolean);      // the position and the last signal: each only when known
   const sh = c.kind === "lab" ? labSafe(() => labShadowNet(name, s), null) : null;      // a Lab strategy with no account: what the day would have made
   const sw = `<button class="switch" role="switch" aria-label="${esc(stratLabel(name))} on or off" aria-checked="${c.enabled}"
     title="${c.kind === "lab" ? esc(labSafe(() => DeskLab.deskSwitchTitle(s, (ST.book && ST.book[name]) || []), "")) : c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"

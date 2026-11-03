@@ -78,7 +78,7 @@ $("#themeToggle").onclick = () => {
 const OVERLAYS = [];   // the open dialogs, topmost last: {el, trigger}
 const OVERLAY_CLOSE = {confirmOverlay: () => cfDone(false), labLimitsOverlay: () => closeLabLimits(), settingsOverlay: () => closeSettings(),
   connectOverlay: () => closeConnect(), resOverlay: () => closeRes(), acctOverlay: () => closeAccts(),
-  groupOverlay: () => closeGroupMgr(), liveOverlay: () => closeLive(), checksOverlay: () => closeChecks(),
+  groupOverlay: () => closeGroupMgr(), liveOverlay: () => closeLive(),
   calOverlay: () => closeCal()};
 const FOCUSABLE = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), " +
   "textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";

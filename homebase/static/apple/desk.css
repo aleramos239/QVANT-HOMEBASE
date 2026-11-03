@@ -291,7 +291,7 @@ html.hb-apple .hb-ipage { display: none; }
 html.hb-apple[data-hb-view="today"] #hbInspDesk, html.hb-apple[data-hb-view="activity"] #hbInspDesk, html.hb-apple:not([data-hb-view]) #hbInspDesk { display: block; }
 html.hb-apple[data-hb-view="strat"] #hbInspStrat { display: block; }
 html.hb-apple[data-hb-view="activity"] .hb-isec-foot { display: none; }
-html.hb-apple .hb-isec-notices:has(#noticeStrip[hidden]), html.hb-apple .hb-isec-links:has(#hbLinks:empty), html.hb-apple .hb-isec:has(> #hbSetup:empty) { display: none; }
+html.hb-apple .hb-isec-links:has(#hbLinks:empty), html.hb-apple .hb-isec:has(> #hbSetup:empty) { display: none; }
 html.hb-apple .hb-ready-ico { flex: none; width: 18px; height: 18px; background: var(--a-label-3); -webkit-mask: var(--sf-shield) center / var(--sf-shield-w) var(--sf-shield-h) no-repeat; mask: var(--sf-shield) center / var(--sf-shield-w) var(--sf-shield-h) no-repeat; }
 html.hb-apple .hb-ready-row[data-lvl="ok"] .hb-ready-ico { background: var(--a-label-2); }
 html.hb-apple .hb-ready-row[data-lvl="warn"] .hb-ready-ico { background: var(--a-orange); -webkit-mask-image: var(--sf-shield-warn); mask-image: var(--sf-shield-warn); }
@@ -481,7 +481,6 @@ html.hb-apple .chk .det { color: var(--a-label-2); overflow-wrap: anywhere; }
 html.hb-apple .chk .chk-x { margin-left: auto; align-self: center; flex: none; border: 0; background: none; color: var(--a-label-2); font-size: 18px; line-height: 1; padding: 0 4px; cursor: pointer; }
 html.hb-apple .chk .chk-x:hover { color: var(--a-label); }
 html.hb-apple .chk.acked .lbl, html.hb-apple .chk.acked .det { color: var(--a-label-2); text-decoration: line-through; text-decoration-thickness: 1px; }
-html.hb-apple #checksOverlay .bulb { display: none; }
 /* the accounts sheet rows may wrap */
 html.hb-apple #acctList2 .acct, html.hb-apple #paperList .acct { flex-wrap: wrap; row-gap: 4px; padding: 6px 2px !important; min-height: 37px; }
 html.hb-apple #acctList2 .acct + .acct::before, html.hb-apple #paperList .acct + .acct::before { left: 2px; right: 2px; }

@@ -5,7 +5,7 @@ import { HTML } from './deskpage.mjs';
 
 /* Task 12: the sidebar sorts itself into Trading / Shadow / Off; a variant set is one row. */
 const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
-const CODE = between('function sideSections(', 'function renderSide(') +
+const CODE = between('function sideKind(', 'function renderSide(') +
   between('const sideFolded = ', 'function toggleSide(');
 
 function load(st) {
@@ -48,4 +48,47 @@ test('Off is folded with no stored fold; Teams empty says "None yet · add one"'
   assert.equal(sideFolded('off'), true);
   assert.equal(sideFolded('trading'), false);
   assert.ok(HTML.includes('None yet · add one'));
+});
+
+/* Task 13: Needs a look is the one readiness list; the shield and the toolbar word go to it. */
+const LOOK = between('const LOOK_FIX', 'function renderNeedsLook(') + 'function chkKey(c) { return c.label + "|" + c.detail; }';
+function looks() {
+  const ctx = vm.createContext({ esc: (v) => String(v).replace(/</g, '&lt;'), jsArg: (v) => JSON.stringify(String(v == null ? '' : v)) });
+  vm.runInContext(LOOK + '\nglobalThis.api = { lookRows, needsLookHtml, LOOK_FIX, LOOK_STALE };', ctx);
+  return ctx.api;
+}
+const CHECKS = [
+  { level: 'ok', label: 'Feed', detail: 'flowing' }, { level: 'info', label: 'Power', detail: 'on power' },
+  { level: 'warn', label: 'nq_orb', detail: 'no account', strategy: 'nq_orb', fix: 'turn_on' },
+  { level: 'bad', label: 'Acct 1', detail: 'offline', account: 'a1', fix: 'reconnect' }];
+
+test('lookRows keeps the warn and bad checks, "label: detail", with their fix', () => {
+  const rows = [...looks().lookRows(CHECKS, false)];
+  assert.deepEqual(rows.map((r) => [r.text, r.fix, r.strategy, r.account]),
+    [['nq_orb: no account', 'turn_on', 'nq_orb', undefined], ['Acct 1: offline', 'reconnect', undefined, 'a1']]);
+});
+test('nothing to look at says Ready; a stale state never does', () => {
+  const k = looks();
+  assert.deepEqual([...k.lookRows([], false)], []);
+  assert.match(k.needsLookHtml([]), /Ready: nothing needs a look/);
+  const stale = [...k.lookRows(CHECKS.slice(0, 2), true)];
+  assert.equal(stale.length, 1);
+  assert.equal(stale[0].text, 'The Desk is not answering: this is the last known state.');
+  assert.doesNotMatch(k.needsLookHtml(stale), /Ready: nothing/);
+  assert.match(k.needsLookHtml([...k.lookRows(CHECKS, false)]), /Needs a look · 2/);
+});
+test('fix buttons carry the five words; Turn on opens a page, it switches nothing', () => {
+  assert.deepEqual({ ...looks().LOOK_FIX }, { reconnect: 'Reconnect', open: 'Open', turn_on: 'Turn on', limits: 'Set limits', team: 'Open team' });
+  const fn = between('function lookFix(', 'function openChecks(');
+  assert.doesNotMatch(fn, /toggleStrat|setDeskLab|post\(/, 'no click on this list switches anything ON');
+});
+test('the shield goes to Today and the list; the old strip, banner and System checks dialog are gone', () => {
+  assert.match(between('function openChecks(', '/* ---- dismissing a notice'), /setView\("today"\)[\s\S]*scrollIntoView/);
+  for (const gone of ['id="readyStrip"', 'id="checksOverlay"', 'function dismissReady(', 'function renderChecks(']) assert.ok(!HTML.includes(gone), gone);
+  assert.ok(HTML.includes('id="needsLook"'));
+});
+test('a Today row\'s switch: a Desk strategy goes through toggleStrat, a Lab one with no account through setDeskLab', () => {
+  assert.match(between('function todayRow(', 'let ISSUE_LVL'), /toggleStrat\('\$\{name\}'/);
+  assert.doesNotMatch(between('function todayRow(', 'let ISSUE_LVL'), /setDeskLab/);
+  assert.match(between('function todayLabRow(', 'function labView('), /setDeskLab/);
 });

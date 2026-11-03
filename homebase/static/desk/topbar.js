@@ -246,29 +246,48 @@ function renderBulb(r) {
   const probs = r ? r.checks.filter(c => c.level === "bad" || c.level === "warn") : [];
   b.title = !lvl ? "connecting…" : lvl === "ok" ? "All good — ready to trade"
     : probs.map(c => c.label + ": " + c.detail).join("\n");
-  if ($("#checksOverlay").classList.contains("open")) renderChecks();
 }
-function renderChecks() {
-  const r = ST && readinessShown(ST.readiness, ST);
-  if (!r) return;
-  const lvl = bulbLevel(r);
-  $("#bulbBig").className = "bulb" + (lvl ? " " + lvl : "");
-  $("#checksTitle").textContent = lvl === "ok" ? "All good — ready to trade"
-    : lvl === "warn" ? "Attention" : "Not ready";
-  // An amber row has an X: it is only a notice, so X takes it out of the list and the count (it comes back if its words
-  // change, and tomorrow). A red row has none: "the algo cannot run right" is never silenced. A row already X'd is not drawn.
-  $("#checksList").innerHTML = r.checks.filter(c => !(c.acked && c.level === "info")).map(c => {
-    const x = c.level !== "warn" ? "" : `<button class="chk-x" aria-label="Dismiss: ${esc(c.label)}" data-ack="${esc(chkKey(c))}"
-        title="Dismiss (it comes back if it changes, and tomorrow)">&times;</button>`;
-    return `
-    <div class="chk${c.acked ? " acked" : ""}"><span class="dot" style="background:${CHK_COLOR[c.level] || CHK_COLOR.info}"></span>
-      <span class="lbl">${esc(c.label)}</span><span class="det">${esc(c.detail)}</span>${x}</div>`;
-  }).join("");
+/* ---- Needs a look: the one readiness list, on Today (#needsLook) ----
+   lookRows takes the checks AS THE PAGE SHOWS THEM (readinessShown: a dismissed amber one is already info) and keeps the warn and
+   bad ones. While the page's state is old the one row says so and the green line never shows. A fix button never switches
+   anything ON: "Turn on" opens the strategy's page, where the ask lives. */
+const LOOK_FIX = {reconnect: "Reconnect", open: "Open", turn_on: "Turn on", limits: "Set limits", team: "Open team"};
+const LOOK_STALE = "The Desk is not answering: this is the last known state.";
+function lookRows(checks, stale) {
+  if (stale) return [{text: LOOK_STALE, level: "bad"}];
+  return (checks || []).filter(c => c && (c.level === "bad" || c.level === "warn"))
+    .map(c => ({text: c.label + ": " + c.detail, fix: c.fix, strategy: c.strategy, account: c.account, level: c.level, key: chkKey(c)}));
 }
-function openChecks() { renderChecks(); showOverlay("checksOverlay"); }
-function closeChecks() { hideOverlay("checksOverlay"); }
-$("#checksOverlay").addEventListener("click", (e) => {
-  if (e.target === e.currentTarget) closeChecks();
+function needsLookHtml(rows) {
+  if (!rows.length) return `<div class="mcap">Ready: nothing needs a look</div>`;
+  const row = (x) => {
+    const fix = LOOK_FIX[x.fix] ? `<button class="btn btn-outline btn-sm" onclick="lookFix(${jsArg(x.fix)},${jsArg(x.strategy)},${jsArg(x.account)})">${LOOK_FIX[x.fix]}</button>` : "";
+    // an amber row can be dismissed (it comes back if its words change, and tomorrow); a red one never
+    const dismiss = x.level === "warn" ? `<button class="btn btn-quiet btn-sm" aria-label="Dismiss: ${esc(x.text)}" data-ack="${esc(x.key)}"
+      title="Dismiss (it comes back if it changes, and tomorrow)">&times;</button>` : "";
+    return `<div class="feed-row"><span class="h${x.level === "bad" ? " warn" : ""}">${esc(x.text)}</span><span class="t">${fix}${dismiss}</span></div>`;
+  };
+  return `<div class="sec"><h2>Needs a look · ${rows.length}</h2><div class="agroup feed static">${rows.map(row).join("")}</div></div>`;
+}
+function renderNeedsLook() {
+  const el = $("#needsLook");
+  if (!el) return;
+  const stale = DESK_STALE === true, r = ST && readinessShown(ST.readiness, ST);
+  el.innerHTML = !r && !stale ? `<div class="mcap">Checking…</div>` : needsLookHtml(lookRows(r ? r.checks : [], stale));
+}
+function lookFix(fix, strategy, account) {
+  if (fix === "reconnect") reconnectAcct(account);
+  else if (fix === "limits" && strategy) openLabLimits(strategy);
+  else if (fix === "team" && strategy) { const g = teams().find(t => t.members.includes(strategy)); if (g) setView("group", g.id); else openGroupMember(strategy); }
+  else if (strategy) openGroupMember(strategy);      // open, turn_on: the strategy's page; nothing is switched here
+}
+// the shield (and the toolbar word): Today, scrolled to the list
+function openChecks() {
+  setView("today");
+  const el = $("#needsLook");
+  if (el && el.scrollIntoView) el.scrollIntoView({block: "start"});
+}
+$("#needsLook").addEventListener("click", (e) => {
   const sw = e.target.closest && e.target.closest("[data-ack]");
   if (sw) toggleAck(sw.dataset.ack);
 });
@@ -282,7 +301,8 @@ function toggleAck(key) {
   if (!keys.delete(key)) keys.add(key);
   try { localStorage.setItem(ACK_KEY, JSON.stringify({day: ackDay(), keys: [...keys]})); } catch (_) { /* private mode: not kept */ }
   const r = ST && readinessShown(ST.readiness, ST);
-  if (r) renderBulb(r);                     // renderBulb redraws the open list
+  if (r) renderBulb(r);
+  renderNeedsLook();
 }
 
 /* ---- readiness, as the page shows it (W4) ----

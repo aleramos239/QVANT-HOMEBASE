@@ -15,7 +15,7 @@ function load(day = '2026-10-28') {
   const ST = { et_now: day + 'T10:00:00-04:00', book: {}, strategies: {}, journal: [] };
   const ctx = vm.createContext({ ST, esc, window: {}, Date, JSON, Set,
     localStorage: { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } });
-  vm.runInContext(BANNER + `globalThis.api = { readinessShown, chkKey, ackSet };`, ctx);
+  vm.runInContext(BANNER + between('const LOOK_FIX', 'function needsLookHtml(') + `globalThis.api = { readinessShown, chkKey, ackSet, lookRows };`, ctx);
   const set = (keys) => { store['hb.chk.ack'] = JSON.stringify({ day: ST.et_now.slice(0, 10), keys }); };
   return { api: ctx.api, ST, store, set };
 }
@@ -47,14 +47,16 @@ test('a changed detail, or another day, brings the concern back', () => {
   assert.equal(api.readinessShown(R, ST).checks[0].level, 'warn');
 });
 
-test('an amber row has an X, wired to one handler; a red row has none and a dismissed one is not drawn', () => {
-  const body = between('function renderChecks()', 'function openChecks()');
+test('an amber row has an X, wired to one handler; a red row has none and a dismissed one is not listed', () => {
+  const body = between('function needsLookHtml(', 'function renderNeedsLook(');
   assert.doesNotMatch(body, /role="switch"/);
-  assert.match(body, /class="chk-x"/);
-  assert.match(body, /c\.level !== "warn" \? ""/);
-  assert.match(body, /c\.acked && c\.level === "info"/);
+  assert.match(body, /x\.level === "warn" \?/);
   assert.match(body, /data-ack=/);
   assert.match(HTML, /closest\("\[data-ack\]"\)/);
+  const { api, ST, set } = load();
+  set([api.chkKey(WARN)]);
+  const lvls = (r) => api.lookRows(r.checks, false).map((x) => x.level);
+  assert.deepEqual(lvls(api.readinessShown(R, ST)), ['bad'], 'the X\'d amber is out, the red stays');
 });
 
 test('the Desk checkbox is the same on/off switch as the rest (apple skin), a row account value is today\'s P&L', () => {

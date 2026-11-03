@@ -136,11 +136,6 @@ $("#resOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeRes();
 });
 
-function dismissReady() {
-  try { localStorage.setItem("hb_ready_dismiss", window.READY_SIG || ""); } catch (_) {}
-  $("#readyStrip").style.display = "none";
-}
-
 /* ---- reconnect ---- */
 async function reconnectAcct(id) {
   toast("Reconnecting" + (id ? " " + id : " all accounts") + "…", 8000);

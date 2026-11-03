@@ -1,16 +1,21 @@
 /* ---- sidebar ---- */
+/* Which section a strategy is in: ON with an account = trading, ON with none = shadow, OFF = off. One that can trade (its day is
+   placing, placed, live or error) counts as ON. The sidebar, the Today list and the Today headline all read this one rule. */
+function sideKind(s, bk) {
+  const on = !!(s.cfg.enabled || ["placing", "placed", "live", "error"].includes(s.day_status));
+  return on && bk.length ? "trading" : on ? "shadow" : "off";
+}
 /* The sidebar sorts itself: Trading = ON with an account, Shadow = ON with none, Off = OFF. A variant set is ONE row (its best member's
    state; its members have none). `labs` = Lab strategies the Desk does not hold yet (never trading). A-Z by label in a section. */
 function sideSections(names, st, sets, labs) {
   const out = {trading: [], shadow: [], off: []}, strategies = (st && st.strategies) || {}, book = (st && st.book) || {};
-  const live = (s) => ["placing", "placed", "live", "error"].includes(s.day_status);   // one that can trade never drops to Off
   const warned = new Set();
   let r = st && st.readiness;
   try { r = readinessShown(r, st); } catch (_) { /* the raw checks stand */ }
   for (const c of (r && r.checks) || []) if (c && c.strategy && (c.level === "warn" || c.level === "bad")) warned.add(c.strategy);
   const one = (n) => {
-    const s = strategies[n], bk = book[n] || [], on = !!(s.cfg.enabled || live(s)), isLab = s.cfg.kind === "lab";
-    const k = on && bk.length ? "trading" : on ? "shadow" : "off", sh = isLab ? labSafe(() => labShadowNet(n, s), null) : null;
+    const s = strategies[n], bk = book[n] || [], isLab = s.cfg.kind === "lab";
+    const k = sideKind(s, bk), sh = isLab ? labSafe(() => labShadowNet(n, s), null) : null;
     const state = stratState(n, s);
     return {k, row: {id: n, label: stratLabel(n), warn: warned.has(n), pnl: k === "off" ? null : sh ? sh.net : todayPnl(s), dot: stratDotCls(s, state, bk), title: state}};
   };
@@ -28,6 +33,11 @@ function sideSections(names, st, sets, labs) {
   for (const k in out) out[k].sort((a, b) => String(a.label).toLowerCase() < String(b.label).toLowerCase() ? -1 : String(a.label).toLowerCase() > String(b.label).toLowerCase() ? 1 : 0);
   return out;
 }
+/* Lab strategies the Desk does not hold yet: they only run in shadow (ON) or not at all (OFF). */
+function sideLabs() {
+  return labSafe(() => DESKLAB.strategies.filter(w => !labOnDesk(w)), []).map(w => labSafe(() => ({title: DeskLab.stateText(w, DESKLAB.runner),
+    dot: DeskLab.dotClass(w, DESKLAB.runner), id: "lab_" + w.name, lab: w.name, label: DeskLab.label(w), on: w.enabled === true, pnl: DeskLab.todayNet(w)}), null)).filter(Boolean);
+}
 function renderSide(names, issues) {
   /* A section header: a button that folds its rows (chevron, title, a count while it is shut) and, beside it, the section's own action. */
   const head = (k, title, n, action) => {
@@ -36,8 +46,7 @@ function renderSide(names, issues) {
       <svg class="sh-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5.5l6.5 6.5L9 18.5"/></svg><span>${title}</span>${shut && n ? `<i>${n}</i>` : ""}</button>${action}</div>`;
   };
   const sel = (k, n) => VIEW.k === k && ((k !== "strat" && k !== "lab" && k !== "group") || VIEW.name === n) ? " sel" : "";
-  const labs = labSafe(() => DESKLAB.strategies.filter(w => !labOnDesk(w)), []).map(w => labSafe(() => ({title: DeskLab.stateText(w, DESKLAB.runner),
-    dot: DeskLab.dotClass(w, DESKLAB.runner), id: "lab_" + w.name, lab: w.name, label: DeskLab.label(w), on: w.enabled === true, pnl: DeskLab.todayNet(w)}), null)).filter(Boolean);
+  const labs = sideLabs();
   const sec = sideSections(names, ST, (ST.variants && ST.variants.sets) || [], labs);
   const rowHtml = (r, k) => {
     const click = r.lab ? `setView('lab',${jsArg(r.lab)})` : `setView('strat','${r.set ? r.members[0] : r.id}')`, here = r.lab ? sel("lab", r.lab) : sel("strat", r.set ? r.members[0] : r.id);

@@ -77,9 +77,10 @@ test('apple skin: the scripts never talk to a server and never swallow an event'
 
 test('apple skin: the Desk skin leans only on things the Desk page still has', () => {
   const page = HTML, skin = read('apple/desk.js');
-  for (const id of ['pgSw', 'bulb', 'clock', 'armBtn', 'killBtn', 'settingsBtn', 'side', 'readyStrip', 'todayFoot', 'noticeStrip', 'stratList', 'dayTl',
+  for (const id of ['pgSw', 'bulb', 'clock', 'armBtn', 'killBtn', 'settingsBtn', 'side', 'todayFoot', 'noticeStrip', 'stratList', 'dayTl',
                     'viewToday', 'viewStrat', 'viewActivity', 'themeToggle', 'statusPill'])
     assert.ok(page.includes(`id="${id}"`) && skin.includes(`#${id}`), `#${id} is expected by the skin and present in the page`);
+  assert.ok(page.includes('id="needsLook"'), 'Today has its one Needs a look list');
   for (const cls of ['pill-slot', 'app-main', 'frame', 'inset-topbar']) assert.ok(page.includes(cls), `.${cls} is in the page`);
   for (const fn of ['openChecks', 'setStratRr', 'readinessShown']) assert.match(page, new RegExp(`function ${fn}\\(`), `${fn}() is the page's own`);
   // the page's own state the skin reads by name (a rename would leave the toolbar words stuck, with no error)
@@ -140,9 +141,8 @@ test('desk skin: readiness in words comes from the page\'s own readinessShown --
   assert.match(DESK_SKIN, /const staleWhy_ = \(\) => \{ try \{ return String\(STALE_WHY \|\| ''\); \}/);
   assert.match(HTML, /DESK_STALE = true; STALE_WHY = "updates pause while a menu or a size edit is open";/, 'the page\'s pause reason, as the skin reads it');
   assert.match(DESK_SKIN, /new MutationObserver\(words\)\.observe\(pill, \{ attributes: true, attributeFilter: \['class'\] \}\)/, 'the word follows the pill going stale');
-  // the inspector's row keeps its own words, from the bulb the page paints (not the toolbar's count)
-  assert.match(DESK_SKIN, /const txt = lvl === 'ok' \? 'Ready to trade' : lvl === 'warn' \? 'Needs attention' : lvl === 'bad' \? 'Not ready' : 'Checking…';/);
-  assert.match(DESK_SKIN, /class: 'hb-ready-word'[^\n]*window\.openChecks\(\)/, 'the word opens the page\'s own System checks');
+  assert.doesNotMatch(DESK_SKIN, /hbReadyRow|hbReadyTxt/, 'the inspector has no Readiness row: Today\'s Needs a look is the one list');
+  assert.match(DESK_SKIN, /class: 'hb-ready-word'[^\n]*window\.openChecks\(\)/, 'the word goes to Today\'s Needs a look (openChecks)');
 });
 
 test('desk skin: the chart-trading chip shows whenever the switch is ON, armed or not, with the live accounts the page tags LIVE', () => {
@@ -166,12 +166,13 @@ test('desk skin: the chart-trading chip shows whenever the switch is ON, armed o
 });
 
 // what words() writes into the toolbar and the inspector's readiness row, run on small fake nodes
-function wordsOn({ st = null, stale = false, why = '', win = {}, bulbLvl = '' } = {}) {
+function wordsOn({ st = null, stale = false, why = '', win = {}, bulbLvl = '', noticesHidden = false } = {}) {
   const node = () => ({ textContent: '', hidden: false, title: '', dataset: {}, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } });
-  const n = { machine: node(), mLong: node(), mShort: node(), readyBtn: node(), ctLong: node(), ctShort: node(), ctChip: node(), sum: node(), row: node() };
+  const n = { machine: node(), mLong: node(), mShort: node(), readyBtn: node(), ctLong: node(), ctShort: node(), ctChip: node(), notices: node(), noNotices: node() };
   n.machine.hidden = n.ctChip.hidden = true;      // as the skin builds them
+  n.notices.hidden = noticesHidden;
   const bulb = { classList: { contains: (c) => c === bulbLvl } };
-  const W = toolbarWords({ window: { readinessShown: (r) => r, ...win }, ...n, bulb, $: (q) => (q === '#hbReadyTxt' ? n.row : null),
+  const W = toolbarWords({ window: { readinessShown: (r) => r, ...win }, ...n, bulb, $: () => null,
     status_: () => st, stale_: () => stale, staleWhy_: () => why });
   W.words();
   return n;
@@ -187,18 +188,18 @@ test('desk skin: words() writes the machine chip, the readiness words and the ch
   assert.equal(n.ctLong.textContent, 'Chart trading ON · 2 live accounts'); assert.equal(n.ctShort.textContent, 'Chart ON · 2 live');
   assert.equal(n.readyBtn.textContent, '1 thing needs a look'); assert.equal(n.readyBtn.dataset.lvl, 'warn');
   assert.equal(n.readyBtn.attrs['aria-label'], 'Readiness: 1 thing needs a look');
-  assert.equal(n.row.textContent, 'Needs attention', 'the inspector row: the bulb the page painted'); assert.equal(n.sum.dataset.lvl, 'warn');
+  assert.equal(n.noNotices.hidden, true, 'notices showing: no "No notices"');
+  assert.equal(wordsOn({ st: {}, noticesHidden: true }).noNotices.hidden, false, 'no notices: the inspector says so');
   n = wordsOn({ st: { machine: 'server' }, win: { HB_MACHINE: 'mac' } });
   assert.equal(n.machine.hidden, false); assert.equal(n.machine.dataset.m, 'mac', 'the grey one'); assert.equal(n.mLong.textContent, 'This Mac');
   n = wordsOn({ st: { chart_trading: { enabled: false }, accounts: acc } });
   assert.equal(n.machine.hidden, true, 'no machine value: no chip'); assert.equal(n.ctChip.hidden, true, 'chart trading off: no chip');
   assert.match(DESK_SKIN, /syncing = true;\n      try \{\n        words\(\);/, 'every sync() writes the words first, before any view can throw');
-  // the page's state is old: the toolbar word and the inspector's row say the same, whatever the bulb last said
+  // the page's state is old: the toolbar word says so, whatever the bulb last said
   n = wordsOn({ st: { ...warn }, bulbLvl: 'ok', stale: true, why: 'the desk is not answering' });
   assert.equal(n.readyBtn.textContent, 'Desk not answering'); assert.equal(n.readyBtn.dataset.lvl, 'bad');
-  assert.equal(n.row.textContent, 'Desk not answering', 'not "Ready to trade"'); assert.equal(n.sum.dataset.lvl, 'bad');
   n = wordsOn({ st: { ...warn }, bulbLvl: 'ok', stale: true, why: 'updates pause while a menu or a size edit is open' });
-  assert.equal(n.readyBtn.textContent, 'Updates paused'); assert.equal(n.row.textContent, 'Updates paused'); assert.equal(n.sum.dataset.lvl, '');
+  assert.equal(n.readyBtn.textContent, 'Updates paused'); 
 });
 
 // the straddle's RR field and stop menu (desk.js rrCtl), run on small fake nodes: what a pick and a Set send

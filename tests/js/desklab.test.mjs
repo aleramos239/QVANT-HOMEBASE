@@ -378,7 +378,7 @@ function renderCtx({ deskLab, view = { k: 'today' } } = {}) {
   const $ = (sel) => (els[sel] = els[sel] || { innerHTML: '', hidden: false });
   const ST = { armed: true, et_now: '2026-10-09T10:00:00-0400', timer: { strategies: {} }, accounts: {}, journal: [],
     strategies: { nq930: { cfg: { symbol: 'NQ', kind: 'straddle', offset_pts: 5, sl_pts: 5, tp_pts: 15, enabled: true, shadow: false, cancel_et: '12:55', flat_et: '15:55' }, day_status: 'idle', accounts: [] } } };
-  const ctx = vm.createContext({ $, ST, CHART: 'http://x', DESK_STALE: false, FREEZE: false, document: { hidden: false }, closeAsgMenus() {}, switchBounced() { return false; },
+  const ctx = vm.createContext({ $, ST, renderNeedsLook() {}, CHART: 'http://x', DESK_STALE: false, FREEZE: false, document: { hidden: false }, closeAsgMenus() {}, switchBounced() { return false; },
     toast() {}, chartPost: async () => ({}), confirmDlg: async () => false, fetch: async () => ({ ok: false }), ...(deskLab ? { DeskLab: deskLab } : {}) });
   vm.runInContext(SLICE('const esc = (v) =>', 'async function chartPost(') + SLICE('const stratLabel = ', 'const actStrat = ') + SLICE('const fmt = ', 'const usd = ') +
     'const usd = (v) => v == null ? "—" : (v < 0 ? "-$" : "$") + fmt(Math.abs(v));\n' +
