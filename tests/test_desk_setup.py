@@ -296,8 +296,10 @@ def test_set_save_refuses_an_unpicked_account_or_a_stranger_whole(desk):
     for r in (vset(desk, {A1: LAB}, accounts=[A1, A2]),                        # a2 ticked, no variant
               vset(desk, {A1: LAB, A2: "lab_zz"}),                             # a stranger
               vset(desk, {A1: LAB, A2: B}, accounts=[A1]),                     # a pick for an unticked account
-              c := desk.post("/api/setup", json={"set": "nope", "accounts": [A1], "pick": {A1: LAB}, "turns": False, "on": True})):
-        assert r.status_code in (400, 404, 409), r.text
+              vset(desk, {A1: LAB, A2: ["x"]}),                                # not a name
+              vset(desk, {A1: LAB, A2: {"x": 1}})):
+        assert r.status_code == 400 and r.json()["detail"] == "Each account picks one variant of the set.", r.text
+    c = desk.post("/api/setup", json={"set": "nope", "accounts": [A1], "pick": {A1: LAB}, "turns": False, "on": True})
     assert not st(desk)["book"].get(LAB) and not st(desk)["book"].get(B)
     assert not any(j["event"] == "setup_saved" for j in st(desk)["journal"])
     assert c.status_code == 404
@@ -326,7 +328,6 @@ def test_set_save_with_nothing_touched_keeps_every_row(desk):
     assert vset(desk, {A1: LAB, A2: B}).status_code == 200
     assert st(desk)["book"] == before and before[LAB][0] == {"account": A1, "qty": 1, **row}
     assert before[B] == [{"account": A2, "qty": 1}]                            # a plain row stays plain
-    from homebase.config import AppCfg  # noqa: F401
     desk.d.eng.cfg.accounts.setdefault("sim099", desk.d.eng.cfg.accounts[A1])
     assert vset(desk, {A1: LAB, A2: B, "sim099": B}).status_code == 200        # a third ticks in: the others stay as they were
     book = st(desk)["book"]
@@ -340,3 +341,13 @@ def test_book_refuses_an_account_another_variant_has(desk):
     assert r.status_code == 409 and r.json()["detail"] == f"..{A2[-4:]} is on 1.5R of the set nq_cb: one variant per account."
     assert not st(desk)["book"].get(LAB)
     assert desk.post("/api/book", json={"strategy": LAB, "assignments": [{"account": A1, "qty": 1}]}).status_code == 200
+
+
+def test_set_save_refuses_a_member_that_is_gone(desk):
+    import json
+    two(desk)
+    (desk.d.root / "variants.json").write_text(json.dumps(
+        {"sets": [{"id": "v1", "name": "nq_cb", "members": [LAB, "lab_gone"], "labels": {}}], "dismissed": [], "next": 2}))
+    r = vset(desk, {A1: LAB, A2: "lab_gone"})
+    assert r.status_code == 409 and r.json()["detail"] == "lab_gone is no longer on the Desk; open the set again."
+    assert not st(desk)["book"].get(LAB)

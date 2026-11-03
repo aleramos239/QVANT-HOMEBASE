@@ -116,7 +116,11 @@ def register(app, *, cfg, engine, labdesk) -> None:
             raise HTTPException(404, "No such set.")
         pick, settings = body.get("pick"), body.get("settings") or {}
         turns, hold = body.get("turns", False), body.get("hold")
-        if not isinstance(pick, dict) or set(pick) != set(accounts) or not set(pick.values()) <= set(vs["members"]):
+        for m in vs["members"]:
+            if not labdesk.is_lab(m) or m not in cfg.strategies:
+                raise HTTPException(409, f"{m} is no longer on the Desk; open the set again.")
+        if not isinstance(pick, dict) or set(pick) != set(accounts) or not all(isinstance(v, str) for v in pick.values()) \
+                or not set(pick.values()) <= set(vs["members"]):
             raise HTTPException(400, "Each account picks one variant of the set.")
         if not isinstance(settings, dict) or not all(isinstance(v, dict) for v in settings.values()):
             raise HTTPException(400, "settings: a dict of settings for each account.")
