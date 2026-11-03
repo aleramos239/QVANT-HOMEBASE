@@ -27,6 +27,7 @@ import httpx
 import websockets
 
 from ..core.clock import ET
+from ..core.jsonio import read_dict, write_json
 from ..paths import state_dir
 from .base import BrokerAdapter, FillCallback, FillEvent, OrderRequest, OrderResult
 from .paper import root_of
@@ -227,7 +228,10 @@ class VestAdapter(BrokerAdapter):
         self._held_of: dict[str, str] = {}              # Vest order id -> held id (its fills carry the held id, R30)
         self._risk: dict[str, Decimal] = {}             # resting limit entry id -> $ at risk to its stop
         self._sp: Optional[dict] = None
-        self._roots: dict[str, str] = {}                # order id / position id -> root we placed it with
+        # order id / position id -> root we placed it with; kept on disk: a fill read after a restart books on it
+        self._roots_path = state_dir() / f"vest_roots_{account_id}.json"
+        self._roots: dict[str, str] = {k: v for k, v in read_dict(self._roots_path).items()
+                                       if isinstance(v, str) and v in UNITS}
         self._on_fill: Optional[FillCallback] = None
         self._tasks: list[asyncio.Task] = []
         self._ws_up = False
@@ -484,6 +488,10 @@ class VestAdapter(BrokerAdapter):
         if oid and held_id:                             # mapped before the wait: a fill on the socket already finds it
             self._held_of[oid] = held_id
         _cap(self._roots), _cap(self._pos_of), _cap(self._held_of)
+        try:
+            write_json(self._roots_path, self._roots)
+        except OSError as e:                            # the order is out: a failed save is logged, never a reject
+            log.warning("vest %s: contract map save failed (%s)", self.account_id, type(e).__name__)
         # fills parked before this answer are delivered by _fire once the entry lock is released (never inside it)
         hits = await self._wait(ids, market)
         bad = next((h for h in hits if h[0] not in ("Working", "Filled")), None)

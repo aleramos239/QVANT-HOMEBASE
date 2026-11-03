@@ -202,6 +202,7 @@ def fill_frame(oid="o1", side="buy"):
 
 def test_fill_before_the_post_answers_keeps_the_held_id():
     for answer in ({"orderId": "o1", "positionId": "p1", "commandId": "c1"}, {}):
+        (vest.state_dir() / "vest_roots_vest1.json").unlink(missing_ok=True)   # each answer a first start: "o1" unknown
         ad, gw, j = mk()
         r = run(hold(ad))
         got = []

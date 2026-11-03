@@ -621,6 +621,21 @@ def test_root_kwarg_caps_and_generic_errors(monkeypatch):
     assert vest._err(RuntimeError("SECRET-TOKEN"))[1] == "vest: RuntimeError"
 
 
+def test_vest_roots_survive_an_adapter_restart(tmp_path):
+    ad, _ = mk()
+    req = OrderRequest("NQZ6", "Buy", 1, "Limit", price=21000, stop_price=20980, tp_price=21040)
+    assert run(ad.place_bracket(req)).ok
+    again = VestAdapter("vest1", keyring_key=KEY, vest_account_id=ACC, session=ad.session, root="MNQ")   # a restart
+    assert again._roots["o1"] == "NQ"
+    (f,) = parse_account_state(acct_msg([order_row(position_id="p9")]), account_id="vest1", vest_account_id=ACC,
+                               seen={}, roots=again._roots, default_root=again.root)
+    assert (f.symbol, f.qty) == ("NQ", 2)                                # 40 units on NQ, never 20 MNQ
+    (tmp_path / "vest_roots_vest1.json").write_text("{not json")
+    assert VestAdapter("vest1", keyring_key=KEY, vest_account_id=ACC, session=ad.session)._roots == {}
+    (tmp_path / "vest_roots_vest1.json").write_text('{"o1": "ES", "o2": 5, "o3": "NQ", "o4": [1]}')
+    assert VestAdapter("vest1", keyring_key=KEY, vest_account_id=ACC, session=ad.session)._roots == {"o3": "NQ"}
+
+
 # ---- fix round 2: never report flat (or ok) while a position may still be open -----------------------------------
 def test_sweep_cancels_first_then_closes_and_rereads():
     ad, gw = mk()

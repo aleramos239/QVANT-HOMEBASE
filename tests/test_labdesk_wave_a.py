@@ -13,7 +13,7 @@ from homebase.desk.labdesk import Refused
 from homebase.labrun import store
 from tests.labdesk_util import DATE, LAB, LIMITS, entry, mkdesk, rec, send
 from tests.test_engine import run
-from tests.test_engine_lab import fill_entry, tick
+from tests.test_engine_lab import fill_entry, leg, mnq_desk, net_spy, tick
 
 NOTE_1600 = ("Its window runs to 16:00 but it closes its trades at 15:55. A trade still open then closes 5 minutes "
              "before the backtest's, so that day will not match.")
@@ -94,6 +94,22 @@ def test_an_adopted_entry_reads_filled_to_the_strategy(tmp_path):
     assert d.ld._brain(LAB)["orders"]["1"]["status"] == "filled"
     assert d.ld._brain(LAB)["flat"] is False
     assert ad.orders == sent                                       # reading it sends nothing
+
+
+def test_guard_placed_guards_an_nq_round(tmp_path):
+    """An NQ row on an MNQ-default strategy, its entry filled with the push lost and its order read still Working:
+    the guard reads NQ's position (a micro held by hand is not it) and adopts the entry."""
+    eng, ads, _ = mnq_desk(tmp_path)
+    ad = ads["a1"]
+    assert run(eng.lab_enter(LAB, [leg()], {"a1": 1}, max_rounds=3, contracts={"a1": "NQ"}))["accounts"]["a1"]["ok"]
+    s = eng.states[f"{LAB}@a1"]
+    assert (s.status, s.symbol) == ("placed", "NQ")
+    ad.nets = {"NQ": 1, "MNQ": -1}
+    seen = net_spy(ad)
+    got = run(eng._guard_placed(s, eng.cfg.strategies[LAB], ad, check_position=True,
+                                event="fill_recovered_on_reconnect", note="recovered"))
+    assert got == "entry_recovered" and seen == ["NQ"]
+    assert (s.status, s.entry_side) == ("live", "Buy")
 
 
 def test_an_adopted_entry_then_its_target_reads_the_right_exit_and_pnl(tmp_path):

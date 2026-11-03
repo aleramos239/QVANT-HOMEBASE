@@ -311,6 +311,21 @@ def test_reconcile_recovers_entry_filled_while_disconnected(tmp_path):
     assert "fill_recovered_on_reconnect" in journal_events(tmp_path)
 
 
+def test_reconcile_account_reads_an_nq_round(tmp_path):
+    """An NQ row on an MNQ-default strategy, closed by its target while the socket was down: the reconnect reads
+    NQ's position (a micro held by hand is not it) and books the exit in NQ dollars."""
+    from tests.test_engine_lab import LAB, mnq_desk, net_spy, nq_round      # here: test_engine_lab imports this file
+    eng, ads, _ = mnq_desk(tmp_path)
+    ad = ads["a1"]
+    st = nq_round(eng, ad)                     # long 1 NQ from 100.0, its target at 110.0
+    ad.order_status[f"{st.upper_id}-tp"] = "Filled"
+    ad.nets = {"NQ": 0, "MNQ": 1}
+    seen = net_spy(ad)
+    assert run(eng.reconcile_account("a1")) == {LAB: "exit_recovered"}
+    assert seen == ["NQ"]
+    assert (st.status, st.exit_fill, st.pnl) == ("done", 110.0, 200.0)     # 10 points x $20
+
+
 def test_reconcile_recovers_exit_while_disconnected(tmp_path):
     eng, ad, _ = mkengine(tmp_path)
     st = _place(eng, ad)

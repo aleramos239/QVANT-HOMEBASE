@@ -15,6 +15,7 @@ from homebase.desk.timer import SelfTimer
 from homebase.desk.trading import ChartDesk
 from tests.test_desk_api import desk_client  # noqa: F401 — the fixture
 from tests.test_engine import Clock
+from tests.test_engine_lab import LAB, mnq_desk, net_spy, nq_round
 from tests.test_timer import FakeMD
 from tests.trading_util import Mono, TradeAdapter, journal, run
 
@@ -505,6 +506,22 @@ def test_live_with_both_entries_reading_filled_takes_the_both_filled_path(tmp_pa
     out = kill(desk)
     assert out["results"]["a1"]["ok"] is False and ads["a1"].orders == []
     assert not {"us", "ut", "ds", "dt"} & set(ads["a1"].cancelled)
+
+
+def test_kill_both_filled_flattens_an_nq_round_as_nq(tmp_path):
+    """An NQ row on an MNQ-default strategy: the both-filled kill reads the round's NQ, never the strategy's MNQ."""
+    eng, ads, _ = mnq_desk(tmp_path)
+    ad = ads["a1"]
+    st = nq_round(eng, ad)
+    seen = net_spy(ad)
+    ad.nets = {"NQ": 1, "MNQ": 0}
+    out = run(eng._kill_both_filled(st, eng.cfg.strategies[LAB], ad, []))
+    assert out["ok"] is False and "holds +1 NQ" in out["actions"][-1] and ad.cancelled == []
+    ad.nets = {"NQ": 0, "MNQ": 1}                         # NQ flat, a micro held by hand: the round's stop/target go
+    out = run(eng._kill_both_filled(st, eng.cfg.strategies[LAB], ad, []))
+    assert out["ok"] is True and ad.orders == []
+    assert ad.cancelled == [f"{st.upper_id}-sl", f"{st.upper_id}-tp"]
+    assert seen == ["NQ", "NQ"]
 
 
 # --- round 2: the entry cancel settles before anything is sold -------------------------------

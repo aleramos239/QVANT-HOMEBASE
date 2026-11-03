@@ -3594,6 +3594,40 @@ def test_o1_a_round_is_never_ended_as_cancelled_without_reading_its_entries(tmp_
     assert ad.order_status[f"{up}-sl"] == "Suspended"              # its stop is there for the fill
 
 
+def test_lab_end_unfilled_cancels_an_nq_round(tmp_path):
+    """An NQ row on an MNQ-default strategy, its entry ended unfilled: the round ends and its stop/target go on
+    NQ's flat read (a micro held by hand is not it)."""
+    eng, ads, _ = mnq_desk(tmp_path)
+    ad = ads["a1"]
+    run(eng.lab_enter(LAB, [leg()], {"a1": 1}, max_rounds=3, contracts={"a1": "NQ"}))
+    st = rnd(eng)
+    assert (st.status, st.symbol) == ("placed", "NQ")
+    ad.order_status[st.upper_id] = "Canceled"
+    ad.nets = {"NQ": 0, "MNQ": 1}
+    seen = net_spy(ad)
+    acts: list = []
+    assert run(eng._lab_end_unfilled(st, eng.cfg.strategies[LAB], ad, acts)) is True
+    assert (st.status, st.exit_reason) == ("done", "cancelled") and seen == ["NQ"]
+    assert ad.cancelled == [f"{st.upper_id}-sl", f"{st.upper_id}-tp"], acts
+
+
+def test_lab_close_retry_closes_an_nq_round_as_nq(tmp_path):
+    """An NQ row on an MNQ-default strategy whose one market-out left long ago: the retry reads NQ's position (a micro
+    held by hand is not it), reads it flat and ends the round; it never sends a second order."""
+    eng, ads, _ = mnq_desk(tmp_path)
+    ad = ads["a1"]
+    st = nq_round(eng, ad)
+    x = eng._lab_x(st)
+    x.update(closing="flat", close_sent_ms=1)
+    ad.nets = {"NQ": 0, "MNQ": 1}
+    seen = net_spy(ad)
+    acts: list = []
+    out = run(eng._lab_close_retry(st, eng.cfg.strategies[LAB], ad, x, acts))
+    assert out["ok"] is True and seen == ["NQ"], acts
+    assert (st.status, st.exit_reason) == ("done", "flat") and ad.orders == []
+    assert ad.cancelled == [f"{st.upper_id}-sl", f"{st.upper_id}-tp"]
+
+
 # ================================================================================================ fix round 5
 def labday(tmp_path, eng):
     return json.loads((tmp_path / f"labday-{eng._today()}.json").read_text())
