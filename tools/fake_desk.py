@@ -1404,6 +1404,8 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
                     rows.append(labcfg.book_row({**a, "account": aid, "qty": qty}))   # the row settings, as the real route
                 except ValueError as e:
                     raise HTTPException(400, str(e)) from None
+        from homebase.routes.strategies import one_variant
+        one_variant(cfg, engine, name, rows)
         try:
             if labdesk.is_lab(name):
                 await labdesk.set_book(name, rows)

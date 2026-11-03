@@ -7,8 +7,22 @@ from fastapi import HTTPException, Request
 
 from .. import config as config_mod
 from ..broker import alphatrader, topstepx
-from ..desk import labcfg, labdesk as labdesk_mod
+from ..desk import labcfg, labdesk as labdesk_mod, variants
 from ..desk_app.brokers import is_atr_key, is_tsx_key
+
+
+def short(aid) -> str:
+    """An account as a line names it: ..<the last 4 of its id> (the form the readiness lines use)."""
+    return ".." + str(aid)[-4:]
+
+
+def one_variant(cfg, engine, name: str, rows: list) -> None:
+    """409 when another variant of `name`'s set already has one of `rows`' accounts (one variant per account)."""
+    vs = variants.set_of(engine._root, name)
+    for o in (vs["members"] if vs else []):
+        for r in rows:
+            if o != name and any(x.get("account") == r["account"] for x in cfg.book.get(o) or []):
+                raise HTTPException(409, f"{short(r['account'])} is on {vs['labels'].get(o, o)} of the set {vs['name']}: one variant per account.")
 
 
 def book_rows(cfg, labdesk, name: str, assignments: list) -> list:
@@ -147,6 +161,7 @@ def register(app, *, cfg, engine, labdesk) -> None:
             raise HTTPException(404, f"unknown strategy {name!r}")
         rows = book_rows(cfg, labdesk, name, body.get("assignments") or [])
         previous = [dict(r) for r in cfg.book.get(name) or []]
+        one_variant(cfg, engine, name, rows)
         try:
             if labdesk.is_lab(name):         # its book lives in its own file beside its record, never in config.json
                 await labdesk.set_book(name, rows)

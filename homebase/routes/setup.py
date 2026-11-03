@@ -19,7 +19,7 @@ from fastapi import HTTPException, Request
 
 from ..desk import labdesk as labdesk_mod, variants
 from ..desk.engine_groups import GroupError
-from .strategies import book_rows
+from .strategies import book_rows, short
 
 IN_TEAM = "It is in the team {}: set it up on the team's page."
 
@@ -29,7 +29,7 @@ def _cur(cfg, name: str) -> list:
     return [dict(r) for r in cfg.book.get(name) or [] if r.get("account") in cfg.accounts]
 
 
-KEPT = ("size", "risk_usd", "most", "contract")
+KEPT = ("size", "risk_usd", "most", "contract", "stop_after")
 
 
 def _rows(cur: list, accounts: list, hold, qty=None, settings=None) -> list:
@@ -107,6 +107,36 @@ def register(app, *, cfg, engine, labdesk) -> None:
         except labdesk_mod.Refused as e:
             raise HTTPException(e.status, f"{label(m)}: {e} Nothing after it was saved.") from None
 
+    async def save_set(body: dict, accounts: list, on: bool):
+        """A variant set {set, accounts, pick: {account: strategy}, settings?, turns?, hold?, on}: each account runs exactly one
+        variant. Each member's book is the accounts that picked it, through the solo path; checked whole, new accounts written
+        before removals, so an account is never without its variant on the way."""
+        vs = next((s for s in variants.load(engine._root)["sets"] if s["id"] == body["set"]), None)
+        if vs is None:
+            raise HTTPException(404, "No such set.")
+        pick, settings = body.get("pick"), body.get("settings") or {}
+        turns, hold = body.get("turns", False), body.get("hold")
+        if not isinstance(pick, dict) or set(pick) != set(accounts) or not set(pick.values()) <= set(vs["members"]):
+            raise HTTPException(400, "Each account picks one variant of the set.")
+        if not isinstance(settings, dict) or not all(isinstance(v, dict) for v in settings.values()):
+            raise HTTPException(400, "settings: a dict of settings for each account.")
+        if not isinstance(turns, bool) or not (hold is None or isinstance(hold, bool)):
+            raise HTTPException(400, "turns and hold must be true or false")
+        for m in vs["members"]:
+            for r in _cur(cfg, m):
+                if pick.get(r["account"], m) != m and engine.lab_open_on(m, r["account"]):
+                    raise HTTPException(409, f"{short(r['account'])} has an open trade on {vs['labels'].get(m, m)}; change it once it is flat.")
+        books = {}
+        for m in vs["members"]:
+            cur = _cur(cfg, m)
+            rows = _rows(cur, [a for a in accounts if pick[a] == m], hold, None, settings)
+            if rows != cur:
+                books[m] = rows
+        books = checked(dict(sorted(books.items(), key=lambda kv: len(kv[1]) <= len(_cur(cfg, kv[0])))), {m: on for m in vs["members"]})
+        await write(books, {m: turns for m in vs["members"]}, {m: on for m in vs["members"]})
+        engine.journal("setup_saved", set=vs["id"], pick=pick, on=on)
+        return {"ok": True, "set": vs["id"], "book": labdesk.book_view()}
+
     @app.post("/api/setup")
     async def setup_save(request: Request):
         """Team {team, name?, members, accounts, mode, assign?, risk_usd, risk_by?, max_minis, hold?: {strategy: bool}, on}
@@ -120,6 +150,8 @@ def register(app, *, cfg, engine, labdesk) -> None:
         accounts = body.get("accounts")
         if not isinstance(accounts, list) or not all(isinstance(a, str) for a in accounts) or len(set(accounts)) != len(accounts):
             raise HTTPException(400, "Accounts: a list of accounts, each once.")
+        if "set" in body:
+            return await save_set(body, accounts, on)
         if "team" in body:
             gid = engine.new_team_id() if body["team"] == "" else body["team"]
             keys = ("name", "members", "mode", "assign", "risk_usd", "risk_by", "max_minis")

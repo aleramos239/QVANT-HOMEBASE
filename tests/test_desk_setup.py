@@ -250,3 +250,93 @@ def test_a_team_save_refuses_a_set_member(desk):
         {"sets": [{"id": "v1", "name": "cb", "members": [LAB, "lab_zz"], "labels": {}}], "dismissed": [], "next": 2}))
     r = team(desk)
     assert r.status_code == 409 and "It is in the set cb." in r.json()["detail"]
+
+
+# ---------------------------------------------------------------- a variant set: one variant per account
+B = "lab_qq"
+
+
+def two(desk, labels=("1R", "1.5R")):
+    """The practice Desk with a second Lab strategy (lab_qq) and both in one set `nq_cb`, both with limits."""
+    import json
+
+    from homebase.labrun import store
+    from tests.test_broker_paper import run
+    from tests.labdesk_util import rec
+    store.put(rec("qq", id="draft_qq"), desk.d.store)
+    run(desk.d.ld.refresh())
+    for n in (LAB, B):
+        assert desk.post("/api/lab-limits", json={"strategy": n, "limits": LIMITS}).status_code == 200
+    (desk.d.root / "variants.json").write_text(json.dumps(
+        {"sets": [{"id": "v1", "name": "nq_cb", "members": [LAB, B], "labels": {LAB: labels[0], B: labels[1]}}],
+         "dismissed": [], "next": 2}))
+
+
+def vset(c, pick, accounts=None, **kw):
+    return c.post("/api/setup", json={"set": "v1", "accounts": accounts if accounts is not None else list(pick), "pick": pick,
+                                      "settings": {}, "turns": False, "on": True, **kw})
+
+
+def test_set_save_books_each_variant_on_the_accounts_that_picked_it(desk):
+    two(desk)
+    r = vset(desk, {A1: LAB, A2: B})
+    assert r.status_code == 200, r.text
+    s = st(desk)
+    assert s["book"][LAB] == [{"account": A1, "qty": 1}] and s["book"][B] == [{"account": A2, "qty": 1}]
+    assert s["strategies"][LAB]["cfg"]["enabled"] is True and s["strategies"][B]["cfg"]["enabled"] is True
+    saved = [j for j in s["journal"] if j["event"] == "setup_saved"]
+    assert len(saved) == 1 and saved[0]["set"] == "v1" and saved[0]["pick"] == {A1: LAB, A2: B} and saved[0]["on"] is True
+    assert vset(desk, {A1: B, A2: LAB}).status_code == 200                     # swap: nothing open, both move
+    s = st(desk)
+    assert s["book"][LAB] == [{"account": A2, "qty": 1}] and s["book"][B] == [{"account": A1, "qty": 1}]
+
+
+def test_set_save_refuses_an_unpicked_account_or_a_stranger_whole(desk):
+    two(desk)
+    for r in (vset(desk, {A1: LAB}, accounts=[A1, A2]),                        # a2 ticked, no variant
+              vset(desk, {A1: LAB, A2: "lab_zz"}),                             # a stranger
+              vset(desk, {A1: LAB, A2: B}, accounts=[A1]),                     # a pick for an unticked account
+              c := desk.post("/api/setup", json={"set": "nope", "accounts": [A1], "pick": {A1: LAB}, "turns": False, "on": True})):
+        assert r.status_code in (400, 404, 409), r.text
+    assert not st(desk)["book"].get(LAB) and not st(desk)["book"].get(B)
+    assert not any(j["event"] == "setup_saved" for j in st(desk)["journal"])
+    assert c.status_code == 404
+
+
+def test_set_save_refuses_moving_an_account_mid_trade(desk):
+    two(desk)
+    assert vset(desk, {A1: LAB, A2: B}).status_code == 200
+    s1 = desk.d.eng._state(LAB, A1)
+    s1.status, s1.qty = "live", 1
+    before = st(desk)["book"]
+    r = vset(desk, {A1: B, A2: B})
+    short = ".." + A1[-4:]
+    assert r.status_code == 409 and r.json()["detail"] == f"{short} has an open trade on 1R; change it once it is flat."
+    assert st(desk)["book"] == before
+    assert vset(desk, {A1: LAB, A2: LAB}).status_code == 200                   # a2 may move; a1 stays
+
+
+def test_set_save_with_nothing_touched_keeps_every_row(desk):
+    two(desk)
+    row = {"contract": "NQ", "size": "risk", "risk_usd": 500, "most": 2, "stop_after": "win"}
+    r = desk.post("/api/book", json={"strategy": LAB, "assignments": [{"account": A1, "qty": 1, **row}]})
+    assert r.status_code == 200, r.text
+    assert desk.post("/api/book", json={"strategy": B, "assignments": [{"account": A2, "qty": 1}]}).status_code == 200
+    before = st(desk)["book"]
+    assert vset(desk, {A1: LAB, A2: B}).status_code == 200
+    assert st(desk)["book"] == before and before[LAB][0] == {"account": A1, "qty": 1, **row}
+    assert before[B] == [{"account": A2, "qty": 1}]                            # a plain row stays plain
+    from homebase.config import AppCfg  # noqa: F401
+    desk.d.eng.cfg.accounts.setdefault("sim099", desk.d.eng.cfg.accounts[A1])
+    assert vset(desk, {A1: LAB, A2: B, "sim099": B}).status_code == 200        # a third ticks in: the others stay as they were
+    book = st(desk)["book"]
+    assert book[LAB] == before[LAB] and book[B][0] == {"account": A2, "qty": 1}
+
+
+def test_book_refuses_an_account_another_variant_has(desk):
+    two(desk)
+    assert desk.post("/api/book", json={"strategy": B, "assignments": [{"account": A2, "qty": 1}]}).status_code == 200
+    r = desk.post("/api/book", json={"strategy": LAB, "assignments": [{"account": A2, "qty": 1}]})
+    assert r.status_code == 409 and r.json()["detail"] == f"..{A2[-4:]} is on 1.5R of the set nq_cb: one variant per account."
+    assert not st(desk)["book"].get(LAB)
+    assert desk.post("/api/book", json={"strategy": LAB, "assignments": [{"account": A1, "qty": 1}]}).status_code == 200
