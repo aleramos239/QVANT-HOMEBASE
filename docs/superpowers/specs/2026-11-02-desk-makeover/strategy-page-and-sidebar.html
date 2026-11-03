@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" class="hb-apple hb-c-tight hb-ready" data-hb-tab="desk" data-hb-desk="1" data-hb-view="strat">
+<head>
+<meta charset="utf-8">
+<title>Desk makeover: layout mockup</title>
+<link rel="stylesheet" href="/files/shadcn.css">
+<link rel="stylesheet" href="/files/inline.css">
+<link rel="stylesheet" href="/files/symbols.css">
+<link rel="stylesheet" href="/files/system.css">
+<link rel="stylesheet" href="/files/desk.css">
+<style>
+  /* mockup-only marks: the blue numbers match the notes in chat */
+  .mk{display:inline-flex;align-items:center;justify-content:center;flex:none;width:18px;height:18px;border-radius:9px;
+      background:#0a84ff;color:#fff;font:600 11px/1 -apple-system,system-ui,sans-serif;margin-right:6px;vertical-align:1px}
+  .mock-banner{margin:0 0 10px;padding:6px 10px;border-radius:8px;background:color-mix(in srgb,#0a84ff 10%,transparent);
+      color:#0a5bd6;font:500 12px/16px -apple-system,system-ui,sans-serif}
+  .acct-sum{margin-left:auto;font-size:12px;color:var(--a-label-2);white-space:nowrap}
+  .gear{margin-left:8px;width:26px;height:22px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:6px;
+      background:transparent;color:var(--a-label-2);cursor:pointer}
+  .gear.on{background:var(--a-track);color:var(--a-label)}
+  .gear .sf{--sf-w:15px;--sf-h:14px}
+  .sheet{margin:0 0 6px 28px;padding:4px 0;border-left:2px solid var(--a-sep)}
+  .sheet .feed-row{padding-left:12px}
+  .sheet .seg{display:inline-flex;margin:0;flex:none}
+  .sheet .seg button{height:22px;padding:0 10px;font-size:12px}
+  .solo-save .btn{margin:10px 10px 0}
+  .ok-line{color:var(--a-green)}
+</style>
+</head>
+<body>
+<div class="app-shell">
+<div class="frame">
+
+<!-- ============ SIDEBAR ============ -->
+<aside class="side hb-side" id="side" aria-label="Desk navigation">
+  <button class="nav"><span>Today</span><span></span></button>
+
+  <div class="sh"><button class="sh-t" aria-expanded="true"><span><span class="mk">1</span>Trading</span></button>
+    <span class="sh-acts"><button class="sh-btn" title="Add a strategy from the Lab">+</button></span></div>
+  <button class="item one sel" aria-current="page" title="">
+    <i class="sd live"></i><span class="it"><b>NQ CANDLE BREAK</b></span>
+    <span class="ir mono">+$412</span></button>
+  <button class="item one" title="">
+    <i class="sd live"></i><span class="it"><b>NQ FIRST 15M CANDLE FOLLOW</b></span>
+    <span class="ir mono">−$96</span></button>
+
+  <div class="sh sub"><button class="sh-t" aria-expanded="true"><span><span class="mk">2</span>Shadow</span></button></div>
+  <button class="item one" title="">
+    <i class="sd shadow"></i><span class="it"><b>NQ CANDLE SWEEP</b></span>
+    <span class="ir mono dim">+$85</span></button>
+  <button class="item one" title="">
+    <i class="sd shadow"></i><span class="it"><b>NQ 15M FVG, OPEN+VWAP SIDE</b></span>
+    <span class="ir mono dim">$0</span></button>
+  <button class="item one" title="">
+    <i class="sd shadow"></i><span class="it"><b>NQ 15-MIN FVG, SIDE OF THE 09:30 OPEN</b></span>
+    <span class="ir mono dim">$0</span></button>
+  <button class="item one" title="">
+    <i class="sd warn"></i><span class="it"><b>NQ 5M WICK BREAK 9:30-11 (#28)</b></span>
+    <span class="ir mono dim">runner down</span></button>
+  <button class="item one" title="">
+    <i class="sd shadow"></i><span class="it"><b>NQ 15M FVG LIMIT AT THE EDGE</b></span>
+    <span class="ir mono dim">$0</span></button>
+  <button class="item one" title="">
+    <i class="sd shadow"></i><span class="it"><b>NQ OVERNIGHT ORB (MICRO)</b></span>
+    <span class="ir mono dim">$0</span></button>
+
+  <div class="sh sub"><button class="sh-t" aria-expanded="false"><span><span class="mk">3</span>Off · 5</span></button></div>
+  <button class="item one" title="">
+    <i class="sd off"></i><span class="it"><b>NQ 9:30 LONG</b></span><span class="ir mono dim"></span></button>
+  <button class="item one" title="">
+    <i class="sd off"></i><span class="it"><b>NQ 9:30 SHORT</b></span><span class="ir mono dim"></span></button>
+  <button class="item one" title="">
+    <i class="sd off"></i><span class="it"><b>NQ 9:30 STOP AGAINST THE OVERNIGHT MOVE</b></span><span class="ir mono dim"></span></button>
+  <button class="item one" title="">
+    <i class="sd off"></i><span class="it"><b>NQ EVENING 20-DAY-HIGH LONG</b></span><span class="ir mono dim"></span></button>
+  <button class="item one" title="">
+    <i class="sd off"></i><span class="it"><b>NQ EVENING CLOSE LOCATION FOLLOW</b></span><span class="ir mono dim"></span></button>
+  <button class="side-more">Archive · 44</button>
+
+  <div class="sh"><button class="sh-t" aria-expanded="true"><span><span class="mk">4</span>Teams</span></button>
+    <span class="sh-acts"><button class="sh-btn" title="New team">+</button></span></div>
+  <button class="side-more">None yet · add one</button>
+
+  <div class="sh"><button class="sh-t" aria-expanded="true"><span>Accounts</span></button>
+    <span class="sh-acts"><button class="sh-btn" title="Add account">+</button></span></div>
+  <button class="item one" onclick="openAccts('live099')" title="FAKELIVE099 · Live">
+    <i class="sd ok"></i><span class="it"><b>FAKELIVE099<span class="tag-live">LIVE</span></b><small><span class="pos">+$310</span> today</small></span>
+    <span class="ir mono">$50,310</span></button>
+  <button class="item one" onclick="openAccts('sim041')" title="SIM0000041 · Demo">
+    <i class="sd ok"></i><span class="it"><b>SIM0000041<span class="tag">DEMO</span></b><small><span class="pos">+$102</span> today</small></span>
+    <span class="ir mono">$50,102</span></button>
+  <button class="item one" onclick="openAccts('sim047')" title="SIM0000047 · Demo">
+    <i class="sd warn"></i><span class="it"><b>SIM0000047<span class="tag">DEMO</span></b><small>offline</small></span>
+    <span class="ir mono">$50,000</span></button>
+
+  <div class="sh"><button class="sh-t" aria-expanded="true"><span>Activity</span></button></div>
+  <button class="item" onclick="setView('activity')">
+    <i class="sd off"></i><span class="it"><b>Last event 9:41 AM</b><small>Every alert, order and fill</small></span><span></span></button>
+</aside>
+
+<!-- ============ STRATEGY PAGE ============ -->
+<main class="app-main"><div class="scroll"><div class="view-wrap">
+<section class="view" id="viewStrat">
+  <div class="mock-banner">Mockup only: nothing here works. Same look as today; only the order and the words change. Blue numbers = notes in chat.</div>
+  <button class="back">‹ Today</button>
+  <div class="sd-top"><div><h1 class="sd-title">NQ CANDLE BREAK</h1>
+      <div class="sp mono">3 variants · 12:00 AM-4:00 PM ET · from the Lab</div></div>
+    <button class="switch" role="switch" aria-checked="true" title="ON"></button></div>
+
+  <div class="sd-state"><span class="mk">5</span><b class="ok-line">Ready</b> · trades on 2 accounts · today +$412</div>
+  <div class="mcap warn" style="margin-left:24px">When something blocks it, the same line turns red and names it, e.g. "Won't trade: SIM0000047 is offline · the Desk is OFF"</div>
+
+  <div class="sec setup"><h2><span class="mk">6</span>Set up</h2>
+    <div class="agroup feed static">
+      <label class="feed-row" style="cursor:pointer">
+        <span class="h"><input type="checkbox" checked> FAKELIVE099 <span class="tag-live">LIVE</span></span>
+        <span class="acct-sum">FLEX · 1 NQ</span>
+        <button class="gear on" type="button" aria-label="Settings for FAKELIVE099"><i class="sf sf-gear"></i></button>
+      </label>
+      <div class="sheet"><span class="mk" style="margin-left:-9px;position:relative;top:-2px">7</span>
+        <div class="feed-row"><span class="h">Variant</span><span class="t">
+          <span class="seg"><button>APEX 300K</button><button>FAST</button><button class="sel">FLEX</button></span></span></div>
+        <div class="feed-row"><span class="h">Contract</span><span class="t">
+          <span class="seg"><button>MNQ</button><button class="sel">NQ</button></span></span></div>
+        <div class="feed-row"><span class="h">Size</span><span class="t">
+          <span class="seg"><button class="sel">Contracts</button><button>$ risk</button></span>
+          <input class="hb-field" type="text" value="1" style="width:60px;text-align:right;margin-left:8px"></span></div>
+        <div class="feed-row"><span class="h">Most contracts</span><span class="t">
+          <input class="hb-field" type="text" value="2" style="width:60px;text-align:right"> NQ</span></div>
+      </div>
+      <label class="feed-row" style="cursor:pointer">
+        <span class="h"><input type="checkbox" checked> SIM…041 <span class="tag">DEMO</span></span>
+        <span class="acct-sum">FAST · $500 risk · MNQ</span>
+        <button class="gear" type="button" aria-label="Settings for SIM0000041"><i class="sf sf-gear"></i></button>
+      </label>
+      <label class="feed-row" style="cursor:pointer">
+        <span class="h"><input type="checkbox"> SIM…047 <span class="tag">DEMO</span></span>
+        <span class="acct-sum">offline</span>
+        <button class="gear" type="button" aria-label="Settings for SIM0000047"><i class="sf sf-gear"></i></button>
+      </label>
+      <label class="feed-row" style="cursor:pointer" title="With 2 or more accounts: each trade goes to ONE account, the next free one">
+        <span class="h"><input type="checkbox"> Take turns: one account a trade</span></label>
+      <label class="feed-row" style="cursor:pointer" title="Keeps a filled trade open past the day's flat time">
+        <span class="h"><input type="checkbox"> Hold overnight</span></label>
+    </div>
+    <div class="solo-save"><button class="btn btn-outline btn-sm" type="button">Save</button></div>
+    <div class="mcap">No account ticked: it runs in shadow (writes its orders down, sends nothing).</div>
+  </div>
+
+  <div class="sec"><h2><span class="mk">8</span>Today</h2>
+    <div class="agroup feed static">
+      <div class="feed-row"><span class="t">9:41 AM</span><span class="h">FAKELIVE099 · FLEX · long 1 NQ · hit target</span><span class="t net">+$310</span></div>
+      <div class="feed-row"><span class="t">9:41 AM</span><span class="h">SIM…041 · FAST · long 4 MNQ · hit target</span><span class="t net">+$102</span></div>
+    </div>
+    <button class="btn btn-quiet btn-sm act-link">Activity ›</button></div>
+
+  <div class="sec"><h2><span class="mk">9</span>Results</h2>
+    <div class="seg" role="group"><button class="sel">Accounts</button><button>Shadow</button></div>
+    <div class="cal-head"><button class="cal-nav">‹</button><span class="m" style="flex:1">November 2026</span><button class="cal-nav">›</button></div>
+    <div class="cal-grid"><div class="dow">S</div><div class="dow">M</div><div class="dow">T</div><div class="dow">W</div><div class="dow">T</div><div class="dow">F</div><div class="dow">S</div>
+      <div class="cal-cell">1</div><div class="cal-cell up">2</div><div class="cal-cell">3</div><div class="cal-cell">4</div><div class="cal-cell">5</div><div class="cal-cell">6</div><div class="cal-cell">7</div>
+      <div class="cal-cell">8</div><div class="cal-cell">9</div><div class="cal-cell">10</div><div class="cal-cell">11</div><div class="cal-cell">12</div><div class="cal-cell">13</div><div class="cal-cell">14</div>
+      <div class="cal-cell">15</div><div class="cal-cell">16</div><div class="cal-cell">17</div><div class="cal-cell">18</div><div class="cal-cell">19</div><div class="cal-cell">20</div><div class="cal-cell">21</div>
+      <div class="cal-cell">22</div><div class="cal-cell">23</div><div class="cal-cell">24</div><div class="cal-cell">25</div><div class="cal-cell">26</div><div class="cal-cell">27</div><div class="cal-cell">28</div>
+      <div class="cal-cell">29</div><div class="cal-cell">30</div></div>
+    <div class="cal-foot"><span>1 day traded</span><span class="tot">+$412</span></div>
+    <div class="agroup feed static" style="margin-top:10px">
+      <div class="feed-row"><span class="h">Matched the backtest on 18 of 19 days</span><span class="t">›</span></div>
+    </div>
+  </div>
+</section>
+</div></div></main>
+
+<!-- ============ RIGHT PANEL ============ -->
+<aside class="hb-insp" id="hbInsp" aria-label="Inspector">
+  <div class="hb-ipage" id="hbInspStrat">
+    <section class="hb-isec"><div class="hb-isec-h"><span><span class="mk">10</span>Backtest, per variant</span></div>
+      <div class="hb-box">
+        <div class="hb-row"><span class="hb-row-k">APEX 300K</span><span class="hb-row-v">412 trades · +$38.1k</span></div>
+        <div class="hb-row"><span class="hb-row-k">FAST</span><span class="hb-row-v">655 trades · +$29.4k</span></div>
+        <div class="hb-row"><span class="hb-row-k">FLEX</span><span class="hb-row-v">398 trades · +$41.0k</span></div>
+      </div></section>
+    <section class="hb-isec"><div class="hb-isec-h">About</div>
+      <div class="hb-box">
+        <div class="hb-row"><span class="hb-row-k">Signal</span><span class="hb-row-v">NQ, 1 min bars</span></div>
+        <div class="hb-row"><span class="hb-row-k">Window</span><span class="hb-row-v">12:00 AM-4:00 PM ET</span></div>
+        <div class="hb-row"><span class="hb-row-k">Trades a day</span><span class="hb-row-v">5 most</span></div>
+        <div class="hb-row"><span class="hb-row-k">Flat by</span><span class="hb-row-v">3:55 PM ET</span></div>
+        <div class="hb-row"><span class="hb-row-k">On the Desk since</span><span class="hb-row-v">Oct 18, 2026</span></div>
+      </div></section>
+    <section class="hb-isec"><div class="hb-isec-h"><span><span class="mk">11</span>More</span></div></section>
+    <div class="hb-acts"><div class="sd-actions">
+      <button class="btn btn-outline btn-sm">Flatten &amp; turn off</button>
+      <button class="btn btn-outline btn-sm">Open in the Lab</button>
+      <button class="btn btn-outline btn-sm">Rename</button>
+      <button class="btn btn-outline btn-sm">Archive</button>
+      <button class="btn btn-outline btn-sm">Delete</button>
+    </div></div>
+  </div>
+</aside>
+
+</div>
+</div>
+</body>
+</html>

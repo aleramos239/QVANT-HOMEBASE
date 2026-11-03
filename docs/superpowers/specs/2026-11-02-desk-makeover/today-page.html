@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" class="hb-apple hb-c-tight hb-ready" data-hb-tab="desk" data-hb-desk="1" data-hb-view="today">
+<head>
+<meta charset="utf-8">
+<title>Desk makeover: Today mockup</title>
+<link rel="stylesheet" href="/files/shadcn.css">
+<link rel="stylesheet" href="/files/inline.css">
+<link rel="stylesheet" href="/files/symbols.css">
+<link rel="stylesheet" href="/files/system.css">
+<link rel="stylesheet" href="/files/desk.css">
+<style>
+  /* mockup-only marks: the blue numbers match the notes in chat */
+  .mk{display:inline-flex;align-items:center;justify-content:center;flex:none;width:18px;height:18px;border-radius:9px;
+      background:#0a84ff;color:#fff;font:600 11px/1 -apple-system,system-ui,sans-serif;margin-right:6px;vertical-align:1px}
+  .mock-banner{margin:0 0 10px;padding:6px 10px;border-radius:8px;background:color-mix(in srgb,#0a84ff 10%,transparent);
+      color:#0a5bd6;font:500 12px/16px -apple-system,system-ui,sans-serif}
+  .acct-sum{margin-left:auto;font-size:12px;color:var(--a-label-2);white-space:nowrap}
+  .gear{margin-left:8px;width:26px;height:22px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:6px;
+      background:transparent;color:var(--a-label-2);cursor:pointer}
+  .gear.on{background:var(--a-track);color:var(--a-label)}
+  .gear .sf{--sf-w:15px;--sf-h:14px}
+  .sheet{margin:0 0 6px 28px;padding:4px 0;border-left:2px solid var(--a-sep)}
+  .sheet .feed-row{padding-left:12px}
+  .sheet .seg{display:inline-flex;margin:0;flex:none}
+  .sheet .seg button{height:22px;padding:0 10px;font-size:12px}
+  .solo-save .btn{margin:10px 10px 0}
+  .ok-line{color:var(--a-green)}
+</style>
+</head>
+<body>
+<div class="app-shell">
+<div class="frame">
+<!-- ============ SIDEBAR ============ -->
+<aside class="side hb-side" id="side" aria-label="Desk navigation">
+  <button class="nav" aria-current="page"><span>Today</span><span></span></button>
+
+  <div class="sh"><button class="sh-t" aria-expanded="true"><span>Trading</span></button>
+    <span class="sh-acts"><button class="sh-btn" title="Add a strategy from the Lab">+</button></span></div>
+  <button class="item one" title="">
+    <i class="sd live"></i><span class="it"><b>NQ CANDLE BREAK</b></span>
+    <span class="ir mono">+$412</span></button>
+  <button class="item one" title="">
+    <i class="sd live"></i><span class="it"><b>NQ FIRST 15M CANDLE FOLLOW</b></span>
+    <span class="ir mono">−$96</span></button>
+
+  <div class="sh sub"><button class="sh-t" aria-expanded="true"><span>Shadow</span></button></div>
+  <button class="item one" title="">
+    <i class="sd shadow"></i><span class="it"><b>NQ CANDLE SWEEP</b></span>
+    <span class="ir mono dim">+$85</span></button>
+  <button class="item one" title="">
+    <i class="sd shadow"></i><span class="it"><b>NQ 15M FVG, OPEN+VWAP SIDE</b></span>
+    <span class="ir mono dim">$0</span></button>
+  <button class="item one" title="">
+    <i class="sd shadow"></i><span class="it"><b>NQ 15-MIN FVG, SIDE OF THE 09:30 OPEN</b></span>
+    <span class="ir mono dim">$0</span></button>
+  <button class="item one" title="">
+    <i class="sd warn"></i><span class="it"><b>NQ 5M WICK BREAK 9:30-11 (#28)</b></span>
+    <span class="ir mono dim">runner down</span></button>
+  <button class="item one" title="">
+    <i class="sd shadow"></i><span class="it"><b>NQ 15M FVG LIMIT AT THE EDGE</b></span>
+    <span class="ir mono dim">$0</span></button>
+  <button class="item one" title="">
+    <i class="sd shadow"></i><span class="it"><b>NQ OVERNIGHT ORB (MICRO)</b></span>
+    <span class="ir mono dim">$0</span></button>
+
+  <div class="sh sub"><button class="sh-t" aria-expanded="false"><span>Off · 5</span></button></div>
+  <button class="item one" title="">
+    <i class="sd off"></i><span class="it"><b>NQ 9:30 LONG</b></span><span class="ir mono dim"></span></button>
+  <button class="item one" title="">
+    <i class="sd off"></i><span class="it"><b>NQ 9:30 SHORT</b></span><span class="ir mono dim"></span></button>
+  <button class="item one" title="">
+    <i class="sd off"></i><span class="it"><b>NQ 9:30 STOP AGAINST THE OVERNIGHT MOVE</b></span><span class="ir mono dim"></span></button>
+  <button class="item one" title="">
+    <i class="sd off"></i><span class="it"><b>NQ EVENING 20-DAY-HIGH LONG</b></span><span class="ir mono dim"></span></button>
+  <button class="item one" title="">
+    <i class="sd off"></i><span class="it"><b>NQ EVENING CLOSE LOCATION FOLLOW</b></span><span class="ir mono dim"></span></button>
+  <button class="side-more">Archive · 44</button>
+
+  <div class="sh"><button class="sh-t" aria-expanded="true"><span>Teams</span></button>
+    <span class="sh-acts"><button class="sh-btn" title="New team">+</button></span></div>
+  <button class="side-more">None yet · add one</button>
+
+  <div class="sh"><button class="sh-t" aria-expanded="true"><span>Accounts</span></button>
+    <span class="sh-acts"><button class="sh-btn" title="Add account">+</button></span></div>
+  <button class="item one" onclick="openAccts('live099')" title="FAKELIVE099 · Live">
+    <i class="sd ok"></i><span class="it"><b>FAKELIVE099<span class="tag-live">LIVE</span></b><small><span class="pos">+$310</span> today</small></span>
+    <span class="ir mono">$50,310</span></button>
+  <button class="item one" onclick="openAccts('sim041')" title="SIM0000041 · Demo">
+    <i class="sd ok"></i><span class="it"><b>SIM0000041<span class="tag">DEMO</span></b><small><span class="pos">+$102</span> today</small></span>
+    <span class="ir mono">$50,102</span></button>
+  <button class="item one" onclick="openAccts('sim047')" title="SIM0000047 · Demo">
+    <i class="sd warn"></i><span class="it"><b>SIM0000047<span class="tag">DEMO</span></b><small>offline</small></span>
+    <span class="ir mono">$50,000</span></button>
+
+  <div class="sh"><button class="sh-t" aria-expanded="true"><span>Activity</span></button></div>
+  <button class="item" onclick="setView('activity')">
+    <i class="sd off"></i><span class="it"><b>Last event 9:41 AM</b><small>Every alert, order and fill</small></span><span></span></button>
+</aside>
+
+<!-- ============ TODAY ============ -->
+<main class="app-main"><div class="scroll"><div class="view-wrap">
+<section class="view" id="viewToday">
+  <div class="mock-banner">Mockup only: nothing here works. Same look as today. Blue numbers = notes in chat.</div>
+  <span class="mk">1</span><h1 class="day-title">In session.<br><span>2 strategies trading on 2 accounts · 6 in shadow · today +$412 (Live +$310 · Demo +$102)</span></h1>
+
+  <h2 class="hb-sec-h"><span class="mk">2</span>Needs a look · 3</h2>
+  <div class="agroup feed static">
+    <div class="feed-row"><span class="t" style="color:var(--a-orange)">⚠</span><span class="h"><b>SIM0000047 is offline.</b> NQ CANDLE BREAK can't trade on it.</span><button class="btn btn-outline btn-sm">Reconnect</button></div>
+    <div class="feed-row"><span class="t" style="color:var(--a-orange)">⚠</span><span class="h"><b>NQ 5M WICK BREAK (#28):</b> its runner is not running.</span><button class="btn btn-outline btn-sm">Open</button></div>
+    <div class="feed-row"><span class="t" style="color:var(--a-orange)">⚠</span><span class="h"><b>NQ OVERNIGHT ORB (MICRO):</b> a new version is waiting. It stays OFF until you turn it on.</span><button class="btn btn-outline btn-sm">Open</button></div>
+  </div>
+  <div class="mcap">When nothing is wrong this says "Ready: nothing needs a look". It is the only ready list on the Desk.</div>
+
+  <h2 class="hb-sec-h"><span class="mk">3</span>Session</h2><div class="daytl"><div class="tl-head"><span><b>Today</b>Monday, November 2</span><span class="mono">9:52 AM ET</span></div>
+    <div class="tl" role="img"><div class="tl-track"><i class="tl-done" style="width:10.6%"></i><i class="tl-tick" style="left:98.81%"></i><i class="tl-open" style="left:7.14%"></i><i class="tl-now" style="left:10.6%"></i></div>
+      <div class="tl-labels"><span class="tl-t strong at-start" style="left:7.14%">9:30 AM Open</span><span class="tl-t at-end" style="left:98.81%">3:55 PM Flat</span></div></div></div>
+
+  <h2 class="hb-sec-h"><span class="mk">4</span>Trading</h2><div class="slist">
+    <div class="srow" role="button" tabindex="0">
+    <div><div class="n">NQ CANDLE BREAK</div><div class="sp mono">FAKELIVE099 FLEX 1 NQ · SIM…041 FAST $500 risk</div></div>
+    <div class="rs">1 trade, won</div>
+    <div class="rp mono">+$412</div><button class="switch" role="switch" aria-checked="true"></button></div>
+    <div class="srow" role="button" tabindex="0">
+    <div><div class="n">NQ FIRST 15M CANDLE FOLLOW</div><div class="sp mono">SIM…041 1.5R 2 MNQ</div></div>
+    <div class="rs">1 trade, lost</div>
+    <div class="rp mono">−$96</div><button class="switch" role="switch" aria-checked="true"></button></div>
+  </div>
+  <h2 class="hb-sec-h">Shadow</h2><div class="slist">
+    <div class="srow" role="button" tabindex="0">
+    <div><div class="n">NQ CANDLE SWEEP</div><div class="sp mono">no account: writes its orders down</div></div>
+    <div class="rs">1 trade</div>
+    <div class="rp mono dim">+$85</div><button class="switch" role="switch" aria-checked="true"></button></div>
+    <div class="srow" role="button" tabindex="0">
+    <div><div class="n">NQ 15M FVG, OPEN+VWAP SIDE</div><div class="sp mono">no account: writes its orders down</div></div>
+    <div class="rs">waiting</div>
+    <div class="rp mono dim">$0</div><button class="switch" role="switch" aria-checked="true"></button></div>
+    <div class="srow" role="button" tabindex="0">
+    <div><div class="n">NQ 15-MIN FVG, SIDE OF THE 09:30 OPEN</div><div class="sp mono">no account: writes its orders down</div></div>
+    <div class="rs">waiting</div>
+    <div class="rp mono dim">$0</div><button class="switch" role="switch" aria-checked="true"></button></div>
+    <div class="srow" role="button" tabindex="0">
+    <div><div class="n">NQ 5M WICK BREAK 9:30-11 (#28)</div><div class="sp mono">no account: writes its orders down</div></div>
+    <div class="rs">runner down</div>
+    <div class="rp mono dim">—</div><button class="switch" role="switch" aria-checked="true"></button></div>
+    <div class="srow" role="button" tabindex="0">
+    <div><div class="n">NQ 15M FVG LIMIT AT THE EDGE</div><div class="sp mono">no account: writes its orders down</div></div>
+    <div class="rs">waiting</div>
+    <div class="rp mono dim">$0</div><button class="switch" role="switch" aria-checked="true"></button></div>
+    <div class="srow" role="button" tabindex="0">
+    <div><div class="n">NQ OVERNIGHT ORB (MICRO)</div><div class="sp mono">no account: writes its orders down</div></div>
+    <div class="rs">waiting</div>
+    <div class="rp mono dim">$0</div><button class="switch" role="switch" aria-checked="true"></button></div>
+  </div>
+  <div class="mcap">Off strategies are not listed here; they sit under Off in the sidebar.</div>
+</section>
+</div></div></main>
+
+<!-- ============ RIGHT PANEL ============ -->
+<aside class="hb-insp" id="hbInsp" aria-label="Inspector">
+  <div class="hb-ipage" id="hbInspDesk">
+    <section class="hb-isec"><div class="hb-isec-h"><span><span class="mk">5</span>Desk</span></div>
+      <div class="hb-box">
+        <div class="hb-row"><span class="hb-row-k">Desk</span><span class="hb-row-v">ON</span></div>
+        <div class="hb-row"><span class="hb-row-k">Accounts</span><span class="hb-row-v">2 of 3 connected ›</span></div>
+        <div class="hb-row"><span class="hb-row-k">Today, live</span><span class="hb-row-v">+$310</span></div>
+        <div class="hb-row"><span class="hb-row-k">Today, demo</span><span class="hb-row-v">+$102</span></div>
+      </div></section>
+    <section class="hb-isec"><div class="hb-isec-h">Notices</div>
+      <div class="hb-box"><div class="hb-row"><span class="hb-row-k">No notices</span></div></div></section>
+  </div>
+</aside>
+
+</div>
+</div>
+</body>
+</html>
