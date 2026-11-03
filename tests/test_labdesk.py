@@ -1459,3 +1459,93 @@ def test_check_book_hold_overnight_only_on_a_tradovate_account(tmp_path):
             d.ld.check_book(LAB, [row])
         assert str(e.value) == labdesk.HOLD_TRADOVATE
         d.ld.check_book(LAB, [{k: v for k, v in row.items() if k != "hold"}])     # without hold: fine
+
+
+# ---------------------------------------------------------------- each row in its own contract (per-account settings, Task 4)
+NQ_RISK = {"account": "a1", "qty": 1, "size": "risk", "risk_usd": 500, "contract": "NQ"}
+
+
+def test_risk_rows_size_in_their_own_contract(tmp_path):
+    mnq = {**RISK_A, "account": "a2", "contract": "MNQ"}
+    d = sized_desk(tmp_path, [NQ_RISK, mnq])
+    out = send(d, entry(sl=70.0))                                    # a 40-point stop: $800 an NQ, $80 an MNQ
+    assert d.sizes == [{"a2": 6}]                                    # $500 / $80 = 6; the NQ row sits out (not even one)
+    assert out["results"][0]["accounts"]["a1"]["reason"] == labdesk.ROW_NO_SIZE
+
+
+def test_a_tight_stop_sizes_both_contracts_from_the_same_dollars(tmp_path):
+    d = sized_desk(tmp_path, [NQ_RISK, {**RISK_A, "account": "a2", "contract": "MNQ"}])
+    send(d, entry(sl=106.0))                  # a 4-point stop: NQ $80 = 6, MNQ $8 = 62
+    assert d.sizes == [{"a1": 6, "a2": 62}]
+
+
+def test_an_entry_is_sent_in_the_contract_it_was_sized_in(tmp_path):
+    d = sized_desk(tmp_path, [{**NQ_RISK, "risk_usd": 1000}, {**RISK_A, "account": "a2"}])
+    seen = []
+    real = d.eng.lab_enter
+
+    async def spy(name, legs, sizes, **k):
+        seen.append(k["contracts"])
+        return await real(name, legs, sizes, **k)
+    d.eng.lab_enter = spy
+    send(d, entry(sl=95.0))                  # 15 pts: NQ $300 -> 3; the default row: MNQ $30 -> 17
+    assert seen == [{"a1": "NQ", "a2": "MNQ"}] and d.sizes == [{"a1": 3, "a2": 17}]
+
+
+def test_a_legacy_row_on_another_contract_is_capped_at_the_same_dollars(tmp_path):
+    d = sized_desk(tmp_path, [{"account": "a2", "qty": 1}])
+    d.cfg.book[LAB] = [{"account": "a1", "qty": 3, "contract": "NQ"}]   # (written past the save check: 2 MNQ is 0 NQ)
+    out = send(d, entry(sl=85.0))
+    assert d.sizes == [] and out["results"][0]["accounts"]["a1"]["reason"] == "Size is capped at 0 here."
+
+
+def test_the_door_counts_dollar_risk_in_the_rows_contract(tmp_path):
+    rows = [{"account": "a1", "qty": 1, "size": "contracts", "contract": "NQ"}, {"account": "a2", "qty": 1, "size": "contracts"}]
+    d = sized_desk(tmp_path, rows, cap=150)
+    out = send(d, entry(sl=100.0))            # 10 pts: one NQ is $200 > $150; one MNQ is $20
+    assert d.sizes == [{"a2": 1}] and "$200 at risk" in out["results"][0]["accounts"]["a1"]["reason"]
+
+
+def test_most_default_follows_the_rows_contract(tmp_path):
+    d = mkdesk(tmp_path, rec_kw={"exec_root": "MNQ"})
+    assert d.ld._most_default(LAB) == 20 and d.ld._most_default(LAB, "MNQ") == 20 and d.ld._most_default(LAB, "NQ") == 2
+
+
+def test_a_team_sizes_each_account_in_its_own_contract(tmp_path):
+    d = sized_desk(tmp_path, [{"account": "a1", "qty": 1, "size": "contracts", "contract": "NQ"}, {"account": "a2", "qty": 2}], cap=100_000)
+    d.eng.groups["g1"] = {"name": "x", "members": [LAB], "accounts": [], "risk_usd": 300.0, "max_minis": 17, "on": True}
+    seen = []
+    real = d.eng.lab_enter
+
+    async def spy(name, legs, sizes, **k):
+        seen.append(k["contracts"])
+        return await real(name, legs, sizes, **k)
+    d.eng.lab_enter = spy
+    send(d, entry(sl=95.0))                  # 15 pts: NQ $300 -> 1; MNQ $30 -> 10 (never 10 NQ)
+    assert seen == [{"a1": "NQ", "a2": "MNQ"}] and d.sizes == [{"a1": 1, "a2": 10}]
+
+
+def test_a_team_account_whose_contract_does_not_fit_sits_out_alone(tmp_path):
+    d = sized_desk(tmp_path, [{"account": "a1", "qty": 1, "size": "contracts", "contract": "NQ"}, {"account": "a2", "qty": 2}], cap=100_000)
+    d.eng.groups["g1"] = {"name": "x", "members": [LAB], "accounts": [], "risk_usd": 300.0, "max_minis": 17, "on": True}
+    out = send(d, entry(sl=80.0))            # 30 pts: one NQ is $600 > $330; MNQ $60 -> 5
+    assert d.sizes == [{"a2": 5}]
+    assert out["results"][0]["accounts"]["a1"]["reason"] == labdesk.GROUP_NO_SIZE
+
+
+def test_a_book_row_with_a_zero_cap_is_refused(tmp_path):
+    d = sized_desk(tmp_path, [{"account": "a2", "qty": 1}])
+    run(d.ld.set_limits(LAB, {**LIMITS, "max_qty": 5}))
+    with pytest.raises(Refused) as e:
+        d.ld.check_book(LAB, [{"account": "a1", "qty": 1, "contract": "NQ"}])
+    assert str(e.value) == "A1: NQ is over this strategy's Most contracts (5 MNQ). Raise Limits first."
+    d.ld.check_book(LAB, [{"account": "a1", "qty": 1, "contract": "NQ", "size": "risk", "risk_usd": 500}])   # a set row: no cap
+    run(d.ld.set_book(LAB, [{"account": "a1", "qty": 1, "contract": "NQ", "size": "risk", "risk_usd": 500}]))
+    run(d.ld.set_limits(LAB, {**LIMITS, "max_qty": 1}))                 # a set row is not held to the cap: still fine
+
+
+def test_switching_the_strategys_contract_leaves_a_rows_own_contract_numbers_alone(tmp_path):
+    d = mkdesk(tmp_path, qty=0, limits={**LIMITS, "max_qty": 1})
+    run(d.ld.set_book(LAB, [{"account": "a1", "qty": 1, "contract": "NQ"}]))
+    new, limits, rows = d.ld._switch_plan(LAB, labcfg.record_of(d.cfg, LAB), "micro")
+    assert rows == [{"account": "a1", "qty": 1, "contract": "NQ"}] and limits.max_qty == 10

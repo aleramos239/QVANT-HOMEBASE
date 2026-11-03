@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from homebase.desk import labcfg
 from homebase.routes.setup import team_books
 from tests.labdesk_util import LAB, LIMITS
 from tests.test_fake_desk_lab import A1, A2, LIVE, desk  # noqa: F401  (the fixture)
@@ -158,3 +159,12 @@ def test_a_team_save_keeps_a_rows_contract():
     new = {"members": ["s"], "assign": {}, "mode": "cycle", "accounts": ["a1", "a2"]}
     out = team_books(cfg, {}, new)["s"]
     assert out[0] == {"account": "a1", "qty": 2, "contract": "NQ"} and out[1] == {"account": "a2", "qty": 1}
+
+
+def test_a_solo_save_with_a_row_the_cap_cannot_fill_writes_nothing(desk):
+    labcfg.record_of(desk.d.ld.cfg, LAB)["exec_root"] = "MNQ"       # its orders go to MNQ (the practice Desk has no switch route)
+    assert desk.post("/api/lab-limits", json={"strategy": LAB, "limits": {**LIMITS, "max_qty": 5}}).status_code == 200
+    r = solo(desk, turns=False, settings={A2: {"contract": "NQ"}})
+    assert r.status_code == 409 and "NQ is over this strategy's Most contracts (5 MNQ). Raise Limits first." in r.json()["detail"]
+    assert not st(desk)["book"].get(LAB)
+    assert solo(desk, turns=False, settings={A2: {"contract": "NQ", "size": "risk", "risk_usd": 500}}).status_code == 200   # a set row: no cap

@@ -72,3 +72,12 @@ def test_a_row_may_name_its_contract_only_as_the_strategys_market_or_its_micro()
     assert labcfg.row_symbol(nq, {"account": "a1"}) == "MNQ"
     assert labcfg.row_symbol(nq, {"account": "a1", "contract": "NQ"}) == "NQ"
     assert labcfg.row_symbol(nq, {"account": "a1", "contract": "ES"}) == "MNQ"
+
+
+def test_the_cap_converts_by_point_value():
+    rec = {"root": "NQ", "exec_root": "MNQ"}
+    assert labcfg.row_cap(rec, {"contract": "NQ"}, 20) == 2
+    assert labcfg.row_cap(rec, {"contract": "NQ"}, 5) == 0
+    assert labcfg.row_cap(rec, {}, 5) == 5
+    assert labcfg.row_cap({"root": "NQ"}, {"contract": "MNQ"}, 2) == 20
+    assert labcfg.row_cap({"root": "NQ"}, {"contract": "ES"}, 2) == 2          # a contract it cannot trade: today's cap

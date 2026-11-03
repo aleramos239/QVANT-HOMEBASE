@@ -64,7 +64,7 @@ import math
 from dataclasses import asdict, dataclass
 
 from ..config import AppCfg, StrategyCfg
-from ..contracts import commission_rt, exec_ok, spec_for
+from ..contracts import commission_rt, exec_ok, point_value, spec_for
 from ..core.clock import HHMM, desk_minutes as _dm, hhmm_minutes as _minutes, is_hhmm as _hhmm, window_minutes
 from ..labrun import store
 
@@ -264,6 +264,16 @@ def row_ok(rec: dict, row: dict) -> str | None:
 def row_symbol(rec: dict, row: dict) -> str:
     """The contract a book row's orders go to: its own `contract` when the strategy can trade it, else exec_symbol(rec)."""
     return row["contract"] if row.get("contract") and row_ok(rec, row) is None else exec_symbol(rec)
+
+
+def row_cap(rec: dict, row: dict, max_qty: int) -> int:
+    """The strategy's Most contracts (`max_qty`, in the contract its orders go to) in the row's own contract at the same
+    dollars: 20 MNQ is 2 NQ. A row on the strategy's own contract keeps `max_qty`; one the contract cannot fill is 0."""
+    sym, own = row_symbol(rec, row), exec_symbol(rec)
+    if sym == own:
+        return max_qty
+    a, b = point_value(own), point_value(sym)
+    return int(max_qty * a / b) if a and b else 0
 
 
 def strategy_cfg(rec: dict, limits: LabLimits | None) -> StrategyCfg:

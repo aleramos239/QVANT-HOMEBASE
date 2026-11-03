@@ -466,7 +466,7 @@ class LabDesk:
         why = self._open_why(name)
         if why is not None:
             raise Refused(why)
-        if any(r.get("size") is None and int(r.get("qty") or 0) > limits.max_qty for r in assignments(self.cfg, name)):
+        if any(r.get("size") is None and int(r.get("qty") or 0) > labcfg.row_cap(rec, r, limits.max_qty) for r in assignments(self.cfg, name)):
             raise Refused(BOOKED_FOR_MORE)   # (the rows of accounts this desk has; another pool's are not its to judge)
         rows = [dict(r) for r in self.cfg.book.get(name) or []]
         was = labcfg.limits_of(self.cfg, name)
@@ -570,13 +570,16 @@ class LabDesk:
                 raise Refused("Its most contracts would be over 10. Lower it first.")
         rows = []
         for r in self.cfg.book.get(name) or []:      # (a row keeps its settings; its size and its most move to the other contract)
+            if r.get("contract"):                    # (unless it names its own contract: its numbers are in that one already)
+                rows.append(dict(r))
+                continue
             row = {**r, "qty": scale(int(r["qty"]), "An account's size")}
             if row.get("most") is not None:
                 row["most"] = min(1000, scale(int(row["most"]), "An account's most"))   # the box's own top
             rows.append(row)
         if rows and limits is None:
             raise Refused(SET_LIMITS_FIRST)
-        if limits is not None and any(r.get("size") is None and r["qty"] > limits.max_qty for r in rows):
+        if limits is not None and any(r.get("size") is None and r["qty"] > labcfg.row_cap(new, r, limits.max_qty) for r in rows):
             raise Refused(BOOKED_FOR_MORE)
         return new, limits, rows
 
@@ -726,8 +729,12 @@ class LabDesk:
                 why = labcfg.row_ok(rec, r) if rec else None
                 if why:
                     raise Refused(why)
-                if r.get("size") is None and int(r["qty"]) > limits.max_qty:     # a row with settings is not held to the backtested cap
-                    raise Refused(f"Size is capped at {limits.max_qty} here.")
+                cap = labcfg.row_cap(rec, r, limits.max_qty) if rec else limits.max_qty
+                if r.get("size") is None and cap < 1:    # the strategy's Most contracts is less than one of this contract
+                    raise Refused(f"{self._label(r['account'])}: {r.get('contract') or labcfg.exec_symbol(rec)} is over this strategy's Most contracts "
+                                  f"({limits.max_qty} {labcfg.exec_symbol(rec)}). Raise Limits first.")
+                if r.get("size") is None and int(r["qty"]) > cap:     # a row with settings is not held to the backtested cap
+                    raise Refused(f"Size is capped at {cap} here.")
                 if r.get("size") == "contracts" and r.get("most") is not None and int(r["qty"]) > r["most"]:
                     raise Refused(ROW_OVER_MOST)
             for r in rows:                   # Hold overnight leans on the broker's GTC stop and target: Tradovate only
@@ -1323,10 +1330,13 @@ class LabDesk:
         judged: dict = {i: {} for i in entries}
         for row in booked:
             a, q = row["account"], int(row["qty"])
-            sized = {i: row_size(row, dists[i], lim["point_value"], full, None, limits.max_risk_usd)[0]
+            # each row is sized, capped and risk-checked in ITS contract (the one _enter sends it in), the cap at the same dollars
+            lr = {**lim, "point_value": point_value(labcfg.row_symbol(rec, row)), "max_qty": labcfg.row_cap(rec, row, limits.max_qty)} \
+                if root else lim
+            sized = {i: row_size(row, dists[i], lr["point_value"], full, None, limits.max_risk_usd)[0]
                      for i in entries} if row.get("size") is not None else None
             got = door.check_event([(dict(it, qty=self._sized(own, it, q)) if sized is None else dict(it, qty=sized[i] or 1))
-                                    if it["op"] == "entry" else it for i, it in enumerate(ev.intents)], state, lim)
+                                    if it["op"] == "entry" else it for i, it in enumerate(ev.intents)], state, lr)
             for i, it in enumerate(ev.intents):
                 if it["op"] == "oco":
                     oco[i] = got[i]
@@ -1341,8 +1351,8 @@ class LabDesk:
                     why = ROW_NO_SIZE
                 if sized is not None and sized[i] is not None:
                     judged[i][a] = sized[i]
-                if why is None and sized is None and q > limits.max_qty:
-                    why = f"Size is capped at {limits.max_qty} here."
+                if why is None and sized is None and q > lr["max_qty"]:
+                    why = f"Size is capped at {lr['max_qty']} here."
                 if why is None and self._past(ev.intents[i], last):
                     why = PRICE_PAST
                 per[i][a] = why
@@ -1528,7 +1538,7 @@ class LabDesk:
                                     per, oco, _, sized = self._verdicts(name, ev, booked)
                                     accounts, sizes = self._takers(unit, per, booked, want, sized)
                         if sizes and no is None:
-                            rows = await self._enter(name, ev, d, unit, ids, sizes, accounts)
+                            rows = await self._enter(name, ev, d, unit, ids, sizes, accounts, booked)
                         else:
                             rows = self._no_entry(name, ev, d, ids, no, accounts)
                     else:
@@ -1564,19 +1574,20 @@ class LabDesk:
         rec = labcfg.record_of(self.cfg, name) or {}
         return int(ev.intents[unit[0]]["qty"]) if rec.get("own_size") is True else None
 
-    def _group_size(self, name: str, rec: dict, ev, unit: list, last, cap_usd: float = 0.0) -> tuple:
+    def _group_size(self, name: str, rec: dict, ev, unit: list, last, cap_usd: float = 0.0, symbol: str | None = None) -> tuple:
         """For a member of an ON account cycle group with dollars at risk: (contracts, None) = round(risk / (stop
         distance x point value)) in the contract the orders go to -- rounded down when rounding would put more than
         10 % over the risk -- at most the group's `max_minis` full contracts'
         worth and never more dollars than the strategy's own "at risk per trade" limit (`cap_usd`, when set);
         (None, GROUP_NO_SIZE) when not one contract fits or the stop cannot be measured (fail closed).
-        (None, None): no such group -- the Desk's own sizes stand. A pair is sized on its wider stop."""
+        (None, None): no such group -- the Desk's own sizes stand. A pair is sized on its wider stop. `symbol`: the contract
+        this account's row trades (default: the strategy's own)."""
         grp = self.engine.group_of(name)
         risk = member_risk(grp[1], name) if grp is not None else 0.0     # its own amount in the cycle, else the cycle's
         if not risk or not rec.get("root"):
             return None, None
         g = grp[1]
-        pv, full = point_value(labcfg.exec_symbol(rec)), point_value(rec["root"])
+        pv, full = point_value(symbol or labcfg.exec_symbol(rec)), point_value(rec["root"])
         try:
             dist = max(abs(door._entry_price(ev.intents[j], {"last_price": last}) - ev.intents[j]["sl"]) for j in unit)
             n = round(risk / (dist * pv))
@@ -1598,9 +1609,9 @@ class LabDesk:
         except (TypeError, KeyError):
             return None
 
-    def _most_default(self, name: str) -> int:
+    def _most_default(self, name: str, symbol: str | None = None) -> int:
         rec = labcfg.record_of(self.cfg, name) or {}
-        pv = point_value(labcfg.exec_symbol(rec)) if rec.get("root") else None
+        pv = point_value(symbol or labcfg.exec_symbol(rec)) if rec.get("root") else None
         full = point_value(rec["root"]) if rec.get("root") else None
         return most_default(pv, full) if pv and full else 2      # unknown market: the mini's (the smaller) default
 
@@ -1638,25 +1649,32 @@ class LabDesk:
         answers = {a: {"ok": False, "round": None, "reason": s} for a, s in said.items()}
         return [{"op": "entry", "id": i, "status": "cancelled", "refused": text, "accounts": answers} for i in ids]
 
-    async def _enter(self, name: str, ev, d: dict, unit: list, ids: list, sizes: dict, accounts: dict) -> list:
+    async def _enter(self, name: str, ev, d: dict, unit: list, ids: list, sizes: dict, accounts: dict, booked: list) -> list:
         """10: an entry (or a linked pair) on the accounts that may take it. The engine's own answer per account is
         passed back as that account's sentence. It counts as one of today's trades when it reached at least one
         account's broker call (the engine numbered a round for it); two that no account took stop the strategy."""
         limits = labcfg.limits_of(self.cfg, name)
         rec = labcfg.record_of(self.cfg, name) or {}
         last, tick = self._last_price(ev), (tick_size(rec["root"]) if rec.get("root") else None)
-        size, no = self._group_size(name, rec, ev, unit, last, limits.max_risk_usd)
-        if no is not None:
-            return self._no_entry(name, ev, d, ids, no, accounts)
-        if size is not None:                         # an account cycle group sizes every member's order itself
-            sizes = {a: size for a in sizes}
+        # the contract each account is sized in IS the one its entry is sent in: one map, from the rows the sizes came from
+        contracts = {r["account"]: labcfg.row_symbol(rec, r) for r in booked if rec and r["account"] in sizes}
+        by = {s: self._group_size(name, rec, ev, unit, last, limits.max_risk_usd, s) for s in set(contracts.values())}
+        sizes, accounts, nos = dict(sizes), dict(accounts), []
+        for a, s in contracts.items():               # an account cycle group sizes every member's order itself, in its contract
+            size, no = by[s]
+            if no is not None:                       # no contract of its fits: that account sits out
+                sizes.pop(a)
+                accounts[a] = no
+                nos.append(no)
+            elif size is not None:
+                sizes[a] = size
+        if not sizes:
+            return self._no_entry(name, ev, d, ids, nos[0] if nos else None, accounts)
         legs = [self._leg(ev.intents[j], last, tick) for j in unit]
         unknown = False
         try:
             got = await self.engine.lab_enter(name, legs, sizes, max_rounds=limits.max_trades_day, source="lab",
-                                               contracts={r["account"]: labcfg.row_symbol(rec, r)
-                                                          for r in assignments(self.cfg, name)
-                                                          if rec and r["account"] in sizes})
+                                               contracts={a: s for a, s in contracts.items() if a in sizes})
             per = got.get("accounts") or {}
             whole = got.get("reason")                        # the engine refused the whole call: no account was asked
         except Exception as e:  # noqa: BLE001 -- the outcome is unknown: counted, and no account is said to hold it
