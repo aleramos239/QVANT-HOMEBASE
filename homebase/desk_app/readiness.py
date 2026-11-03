@@ -100,7 +100,10 @@ def _lab_traps(cfg, engine, lab, enabled: dict, shown, short) -> list:
                         "detail": "Limits needed first: it runs in shadow until they are set."})
         for r in config_mod.assignments(cfg, n):
             seats.setdefault((r["account"], contracts.price_root(labcfg.row_symbol(rec, r))), []).append(n)
+    teams = [set(g.get("members") or ()) for g in (getattr(engine, "groups", None) or {}).values() if g.get("mode") != "split"]
     for (aid, root), names in seats.items():
+        if any(set(names) <= t for t in teams):      # one team taking turns or sharing its accounts: by design, no warn
+            continue
         for n in names if len(names) > 1 else ():
             others = ", ".join(shown(o) for o in names if o != n)
             out.append({"level": "warn", "label": shown(n), "strategy": n, "account": aid, "fix": "open",

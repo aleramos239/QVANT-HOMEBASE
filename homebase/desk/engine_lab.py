@@ -49,6 +49,7 @@ LAB_SETTLE_S = 2.0                             # a closed round's orders are re-
 LAB_SETTLE_FAST = 5                            # ... for this many reads, then every LAB_CHECK_RETRY_S
 LAB_UNCONFIRMED_S = 5.0                        # a close with no exit fill is given this long
 LAB_CLOCK_POLLS = 2                            # the clock's flatten re-reads an entry this often (250 ms apart)
+LAB_RECHECK_CAP_S = 5.0                        # the position-block re-read never holds the clock (flat time) longer
 # The sentences the owner reads (design, section E). The door's own are repeated here so the engine never
 # imports the runner's code; tests/test_engine_lab.py holds them equal.
 LAB_NOT_ON_DESK = "That strategy is not on the Desk."
@@ -1093,6 +1094,12 @@ class LabMixin:
         if not self.position_blocks or self._mono() - self.__dict__.get("_blocks_read", -1e9) < 15:
             return
         self._blocks_read = self._mono()
+        try:
+            await asyncio.wait_for(self._lab_reread_blocks(), LAB_RECHECK_CAP_S)
+        except asyncio.TimeoutError:            # a slow broker: the blocks not read yet stay (the safe side), read again in 15 s
+            print(f"homebase engine: the position-block re-read took over {LAB_RECHECK_CAP_S:g} s; the blocks stay", file=sys.stderr)
+
+    async def _lab_reread_blocks(self) -> None:
         today = self._today()
         for key, val in list(self.position_blocks.items()):
             cfg = self.cfg.strategies.get(key[0])

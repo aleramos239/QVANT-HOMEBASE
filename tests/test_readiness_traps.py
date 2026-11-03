@@ -185,3 +185,38 @@ def test_split_team_member_without_account_has_fix_team(tmp_path):
     d.eng.groups = {"g1": {"name": "T", "members": [LAB], "mode": "split"}}
     got = [c for c in mine(d) if c["detail"].startswith("in team T")]
     assert len(got) == 1 and got[0]["fix"] == "team" and got[0]["level"] == "warn"
+
+
+def test_team_members_sharing_an_account_do_not_warn_unless_split(tmp_path):
+    d = mkdesk(tmp_path, rec_kw=NOLABEL)
+    add_pp2(d)
+    d.eng.groups = {"g1": {"name": "T", "members": [LAB, "lab_pp2"], "mode": "cycle"}}
+    assert not [c for c in checks(d) if c.get("fix") == "open"]
+    d.eng.groups = {"g1": {"name": "T", "members": [LAB, "lab_pp2"], "mode": "split"}}
+    assert len([c for c in checks(d) if c.get("fix") == "open"]) == 2
+    d.eng.groups = {"g1": {"name": "T", "members": [LAB], "mode": "share"}}     # only one of them in the team
+    assert len([c for c in checks(d) if c.get("fix") == "open"]) == 2
+
+
+def test_a_hung_broker_read_never_holds_the_block_recheck_past_its_cap(tmp_path, monkeypatch):
+    import asyncio
+    import time
+
+    from homebase.desk import engine_lab
+    monkeypatch.setattr(engine_lab, "LAB_RECHECK_CAP_S", 0.05)
+    d = mkdesk(tmp_path, rec_kw=NOLABEL)
+    d.ads["a1"].net = {"NQ": 1}
+
+    async def net(sym):
+        return d.ads["a1"].net.get(sym, 0)
+    d.ads["a1"].get_net_position = net
+    run(d.eng._lab_position(LAB, d.cfg.strategies[LAB], "a1"))
+    assert (LAB, "a1") in d.eng.position_blocks
+
+    async def hang(sym):
+        await asyncio.sleep(3600)
+    d.ads["a1"].get_net_position = hang
+    t0 = time.monotonic()
+    run(d.eng._lab_recheck_blocks())
+    assert time.monotonic() - t0 < 2
+    assert (LAB, "a1") in d.eng.position_blocks                  # not read: the block stays (the safe side)
