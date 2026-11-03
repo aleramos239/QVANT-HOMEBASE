@@ -398,7 +398,7 @@ test('a Lab part that throws, or a desklab.js that did not load, leaves the desk
     assert.doesNotMatch(els['#side'].innerHTML, /setView\('lab'/, why);
     assert.match(els['#stratList'].innerHTML, /setView\('strat','nq930'\)/, `${why}: the Today row`);
     assert.doesNotMatch(els['#stratList'].innerHTML, /setView\('lab'/, why);
-    assert.match(els['#side'].innerHTML, /Strategies<\/span><i>|Strategies/, why);
+    assert.match(els['#side'].innerHTML, /Trading<\/span>/, why);
   }
 });
 

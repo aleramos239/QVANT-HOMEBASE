@@ -21,8 +21,9 @@ let SIDE_ALL = false;
 /* The sidebar's sections fold (2026-10-09): a header with a chevron hides its rows; what is folded is remembered per browser. */
 const SIDE_FOLD_KEY = "hb_side_fold";
 let SIDE_FOLD = (() => { try { const v = JSON.parse(localStorage.getItem(SIDE_FOLD_KEY) || "{}"); return v && typeof v === "object" ? v : {}; } catch (_) { return {}; } })();
+const sideFolded = (k) => k in SIDE_FOLD ? !!SIDE_FOLD[k] : k === "off";      // Off starts folded; old keys (strat, cyc, f:*) are never read
 function toggleSide(k) {
-  SIDE_FOLD[k] = !SIDE_FOLD[k];
+  SIDE_FOLD[k] = !sideFolded(k);
   try { localStorage.setItem(SIDE_FOLD_KEY, JSON.stringify(SIDE_FOLD)); } catch (_) { /* stays for this page */ }
   render();
 }

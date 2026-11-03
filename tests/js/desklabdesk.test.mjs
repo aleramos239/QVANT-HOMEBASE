@@ -430,7 +430,7 @@ test('L: an account with no demo or paper mark is LIVE in the Setup and the side
   assert.equal(setupRow(html, 'LIVE / paper'), 'LIVE on 2 · demo on 1 · paper on 1');
   const side = t.side(), rows = [...side.matchAll(/onclick="openAccts\(([^)]*)\)"/g)].map((m) => m[1].replace(/&quot;|"/g, ''));
   assert.deepEqual(rows, ['a2', 'a3', 'a1', 'a4'], 'LIVE first, then demo, then paper');
-  assert.match(side, /Funded 3<span class="tag-live">LIVE<\/span>/);
+  assert.match(side, /Funded 3<span class="tag-live"[^>]*>LIVE<\/span>/);
   assert.match(side, /title="Funded 3 · Live"/);
   assert.match(side, /Lucid Eval #1<span class="tag"[^>]*>DEMO</);
   assert.match(side, /Paper 4<span class="tag-paper"[^>]*>PAPER</);
@@ -469,7 +469,7 @@ test('WP1.8 sidebar accounts: a LIVE / DEMO / PAPER tag on every row, what it ho
   const side = t.side(), rows = [...side.matchAll(/onclick="openAccts\(([^)]*)\)"/g)].map((m) => m[1].replace(/&quot;|"/g, ''));
   assert.deepEqual(rows, ['l1', 'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'd10', 'd11', 'd14'], 'the first 12 in their order, then the one in a trade');
   assert.match(side, />Show 3 more</);
-  assert.match(side, /Live 1<span class="tag-live">LIVE<\/span>/);
+  assert.match(side, /Live 1<span class="tag-live"[^>]*>LIVE<\/span>/);
   assert.equal((side.match(/>DEMO</g) || []).length, 12);
   assert.match(side, /<small>in a trade 1 · 1 working<\/small>/);
   vm.runInContext("SIDE_ALL = true", t.ctx);
@@ -478,12 +478,10 @@ test('WP1.8 sidebar accounts: a LIVE / DEMO / PAPER tag on every row, what it ho
   assert.match(all, />Show fewer</);
 });
 
-test('the Strategies count in a folded sidebar does not count the same strategy twice', () => {
+test('a Lab row the Desk holds is its own row, never two: the sidebar sorts names + the Lab ones it does not hold', () => {
   const side = SLICE('function renderSide(', '/* ---- strategy detail ---- */');
-  // the count is the rows under Strategies: a Lab row the Desk holds is its own row (one row, never two); teams are their own section
-  assert.match(side, /DESKLAB\.strategies\.filter\(w => !labOnDesk\(w\)\)\.map/);
-  assert.match(side, /head\("strat", "Strategies", names\.length \+ labIds\.length/);
-  assert.match(side, /SIDE_FOLD\.strat \? "" : loose/);
+  assert.match(side, /DESKLAB\.strategies\.filter\(w => !labOnDesk\(w\)\)/);
+  assert.match(side, /sideSections\(names, ST, .*, labs\)/);
 });
 
 test('the Desk\'s own page is shown for a #lab=<name> link or a Lab view once the Desk knows the strategy', () => {

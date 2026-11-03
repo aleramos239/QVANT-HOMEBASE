@@ -1,26 +1,52 @@
 /* ---- sidebar ---- */
+/* The sidebar sorts itself: Trading = ON with an account, Shadow = ON with none, Off = OFF. A variant set is ONE row (its best member's
+   state; its members have none). `labs` = Lab strategies the Desk does not hold yet (never trading). A-Z by label in a section. */
+function sideSections(names, st, sets, labs) {
+  const out = {trading: [], shadow: [], off: []}, strategies = (st && st.strategies) || {}, book = (st && st.book) || {};
+  const live = (s) => ["placing", "placed", "live", "error"].includes(s.day_status);   // one that can trade never drops to Off
+  const warned = new Set();
+  let r = st && st.readiness;
+  try { r = readinessShown(r, st); } catch (_) { /* the raw checks stand */ }
+  for (const c of (r && r.checks) || []) if (c && c.strategy && (c.level === "warn" || c.level === "bad")) warned.add(c.strategy);
+  const one = (n) => {
+    const s = strategies[n], bk = book[n] || [], on = !!(s.cfg.enabled || live(s)), isLab = s.cfg.kind === "lab";
+    const k = on && bk.length ? "trading" : on ? "shadow" : "off", sh = isLab ? labSafe(() => labShadowNet(n, s), null) : null;
+    const state = stratState(n, s);
+    return {k, row: {id: n, label: stratLabel(n), warn: warned.has(n), pnl: k === "off" ? null : sh ? sh.net : todayPnl(s), dot: stratDotCls(s, state, bk), title: state}};
+  };
+  const rank = {trading: 0, shadow: 1, off: 2}, inSet = new Set();
+  for (const set of sets || []) {
+    const ms = (set.members || []).filter(n => strategies[n] && names.includes(n));
+    if (ms.length < 2) continue;
+    ms.forEach(n => inSet.add(n));
+    const parts = ms.map(one), k = parts.reduce((a, p) => rank[p.k] < rank[a] ? p.k : a, "off"), pn = parts.map(p => p.row.pnl).filter(v => v != null);
+    out[k].push({id: set.id, set: set.id, members: ms, label: String(set.name || set.id), warn: ms.some(n => warned.has(n)),
+      pnl: pn.length ? pn.reduce((a, v) => a + v, 0) : null, dot: k === "trading" ? "ok" : k, title: ms.length + " variants"});
+  }
+  for (const n of names) if (strategies[n] && !inSet.has(n)) { const p = one(n); out[p.k].push(p.row); }
+  for (const w of labs || []) out[w.on ? "shadow" : "off"].push({id: w.id, lab: w.lab, label: w.label, warn: false, pnl: w.pnl, dot: w.dot, title: w.title});
+  for (const k in out) out[k].sort((a, b) => String(a.label).toLowerCase() < String(b.label).toLowerCase() ? -1 : String(a.label).toLowerCase() > String(b.label).toLowerCase() ? 1 : 0);
+  return out;
+}
 function renderSide(names, issues) {
   /* A section header: a button that folds its rows (chevron, title, a count while it is shut) and, beside it, the section's own action. */
   const head = (k, title, n, action) => {
-    const shut = !!SIDE_FOLD[k];
+    const shut = sideFolded(k);
     return `<div class="sh${shut ? " shut" : ""}"><button class="sh-t" onclick="toggleSide('${k}')" aria-expanded="${!shut}" title="${shut ? "Show" : "Hide"} ${title}">
       <svg class="sh-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5.5l6.5 6.5L9 18.5"/></svg><span>${title}</span>${shut && n ? `<i>${n}</i>` : ""}</button>${action}</div>`;
   };
   const sel = (k, n) => VIEW.k === k && ((k !== "strat" && k !== "lab" && k !== "group") || VIEW.name === n) ? " sel" : "";
-  /* every strategy's row by its id (a Desk name, or lab_<name> for a Lab one the Desk does not hold yet), so a group can take it */
-  const rowOf = {};
-  for (const n of names) {
-    const s = ST.strategies[n], state = stratState(n, s), sh = s.cfg.kind === "lab" ? labSafe(() => labShadowNet(n, s), null) : null, p = sh ? sh.net : todayPnl(s);
-    rowOf[n] = `<button class="item one${sel("strat", n)}" onclick="setView('strat','${n}')" aria-current="${sel("strat", n) ? "page" : "false"}" title="${esc(state)}">
-      <i class="sd ${stratDotCls(s, state, (ST.book && ST.book[n]) || [])}"></i><span class="it"><b>${esc(stratLabel(n))}</b></span>
-      <span class="ir mono${p == null || sh ? " dim" : ""}">${p == null ? "" : usdS(p)}</span></button>`;
-  }
-  const labIds = labSafe(() => DESKLAB.strategies.filter(w => !labOnDesk(w)).map(w => {
-    const id = "lab_" + w.name;
-    rowOf[id] = labSafe(() => labSideRow(w, sel), "");
-    return id;
-  }), []);
-  const loose = names.concat(labIds).map(id => rowOf[id] || "").join("");
+  const labs = labSafe(() => DESKLAB.strategies.filter(w => !labOnDesk(w)), []).map(w => labSafe(() => ({title: DeskLab.stateText(w, DESKLAB.runner),
+    dot: DeskLab.dotClass(w, DESKLAB.runner), id: "lab_" + w.name, lab: w.name, label: DeskLab.label(w), on: w.enabled === true, pnl: DeskLab.todayNet(w)}), null)).filter(Boolean);
+  const sec = sideSections(names, ST, (ST.variants && ST.variants.sets) || [], labs);
+  const rowHtml = (r, k) => {
+    const click = r.lab ? `setView('lab',${jsArg(r.lab)})` : `setView('strat','${r.set ? r.members[0] : r.id}')`, here = r.lab ? sel("lab", r.lab) : sel("strat", r.set ? r.members[0] : r.id);
+    return `<button class="item one${here}" onclick="${click}" aria-current="${here ? "page" : "false"}" title="${esc(r.title || "")}">
+      <i class="sd ${r.warn ? "warn" : r.dot}"></i><span class="it"><b>${esc(r.label)}</b></span>
+      <span class="ir mono${r.pnl == null || k !== "trading" ? " dim" : ""}">${r.pnl == null ? "" : usdS(r.pnl)}</span></button>`;
+  };
+  const rowsOf = (k) => sec[k].map(r => rowHtml(r, k)).join("");
+  const archN = (DESKLAB.archived || []).length;
   const cycRows = teams().map(g => {
     const gr = (ST.groups || {})[g.id] || {}, on = !!gr.on, n = g.members.length, word = {share: "shared", split: "split"}[gr.mode] || "cycle";
     return `<button class="item one${sel("group", g.id)}" onclick="setView('group',${jsArg(g.id)})" aria-current="${sel("group", g.id) ? "page" : "false"}" title="${on ? "Its team is on" : "Its team is off"}">
@@ -32,11 +58,10 @@ function renderSide(names, issues) {
   const accts = Object.entries(ST.accounts || {}).sort((a, b) => rank(a) - rank(b));
   const inTrade = (a) => Array.isArray(a.open_positions) && a.open_positions.length > 0;
   const shown = SIDE_ALL ? accts : accts.filter(([, a], i) => i < 12 || inTrade(a));     // one in a trade is never under the cut
-  const envTag = (id, a) => !isDemoAcct(id) ? '<span class="tag-live">LIVE</span>' : a.env === "paper" ? '<span class="tag-paper" style="margin-left:6px">PAPER</span>'
-    : '<span class="tag" style="margin-left:6px">DEMO</span>';
+  const envTag = (id) => ACCT_TAG_HTML[acctTag(id)];
   const shortId = (t) => { t = String(t); return /^[A-Za-z0-9]{12,}$/.test(t) ? t.slice(0, 4) + " ··" + t.slice(-4) : t; };
   const acctRows = shown.map(([id, a]) => `<button class="item one" onclick="openAccts(${jsArg(id)})" title="${esc((a.label || id) + " · " + (!isDemoAcct(id) ? "Live" : a.env === "paper" ? "Paper" : "Demo") + (a.connected ? "" : " · offline"))}">
-      <i class="sd ${a.connected ? "ok" : "warn"}"></i><span class="it"><b>${esc(shortId(a.label || id))}${envTag(id, a)}${a.connected ? "" : '<span class="tag">offline</span>'}</b>${a.connected && a.day_pnl != null ? `<small>today <span class="${a.day_pnl > 0 ? "pos" : a.day_pnl < 0 ? "neg" : ""}">${DAY_PNL_WORDS(a.day_pnl)}</span></small>` : tradeWords(a) ? `<small>${esc(tradeWords(a))}</small>` : ""}</span>
+      <i class="sd ${a.connected ? "ok" : "warn"}"></i><span class="it"><b>${esc(shortId(a.label || id))}${envTag(id)}${a.connected ? "" : '<span class="tag">offline</span>'}</b>${a.connected && a.day_pnl != null ? `<small>today <span class="${a.day_pnl > 0 ? "pos" : a.day_pnl < 0 ? "neg" : ""}">${DAY_PNL_WORDS(a.day_pnl)}</span></small>` : tradeWords(a) ? `<small>${esc(tradeWords(a))}</small>` : ""}</span>
       <span class="ir mono${a.connected ? "" : " dim"}">${a.connected && a.balance != null ? "$" + fmt(a.balance, 0) : ""}</span></button>`).join("");
   const more = (SIDE_ALL ? accts.length > 12 : shown.length < accts.length)
     ? `<button class="side-more" onclick="SIDE_ALL=!SIDE_ALL;render()">${SIDE_ALL ? "Show fewer" : `Show ${accts.length - shown.length} more`}</button>` : "";
@@ -45,15 +70,18 @@ function renderSide(names, issues) {
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span>Today</span><span></span></button>
-    ${head("strat", "Strategies", names.length + labIds.length, `<span class="sh-acts"><button class="sh-btn grp-new" title="Teams: new, delete, add or remove strategies" aria-label="Manage teams" onclick="openGroupMgr()">+</button></span>`)}
-    ${SIDE_FOLD.strat ? "" : loose
-      + ((DESKLAB.archived || []).length || VIEW.k === "archive" ? `<button class="side-more${sel("archive")}" onclick="setView('archive')">Archive · ${(DESKLAB.archived || []).length}</button>` : "")}
-    ${head("cyc", "Teams", teams().length, `<button class="sh-btn" title="Teams: new, delete, add or remove strategies" aria-label="Manage teams" onclick="openGroupMgr()">+</button>`)}
-    ${SIDE_FOLD.cyc ? "" : cycRows}
+    ${head("trading", "Trading", sec.trading.length, "")}
+    ${sideFolded("trading") ? "" : rowsOf("trading")}
+    ${head("shadow", "Shadow", sec.shadow.length, "")}
+    ${sideFolded("shadow") ? "" : rowsOf("shadow")}
+    ${head("off", "Off", sec.off.length + archN, "")}
+    ${sideFolded("off") ? "" : rowsOf("off") + (archN || VIEW.k === "archive" ? `<button class="side-more${sel("archive")}" onclick="setView('archive')">Archive · ${archN}</button>` : "")}
+    ${head("teams", "Teams", teams().length, `<button class="sh-btn grp-new" title="Teams: new, delete, add or remove strategies" aria-label="Manage teams" onclick="openGroupMgr()">+</button>`)}
+    ${sideFolded("teams") ? "" : cycRows}
     ${head("accts", "Accounts", accts.length, `<button class="sh-btn" title="Add account" aria-label="Add account" onclick="openConnect()">+</button>`)}
-    ${SIDE_FOLD.accts ? "" : acctRows + more}
+    ${sideFolded("accts") ? "" : acctRows + more}
     ${head("act", "Activity", 0, "")}
-    ${SIDE_FOLD.act ? "" : `<button class="item${sel("activity")}" onclick="setView('activity')" aria-current="${sel("activity") ? "page" : "false"}">
+    ${sideFolded("act") ? "" : `<button class="item${sel("activity")}" onclick="setView('activity')" aria-current="${sel("activity") ? "page" : "false"}">
       <i class="sd ${issues ? (ISSUE_LVL === "bad" ? "bad" : "warn") : "off"}"></i><span class="it"><b>${last && last.et ? "Last event " + esc(hbClock(String(last.et).slice(11, 16))) : "Journal"}</b><small>${issues ? plural(issues, "thing needs", "things need") + " a look" : "Every alert, order and fill"}</small></span><span></span></button>`}`;
 }
 
@@ -171,12 +199,6 @@ function eqChart(name) {
 })();
 
 /* ---- Lab strategies: rows and page. Every value from the network goes through esc / jsArg. ---- */
-function labSideRow(w, sel) {
-  const net = DeskLab.todayNet(w);
-  return `<button class="item one${sel("lab", w.name)}" onclick="setView('lab',${jsArg(w.name)})" aria-current="${sel("lab", w.name) ? "page" : "false"}" title="${esc(DeskLab.stateText(w, DESKLAB.runner))}">
-      <i class="sd ${esc(DeskLab.dotClass(w, DESKLAB.runner))}"></i><span class="it"><b>${esc(DeskLab.label(w))}</b></span>
-      <span class="ir mono dim">${net == null ? "" : esc(usdS(net))}</span></button>`;
-}
 /* A Lab strategy's research, as two blocks of a strategy page: its saved run on the unseen days and the prop sim of its runs
    (DESKRES; the words and numbers are DeskLab.results). The skin moves them into the inspector; `view` is the page's own name
    for that strategy, so the skin never shows one strategy's blocks under another. */
