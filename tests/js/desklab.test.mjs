@@ -1495,3 +1495,14 @@ test('results: a 3:1 card with its full sample (Both) shows that one column only
   assert.equal('o' in two.unseen.rows[0] || 'both' in two.prop.rows[0], false);
 });
 
+
+test('an old built-in entry in the archive (builtin: true, nq930) is dropped as it is read: no Archive row, not counted', async () => {
+  const src = HTML.slice(HTML.indexOf('let DESKLAB = {strategies'), HTML.indexOf('\n', HTML.indexOf('const DESKLAB_NAME ='))) + '\n' +
+    HTML.slice(HTML.indexOf('async function loadDeskLab() {'), HTML.indexOf('async function setDeskLab('));
+  const answer = { strategies: [], runner: null, archived: [{ name: 'nq930', builtin: true }, { name: 'gc_nfp', builtin: true }, row({ name: 'nq_gap' })] };
+  const ctx = vm.createContext({ document: { hidden: false }, CHART: '', ST: null, FREEZE: false, render() {},
+    fetch: async () => ({ ok: true, json: async () => answer }) });
+  vm.runInContext(src + '\nglobalThis.load = loadDeskLab; globalThis.lab = () => DESKLAB;', ctx);
+  await ctx.load();
+  assert.deepEqual(ctx.lab().archived.map((w) => w.name), ['nq_gap'], 'only the Lab strategy: the sidebar count and the Archive list read this');
+});

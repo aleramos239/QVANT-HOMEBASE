@@ -78,7 +78,8 @@ async function loadDeskLab() {
     if (!r.ok) throw new Error("HTTP " + r.status);
     const j = await r.json();
     next = {strategies: (Array.isArray(j.strategies) ? j.strategies : []).filter(w => w && DESKLAB_NAME.test(String(w.name))),
-            archived: (Array.isArray(j.archived) ? j.archived : []).filter(w => w && DESKLAB_NAME.test(String(w.name))),
+            // an old built-in's archive entry (builtin: true) is not a Lab strategy: no Restore/Delete row, not counted (2026-11-03)
+            archived: (Array.isArray(j.archived) ? j.archived : []).filter(w => w && w.builtin !== true && DESKLAB_NAME.test(String(w.name))),
             runner: j.runner && typeof j.runner === "object" ? {alive: j.runner.alive === true} : null};
   } catch (_) {
     // the chart service does not answer: its runner is not reachable either, so no strategy is shown as running
