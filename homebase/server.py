@@ -99,7 +99,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         leftover = lab_store.root().parent / "deskgroups.json"
         try:
             engine.adopt_teams(leftover)
-            retire(leftover)
+            retire(leftover)        # only after a clean adoption: adopt_teams raises when a team was not read or not adopted
         except Exception as e:  # noqa: BLE001 -- the desk must still start; the file stays for the next start
             print(f"homebase: adopting {leftover} failed: {e!r}", file=sys.stderr)
     acct_status: dict[str, dict] = {}

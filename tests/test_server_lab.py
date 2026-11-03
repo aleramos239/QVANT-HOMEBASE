@@ -2063,9 +2063,10 @@ def test_a_sidecar_without_permissions_is_the_same(tmp_path):
     assert f.read_bytes() == before
 
 
-def test_a_leftover_charts_team_file_is_adopted_once_at_start(paths):
+def test_a_leftover_charts_team_file_is_adopted_once_at_start(paths, monkeypatch):
     """Desk makeover task 3: a team is the Desk's one record; the charts' old deskgroups.json joins it OFF, then is .retired."""
     import json
+    monkeypatch.setenv(store.ENV_ROOT, str(paths / "desklab"))      # the leftover beside it is this test's own
     store.put(rec())
     leftover = store.root().parent / "deskgroups.json"
     leftover.parent.mkdir(parents=True, exist_ok=True)
@@ -2077,3 +2078,15 @@ def test_a_leftover_charts_team_file_is_adopted_once_at_start(paths):
     assert not leftover.exists() and leftover.with_name("deskgroups.json.retired").exists()
     again = create_app(desk_cfg(), adapters, background=False, lab=True)
     assert again.state.engine.groups["g1"]["members"] == [LAB]
+
+
+def test_an_unreadable_leftover_team_file_is_never_retired(paths, monkeypatch):
+    monkeypatch.setenv(store.ENV_ROOT, str(paths / "desklab"))      # the leftover beside it is this test's own
+    store.put(rec())
+    leftover = store.root().parent / "deskgroups.json"
+    leftover.parent.mkdir(parents=True, exist_ok=True)
+    leftover.write_text("not json")
+    adapters = {aid: SeededFakeAdapter(aid) for aid in desk_cfg().accounts}
+    app_ = create_app(desk_cfg(), adapters, background=False, lab=True)
+    assert app_.state.engine.groups == {}
+    assert leftover.read_text() == "not json" and not leftover.with_name("deskgroups.json.retired").exists()

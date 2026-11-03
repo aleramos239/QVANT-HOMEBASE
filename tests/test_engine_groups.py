@@ -346,11 +346,32 @@ def test_a_leftover_team_id_clash_never_overwrites_the_desk_team(tmp_path):
     eng, ads, _ = mk(tmp_path)
     eng.set_group("g1", {"name": "Apex", "members": [tlab.LAB], "accounts": ["a1"], "on": True})
     before = dict(eng.groups["g1"])
-    p = _leftover(tmp_path, [{"id": "g1", "name": "Old", "members": [TWO]},
-                             {"id": "g2", "name": "Clash", "members": [tlab.LAB]},     # already in g1: a GroupError
-                             {"id": "g3", "name": "Fine", "members": [TWO]}])
+    p = _leftover(tmp_path, [{"id": "g1", "name": "Old", "members": [TWO]}, {"id": "g3", "name": "Fine", "members": [TWO]}])
     assert eng.adopt_teams(p) == ["g3"]
-    assert eng.groups["g1"] == before and "g2" not in eng.groups
+    assert eng.groups["g1"] == before and eng.groups["g3"]["members"] == [TWO]
+
+
+def test_a_leftover_team_with_a_clashing_member_is_adopted_without_it(tmp_path, capsys):
+    eng, ads, _ = mk(tmp_path)
+    eng.set_group("g1", {"name": "Apex", "members": [tlab.LAB], "accounts": ["a1"], "on": True})
+    p = _leftover(tmp_path, [{"id": "g2", "name": "Clash", "members": [tlab.LAB, TWO]}])
+    assert eng.adopt_teams(p) == ["g2"]
+    assert eng.groups["g2"]["members"] == [TWO] and eng.groups["g1"]["members"] == [tlab.LAB]
+    assert f"adopted without {tlab.LAB}" in capsys.readouterr().err
+
+
+def test_an_unreadable_or_partly_refused_leftover_file_raises(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    p = tmp_path / "deskgroups.json"
+    for bad in ("not json", "[1]", '{"groups": "x"}', '{"groups": [{"name": "no id"}]}'):
+        p.write_text(bad)
+        with pytest.raises(ValueError):
+            eng.adopt_teams(p)
+    assert eng.groups == {}
+    p = _leftover(tmp_path, [{"id": "Bad Id!", "name": "x", "members": []}, {"id": "g2", "name": "Fine", "members": []}])
+    with pytest.raises(GroupError, match="Bad Id!"):
+        eng.adopt_teams(p)
+    assert list(eng.groups) == ["g2"], "the others are still adopted"
 
 
 def test_an_account_done_for_the_day_passes_the_cycle_turn_on(tmp_path):

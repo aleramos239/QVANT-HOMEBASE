@@ -279,6 +279,7 @@ class GroupMixin:
 
     def new_team_id(self) -> str:
         """The first "g<n>" (n from 1) no team holds."""
+        # ids are reused on purpose: nothing keyed by a team id is kept outside groups.json, so a freed id carries nothing
         n = 1
         while f"g{n}" in self.groups:
             n += 1
@@ -286,30 +287,45 @@ class GroupMixin:
 
     def adopt_teams(self, path: Path) -> list:
         """Each team of a leftover charts team file (deskgroups.json: {"groups": [{id, name, members}]}) whose id the Desk
-        does not hold joins it OFF, with no account, its Lab strategies only. A clash or a refusal leaves the Desk as it is
-        (said on stderr). -> the ids added. Safe twice: an id the Desk holds is never written again."""
+        does not hold joins it OFF, with no account, its Lab strategies only; a member already in another team stays there
+        (said on stderr). An id the Desk holds is left as it is (safe twice). -> the ids added; none for no file. A file that
+        cannot be read raises ValueError, and a team that cannot be adopted raises GroupError after the others are written:
+        the caller then keeps the file (server.py retires it only after a clean adoption)."""
         try:
             raw = json.loads(path.read_text())
         except FileNotFoundError:
             return []
-        except ValueError as e:
-            print(f"homebase engine: leftover teams in {path.name} unreadable: {e!r}", file=sys.stderr)
-            return []
-        added = []
-        for t in (raw.get("groups") if isinstance(raw, dict) else None) or []:
+        teams = raw.get("groups", []) if isinstance(raw, dict) else None
+        if not isinstance(teams, list):
+            raise ValueError(f"{path.name}: not a team file")
+        added, refused = [], []
+        for t in teams:
             gid = t.get("id") if isinstance(t, dict) else None
-            if not isinstance(gid, str) or gid in self.groups:
+            if not isinstance(gid, str):
+                raise ValueError(f"{path.name}: a team without an id")
+            if gid in self.groups:
                 continue
-            members = [m for m in t.get("members") or [] if isinstance(m, str)
-                       and getattr(self.cfg.strategies.get(m), "kind", None) == LAB]
+            members = []
+            for m in t.get("members") or []:
+                if not isinstance(m, str) or getattr(self.cfg.strategies.get(m), "kind", None) != LAB:
+                    continue
+                held = next((g["name"] for g in self.groups.values() if m in g["members"]), None)
+                if held is not None:
+                    print(f"homebase engine: leftover team {gid!r} adopted without {m}: it is in the team {held}",
+                          file=sys.stderr)
+                elif m not in members:
+                    members.append(m)
             try:
                 old, new = self.group_checked(gid, {"name": str(t.get("name") or gid).strip()[:MAX_NAME] or gid,
                                                     "members": members, "accounts": [], "mode": "cycle", "on": False})
             except GroupError as e:
                 print(f"homebase engine: leftover team {gid!r} not adopted: {e}", file=sys.stderr)
+                refused.append(gid)
                 continue
             self.write_group(gid, old, new)
             added.append(gid)
+        if refused:
+            raise GroupError(f"Leftover teams not adopted: {', '.join(refused)}.")
         return added
 
     def delete_group(self, gid: str) -> None:

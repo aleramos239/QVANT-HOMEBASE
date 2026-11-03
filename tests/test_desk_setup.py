@@ -112,6 +112,27 @@ def test_team_save_moves_a_member_from_another_team_in_one_book_write(desk):
     assert len(books) == 2 and books[0]["assignments"] == [{"account": LIVE, "qty": 1}]   # the team's, then the move: one write
 
 
+def test_a_move_whose_new_team_cannot_be_written_puts_the_old_team_back(desk, monkeypatch):
+    limits(desk)
+    team(desk)
+    eng, real, calls = desk.d.eng, desk.d.eng._save_groups, []
+
+    def save():
+        calls.append(1)
+        if len(calls) == 2:                                                     # the new team's write
+            raise OSError("disk full")
+        real()
+    monkeypatch.setattr(eng, "_save_groups", save)
+    try:
+        desk.post("/api/setup", json={"team": "g2", "name": "B", "members": [LAB], "accounts": [LIVE], "mode": "cycle", "on": True})
+    except OSError:
+        pass                                                                    # the test client re-raises the server's error
+    monkeypatch.setattr(eng, "_save_groups", real)
+    eng._load_groups()                                                          # what the file holds
+    assert eng.groups["g1"]["members"] == [LAB] and "g2" not in eng.groups
+    assert st(desk)["book"][LAB] == [{"account": A1, "qty": 1}, {"account": A2, "qty": 1}]
+
+
 def test_dead_team_routes_are_gone(desk):
     assert desk.post("/api/groups", json={"id": "g1", "name": "A"}).status_code in (404, 405)
     assert desk.post("/api/groups/follow", json={"id": "g1", "members": []}).status_code in (404, 405)

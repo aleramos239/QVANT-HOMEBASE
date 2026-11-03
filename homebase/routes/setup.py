@@ -13,6 +13,8 @@ drops the per-account extras (size per account, stop after, most; owner, 2026-11
 Hold overnight stays, one choice per strategy. A solo save keeps every row's size / risk / most / contract and takes new ones from `settings`."""
 from __future__ import annotations
 
+import contextlib
+
 from fastapi import HTTPException, Request
 
 from ..desk import labdesk as labdesk_mod
@@ -154,9 +156,18 @@ def register(app, *, cfg, engine, labdesk) -> None:
                 engine.groups.update(saved)
             # the movers' books come from the new team only: one write each, never empty on the way
             books = checked(team_books(cfg, old, new, hold), {m: on for m in new["members"]})
-            for oid, _, o_new in others:
-                engine.write_group(oid, saved[oid], o_new)
-            view = engine.write_group(gid, old, new)
+            done = []
+            try:
+                for oid, _, o_new in others:
+                    engine.write_group(oid, saved[oid], o_new)
+                    done.append(oid)
+                view = engine.write_group(gid, old, new)
+            except Exception:       # never a mover out of its old team and not in the new one: the old teams come back
+                for oid in done:
+                    engine.groups[oid] = saved[oid]
+                with contextlib.suppress(Exception):
+                    engine._save_groups()
+                raise
             # Team OFF ends Take turns; ON in Take turns mode starts it again (after write_group's own switch-on)
             await write(books, {m: on and new["mode"] == "cycle" for m in new["members"]}, {m: on for m in new["members"]})
             engine.journal("setup_saved", team=gid, members=new["members"], accounts=accounts, mode=new["mode"], on=on)
