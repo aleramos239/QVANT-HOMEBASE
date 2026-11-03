@@ -140,24 +140,10 @@ def test_connect_probes_and_returns_key(client):
     assert len(client.app.state.cfg.accounts) == 1
 
 
-def test_accounts_add_creates_and_connects(client):
-    import homebase.store.secrets_store as ss
-    ss.set_credentials("tv:demo:z", username="z", password="x")
-    r = client.post("/api/accounts/add",
-                    json={"key": "tv:demo:z", "account_name": "EVAL77",
-                          "label": "Eval"}).json()
-    assert r["ok"] is True and r["account"] == "eval77"
-    cfg = client.app.state.cfg
-    assert cfg.accounts["eval77"].keyring_key == "tv:demo:z"
-    assert cfg.accounts["eval77"].live is False
-    assert "eval77" in client.app.state.adapters
-
-
 def test_book_endpoint_sets_assignments(client):
     import homebase.store.secrets_store as ss
-    ss.set_credentials("tv:demo:z", username="z", password="x")
-    client.post("/api/accounts/add", json={"key": "tv:demo:z",
-                                           "account_name": "EVAL77"})
+    client.app.state.cfg.accounts["eval77"] = AccountCfg(keyring_key="tv:demo:z", account_name="EVAL77")
+    client.app.state.adapters["eval77"] = SeededFakeAdapter("eval77")
     r = client.post("/api/book", json={
         "strategy": "nq930",
         "assignments": [{"account": "main", "qty": 2},
@@ -497,12 +483,6 @@ def test_live_login_probes_live_and_the_account_is_live(client):
                                           "env": "live"}).json()
     assert r["ok"] is True and r["key"] == "tv:live:realme"
     assert client.created[-1].cfg.live is True          # the probe logged in LIVE
-    add = client.post("/api/accounts/add", json={"key": "tv:live:realme",
-                                                 "account_name": "LIVE123"}).json()
-    assert add["ok"] is True
-    assert client.app.state.cfg.accounts["live123"].live is True
-    # never auto-assigned: it trades only once the user assigns it
-    assert client.app.state.cfg.book["nq930"] == [{"account": "main", "qty": 3}]
     # a saved live login stays live on the next connect
     again = client.post("/api/connect", json={"saved_key": "tv:live:realme"}).json()
     assert again["ok"] and client.created[-1].cfg.live is True
@@ -515,9 +495,6 @@ def test_live_login_with_a_colon_in_the_username_stays_live(client):
     r = client.post("/api/connect", json={"username": "Google:1012", "password": "x",
                                           "env": "live"}).json()
     assert r["key"] == "tv:live:google:1012" and client.created[-1].cfg.live is True
-    client.post("/api/accounts/add", json={"key": "tv:live:google:1012",
-                                           "account_name": "1552885"})
-    assert client.app.state.cfg.accounts["1552885"].live is True
     envs = {l["key"]: l["env"] for l in client.get("/api/logins").json()["logins"]}
     assert envs["tv:live:google:1012"] == "live"
 
@@ -1178,3 +1155,9 @@ def test_rotation_switch_is_set_journaled_and_shown(client, tmp_path):
     assert client.post("/api/rotation", json={"strategy": "nope", "on": True}).status_code == 404
     for bad in ({"strategy": "nq930", "on": "yes"}, {"strategy": "nq930"}, [1]):
         assert client.post("/api/rotation", json=bad).status_code in (400, 404), bad
+
+
+def test_dead_account_routes_are_gone(client):
+    assert client.post("/api/accounts/add", json={}).status_code in (404, 405)
+    assert client.get("/api/diag-permissions?account=x").status_code in (404, 405)
+    assert client.post("/api/selftest-order", json={}).status_code in (404, 405)

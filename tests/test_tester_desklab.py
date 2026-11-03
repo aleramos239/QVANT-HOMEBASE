@@ -468,7 +468,6 @@ def test_remove_is_refused_while_accounts_are_assigned_on_the_desk(c, drafts_dir
     r = c.post("/api/tester/desklab/remove", json={"name": "nq_bars"}, headers=DESK)
     assert sentence(r, 409) == TAKE_OFF and r.headers["access-control-allow-origin"] == "http://localhost:8850"
     assert store.get("nq_bars") is not None
-    assert c.post("/api/tester/desklab/onoff", json={"name": "nq_bars", "on": True}).json()["enabled"] is True   # the switch still works
     sidecar(book=())
     assert c.post("/api/tester/desklab/remove", json={"name": "nq_bars"}).json() == {"ok": True, "removed": True, "name": "nq_bars"}
     assert store.get("nq_bars") is None and store.get_desk("nq_bars") is not None    # the sidecar is the desk's to remove
@@ -1039,3 +1038,14 @@ def test_family_routes_are_gone(c):
     for path in ("/api/tester/deskfamilies", "/api/tester/deskfamilies/create"):
         assert c.get(path).status_code in (404, 405)
         assert c.post(path, json={"name": "x"}, headers=DESK).status_code in (404, 405)
+
+
+def test_chart_switch_refuses_a_booked_strategy(c, drafts_dir, make_run):
+    draft(drafts_dir)
+    promote(c, run_id=make_run())
+    before = store.get("nq_bars")
+    sidecar()                                   # booked: the Desk's own switch is the only way
+    r = c.post("/api/tester/desklab/onoff", json={"name": "nq_bars", "on": True}, headers=DESK)
+    assert sentence(r, 409) == TAKE_OFF and store.get("nq_bars") == before
+    sidecar(book=())                            # unbooked Shadow: switched as before
+    assert c.post("/api/tester/desklab/onoff", json={"name": "nq_bars", "on": True}).json()["enabled"] is True

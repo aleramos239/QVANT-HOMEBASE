@@ -182,12 +182,6 @@ def test_add_many_vest_batch_line_has_no_wizard_env(client, tmp_path):
     assert [e["live"] for e in ev if e["event"] == "accounts_added_batch"] == [None]
 
 
-def test_single_add_refuses_vest(client):
-    saved_login()
-    r = client.post("/api/accounts/add", json={"key": KEY, "account_name": "Vest primary"})
-    assert r.status_code == 400 and "wizard" in r.json()["detail"]
-
-
 @pytest.mark.parametrize("addr", ["0x123", "bbe10000000000000000000000000000000a1eab", "0x" + "g" * 40, "", None, 7])
 def test_challenge_rejects_bad_address(client, gw, addr):
     assert client.post("/api/vest/challenge", json={"address": addr}).status_code == 400

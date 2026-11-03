@@ -201,7 +201,6 @@ def test_add_many_marks_practice_demo_and_the_rest_live(client):
     again = client.post("/api/accounts/add-many", json={"key": KEY, "accounts": ["Alpha 50K Eval"]}).json()
     assert again["exists"] == 1
     assert connect(client).json()["accounts"][0]["on_desk"] is True
-    assert client.post("/api/accounts/add", json={"key": KEY, "account_name": "A1"}).status_code == 400
 
 
 def test_build_adapter_makes_an_AlphaTraderAdapter_sharing_one_session_per_login():

@@ -121,8 +121,6 @@ def _journal(tmp: Path) -> list:
 WRITES = [
     ("/api/arm", {"armed": True}),
     ("/api/kill", {}),
-    ("/api/selftest-order", {"account": "main", "symbol": "NQ", "ref_price": 24500.0,
-                             "plain": True}),
 ]
 
 
@@ -131,7 +129,7 @@ def _untouched(c) -> None:
     assert c.adapter.orders == [] and c.adapter.brackets == []
     assert c.adapter.cancel_all_calls == 0 and c.adapter.flatten_calls == 0
     events = {e["event"] for e in _journal(c.tmp)}
-    assert not events & {"armed_toggled", "kill_switch", "selftest_order"}
+    assert not events & {"armed_toggled", "kill_switch"}
 
 
 @pytest.mark.parametrize("url,body", WRITES)
@@ -192,14 +190,6 @@ def test_a_proper_local_json_kill_still_works(desk):
     r = desk.post("/api/kill", json={}, headers={"origin": DESK})
     assert r.status_code == 200 and r.json()["armed"] is False
     assert desk.adapter.cancel_all_calls == 1 and desk.adapter.flatten_calls == 1
-
-
-def test_a_proper_local_json_selftest_still_works_on_the_fake(desk):
-    r = desk.post("/api/selftest-order", headers={"origin": DESK},
-                  json={"account": "main", "symbol": "NQ", "ref_price": 24500.0, "plain": True})
-    assert r.status_code == 200 and r.json()["ok"] is True
-    assert [o.text for o in desk.adapter.orders] == ["homebase:selftest"]   # the fake, not a broker
-    assert desk.adapter.cancelled == ["plain"]
 
 
 def test_duplicate_guarded_headers_are_refused(desk):
@@ -273,7 +263,7 @@ def test_every_post_route_on_the_main_app_is_guarded(desk):
     loopback Host only, any Origin refused, desk key) refuses text/plain."""
     posts = sorted({r.path for r in desk.app.routes if "POST" in getattr(r, "methods", set())}
                    | {"/api/chart-trading"})           # included via its router
-    assert {"/api/arm", "/api/kill", "/api/selftest-order"} <= set(posts)
+    assert {"/api/arm", "/api/kill"} <= set(posts)
     assert "/hook" not in posts           # the TradingView webhook was removed 2026-09-27
     for p in posts:
         assert desk.post(p, content="{}", headers={"content-type": "text/plain"}).status_code \

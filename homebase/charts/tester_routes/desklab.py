@@ -537,8 +537,11 @@ def register(r: APIRouter, ctx) -> Callable[[], None]:
                 **({"builtin": True} if fresh and builtin else {})}
 
     def desklab_onoff(name: str, on: bool) -> dict:
-        if store.set_enabled(name, on) is None:
-            raise HTTPException(404, "That strategy is not on the Desk.")
+        with store.write_lock():             # a booked strategy is switched on the Desk only (its stop logic lives there)
+            if store.booked(name):
+                raise HTTPException(409, DESKLAB_TAKE_OFF)
+            if store.set_enabled(name, on) is None:
+                raise HTTPException(404, "That strategy is not on the Desk.")
         return {"ok": True, "name": name, "enabled": on}
 
     @r.post("/desklab/{what}")

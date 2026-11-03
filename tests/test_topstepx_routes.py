@@ -179,7 +179,6 @@ def test_add_many_marks_practice_demo_and_the_rest_live(client):
     assert ads["prac-v2-1"].journal == ads["prac-v2-1"].session.journal == client.app.state.engine.journal
     assert budget_logins(client) == 1                  # the wizard's login; entries rode its token
     assert client.post("/api/accounts/add-many", json={"key": KEY, "accounts": ["PRAC-V2-1"]}).json()["exists"] == 1
-    assert client.post("/api/accounts/add", json={"key": KEY, "account_name": "PRAC-V2-1"}).status_code == 400
 
 
 def test_the_desk_books_a_login_only_when_the_session_sends_one(client, api):
@@ -319,9 +318,6 @@ def test_booking_a_tsx_account_is_refused_in_words_and_the_self_test_waits_for_t
     assert "nq930" not in cfg.book                                  # nothing written, not even the non-TopstepX row
     assert client.post("/api/book", json={"strategy": "nq930", "assignments": [
         {"account": "main", "qty": 1}]}).json()["ok"]               # other accounts book as before
-    # the self-test route stays: it waits for the caches (the stub socket is not up: unknown is not idle)
-    r = client.post("/api/selftest-order", json={"account": "prac-v2-1", "ref_price": 20000})
-    assert r.status_code == 409 and "not read yet" in r.json()["detail"]
 
 
 def test_an_account_gone_and_back_never_gets_a_tsx_booking_back(client):
