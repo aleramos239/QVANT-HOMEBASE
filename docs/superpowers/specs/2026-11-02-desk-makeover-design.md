@@ -225,9 +225,8 @@ new layout (double work, and two different gears live for a while).
 3. **The strategy settings form goes** (shown gone in the approved mockup). Changing a strategy's own Target / Risk /
    Stop-for-the-day = a new variant from the Lab. Current values are kept and shown read-only in About.
 4. **Limits stay a gate**, but leave the page body: "Edit limits" sits in About, and a strategy that needs them shows red
-   "Limits needed first" with a Set limits button. "Most contracts per account" leaves the limits dialog if no path still
-   reads the strategy-wide `max_qty` for rows that have their own Most (team rows still do: then it stays, worded "Most
-   contracts on a team account").
+   "Limits needed first" with a Set limits button. Owner: "Gear only" (section 8): a row's Most is its only cap. "Most contracts per
+   account" stays in the limits dialog only while plain or team rows still read `max_qty`, worded for those rows.
 5. **A team is one record**: the Desk's `groups.json` (`desk/engine_groups.py`) already holds name, members, accounts,
    mode, size and ON. The charts service stops keeping `deskgroups.json`: team edits go only through the Desk; the
    charts service reads members from the Desk's file (same machine, `paths.state_dir()`) for the team's backtest results
@@ -285,10 +284,9 @@ Server:
 
 ## 8. Before it ships
 
-- **Waiting on the owner (one question):** is the gear's Most contracts the only cap on that account, or does the
-  strategy's own Desk limit (`max_qty`) still cap it too? Today a row with its own size already answers to its own Most
-  only (per-account ledger, Task 4 ruling, flagged to raise with the owner). The answer decides call 4's last part.
-
+- **The owner, 2026-11-02, "Gear only":** the gear's Most contracts is the only cap on that account. The strategy's own
+  Desk limit (`max_qty`) no longer caps a row that has its own Most; it binds only rows without one (plain rows, team
+  rows). The Task 4 ruling stands, now with his word.
 - **Built-in page gate.** A read of the VPS Desk config was refused by the permission check on 2026-11-02 (production
   read). Ask the owner either to OK one read-only look at the server's strategy config, or to confirm no built-in
   (straddle) strategy runs there. If one does, keep the built-in page and say so in the hand-off.
@@ -317,7 +315,7 @@ Server:
 - Exact copy of status-line and "Needs a look" sentences, within the words in 4.1.
 - Whether the set store is a new `desk/variants.py` or part of `engine_groups.py`.
 - How the charts service reads the Desk's team file (direct file read or a Desk route), as long as there is one record.
-- Which rows still read the strategy-wide `max_qty` (decides call 4's last part).
+- Which plain / team rows still read the strategy-wide `max_qty` (decides whether that field stays in the dialog).
 - Archive data for families/teams: rename, never delete.
 
 ## 11. Supersedes
