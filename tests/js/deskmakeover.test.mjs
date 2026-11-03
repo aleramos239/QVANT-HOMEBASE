@@ -94,7 +94,7 @@ test('a Today row\'s switch: a Desk strategy goes through toggleStrat, a Lab one
 });
 
 /* Task 15: the strategy page's status line -- its state in words, or red with every reason. */
-const SL = between('function sideKind(', '/* A strategy page') + between('const STATUS_STALE', 'function statusLineHtml(') +
+const SL = between('function setDayPnl(', 'let COMBINE = null;') + between('function sideKind(', '/* A strategy page') + between('const STATUS_STALE', 'function statusLineHtml(') +
   'const fmt = (v) => String(v);\n' + HTML.slice(HTML.indexOf('const usdS = '), HTML.indexOf('\n', HTML.indexOf('const plural = '))) + '\n';
 function sl(net = {}) {
   const ctx = vm.createContext({ labSafe: (f, d) => { try { return f(); } catch (_) { return d; } },
@@ -170,4 +170,14 @@ test('Combine is blocked while two members share an account, naming it; free oth
   const labels = { m1: '1R', m2: '2R' };
   assert.equal(ctx.combineBlock(['m1', 'm2'], labels, { m1: [{ account: 'a1' }], m2: [{ account: 'a1' }] }), '..a1 has both 1R and 2R: untick one first.');
   assert.equal(ctx.combineBlock(['m1', 'm2'], labels, { m1: [{ account: 'a1' }], m2: [{ account: 'a2' }] }), '');
+});
+
+test('statusLine of a set: Trading when any member trades, red for a bad check on any member, money from accounts', () => {
+  const st = { strategies: { m1: { cfg: { enabled: false } }, m2: { cfg: { enabled: true } } }, book: { m2: [{ account: 'a1' }] }, accounts: { a1: { day_pnl: 55 } } };
+  const f = sl({ m1: 9999, m2: 9999 });
+  assert.equal(f(['m1', 'm2'], [], st, false).text, 'Ready · trades on 1 account · today +$55');
+  const L = f(['m1', 'm2'], [{ label: 'pp', detail: 'bad thing', level: 'bad', strategy: 'm2' }, { label: 'q', detail: 'other', level: 'bad', strategy: 'zz' }], st, false);
+  assert.equal(L.level, 'bad');
+  assert.deepEqual(JSON.parse(JSON.stringify(L.reasons.map((r) => r.text))), ['m2 · pp: bad thing']);
+  assert.equal(f(['m1', 'm2'], [], { ...st, book: {} }, false).text, 'Shadow · no account · would be +$9,999 today'.replace('9,999', '9999'));
 });

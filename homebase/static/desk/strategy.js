@@ -9,27 +9,32 @@ function sideKind(s, bk) {
    ok, and the Desk-wide warn / bad ones (no strategy, no account: Desk OFF, the feed, the Lab runner). An info line is listed, never red.
    Pure: checks as the page shows them (readinessShown), st = the status, stale = DESK_STALE. */
 const STATUS_STALE = "The Desk is not answering: last known state.";
-function statusLine(id, checks, st, stale) {
-  const red = {warn: 1, bad: 2}, reasons = [];
+function statusLine(id, checks, st, stale) {      // id: a strategy, or the members of a variant set (picked variant first): one line for the set
+  const red = {warn: 1, bad: 2}, reasons = [], ids = Array.isArray(id) ? id : [id], multi = Array.isArray(id);
+  const who = (m) => labSafe(() => soloVarLabel(m), "") || m;
   let worst = 0;
   for (const c of checks || []) {
-    if (!c || !(c.strategy === id ? c.level !== "ok" : !c.strategy && !c.account && red[c.level])) continue;
-    reasons.push({text: c.label + ": " + c.detail, fix: c.fix || "", account: c.account || ""});      // account: what Reconnect reconnects
+    if (!c || !(ids.includes(c.strategy) ? c.level !== "ok" : !c.strategy && !c.account && red[c.level])) continue;
+    const text = c.label + ": " + c.detail;
+    reasons.push({text: multi && c.strategy && !text.includes(who(c.strategy)) ? who(c.strategy) + " · " + text : text, fix: c.fix || "", account: c.account || ""});      // account: what Reconnect reconnects
     worst = Math.max(worst, red[c.level] || 0);
   }
   if (stale) return {level: "stale", text: STATUS_STALE, reasons};
-  const s = ((st && st.strategies) || {})[id], bk = ((st && st.book) || {})[id] || [], k = s ? sideKind(s, bk) : "off";
+  const rank = {trading: 0, shadow: 1, off: 2}, strategies = (st && st.strategies) || {}, book = (st && st.book) || {};
+  const kinds = ids.filter(m => strategies[m]).map(m => sideKind(strategies[m], book[m] || []));      // a set is the best of its members, as in the sidebar
+  const k = kinds.length ? kinds.reduce((a, b) => rank[b] < rank[a] ? b : a) : "off", s = strategies[ids[0]], bk = [...new Set(ids.flatMap(m => (book[m] || []).map(r => r.account)))];
   const lvl = worst === 2 ? "bad" : worst ? "warn" : null;
   if (k === "off") return {level: lvl || "off", text: "OFF", reasons};
   if (k === "shadow") {
-    const sh = labSafe(() => labShadowNet(id, s), null);
+    const sh = labSafe(() => labShadowNet(ids[0], s), null);      // a set: the picked variant's line, never a sum
     return {level: lvl || "shadow", text: "Shadow · no account" + (sh ? ` · would be ${usdS(sh.net)} today` : ""), reasons};
   }
-  const p = todayPnl(s);
+  const p = multi ? setDayPnl({members: ids}, st.accounts, st.book) : todayPnl(s);      // a set's money is its accounts', never shadow dollars
   return {level: lvl || "ok", text: `${lvl ? "Not ready" : "Ready"} · trades on ${plural(bk.length, "account", "accounts")}${p != null ? " · today " + usdS(p) : ""}`, reasons};
 }
 function statusLineHtml(id) {
-  const r = ST && readinessShown(ST.readiness, ST), L = statusLine(id, r ? r.checks : [], ST, DESK_STALE === true);
+  const vs = labSafe(() => soloVs(id), null), pm = vs ? setPicked(vs) : null;      // a set page: all its members, the picked variant first
+  const r = ST && readinessShown(ST.readiness, ST), L = statusLine(vs ? [pm, ...vs.members.filter(m => m !== pm)] : id, r ? r.checks : [], ST, DESK_STALE === true);
   const red = L.level === "bad" || L.level === "warn" || L.level === "stale";
   const row = (x) => `<div class="feed-row"><span class="h${red ? " warn" : ""}">${esc(x.text)}</span><span class="t">${LOOK_FIX[x.fix] && (x.fix !== "reconnect" || x.account)      // a reconnect with no account has nothing to reconnect
     ? `<button class="btn btn-outline btn-sm" onclick="lookFix(${jsArg(x.fix)},${jsArg(id)},${jsArg(x.account)})">${LOOK_FIX[x.fix]}</button>` : ""}</span></div>`;
