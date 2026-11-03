@@ -495,7 +495,7 @@ const soloOwnWords = (name) => { const p = Number((soloLab(name).params || {}).r
 const soloBookRow = (name, a) => ((ST.book || {})[name] || []).find(r => r.account === a) || null;
 /* the gear form an account opens with: its row as booked, the strategy's first contract and that contract's Most when it has none */
 function soloForm0(name, a) {
-  const lab = soloLab(name), row = soloBookRow(name, a) || {account: a, qty: soloNow(name).qty}, f = AcctSet.formOf(row);
+  const lab = soloLab(name), row = soloBookRow(name, a) || {account: a, qty: 1}, f = AcctSet.formOf(row);      // a new row is 1 contract (the server)
   const contract = row.contract || soloContracts(name)[0], most = f.most != null ? f.most : (lab.most_default_by || {})[contract];
   return {contract, size: f.size === "own" && lab.own_size !== true ? "contracts" : f.size, qty: f.qty, risk_usd: f.risk_usd, most: most == null ? "" : most};
 }
@@ -519,9 +519,13 @@ function soloBody(name) {
 }
 const soloEntryWords = (name, e) => e.size == null ? soloOwnWords(name) : AcctSet.words({...e, qty: e.qty || 1}, undefined, true);
 function soloDiff(now, b) {
-  const parts = [...b.accounts.filter(a => !now.accounts.includes(a)).map(a => "+" + acctShort(a)),
+  const added = (a) => {      // a ticked-in account with the size it will be saved with
+    const e = (b.settings || {})[a], lab = soloLab(b.strategy), c = soloContracts(b.strategy)[0];
+    return `+${acctShort(a)} (${e ? soloEntryWords(b.strategy, e) : lab.own_size === true ? soloOwnWords(b.strategy) : AcctSet.words({qty: 1, contract: c})})`;
+  };
+  const parts = [...b.accounts.filter(a => !now.accounts.includes(a)).map(added),
                  ...now.accounts.filter(a => !b.accounts.includes(a)).map(a => "−" + acctShort(a)),
-                 ...Object.entries(b.settings || {}).map(([a, e]) => `${acctShort(a)} ${soloEntryWords(b.strategy, e)}`)];
+                 ...Object.entries(b.settings || {}).filter(([a]) => now.accounts.includes(a)).map(([a, e]) => `${acctShort(a)} ${soloEntryWords(b.strategy, e)}`)];
   if (b.turns !== now.turns) parts.push(b.turns ? "take turns" : "every account");
   if (b.hold !== now.hold) parts.push(b.hold ? "holds overnight" : "flat each night");
   return parts;

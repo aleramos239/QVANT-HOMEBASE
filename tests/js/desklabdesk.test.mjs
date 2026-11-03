@@ -1293,7 +1293,7 @@ test('solo Save: a LIVE account ticked in on an ON strategy asks first, naming i
   soloRoot(t, { ticked: ['a1', 'a2'], turns: true });
   await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
   assert.equal(t.confirms.length, 1);
-  assert.match(t.confirms[0].body, /\+APEX…048 · take turns\. LIVE account ticked in: APEX…048\./);
+  assert.match(t.confirms[0].body, /\+APEX…048 \(×1\) · take turns\. LIVE account ticked in: APEX…048\./);
   assert.deepEqual(t.posts, []);
 });
 
@@ -1887,4 +1887,14 @@ test('gear: a bigger Contracts number, a bigger $ risk and Most up ask on LIVE, 
       assert.equal(t.posts.length, 1);
     }
   }
+});
+
+test('gear: a newly ticked account is 1 contract in its gear and in the Save line, with no settings entry', () => {
+  const t = gearT(GC, { lab_nq_orb: [{ account: 'a1', qty: 3 }] });
+  const one = soloRoot(t, { ticked: ['a1', 'a2'] });
+  const run = (s) => vm.runInContext(s, t.ctx);
+  assert.equal(run('soloForm0("lab_nq_orb","a2").qty'), 1);
+  assert.deepEqual(plain(run('soloBody("lab_nq_orb")').settings), {});
+  run('soloEdit("lab_nq_orb")');
+  assert.match(one['.solo-save'].innerHTML, /\+APEX…048 \(1 MNQ\)/);
 });
