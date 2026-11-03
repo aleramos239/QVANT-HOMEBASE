@@ -8,7 +8,8 @@
        (notices, the footer links; a strategy's figures, links and actions), re-collected after each of
        the page's repaints;
      - adds a "Setup" card to the strategy inspector, written from the same cfg the page prints as one line; a straddle with
-     an RR (nq930) also gets a 5/10-point stop menu and a small RR field; both call the page's own setStratRr().
+     an RR (nq930) also gets a 5/10-point stop menu and a small RR field; both call the page's own setStratRr(). A Lab strategy
+     on the Desk has no Setup here: the page's own Backtest and About blocks move in (its Set up card stays in the content).
    It calls no endpoint itself, changes no handler and never stops an event. If anything here throws, the page is shown as
    the base page: the finally block always reveals it.                                                               */
 (function () {
@@ -82,8 +83,9 @@
     unseenSec.hidden = propSec.hidden = true;
     const linksBox = el('div', { class: 'hb-box hb-links-box', id: 'hbLinks' });
     const actsBox = el('div', { class: 'hb-acts', id: 'hbActs' });
+    const setupH = el('div', { class: 'hb-isec-h', text: 'Setup' });      // "About" for a Lab strategy on the Desk
     const stratPage = el('div', { class: 'hb-ipage', id: 'hbInspStrat' },
-      el('section', { class: 'hb-isec' }, el('div', { class: 'hb-isec-h', text: 'Setup' }), setupBox),
+      el('section', { class: 'hb-isec' }, setupH, setupBox),
       figsSec = el('section', { class: 'hb-isec' }, figsH, figsBox),
       unseenSec, propSec,
       el('section', { class: 'hb-isec hb-isec-links' }, el('div', { class: 'hb-isec-h', text: 'More' }), linksBox),
@@ -124,22 +126,15 @@
       setupBox.replaceChildren(...rows);
     }
 
-    /* A LAB strategy the Desk itself knows (desk id lab_<name>, kind "lab", a `lab` block in the status): its limits, when it was promoted, and
-       whether its orders are written down or go through the Desk. The words are DeskLab.deskSetupRows (desklab.js). */
+    /* A LAB strategy the Desk itself knows (desk id lab_<name>, kind "lab", a `lab` block in the status): the page renders its Backtest
+       and About blocks; this moves them in (owner 2026-11-02: About and More on the right, no second Setup). */
     const deskLabbed = (name) => { const st = status_(), s = st && st.strategies && st.strategies[name]; return s && s.cfg && s.cfg.kind === 'lab' && s.lab ? s : null; };
-    function setupDeskLab(name, s) {
-      const rowOf = () => { try { return (DESKLAB.strategies || []).find((w) => w && w.name === s.lab.name) || null; } catch (_) { return null; } };
-      const bookOf = () => { try { return (ST.book && ST.book[name]) || []; } catch (_) { return []; } };
-      const data = window.DeskLab ? window.DeskLab.deskSetupRows(s, rowOf(), bookOf()) : [];
-      const sig = 'dl:' + name + '|' + JSON.stringify(data) + '|' + (window.DeskLabSet ? window.DeskLabSet.sig(s.lab) : '');
-      // the settings it lets the Desk change are controls: the same nodes every time, repainted only when something shown changed,
-      // so a menu or a field being used is never rebuilt under the hand
-      const ctl = window.DeskLabSet ? window.DeskLabSet.nodes(name, s.lab, !!(s.lab && s.lab.read_only)) : [];
-      if (setupBox._sig !== sig) {
-        setupBox._sig = sig;      // (never what setup() cached)
-        setupBox.replaceChildren(...data.map(([k, v]) => row(k, v)), ...ctl);
-      }
-    }
+    const takeSec = (sec, box) => {      // the page's .sec without its h2, into an inspector box; the old block stays when no new one came
+      if (!sec) return;
+      box._sig = null;      // never what setup() cached
+      box.replaceChildren(...[...sec.children].filter((n) => n.tagName !== 'H2'));
+      sec.remove();
+    };
 
     function setup(name) {
       const st = status_(), s = st && st.strategies && st.strategies[name], c = s && s.cfg;
@@ -296,20 +291,23 @@
         const st = status_();
         if (v === 'strat') {
           // the page just rebuilt #viewStrat: take this render's figures, links and actions into the inspector
+          let name = '';
+          try { name = (VIEW && VIEW.name) || ''; } catch (_) {}
+          const l = labbed(), dl = deskLabbed(name);
+          if (dl) { takeSec($(':scope > .sd-backtest', vStrat), figsBox); figsSec.hidden = !figsBox.childElementCount; }
           const figs = $(':scope > .figs', vStrat), links = $(':scope > .qlinks', vStrat), acts = $(':scope > .sd-actions', vStrat);
           // "No Desk trades yet." stands where the figures would be (the curve's own empty note stays in the content)
           const none = [...vStrat.children].find((n) => n.classList.contains('eq-empty') && /No Desk trades/.test(n.textContent)) || null;
           if (figs || none || links || acts) {
-            figsBox.replaceChildren(...(figs ? [figs] : none ? [el('div', { class: 'hb-row hb-row-note', text: 'No Desk trades yet.' })] : []));
-            figsSec.hidden = !figsBox.childElementCount;
+            if (!dl) {      // a Lab strategy on the Desk: its Backtest block, taken above
+              figsBox.replaceChildren(...(figs ? [figs] : none ? [el('div', { class: 'hb-row hb-row-note', text: 'No Desk trades yet.' })] : []));
+              figsSec.hidden = !figsBox.childElementCount;
+            }
             if (none && !figs) none.remove();
             linksBox.replaceChildren(...(links ? [links] : []));
             actsBox.replaceChildren(...(acts ? [acts] : []));
           }
           const t = $('.sd-title', vStrat), sd = $('.sd-state b', vStrat);
-          let name = '';
-          try { name = (VIEW && VIEW.name) || ''; } catch (_) {}
-          const l = labbed(), dl = deskLabbed(name);
           const grp = groupped();
           const res = $(':scope > .labres', vStrat);
           if (res) {
@@ -323,7 +321,8 @@
           unseenSec.hidden = propSec.hidden = !name || unseenSec.dataset.for !== name;
           if (!unseenBox.childElementCount) unseenSec.hidden = true;      // never one strategy's research under another
           figsH.textContent = grp ? (figsBox.querySelector('[data-h="Full sample"]') ? 'Full sample' : 'Combined') : l || dl ? 'Backtest' : 'Desk results';
-          if (grp) setupGroup(grp); else if (l) setupLab(l); else if (dl) setupDeskLab(name, dl); else setup(name);
+          setupH.textContent = dl && !grp ? 'About' : 'Setup';
+          if (grp) setupGroup(grp); else if (l) setupLab(l); else if (dl) takeSec($(':scope > .sd-about', vStrat), setupBox); else setup(name);
           tb.title(t ? t.textContent : 'Strategy', sd ? sd.textContent : '');
         } else if (v === 'activity') {
           tb.title('Activity', 'Every alert, order and fill');

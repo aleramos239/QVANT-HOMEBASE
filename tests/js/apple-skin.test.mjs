@@ -433,7 +433,7 @@ test('desk skin: the research heading reads the record the page drew -- a group 
   // the page still keys them so
   const page = HTML;
   assert.match(page, /DeskLab\.groupPage\(g, DESKGRES\[g\.id\]\)/);
-  assert.match(page, /labResHtml\(row\.name, name\)/);
+  assert.match(page, /labResHtml\(w\.name, w\.name\)/);
   assert.match(page, /DeskLab\.results\(DESKRES\[lab\]\)/);
 });
 

@@ -92,3 +92,58 @@ test('a Today row\'s switch: a Desk strategy goes through toggleStrat, a Lab one
   assert.doesNotMatch(between('function todayRow(', 'let ISSUE_LVL'), /setDeskLab/);
   assert.match(between('function todayLabRow(', 'function labView('), /setDeskLab/);
 });
+
+/* Task 15: the strategy page's status line -- its state in words, or red with every reason. */
+const SL = between('function sideKind(', '/* A strategy page') + between('const STATUS_STALE', 'function statusLineHtml(') +
+  'const fmt = (v) => String(v);\n' + HTML.slice(HTML.indexOf('const usdS = '), HTML.indexOf('\n', HTML.indexOf('const plural = '))) + '\n';
+function sl(net = {}) {
+  const ctx = vm.createContext({ labSafe: (f, d) => { try { return f(); } catch (_) { return d; } },
+    labShadowNet: (id) => net[id] == null ? null : { net: net[id] }, todayPnl: (s) => s.pnl ?? null });
+  vm.runInContext(SL + '\nglobalThis.api = { statusLine };', ctx);
+  return ctx.api.statusLine;
+}
+const ST15 = { strategies: { t: { cfg: { enabled: true }, pnl: 412 }, sh: { cfg: { enabled: true } }, off: { cfg: { enabled: false } } },
+  book: { t: [{ account: 'a1' }, { account: 'a2' }] } };
+const DESK_OFF = { label: 'Desk', detail: 'OFF.', level: 'bad', fix: 'turn_on' };
+const fixOf = (r) => ({ text: r.text, fix: r.fix });
+
+test('statusLine: a ready trading strategy says its accounts and today, exact', () => {
+  assert.deepEqual(JSON.parse(JSON.stringify(sl()('t', [{ label: 'x', detail: 'fine', level: 'ok', strategy: 't' }], ST15, false))),
+    { level: 'ok', text: 'Ready · trades on 2 accounts · today +$412', reasons: [] });
+  assert.equal(sl({ sh: 80 })('sh', [], ST15, false).text, 'Shadow · no account · would be +$80 today');
+  assert.deepEqual(JSON.parse(JSON.stringify(sl()('off', [], ST15, false))), { level: 'off', text: 'OFF', reasons: [] });
+});
+
+test('statusLine: an offline booked account is bad with a Reconnect reason', () => {
+  const L = sl()('t', [{ label: 'pp', detail: '..a1 is offline.', level: 'bad', strategy: 't', account: 'a1', fix: 'reconnect' }], ST15, false);
+  assert.equal(L.level, 'bad');
+  assert.deepEqual(JSON.parse(JSON.stringify(L.reasons.map(fixOf))), [{ text: 'pp: ..a1 is offline.', fix: 'reconnect' }]);
+  assert.equal(L.reasons[0].account, 'a1', 'Reconnect knows which account');
+});
+
+test('statusLine: the Desk OFF line is on every strategy; another strategy\'s or an account-only check is not', () => {
+  const checks = [DESK_OFF, { label: 'pp', detail: 'x', level: 'bad', strategy: 'sh' }, { label: 'acct', detail: 'y', level: 'bad', account: 'a9' },
+    { label: 'Power', detail: 'z', level: 'info' }];
+  for (const id of ['t', 'sh', 'off']) {
+    const L = sl()(id, checks, ST15, false);
+    assert.equal(L.level, 'bad', id);
+    assert.ok(L.reasons.some((r) => r.text === 'Desk: OFF.'), id);
+    assert.ok(!L.reasons.some((r) => r.text.startsWith('acct') || r.text.startsWith('Power')), id);
+  }
+  assert.equal(sl()('t', checks, ST15, false).reasons.length, 1, 'the sh check stays on sh');
+});
+
+test('statusLine: a warn limits line turns it red with Set limits; an info evening line keeps shadow and is listed', () => {
+  const w = sl()('t', [{ label: 'Limits', detail: 'none set.', level: 'warn', strategy: 't', fix: 'limits' }], ST15, false);
+  assert.equal(w.level, 'warn');
+  assert.equal(w.reasons[0].fix, 'limits');
+  const i = sl()('sh', [{ label: 'Window', detail: 'runs in the evening.', level: 'info', strategy: 'sh' }], ST15, false);
+  assert.equal(i.level, 'shadow');
+  assert.deepEqual([...i.reasons].map((r) => r.text), ['Window: runs in the evening.']);
+});
+
+test('statusLine: stale is stale, never ok, and says so', () => {
+  const L = sl()('t', [], ST15, true);
+  assert.equal(L.level, 'stale');
+  assert.equal(L.text, 'The Desk is not answering: last known state.');
+});

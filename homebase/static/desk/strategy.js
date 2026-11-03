@@ -5,6 +5,41 @@ function sideKind(s, bk) {
   const on = !!(s.cfg.enabled || ["placing", "placed", "live", "error"].includes(s.day_status));
   return on && bk.length ? "trading" : on ? "shadow" : "off";
 }
+/* A strategy page's status line (owner 2026-11-02): its state in words, or red with EVERY reason. Reasons = its own checks that are not
+   ok, and the Desk-wide warn / bad ones (no strategy, no account: Desk OFF, the feed, the Lab runner). An info line is listed, never red.
+   Pure: checks as the page shows them (readinessShown), st = the status, stale = DESK_STALE. */
+const STATUS_STALE = "The Desk is not answering: last known state.";
+function statusLine(id, checks, st, stale) {
+  const red = {warn: 1, bad: 2}, reasons = [];
+  let worst = 0;
+  for (const c of checks || []) {
+    if (!c || !(c.strategy === id ? c.level !== "ok" : !c.strategy && !c.account && red[c.level])) continue;
+    reasons.push({text: c.label + ": " + c.detail, fix: c.fix || "", account: c.account || ""});      // account: what Reconnect reconnects
+    worst = Math.max(worst, red[c.level] || 0);
+  }
+  if (stale) return {level: "stale", text: STATUS_STALE, reasons};
+  const s = ((st && st.strategies) || {})[id], bk = ((st && st.book) || {})[id] || [], k = s ? sideKind(s, bk) : "off";
+  const lvl = worst === 2 ? "bad" : worst ? "warn" : null;
+  if (k === "off") return {level: lvl || "off", text: "OFF", reasons};
+  if (k === "shadow") {
+    const sh = labSafe(() => labShadowNet(id, s), null);
+    return {level: lvl || "shadow", text: "Shadow · no account" + (sh ? ` · would be ${usdS(sh.net)} today` : ""), reasons};
+  }
+  const p = todayPnl(s);
+  return {level: lvl || "ok", text: `${lvl ? "Not ready" : "Ready"} · trades on ${plural(bk.length, "account", "accounts")}${p != null ? " · today " + usdS(p) : ""}`, reasons};
+}
+function statusLineHtml(id) {
+  const r = ST && readinessShown(ST.readiness, ST), L = statusLine(id, r ? r.checks : [], ST, DESK_STALE === true);
+  const red = L.level === "bad" || L.level === "warn" || L.level === "stale";
+  const row = (x) => `<div class="feed-row"><span class="h${red ? " warn" : ""}">${esc(x.text)}</span><span class="t">${LOOK_FIX[x.fix]
+    ? `<button class="btn btn-outline btn-sm" onclick="lookFix(${jsArg(x.fix)},${jsArg(id)},${jsArg(x.account)})">${LOOK_FIX[x.fix]}</button>` : ""}</span></div>`;
+  return `<div class="sd-state" data-level="${L.level}"><b>${esc(L.text)}</b></div>${L.reasons.length ? `<div class="agroup feed static">${L.reasons.map(row).join("")}</div>` : ""}`;
+}
+/* the status line alone, in place: when the Desk stops answering the page is not repainted, but this line must say so */
+function renderStatusLine() {
+  const el = typeof document !== "undefined" && document.querySelector ? document.querySelector("#viewStrat .sd-status") : null;
+  if (el && VIEW.k === "strat") el.innerHTML = labSafe(() => statusLineHtml(VIEW.name), el.innerHTML);
+}
 /* The sidebar sorts itself: Trading = ON with an account, Shadow = ON with none, Off = OFF. A variant set is ONE row (its best member's
    state; its members have none). `labs` = Lab strategies the Desk does not hold yet (never trading). A-Z by label in a section. */
 function sideSections(names, st, sets, labs) {
@@ -208,8 +243,8 @@ function eqChart(name) {
 })();
 
 /* ---- Lab strategies: rows and page. Every value from the network goes through esc / jsArg. ---- */
-/* A Lab strategy's research, as two blocks of a strategy page: its saved run on the unseen days and the prop sim of its runs
-   (DESKRES; the words and numbers are DeskLab.results). The skin moves them into the inspector; `view` is the page's own name
+/* A Lab strategy's research, as a block of a strategy page: its saved run on the unseen days (DESKRES; the words and numbers
+   are DeskLab.results; no prop sim since the makeover, 2026-11-02). The skin moves them into the inspector; `view` is the page's own name
    for that strategy, so the skin never shows one strategy's blocks under another. */
 function labResHtml(lab, view) {
   let v;
@@ -222,12 +257,8 @@ function labResHtml(lab, view) {
   const unseen = v.unseen.head
     ? f("", v.unseen.head, true) + v.unseen.rows.map(r => f(r.k, [r.b, r.v])).join("") + (v.unseen.note ? note(v.unseen.note) : "")
     : v.unseen.rows.length ? v.unseen.rows.map(r => f(r.k, [r.v])).join("") + (v.unseen.note ? note(v.unseen.note) : "") : note(v.unseen.note);
-  const prop = !v.prop.rows.length ? note(v.prop.note)
-    : v.prop.head ? f("", v.prop.head, true) + v.prop.rows.map(r => f(r.k, [r.build, r.unseen])).join("")
-    : v.prop.rows.map(r => f(r.k, [r.v])).join("");
   return `<div class="labres" data-for="${esc(view)}">
-    <div class="sec"><h2>${esc(v.unseen.title)}</h2><div class="figs labres-unseen${v.unseen.full ? " full" : ""}" data-h="${esc(v.unseen.title)}">${unseen}</div></div>
-    <div class="sec"><h2>${esc(v.prop.title)}</h2><div class="figs labres-prop" data-h="${esc(v.prop.title)}">${prop}</div></div></div>`;
+    <div class="sec"><h2>${esc(v.unseen.title)}</h2><div class="figs labres-unseen${v.unseen.full ? " full" : ""}" data-h="${esc(v.unseen.title)}">${unseen}</div></div></div>`;
 }
 /* The unseen run's running total as a curve in the page's own content (the Desk's eqPlot), under its Matched-the-backtest block:
    nothing while there is no run (the inspector's block says why). */
@@ -326,7 +357,6 @@ function stratView(name) {
     <div class="sd-top"><div><h1 class="sd-title">${esc(stratLabel(name))}</h1><div class="sp mono">${esc(specOf(c, name))}</div></div>${sw}</div>
     <div class="sd-state"><b>${esc(state)}</b>${p != null ? ` · today ${usdS(p)}` : ""}</div>
     <div class="sd-note">${esc(execTxt)}</div>
-    ${setupHtml(name, s)}
     ${eqChart(name)}${figs}${links}
     ${twin ? labCurveHtml(name) + labResHtml(name, name) : ""}
     <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div><div class="mcap acct-note">An account's balance and its green or red figure are the whole account: every strategy and every manual trade on it, not this strategy alone.</div>` : ""}${rotationHtml(name)}${addForm}</div>
@@ -335,65 +365,6 @@ function stratView(name) {
       ${twin && deskMachine() !== "server" ? `<button class="btn btn-outline btn-sm" onclick="openBuiltinInLab(${jsArg(name)})" title="The Lab page, on this strategy's tester twin (it follows the Desk's setting)">Open in the Lab</button>
       <button class="btn btn-outline btn-sm" onclick="openBuiltinInLab(${jsArg(name)}, true)"${hasRun ? "" : " disabled"} title="Its twin's run on the unseen days, on the chart, trade by trade">Show on chart</button>` : ""}
       <button class="btn btn-outline btn-sm" onclick="archiveBuiltin(${jsArg(name)})"${DESKLAB_BUSY || ((ST.book && ST.book[name]) || []).length ? " disabled" : ""} title="Switched off and off the Desk's list, kept. Restore it from Archive any time.">Archive</button>${test}</div>`;
-}
-
-/* WP1.14 The Setup summary at the top of a strategy's page: the whole setup in one place, read only. The window and the days are
-   shown, never edited here (editing them would change what it trades). Red lines first: what still stops it trading. */
-function setupHtml(name, s) {
-  const c = s.cfg || {}, lab = c.kind === "lab" ? (s.lab || {}) : null, book = (ST.book && ST.book[name]) || [], accts = ST.accounts || {};
-  const kind = (id) => isDemoAcct(id) ? accts[id].env : "live", word = (id) => kind(id) === "live" ? "LIVE" : kind(id);   // as isDemoAcct
-  const red = [...(lab && DeskLab.accountsLock(s).caption === DeskLab.LIMITS_CAPTION ? ["Limits needed first"] : []),
-    ...(ST.armed ? [] : ["Desk OFF"])];
-  const cyc = Object.values(ST.groups || {}).find(g => (g.members || []).includes(name));
-  const qs = [...new Set(book.map(a => +a.qty || 1))], whole = (v) => usd(v).replace(/\.00$/, "");
-  const n = (e) => book.filter(a => kind(a.account) === e).length, set = book.some(a => a.size);   // a row with its own size wins
-  const own = (a) => a.size || a.stop_after || a.hold ? AcctSet.words(a) : `×${+a.qty || 1}`;
-  const rows = [
-    ["Accounts", book.map(a => `${acctShort(a.account)} ${word(a.account)} ${own(a)}`.replace("  ", " ")).join(" · ") || "none yet"],
-    ["LIVE / paper", book.length ? [["LIVE", n("live")], ["demo", n("demo")], ["paper", n("paper")]].filter(x => x[1]).map(x => `${x[0]} on ${x[1]}`).join(" · ") || "—"
-      : lab ? "no account: it runs in shadow" : "no account"],
-    ["Size", lab && cyc && cyc.on && cycRisk(cyc, name) > 0 ? `${whole(cycRisk(cyc, name))} at risk a trade (the ${cyc.name} group sizes it)`
-      : lab && set ? "set on each account (see Accounts)"
-      : lab && lab.own_size === true ? (Number((lab.params || {}).risk) > 0 ? `${whole(Number(lab.params.risk))} at risk a trade` : "it sizes each trade itself")   // as DeskLab.ordersGo
-      : qs.length === 1 ? `${qs[0]} contract${qs[0] === 1 ? "" : "s"} an account` : qs.length ? `${Math.min(...qs)}-${Math.max(...qs)} contracts an account` : "—"],
-    ...(lab && lab.limits ? [["Limits", DeskLab.limitsRows(lab.limits).map(x => `${x.k} ${x.v}`).join(" · ")]] : []),
-    ["Window", lab ? specOf(c, name) : [c.kind === "bars" ? `${c.bar_minutes}-minute bars` : c.fire_et ? `fires ${String(c.fire_et).slice(0, 5)} ET` : "",
-      c.flat_et ? `flat by ${c.flat_et} ET` : "", (c.only_dates || []).length ? `only on ${c.only_dates.length} set day${c.only_dates.length === 1 ? "" : "s"}` : "every weekday"]
-      .filter(Boolean).join(" · ")],
-    ["Team", cyc ? `${cyc.name} (team ${cyc.on ? "ON" : "OFF"}${cyc.mode === "share" ? ", every account" : cyc.mode === "split"
-      ? `, ${(cyc.assign || {})[name] ? "its account " + acctShort(cyc.assign[name]) : "no account of its own"}` : ""}${cyc.on && cyc.next ? `, next ${acctShort(cyc.next)}` : ""})` : "none"],
-    ...(machineWords() ? [["Machine", machineWords().replace(/^on /, "")]] : []),
-  ];
-  return `<div class="sec setup"><h2>Setup</h2>${red.map(t => `<div class="mcap warn">${esc(t)}</div>`).join("")}
-    <div class="agroup feed static">${rows.map(([k, v]) => `<div class="feed-row"><span class="t">${esc(k)}</span><span class="h">${esc(v)}</span></div>`).join("")}
-    ${lab ? labSetRows(name, lab) : ""}</div></div>`;
-}
-
-/* The settings a Lab strategy lets the Desk change (desk_settings), as a menu / number box (owner 2026-11-01: "i still dont see
-   where i would switch it"). A change saves on pick (Enter or leaving the box for a number); setLabSetting asks first when
-   a LIVE account is booked, and the Desk refuses it while the session runs. Focus holds repaints (FREEZE) so a poll never wipes it. */
-function labSetRows(name, lab) {
-  const specs = (Array.isArray(lab.settings) ? lab.settings : []).filter(x => x && typeof x.key === "string");
-  const p = lab.params || {}, off = lab.read_only ? " disabled" : "";
-  const hold = `onfocus="FREEZE=true" onblur="FREEZE=false;refresh()"`;
-  return specs.map(sp => {
-    const v = p[sp.key] != null ? p[sp.key] : sp.default, lbl = esc(sp.label || sp.key), k = jsArg(name), key = jsArg(sp.key);
-    const ctl = sp.type === "choice" || sp.type === "bool"
-      ? `<select class="hb-field" aria-label="${lbl}"${off} ${hold} onchange="labSetPick(${k},${key},this,${jsArg(v)},${jsArg(sp.type)})">${
-          (sp.type === "bool" ? [["true", "On"], ["false", "Off"]] : (sp.choices || []).map(c => [String(c), String(c)]))
-            .map(([val, txt]) => `<option value="${esc(val)}"${String(v) === val ? " selected" : ""}>${esc(txt)}</option>`).join("")}</select>`
-      : `<input class="hb-field" type="number" inputmode="decimal" aria-label="${lbl}" value="${esc(String(v))}"${sp.min != null ? ` min="${sp.min}"` : ""}${sp.max != null ? ` max="${sp.max}"` : ""}${sp.step != null ? ` step="${sp.step}"` : ""} style="width:90px;text-align:right"${off} ${hold}
-          onchange="labSetPick(${k},${key},this,${jsArg(v)},'float')" onkeydown="if(event.key==='Enter'&&!event.repeat)this.blur()">`;
-    return `<div class="feed-row"><span class="t">${lbl}</span><span class="h">${ctl}</span></div>`;
-  }).join("");
-}
-async function labSetPick(name, key, el, was, type) {
-  const v = type === "float" ? Number(el.value) : type === "bool" ? el.value === "true" : el.value;
-  if (type === "float" && !isFinite(v)) { toast("A number, please."); el.value = String(was); return; }
-  const from = type === "float" ? Number(was) : type === "bool" ? was === "true" : was;   // jsArg hands it over as text
-  const why = await setLabSetting(name, key, v, {from});
-  if (why) { toast(why, 8000); el.value = String(was); }
-  FREEZE = false; refresh();
 }
 
 /* A dry run of a built-in straddle: what it would send, nothing sent. */

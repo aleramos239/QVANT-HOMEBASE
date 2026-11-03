@@ -263,7 +263,7 @@ test('a hostile name and sentence from the network cannot break out of the page'
   assert.match(ctx.html, /Would be refused: &lt;img/);
 });
 
-test('the research blocks: the unseen days and the prop sim, every word escaped, and a view name the skin can check', () => {
+test('the research block: the unseen days, every word escaped, no prop sim, and a view name the skin can check', () => {
   const hostile = '<img src=x onerror=alert(1)>';
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const head = { account: hostile, eval_pass_p: 0.41, bust_p: 0.59, median_days_to_pass: 14, funded_payout_p: 0.3, funded_expected_cheque: 602 };
@@ -277,11 +277,8 @@ test('the research blocks: the unseen days and the prop sim, every word escaped,
   assert.match(ctx.html, /<div class="k">Net<\/div><div class="v mono">\+\$16,342<\/div>/);
   assert.match(ctx.html, /<div class="k">Realized RR<\/div><div class="v mono">1:2\.81<\/div>/);
   assert.match(ctx.html, /<div class="k">Sharpe<\/div><div class="v mono">0\.43<\/div>/);
-  assert.match(ctx.html, /<div class="f fh"><div class="k"><\/div><div class="v mono">Build days<\/div><div class="v mono">Test days<\/div><\/div>/);
-  assert.match(ctx.html, /<div class="k">Passes the eval<\/div><div class="v mono">41%<\/div><div class="v mono">—<\/div>/);
-  assert.doesNotMatch(ctx.html + ctx.none, /<img/);
-  assert.match(ctx.html, /Prop sim · &lt;img/);
-  assert.equal((ctx.none.match(/<div class="labres-note">Reading…<\/div>/g) || []).length, 2, 'before the first answer both blocks say so');
+  assert.doesNotMatch(ctx.html + ctx.none, /<img|Prop sim|Passes the eval/, 'no prop sim on a strategy page (owner 2026-11-02)');
+  assert.equal((ctx.none.match(/<div class="labres-note">Reading…<\/div>/g) || []).length, 1, 'before the first answer the block says so');
 });
 
 test('the page: "Today, in shadow", the size in the net\'s tooltip, and "rebuilt" by a day and in the state line', () => {

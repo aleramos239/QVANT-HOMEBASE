@@ -78,34 +78,33 @@ function calView(st, pick) {
    GET /api/tester/desklab/shadow: would-be fills, a booked day's shadow copy included) or, on the Desk, its LIVE ones
    (/api/strategy-live), a month at a time. Its state lives here, so a repaint keeps the month and the day picked. */
 let SCAL = {key: ""};
-function stratCal(deskId, lab) {
+function stratCal(deskId, lab, booked, extra) {      // booked: Accounts first and picked; extra: the Matched-the-backtest line
   const key = deskId + "|" + lab;
-  if (SCAL.key !== key) SCAL = {key, deskId, lab, shadow: true, d: new Date(), day: "", data: null, at: 0, tok: 0};
+  if (SCAL.key !== key) SCAL = {key, deskId, lab, shadow: !(deskId && booked), d: new Date(), day: "", data: null, at: 0, tok: 0};
   if (!SCAL.loading && Date.now() - SCAL.at > 60000) loadScal();         // its trades, read again each minute
   const v = calView(SCAL, "scalDay");
-  const seg = deskId ? `<div class="seg" role="group" aria-label="Which trades">` + [[true, "Shadow"], [false, "Live"]].map(([sh, word]) =>
+  const opts = booked ? [[false, "Accounts"], [true, "Shadow"]] : [[true, "Shadow"], [false, "Accounts"]];
+  const seg = deskId ? `<div class="seg" role="group" aria-label="Which trades">` + opts.map(([sh, word]) =>
     `<button class="${SCAL.shadow === sh ? "sel" : ""}" aria-pressed="${SCAL.shadow === sh}" onclick="scalMode(${sh})">${word}</button>`).join("") + `</div>` : "";
-  return `${shadowStatsHtml(SCAL.stats, typeof DESKRES === "object" && DESKRES[lab] ? DESKRES[lab].both : null)}<div class="sec"><h2>Calendar</h2>${seg}
+  return `<div class="sec"><h2>Results</h2>${seg}
     <div class="cal-head"><button class="cal-nav" onclick="scalStep(-1)" aria-label="Previous month">&lsaquo;</button>
       <span class="m" style="flex:1">${esc(v.month)}</span>
       <button class="cal-nav" onclick="scalStep(1)" aria-label="Next month">&rsaquo;</button></div>
     <div class="mcap" style="margin:0 0 8px">${esc(v.since)}</div>
     <div class="cal-grid">${v.grid}</div>
-    <div class="cal-foot"><span>${esc(v.note)}</span><span class="tot">${esc(v.total)}</span></div>${v.table}${v.trades}</div>`;
+    <div class="cal-foot"><span>${esc(v.note)}</span><span class="tot">${esc(v.total)}</span></div>${extra || ""}${v.table}${v.trades}</div>`;
 }
 async function loadScal() {
   const s = SCAL, tok = ++s.tok, shadow = s.shadow;
   s.loading = true;
-  let data = null, stats = false;
+  let data = null;
   try {
     const r = await fetch(shadow ? CHART + "/api/tester/desklab/shadow?name=" + encodeURIComponent(s.lab)
                                  : "/api/strategy-live?strategy=" + encodeURIComponent(s.deskId));
     const j = r.ok ? await r.json() : null;
     data = j ? (shadow ? shadowData(j.days) : j) : null;
-    if (shadow && j) stats = j.stats && typeof j.stats === "object" ? j.stats : false;      // worked out by the chart service
   } catch (_) { data = null; }
   if (SCAL !== s || s.tok !== tok) return;                             // another strategy, or the other switch, since
-  if (shadow) s.stats = stats || s.stats || false;                     // the Live switch keeps the last shadow record on screen
   s.loading = false; s.at = Date.now();
   s.data = data || {days: {}, trades: [], table: [], error: true};
   try { render(); } catch (_) { /* no page to draw on */ }
@@ -128,42 +127,51 @@ function shadowData(days) {
   }
   return out;
 }
-/* The shadow's forward record (the owner, 2026-10-30), from GET /api/tester/desklab/shadow's `stats` (per contract, after costs;
-   RR and Sharpe are the tester report's, Sharpe on the days that had a trade only), beside the strategy's full 3:1 sample, the
-   same run the results block shows. A backtest's trades a week = its trades over its months x 52 / 12. */
-const SHADOW_MIN_TRADES = 20;          // as the shadow scorecard: fewer trades say nothing yet
-function shadowStatsHtml(st, bt) {
-  const num = (v) => typeof v === "number" && isFinite(v) ? v : null;
-  const pct = (v) => num(v) == null ? "—" : Math.round(v) + "%", dec = (v, d) => num(v) == null ? "—" : v.toFixed(d);
-  const rr = (x) => typeof x.rr_label === "string" && x.rr_label ? x.rr_label : num(x.rr) == null ? "—" : "1:" + x.rr.toFixed(2);
-  const b = bt && typeof bt === "object" ? bt : null, bn = b ? num(b.trades) : null;
-  const cell = (v, dim) => `<span class="t${dim ? " dim" : " net"}" style="min-width:84px;text-align:right">${esc(v)}</span>`;
-  const row = (k, live, back, title) => `<div class="feed-row"${title ? ` title="${esc(title)}"` : ""}><span class="h">${esc(k)}</span>${cell(live)}${cell(back, true)}</div>`;
-  const body = st == null ? `<div class="eq-empty">Reading its shadow days…</div>`
-    : st === false ? `<div class="eq-empty">Its shadow days could not be read.</div>`
-    : !num(st.trades) ? `<div class="eq-empty">No shadow trades yet${st.since ? ` since ${esc(shortDay(st.since))}` : ""}.</div>`
-    : `<div class="agroup feed static">${row("", "Live", "Backtest", "Live = the shadow since its promotion; Backtest = its full 3:1 sample")}`
-      + row("Trades", String(st.trades), bn == null ? "—" : String(bn))
-      + row("Win rate", pct(st.win_rate), b ? pct(b.win_rate) : "—", "Trades that made money")
-      + row("Realized RR", rr(st), b ? rr(b) : "—", "Average win : average loss")
-      + row("Sharpe", dec(st.sharpe, 2), b ? dec(b.sharpe, 2) : "—", "Daily net of the days that had a trade, mean / sd × √252")
-      + row("Trades / week", dec(st.per_week, 1), b && bn != null && num(b.months) ? (bn / (b.months * 52 / 12)).toFixed(1) : "—")
-      + row("Avg / trade", usdS(st.net / st.trades), b && bn && num(b.net) != null ? usdS(b.net / bn) : "—", "Per contract, after costs")
-      + `</div><div class="mcap">Since ${esc(shortDay(st.since))} · net ${esc(usdS(st.net))} · per contract, after costs`
-      + `${st.trades < SHADOW_MIN_TRADES ? ` · too early to judge (${st.trades} of ${SHADOW_MIN_TRADES} trades)` : ""}</div>`;
-  return `<div class="sec"><h2>Shadow</h2>${body}</div>`;
+/* A Lab strategy's page, in the approved order (owner 2026-11-02, spec 4.3): title, sub-line and switch; the status line; the Set up
+   card; Today; Results (one calendar, Accounts / Shadow, and how often it matched the backtest). Then Backtest, About and More, which
+   the skin moves into the right panel. */
+let MATCH_OPEN = "";      // the strategy whose "Matched the backtest" day list is open
+function toggleMatchDays(name) { MATCH_OPEN = MATCH_OPEN === name ? "" : name; render(); }
+const labSetOf = (name) => ((ST.variants && ST.variants.sets) || []).find(x => (x.members || []).includes(name)) || null;
+/* "Matched the backtest on 18 of 19 days ›": the days the daily match checked, and how many matched */
+function matchSummary(days) {
+  const seen = days.filter(m => m.ok !== null);
+  return seen.length ? `Matched the backtest on ${seen.filter(m => m.ok === true).length} of ${plural(seen.length, "day", "days")}` : "Matched the backtest: " + DeskLab.NOT_CHECKED.toLowerCase();
+}
+/* one row per variant (one for a plain strategy): its saved run's net, trades and win rate */
+function backtestRows(members, set) {
+  const one = (m) => {
+    const s = ST.strategies[m], lab = s && s.lab && s.lab.name, label = set && (set.labels || {})[m] ? set.labels[m] : stratLabel(m);
+    let v = null;
+    try { v = DeskLab.results(DESKRES[lab]).unseen; } catch (_) { v = null; }
+    const get = (k) => { const r = v && v.rows.find(x => x.k === k); return r ? r.v : "—"; };
+    if (!v || !v.rows.length) return `<div class="feed-row"><span class="h">${esc(label)}</span><span class="t dim">${esc(v ? v.note : DeskLab.NOT_CHECKED)}</span></div>`;
+    return `<div class="feed-row" title="${esc(v.title)}"><span class="h">${esc(label)}</span><span class="t">${esc(get("Trades"))} trades</span><span class="t">${esc(get("Win rate"))} won</span><span class="t net">${esc(get("Net"))}</span></div>`;
+  };
+  return members.map(one).join("");
+}
+/* About: what it is, read only. A setting the Desk changed from its Lab default is shown, never edited here. */
+function aboutRows(name, s, row) {
+  const c = s.cfg || {}, lab = s.lab || {}, l = DeskLab.limitsRows(lab.limits), bars = row && row.bar_minutes;
+  const win = row ? DeskLab.deskSpec({}, row).replace(/ ?·? ?from the Lab$/, "") : "";
+  const mark = Array.isArray(lab.mark) ? lab.mark : [], p = lab.params || {};
+  const since = (iso) => { const d = new Date(iso); return iso && !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", {month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York"}) : "—"; };
+  const changed = (Array.isArray(lab.settings) ? lab.settings : []).filter(x => x && typeof x.key === "string" && p[x.key] != null && x.default != null && String(p[x.key]) !== String(x.default))
+    .map(x => [x.label || x.key, String(p[x.key])]);
+  return [["Signal", [c.symbol, bars ? bars + "-minute bars" : ""].filter(Boolean).join(" · ") || "—"], ["Window", win || "—"],
+    ["Trades a day", lab.auto === true ? "its own" : l[0].v], ["Flat by", lab.auto === true ? (c.flat_et || "—") : l[4].v],
+    ["On the Desk since", since(mark[1])], ...changed];
 }
 function labDeskView(name, s) {
-  const c = s.cfg, lab = s.lab || {}, on = c.enabled === true, p = todayPnl(s), nm = stratLabel(name), busy = DESKLAB_BUSY === name;
-  const accts = ST.accounts || {}, book = (ST.book && ST.book[name]) || [], row = labRowOf(s);
+  const c = s.cfg, lab = s.lab || {}, on = c.enabled === true, nm = stratLabel(name), busy = DESKLAB_BUSY === name;
+  const book = (ST.book && ST.book[name]) || [], row = labRowOf(s);
   const ro = DeskLab.readOnly(s), lock = DeskLab.accountsLock(s), shadow = DeskLab.inShadow(s, book);
   const sw = `<button class="switch" role="switch" aria-label="${esc(nm)} on or off" aria-checked="${on}"
     title="${esc(DeskLab.deskSwitchTitle(s, book, ST.accounts, deskMachine()))}"
-    onclick="toggleStrat(${jsArg(name)}, ${!on})"></button>`;
-  const sh = labShadowNet(name, s), stateNote = DeskLab.stateNote(s);
-  const fig = (f) => `<div class="f"><div class="k">${esc(f.k)}</div><div class="v mono">${esc(f.v)}</div></div>`;
-  const limits = DeskLab.limitsRows(lab.limits).map(x => `<div class="feed-row"><span class="h">${esc(x.k)}</span><span class="t net">${esc(x.v)}</span></div>`).join("");
-  const winNote = DeskLab.windowNote(s);          // its window runs past the flat time: a note, never a refusal
+    onclick="toggleStrat(${jsArg(name)}, ${!on})"></button>`;      // on the Desk: always the Desk's path, booked or not
+  const set = labSetOf(name), members = set ? set.members.filter(m => ST.strategies[m]) : [name];
+  const sub = (members.length > 1 ? plural(members.length, "variant", "variants") + " · " : "") + (row ? DeskLab.deskSpec({}, row) : "from the Lab");
+  const stateNote = DeskLab.stateNote(s), winNote = DeskLab.windowNote(s);          // its window runs past the flat time: a note, never a refusal
   const split = DeskLab.splitRounds(lab.rounds), who = (a) => acctShort(a);
   const trades = split.today.map(r => ({r, x: DeskLab.roundLine(r, who(r.account))})).map(({r, x}) =>
     `<div class="feed-row"><span class="h${x.bad ? " warn" : ""}">${esc(x.text)}</span>${x.net == null ? "" : `<span class="t net">${esc(usdS(x.net))}</span>`}${r.check === true ? `<button class="btn btn-outline btn-sm" onclick="clearLabBlock(${jsArg(name)}, ${jsArg(r.account)})"${labClearing(name, r.account) ? " disabled" : ""}>${esc(DeskLab.CLEAR)}</button>` : ""}</div>` +
@@ -182,23 +190,26 @@ function labDeskView(name, s) {
     `<div class="feed-row"><span class="h warn">${esc(x.text)}</span>
       <button class="btn btn-outline btn-sm" onclick="clearLabBlock(${jsArg(name)}, ${jsArg(r.account)})"${labClearing(name, r.account) ? " disabled" : ""} title="${esc(x.text)}">${esc(DeskLab.CLEAR)}</button></div>`);
   const isDay = (d) => /^\d{4}-\d\d-\d\d$/.test(String(d));
-  const days = (row && Array.isArray(row.days) ? row.days : []).map(DeskLab.matchLine).map(m =>
+  const days = (row && Array.isArray(row.days) ? row.days : []).map(DeskLab.matchLine);
+  const dayRows = days.map(m =>
     `<div class="feed-row"><span class="t">${esc(isDay(m.date) ? shortDay(m.date) : m.date)}</span><span class="h${m.ok === false ? " warn" : ""}">${esc(m.text)}</span>${m.rebuilt ? '<span class="t dim">rebuilt</span>' : ""}<span class="t net">${esc(usdS(m.net))}</span></div>`);
+  const match = !row ? "" : days.length
+    ? `<button class="btn btn-quiet btn-sm act-link" aria-expanded="${MATCH_OPEN === name}" onclick="toggleMatchDays(${jsArg(name)})">${esc(matchSummary(days))} ›</button>${MATCH_OPEN === name ? `<div class="agroup feed static">${dayRows.join("")}</div>` : ""}`
+    : `<div class="mcap">${esc(matchSummary(days))}</div>`;
+  const about = labSafe(() => aboutRows(name, s, row), []).map(([k, v]) => `<div class="feed-row"><span class="t">${esc(k)}</span><span class="h">${esc(v)}</span></div>`).join("");
   return `<button class="back" onclick="setView('today')">‹ Today</button>
-    <div class="sd-top"><div><h1 class="sd-title">${esc(nm)}</h1><div class="sp mono">${esc(specOf(c, name))}</div></div>${sw}</div>
-    <div class="sd-state"><b>${esc(DeskLab.deskState(s, book))}</b>${sh ? ` · today would be ${esc(usdS(sh.net))}` : p != null ? ` · today ${esc(usdS(p))}` : ""}</div>
+    <div class="sd-top"><div><h1 class="sd-title">${esc(nm)}</h1><div class="sp mono">${esc(sub)}</div></div>${sw}</div>
+    <div class="sd-status">${labSafe(() => statusLineHtml(name), "")}</div>
     ${stateNote ? `<div class="sd-note">${esc(stateNote)}</div>` : ""}
-    <div class="sd-note">${esc(DeskLab.deskNote(book.length > 0))}</div>
     ${ro ? `<div class="sd-note">${esc(DeskLab.OTHER_DESK)}</div>` : ""}
-    ${labSafe(() => setupHtml(name, s), "")}
-    ${lab.auto === true ? "" : `<div class="sec"><h2>Limits</h2><div class="agroup feed static">${limits}</div>${winNote ? `<div class="mcap warn">${esc(winNote)}</div>` : ""}
-      <button class="btn btn-outline btn-sm" onclick="openLabLimits(${jsArg(name)})"${ro ? " disabled" : ""}>${esc(DeskLab.EDIT_LIMITS)}</button></div>`}
-    <div class="sec"><h2>${shadow ? "Today, in shadow" : "Today"}</h2>${today}${actBtn("s:" + name)}</div>${lab.name ? stratCal(name, lab.name) : ""}
-    ${old.length ? `<div class="sec"><h2>${esc(DeskLab.OLD_TITLE)}</h2><div class="agroup feed static">${old.join("")}</div></div>` : ""}
-    ${row ? `<div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
-    ${labCurveHtml(row.name)}${labResHtml(row.name, name)}` : ""}
     ${labSafe(() => soloSetupHtml(name, s, ro, lock), "")}
+    <div class="sec"><h2>${shadow ? "Today, in shadow" : "Today"}</h2>${today}${actBtn("s:" + name)}</div>
+    ${old.length ? `<div class="sec"><h2>${esc(DeskLab.OLD_TITLE)}</h2><div class="agroup feed static">${old.join("")}</div></div>` : ""}
+    ${lab.name ? stratCal(name, lab.name, book.length > 0, match) : ""}
     ${labSafe(() => deskChangesHtml("s:" + name), "")}
+    <div class="sec sd-backtest"><h2>Backtest</h2><div class="agroup feed static">${labSafe(() => backtestRows(members, set), "")}</div></div>
+    <div class="sec sd-about"><h2>About</h2><div class="agroup feed static">${about}</div>${winNote ? `<div class="mcap warn">${esc(winNote)}</div>` : ""}
+      ${lab.auto === true ? "" : `<div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openLabLimits(${jsArg(name)})"${ro ? " disabled" : ""}>${esc(DeskLab.EDIT_LIMITS)}</button></div>`}</div>
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat(${jsArg(name)})" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       ${deskMachine() === "server" ? "" : `<button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>`}
       <button class="btn btn-outline btn-sm" onclick="renameLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Change the name the Desk shows for it.">Rename</button>
@@ -722,7 +733,7 @@ async function refresh() {
     DESK_STALE = true;   // ST is now the last-known state, not current -- the top bar shows it as stale
     STALE_WHY = refused || "the desk is not answering";
     $("#clock").textContent = refused ? "status error" : "server unreachable";
-    renderMaster(); renderNeedsLook();
+    renderMaster(); renderNeedsLook(); renderStatusLine();
     if ($("#settingsOverlay").classList.contains("open")) renderSettings();
   }
 }
