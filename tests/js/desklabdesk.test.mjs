@@ -550,9 +550,9 @@ test('with accounts: the other note and the Set-up card -- every account a tick,
   assert.match(html, /<h2>Today<\/h2>/);
   assert.match(html, /class="solo-acct" data-acct="a1" checked/);
   assert.match(html, /class="solo-acct" data-acct="a2"  onchange/, 'an account not booked: a tick, unticked');
-  assert.match(html, /APEX…048\s*<span class="tag-live">LIVE<\/span>/);
-  assert.match(html, /class="solo-qty"[^>]*\s+value="1"/);
-  assert.match(html, /class="solo-turns"/);
+  assert.match(html, /APEX…048\s*<span class="tag-live"[^>]*>LIVE<\/span>/);
+  assert.match(html, /aria-label="Settings for Lucid Eval #1"/, 'a gear on a ticked row only');
+  assert.doesNotMatch(html, /solo-qty|class="solo-turns"/, 'one account ticked: no Take turns');
   assert.match(html, /class="solo-hold"/);
   assert.match(html, /<div class="mcap pos">Ready: trades on Lucid Eval #1, 1 contract\.<\/div>/);
   assert.doesNotMatch(html, /toggleAsgMenu|pickAsg|amenu|editQty|removeAsg|openAcctSet/, 'one place to set it up, nothing else');
@@ -1270,10 +1270,10 @@ test('m4 under read_only the Set-up card only says why and how it stands: no tic
 });
 
 /* The solo Set-up card's Save (owner 2026-11-02): its ticks, contracts, Take turns and Hold go in ONE /api/setup call. */
-function soloRoot(t, { ticked = [], qty = '1', turns = false, hold = false } = {}) {
+function soloRoot(t, { ticked = [], turns = false, hold = false } = {}) {
   const box = (cls, checked, extra = {}) => ({ checked, className: cls, dataset: extra });
   const accts = Object.keys(t.ctx.ST.accounts).map((a) => box('solo-acct', ticked.includes(a), { acct: a }));
-  const one = { '.solo-qty': { value: qty }, '.solo-turns': box('solo-turns', turns), '.solo-hold': box('solo-hold', hold), '.solo-save': { innerHTML: '' } };
+  const one = { '.solo-turns': box('solo-turns', turns), '.solo-hold': box('solo-hold', hold), '.solo-save': { innerHTML: '' } };
   const root = { querySelectorAll: (sel) => (sel === '.solo-acct' ? accts : []), querySelector: (sel) => one[sel] || null };
   t.ctx.document.querySelector = (sel) => (sel === '#viewStrat' ? root : null);
   return one;
@@ -1284,11 +1284,8 @@ test('solo Save: one /api/setup call with the ticks, contracts, Take turns, Hold
   soloRoot(t, { ticked: ['a1'], qty: '1', turns: false, hold: true });
   await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
   assert.equal(t.confirms.length, 0, 'nothing sized up, nothing ticked in: no question');
-  assert.deepEqual(t.posts, [{ url: '/api/setup', body: { strategy: 'lab_nq_orb', accounts: ['a1'], qty: 1, turns: false, hold: true, on: true } }]);
+  assert.deepEqual(t.posts, [{ url: '/api/setup', body: { strategy: 'lab_nq_orb', accounts: ['a1'], qty: 1, turns: false, hold: true, settings: {}, on: true } }]);
   assert.deepEqual(t.toasts, ['NQ ORB saved.']);
-  soloRoot(t, { ticked: ['a1'], qty: '2' });                    // sizing up on a DEMO account asks, in its tag's word
-  await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
-  assert.match(t.confirms[0].body, /1 → 2 contracts\. 2 contracts on DEMO accounts\./);
 });
 
 test('solo Save: a LIVE account ticked in on an ON strategy asks first, naming it; a no sends nothing', async () => {
@@ -1324,7 +1321,7 @@ test('solo status: red with every reason, the Desk OFF and an offline account na
   t.ctx.ST.accounts.a2.connected = false;
   assert.match(t.view(), /<div class="mcap warn">Not trading: the Desk is OFF · account APEX…048 is offline\.<\/div>/);
   const none = load();
-  assert.match(none.view(), /<div class="mcap pos">No account: it runs in shadow\.<\/div>/);
+  assert.match(none.view(), /<div class="mcap pos">No account ticked: it runs in shadow\.<\/div>/);
   const dead = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
   dead.ctx.ST.strategies.lab_nq_orb.lab.state = 'runner_down';
   assert.match(dead.view(), /Not trading: its runner is not running/);
@@ -1334,8 +1331,8 @@ test('a strategy in a team has no ticks of its own: its page says so and opens t
   const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
   t.ctx.ST.groups = { g3: { name: 'apex 300k', members: ['lab_nq_orb'], accounts: ['a1'], on: true } };
   const html = t.view();
-  assert.match(html, /In the team apex 300k: its accounts, size and Trading switch are set on the team's page\./);
-  assert.match(html, /onclick="setView\('group',&quot;g3&quot;\)">Open apex 300k</);
+  assert.match(html, /In team apex 300k → open/);
+  assert.match(html, /onclick="setView\('group',&quot;g3&quot;\)">In team apex 300k → open</);
   assert.doesNotMatch(html, /solo-acct/);
 });
 
@@ -1802,4 +1799,57 @@ test('no family: the sidebar lists strategies loose, the Archive is one list, th
   const arch = vm.runInContext('archiveView()', t.ctx);
   assert.match(arch, /NQ ORB 1\.5R[\s\S]*NQ gap/);
   assert.doesNotMatch(arch, /<h2>|Restore family/);
+});
+
+/* Task 14: the gear per account on the Set up card. */
+const GC = { contracts: ['MNQ', 'NQ'], most_default_by: { MNQ: 20, NQ: 2 }, own_size: false };
+const gearT = (labOver = GC, book = BOOKED0, accounts = ACCOUNTS) => load({ book, accounts, strategies: { lab_nq_orb: deskStrat(labOver) } });
+
+test('gear: an untouched row sends no settings, an own-size plain row stays {account, qty}', async () => {
+  const t = gearT({ ...GC, own_size: true }, { lab_nq_orb: [{ account: 'a1', qty: 2 }] });
+  soloRoot(t, { ticked: ['a1', 'a2'] });
+  assert.deepEqual(plain(vm.runInContext('soloBody("lab_nq_orb")', t.ctx).settings), {});
+  assert.match(t.view(), /its own size/);
+  vm.runInContext('soloGear("lab_nq_orb","a1")', t.ctx);      // opening the sheet changes nothing
+  assert.deepEqual(plain(vm.runInContext('soloBody("lab_nq_orb")', t.ctx).settings), {});
+});
+
+test('gear: NQ gives 1 contract and Most 2; back to MNQ; $ risk is kept across a switch', () => {
+  const t = gearT();
+  soloRoot(t, { ticked: ['a1'] });
+  const run = (s) => vm.runInContext(s, t.ctx);
+  run('soloSet("lab_nq_orb","a1","contract","NQ")');
+  assert.deepEqual(plain(run('soloBody("lab_nq_orb")').settings.a1), { contract: 'NQ', size: 'contracts', qty: 1, most: 2 });
+  run('soloSet("lab_nq_orb","a1","size","risk")'); run('soloSet("lab_nq_orb","a1","risk_usd","500",true)');
+  run('soloSet("lab_nq_orb","a1","contract","MNQ")');
+  assert.deepEqual(plain(run('soloBody("lab_nq_orb")').settings.a1), { contract: 'MNQ', size: 'risk', risk_usd: 500, most: 20 });
+});
+
+test('gear: a GC strategy offers MGC and GC only', () => {
+  const t = gearT({ contracts: ['MGC', 'GC'], most_default_by: { MGC: 20, GC: 2 } });
+  soloRoot(t, { ticked: ['a1'] });
+  vm.runInContext('soloGear("lab_nq_orb","a1")', t.ctx);
+  const html = t.view();
+  assert.match(html, /aria-label="Contract">.*MGC.*GC/s);
+  assert.doesNotMatch(html, /NQ<\/button>/);
+});
+
+test('Take turns hides with one account ticked; none ticked says shadow', () => {
+  const t = gearT(GC, {});
+  assert.match(t.view(), /No account ticked: it runs in shadow\./);
+  assert.doesNotMatch(t.view(), /solo-turns/);
+  const two = gearT(GC, { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] });
+  assert.match(two.view(), /class="solo-turns"/);
+});
+
+test('gear: MNQ to NQ asks on a DEMO and a LIVE account, not on paper', async () => {
+  for (const [env, asks] of [['demo', 1], ['live', 1], ['paper', 0]]) {
+    const t = gearT(GC, BOOKED0, { a1: { label: 'X', env, connected: true } });
+    soloRoot(t, { ticked: ['a1'] });
+    vm.runInContext('soloSet("lab_nq_orb","a1","contract","NQ")', t.ctx);
+    await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+    assert.equal(t.confirms.length, asks, env);
+    assert.equal(t.posts.length, 1);
+    assert.equal(t.posts[0].body.settings.a1.contract, 'NQ');
+  }
 });
