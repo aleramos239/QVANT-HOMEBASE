@@ -105,7 +105,7 @@ class KillMixin:
 
         def lab_sym(st: DayState) -> Optional[str]:
             c = self.cfg.strategies.get(st.strategy)
-            return str(c.symbol).upper() if c is not None and c.kind == "lab" else None
+            return str(self._rcfg(st, c).symbol).upper() if c is not None and c.kind == "lab" else None
 
         async def account(a: str) -> dict:
             acts: dict = {}
@@ -306,6 +306,7 @@ class KillMixin:
           5. market out min(net on the bot's side, the bot's qty); then the run
              is done/killed and its stop/target are cancelled.
         -> {ok, sold, actions}"""
+        cfg = self._rcfg(st, cfg)
         acts: list[str] = []
         if not self._killable(st):
             return {"ok": True, "sold": False, "actions": ["already killed — nothing to do"]}
@@ -385,6 +386,7 @@ class KillMixin:
         """Both entries filled: the engine's both-filled emergency owns the
         flatten. The kill never sells here; it cancels the stop/target only
         once the account is flat in the bot's symbol."""
+        cfg = self._rcfg(st, cfg)
         try:
             net = int(await ad.get_net_position(cfg.symbol) or 0)
         except Exception as e:  # noqa: BLE001
@@ -442,6 +444,7 @@ class KillMixin:
         position days later). Position unreadable or the market order refused
         -> NOTHING is cancelled; the stop/target stay working. close=False: the
         read and the cancels, never the market-out (flatten_today's close=False)."""
+        cfg = self._rcfg(st, cfg)
         acts: list[str] = []
         try:
             net = await ad.get_net_position(cfg.symbol)

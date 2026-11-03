@@ -4200,3 +4200,159 @@ def test_the_flat_check_reads_the_whole_market_not_only_the_round_contract(tmp_p
     assert out["accounts"]["a1"]["reason"] == "The account already holds MNQ. Check it."
     ads["a1"].nets = {"NQ": 0, "MNQ": 0}
     assert run(eng.lab_enter(LAB, [leg()], {"a1": 1}, max_rounds=3))["accounts"]["a1"]["round"] == 1
+
+
+# ------------------------------------------------------------------------------------------------ every later step: the round's contract
+def test_same_contract_is_exact_never_a_substring():
+    assert contracts.same_contract("NQ", "NQZ6") and contracts.same_contract("MNQ", "MNQZ6")
+    assert contracts.same_contract("NQZ6", "NQ") and contracts.same_contract("NQ", "NQ")
+    assert not contracts.same_contract("MNQ", "NQZ6") and not contracts.same_contract("NQ", "MNQZ6")
+    assert not contracts.same_contract("", "") and not contracts.same_contract("NQ", "")
+
+
+def mnq_desk(tmp_path, accounts=("a1",), **row):
+    """A strategy that reads NQ and trades MNQ by default (exec_root); each account row may name its own contract."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    eng, ads, clock = mk(tmp_path, accounts=accounts, book={LAB: [{"account": a, "qty": 1, **row} for a in accounts]})
+    eng.cfg.strategies[LAB] = lab_cfg(exec_root="MNQ")
+    assert eng.cfg.strategies[LAB].symbol == "MNQ"
+    return eng, ads, clock
+
+
+def nq_round(eng, ad, a="a1"):
+    out = run(eng.lab_enter(LAB, [leg()], {a: 1}, max_rounds=3, contracts={a: "NQ"}))
+    assert out["accounts"][a]["round"] == 1, out
+    st = rnd(eng, a)
+    fill_entry(eng, ad, st, 100.0)
+    assert (st.status, st.symbol) == ("live", "NQ")
+    return st
+
+
+def net_spy(ad) -> list:
+    seen: list = []
+    real = ad.get_net_position
+
+    async def read(symbol):
+        seen.append(symbol)
+        return await real(symbol)
+
+    ad.get_net_position = read
+    return seen
+
+
+def push(eng, a, symbol, px, side="Sell"):
+    run(eng.on_fill(FillEvent(account_id=a, symbol=symbol, side=side, qty=1, price=px, raw={"orderId": "hand"})))
+
+
+def test_an_nq_exit_fill_on_an_mnq_default_strategy_is_booked(tmp_path):
+    eng, ads, _ = mnq_desk(tmp_path, accounts=("a1", "a2"))
+    run(eng.lab_enter(LAB, [leg()], {"a1": 1, "a2": 1}, max_rounds=3, contracts={"a2": "NQ"}))
+    a1, a2 = rnd(eng, "a1"), rnd(eng, "a2")
+    fill_entry(eng, ads["a1"], a1, 100.0)
+    fill_entry(eng, ads["a2"], a2, 100.0)
+    assert (a1.symbol, a2.symbol) == ("MNQ", "NQ")
+    push(eng, "a2", "MNQZ6", 105.0)                                   # a micro fill: not the NQ round's
+    assert (a2.status, a2.exit_qty, a2.exit_fill) == ("live", 0, None)
+    push(eng, "a2", "NQZ6", 110.0)
+    assert (a2.status, a2.exit_fill, a2.pnl) == ("done", 110.0, 200.0)   # NQ dollars: 10 points x $20
+    assert eng.book("a2").closed_net == 196.0                         # less NQ's own fee
+    push(eng, "a1", "NQZ6", 104.0)                                    # an NQ fill: not the MNQ round's
+    assert (a1.status, a1.exit_qty) == ("live", 0)
+    push(eng, "a1", "MNQZ6", 110.0)
+    assert (a1.status, a1.pnl) == ("done", 20.0)                     # MNQ dollars: 10 points x $2
+
+
+def test_flatten_kill_and_carry_of_an_nq_round_act_on_nq(tmp_path):
+    # the Kill: its position read, its market-out and the settle after it are NQ's
+    eng, ads, _ = mnq_desk(tmp_path / "kill")
+    ad = ads["a1"]
+    st = nq_round(eng, ad)
+    ad.nets = {"NQ": 1, "MNQ": 0}
+    seen = net_spy(ad)
+    out = run(eng.kill_strategy(LAB))["a1"]
+    assert out["ok"] is True, out
+    assert [(o.symbol, o.side, o.qty) for o in ad.orders] == [("NQ", "Sell", 1)]
+    assert ad.cancelled[-2:] == [f"{st.upper_id}-sl", f"{st.upper_id}-tp"]
+    ad.order_status[f"{st.upper_id}-sl"] = "Working"                  # a stop still working after it: the settle
+    ad.nets = {"NQ": 0, "MNQ": 0}                                     # reads the net before it takes it away
+    killed, cancels = len(seen), len(ad.cancelled)
+    tick(eng)
+    assert len(seen) > killed and set(seen) == {"NQ"}, seen
+    assert f"{st.upper_id}-sl" in ad.cancelled[cancels:]               # NQ read flat: the stop goes
+
+    # the flat time after a restart, the row changed to MNQ meanwhile: the NQ round still goes out as NQ
+    eng, ads, clock = mnq_desk(tmp_path / "flat")
+    ad = ads["a1"]
+    nq_round(eng, ad)
+    ad.nets = {"NQ": 1, "MNQ": 0}
+    eng.cfg.book[LAB] = [{"account": "a1", "qty": 1, "contract": "MNQ"}]
+    eng = restart(eng, tmp_path / "flat")
+    seen = net_spy(ad)
+    clock.set_et(15, 55)
+    tick(eng)
+    assert [(o.symbol, o.text) for o in ad.orders] == [("NQ", "homebase:lab-flat")]
+    assert seen and set(seen) == {"NQ"}, seen
+
+    # held overnight: the block of an NQ round reads NQ, after the row was changed to MNQ
+    eng, ads, clock = mnq_desk(tmp_path / "carry", hold=True)
+    ad = ads["a1"]
+    st = nq_round(eng, ad)
+    clock.set_et(15, 56)
+    tick(eng)
+    assert ad.orders == [] and st.status == "live"
+    eng.cfg.book[LAB] = [{"account": "a1", "qty": 1, "hold": True, "contract": "MNQ"}]
+    next_day(clock)
+    (r,) = eng.lab_rounds(LAB)
+    assert r["carried"] is True
+    ad.order_status.update({f"{st.upper_id}-sl": "Canceled", f"{st.upper_id}-tp": "Canceled"})   # cancelled by hand ...
+    ad.nets = {"NQ": 1, "MNQ": 0}                                     # ... and the NQ is still held
+    seen = net_spy(ad)
+    tick(eng)
+    assert eng.lab_open(LAB) == ["a1"]                                # the block stays
+    ad.nets = {"NQ": 0, "MNQ": 0}
+    tick(eng)
+    assert eng.lab_open(LAB) == []
+    assert seen == ["NQ", "NQ"] and ad.orders == []
+
+
+def test_a_carried_block_keeps_its_contract_across_a_restart_and_another_day(tmp_path):
+    eng, ads, clock = mnq_desk(tmp_path, hold=True)
+    ad = ads["a1"]
+    nq_round(eng, ad)
+    clock.set_et(15, 56)
+    tick(eng)
+
+    def block():
+        eng.lab_open(LAB)
+        (blk,) = [s for k, s in eng.states.items() if "#c" in k]
+        return blk.symbol
+
+    next_day(clock)
+    assert block() == "NQ"
+    eng = restart(eng, tmp_path)
+    assert block() == "NQ"
+    next_day(clock, 2)                                                # carried again: a block of a block
+    assert block() == "NQ"
+
+
+def test_a_vest_fill_of_an_nq_round_is_booked(tmp_path):
+    from homebase.broker.vest import SYMBOL, parse_account_state
+    eng, ads, _ = mnq_desk(tmp_path)
+    st = nq_round(eng, ads["a1"])
+
+    def vest_fill(oid, pid, roots):                                   # Vest reports a fill in units, its symbol the root
+        row = {"order_id": oid, "position_id": pid, "account_id": "v1", "symbol": SYMBOL, "side": "sell",
+               "order_type": "market", "executed_quantity": "20", "execution_price": "110"}
+        msg = {"channel": "account_state", "data": {"account_id": "v1", "positions": [], "orders": [row]}}
+        (ev,) = parse_account_state(msg, account_id="a1", vest_account_id="v1", seen={}, roots=roots,
+                                    default_root="MNQ")
+        return ev
+
+    stray = vest_fill("o9", "p9", {})                                 # a position it does not know: the account's root
+    assert (stray.symbol, stray.qty) == ("MNQ", 10)
+    run(eng.on_fill(stray))
+    assert (st.status, st.exit_qty) == ("live", 0)                    # an MNQ fill is not the NQ round's
+    ev = vest_fill("o2", "p1", {"p1": "NQ"})                          # the round's position, placed as NQ
+    assert (ev.symbol, ev.qty) == ("NQ", 1)
+    run(eng.on_fill(ev))
+    assert (st.status, st.exit_fill, st.pnl) == ("done", 110.0, 200.0)

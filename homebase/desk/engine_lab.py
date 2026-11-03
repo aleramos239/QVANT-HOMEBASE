@@ -571,7 +571,7 @@ class LabMixin:
                     "date": (was or {}).get("date") or date, "status": (was or {}).get("status") or rec["status"],
                     "round": (x or {}).get("round"), "iid": (x or {}).get("iid"), "placed_ms": (x or {}).get("placed_ms"),
                     "orders": [], "sides": {}, "filled": (was or {}).get("filled"), "was": dict((was or {}).get("was") or {}),
-                    "held": (was or {}).get("held") is True or (x or {}).get("held") is True})
+                    "held": (was or {}).get("held") is True or (x or {}).get("held") is True, "symbol": rec.get("symbol")})
                 if was is not None:
                     c["orders"] += [i for i in was.get("orders") or [] if i not in c["orders"]]
                     c["sides"].update(was.get("sides") or {})
@@ -582,6 +582,7 @@ class LabMixin:
                         c["orders"].append(rec[k])
                         c["sides"][rec[k]] = side
                 if not c["was"] or rec.get("entry_side"):         # what was known of the trade, for the owner
+                    c["symbol"] = rec.get("symbol")               # the contract the trade that went in was in
                     leg = ((x or {}).get("legs") or {}).get(rec.get("entry_side") or "") or {}
                     c["was"] = {"status": rec["status"], "entry_side": rec.get("entry_side"), "qty": rec.get("qty"),
                                 "entry_qty": rec.get("entry_qty", 0), "entry_fill": rec.get("entry_fill"),
@@ -672,9 +673,11 @@ class LabMixin:
         why = LAB_BAD_RECORD if c.get("unread") else LAB_HELD if c.get("held") is True else LAB_CANNOT_CHECK
         was = c.get("was") if isinstance(c.get("was"), dict) else {}
         qty = was.get("qty")
+        sym = c.get("symbol")
         st = DayState(strategy=name, account=account, date=today,
                       qty=qty if isinstance(qty, int) and not isinstance(qty, bool) and qty >= 0 else 0,
-                      status="error", exit_reason="carried", note=why)
+                      status="error", exit_reason="carried", note=why,
+                      symbol=sym if isinstance(sym, str) and sym else None)    # its net is read in that contract
         n = c.get("round")
         n = n if isinstance(n, int) and not isinstance(n, bool) else 1
         x = self._lab_blank(n)
@@ -704,6 +707,7 @@ class LabMixin:
         (`lab_carry_fill`) and changes nothing. The block clears when every known order reads ended at the broker
         AND the account's net in the market reads zero. Every 5 s for a minute, then every 30 s. A block whose
         record did not read is cleared by hand only."""
+        cfg = self._rcfg(st, cfg)
         key = self._lab_key(st)
         tries = self.__dict__.setdefault("_lab_tries", {})
         rk = f"carry:{key}"
@@ -868,7 +872,7 @@ class LabMixin:
                         "entry_qty": st.qty if st.entry_side and not st.entry_qty else st.entry_qty,
                         "entry_fill": st.entry_fill, "exit_qty": st.exit_qty,
                         "exit_fill": st.exit_fill, "exit_reason": st.exit_reason, "sl": sl, "tp": tp,
-                        "pnl": st.pnl, "net": self._net_pnl(st, cfg, st.pnl),       # net: after the fee, as booked
+                        "pnl": st.pnl, "net": self._net_pnl(st, self._rcfg(st, cfg), st.pnl),       # net: after the fee, as booked
                         "clean": self._lab_clean(st), "check": bool(x.get("check")), "entry_ms": x.get("entry_ms"),
                         "exit_ms": x.get("exit_ms"), "why": x.get("why") or (st.note or None if st.status == "error" else None),
                         "cancelled": list(x.get("cancelled") or []), "closing": x.get("closing"),
@@ -1038,7 +1042,7 @@ class LabMixin:
             return f"Daily limit reached ({max_rounds} trade{'' if max_rounds == 1 else 's'})."
         row = next(a for a in assignments(self.cfg, name) if a.get("account") == account)
         if row.get("stop_after"):                   # per account: done for the day after a win / once in profit
-            nets = [self._net_pnl(s, cfg, s.pnl) for s in rounds
+            nets = [self._net_pnl(s, self._rcfg(s, cfg), s.pnl) for s in rounds
                     if s.status not in ("placing", "placed", "live") and s.pnl is not None]
             if row["stop_after"] == "win" and any(n > 0 for n in nets):
                 return LAB_DONE_WIN
@@ -1296,6 +1300,7 @@ class LabMixin:
         new one may follow. A working ENTRY leftover is cancelled (a later fill would be a new entry); a working
         stop / target only when the account's net in the market reads zero -- protection is never taken from a
         position. An entry that filled on a side the round never held, or anything unread: not clean, `lab_check`."""
+        cfg = self._rcfg(st, cfg)
         x = self._lab_x(st)
         if st.status not in ("done", "error") or x.get("clean") or not ad.connected:
             return
@@ -1450,6 +1455,7 @@ class LabMixin:
         "check it", nothing is ended and nothing cancelled (False). Its stop and target died with their entries;
         they are cancelled for good measure ONLY when the account's net in the market reads zero (a fill push
         can be missed: never take a stop from a position), as the kill does. True = the round was ended."""
+        cfg = self._rcfg(st, cfg)
         x = self._lab_x(st)
         if not await self._lab_entries_ended(st, ad, x, acts, unfilled=True):
             return False
@@ -1616,6 +1622,8 @@ class LabMixin:
         """A flatten of a round whose ONE market-out already left (or that already read flat): reads only, never
         a second order. Flat for LAB_UNCONFIRMED_S with no exit fill, and every entry read ended -> the round
         ends. Still holding after that, or after a refused close -> "check it", stops left working."""
+        cfg = self._rcfg(st, cfg)
+
         def ans(ok: bool) -> dict:
             return {"ok": ok, "sold": 0, "actions": acts}
 
@@ -1689,6 +1697,7 @@ class LabMixin:
              -> "check it", stops stay, never sent again;
           5. accepted -> the stop / target are cancelled; the round stays live until the exit fill books it.
         -> {"ok", "sold": contracts, "actions"}"""
+        cfg = self._rcfg(st, cfg)
         acts: list[str] = []
         x = self._lab_x(st)
         reason = str(reason or "flat")               # never empty: it becomes the round's exit reason
@@ -1978,6 +1987,7 @@ class LabMixin:
           live with exit fills        is the trade over? (_close_if_out)
           live or done, a sibling     is the other entry really gone? (_guard_sibling)
           done or error               are its orders all ended? (_lab_settle)"""
+        cfg = self._rcfg(st, cfg)
         if self._archived(st):
             if self._lab_carried(st):
                 await self._lab_carry_check(st, cfg, ad, self._lab_x(st))

@@ -776,6 +776,7 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
             ad = self.adapters.get(st.account)
             if cfg is None or ad is None:
                 continue
+            cfg = self._rcfg(st, cfg)            # the round's own contract: its fills, its exits, its dollars
             matches_leg = oid in (st.upper_id, st.lower_id)
             # Fallback: a partial fill push with no usable order id would
             # otherwise leave the opposite entry resting. If it is our symbol,
@@ -783,7 +784,7 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
             # the wrong sibling only costs a trade, leaving one costs a
             # position.
             if st.status == "placed" and not matches_leg and not oid \
-                    and ev.symbol and cfg.symbol.upper() in ev.symbol.upper() \
+                    and contracts.same_contract(cfg.symbol, ev.symbol) \
                     and ev.side in ("Buy", "Sell"):
                 oid = st.upper_id if ev.side == "Buy" else st.lower_id
                 matches_leg = bool(oid)
@@ -861,7 +862,7 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
                 self.journal("both_filled_emergency", strategy=st.strategy,
                              account=st.account, order_id=oid, actions=acts)
                 return
-            if st.status == "live" and ev.symbol and cfg.symbol.upper() in ev.symbol.upper() \
+            if st.status == "live" and contracts.same_contract(cfg.symbol, ev.symbol) \
                     and ev.side != st.entry_side and not self._owned_by_other(oid, st):
                 # an exit can come in pieces, and before the whole entry is in (gc_nfp 2026-10-02:
                 # 1 contract in, 1 out, then the other 3): keep the AVERAGE exit and stay live
@@ -881,7 +882,7 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
                                  fill=ev.price, qty=q, out=st.exit_qty, entered=st.entry_qty)
                 return
             if st.status == "done" and st.entry_fill is not None and cfg.kind != "lab" \
-                    and ev.symbol and cfg.symbol.upper() in ev.symbol.upper() \
+                    and contracts.same_contract(cfg.symbol, ev.symbol) \
                     and ev.side != st.entry_side and not self._owned_by_other(oid, st) \
                     and (took := await self._book_flat_fill(st, cfg, ev)):
                 # one market-out sells the account's WHOLE net: what this run did not hold goes to the next done run
@@ -1164,6 +1165,7 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
         means that side is in, even if the trade already went flat again
         (which a position check alone would miss). check_position adds the
         net-position read. Returns "entry_recovered", "both_filled" or None."""
+        cfg = self._rcfg(st, cfg)
         up = await ad.get_order_status(st.upper_id) if st.upper_id else None
         dn = await ad.get_order_status(st.lower_id) if st.lower_id else None
         side, net = None, None
@@ -1215,6 +1217,7 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
             cfg = self.cfg.strategies.get(st.strategy)
             if cfg is None or st.status not in ("placed", "live"):
                 continue
+            cfg = self._rcfg(st, cfg)
             if st.status == "placed":
                 got = await self._guard_placed(
                     st, cfg, ad, check_position=True,

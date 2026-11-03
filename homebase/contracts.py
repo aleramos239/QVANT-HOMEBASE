@@ -106,6 +106,12 @@ def root_of(symbol: str) -> str:
     return s
 
 
+def same_contract(a: str, b: str) -> bool:
+    """One contract, whatever its month: 'NQ' ~ 'NQZ6', never 'NQ' ~ 'MNQZ6' (a substring test would say yes)."""
+    r = root_of(a)
+    return bool(r) and r == root_of(b)
+
+
 def market_of(symbol: str) -> str:
     """The market a contract trades, a micro counted as its full contract's: 'MNQZ6' -> 'NQ', 'NQZ6' -> 'NQ', 'MNQ' -> 'NQ'.
     (Two positions of one market, one in NQ and one in MNQ, are the same bet: the account cycle's hedge check, 2026-10-26.)"""
