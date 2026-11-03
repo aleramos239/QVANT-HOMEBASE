@@ -1082,6 +1082,7 @@ class LabMixin:
         why = LAB_NO_POSITION_READ if None in nets else (
             f"The account already holds {held[0]}. Check it." if held else None)
         if why is not None and said:
+            self.position_blocks[(name, account)] = (self._today(), why)
             self.journal("place_skipped", strategy=name, account=account, reason=why,
                          **({"net": held[1]} if held and None not in nets else {}))
         return why
@@ -1184,6 +1185,7 @@ class LabMixin:
                                                   contract)
         if st is None:
             return ans
+        self.position_blocks.pop((name, account), None)                    # an entry for this pair goes out: the block is over
         x = self._lab_x(st)
         try:                                                                # 5
             if reqs is None:

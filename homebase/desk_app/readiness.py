@@ -4,8 +4,11 @@ Moved verbatim from homebase/server.py; homebase.server re-exports compute_readi
 from __future__ import annotations
 
 from .. import config as config_mod
+from .. import contracts
+from ..desk import labcfg
 from ..desk import inactive as inactive_mod
 from ..desk import labdesk as labdesk_mod
+from ..labrun import store as lab_store
 from ..desk.timer import fire_clock, fire_said, fire_time, miss_why, off_anchor, schedule
 from .barsfeed import feed_window
 
@@ -74,6 +77,58 @@ def _timer_day(tst: dict | None, status: str, s, armed: bool) -> tuple[str, str]
     return None
 
 
+def _lab_traps(cfg, engine, lab, enabled: dict, shown, short) -> list:
+    """The Lab lines that used to be silent (Desk makeover 4.8): taken off its accounts, two strategies on one market
+    and account, an entry an open position refused, a window outside the Desk day, limits not set, the switch file
+    missing, the runner down. Each names its strategy / account / fix where one applies."""
+    out = []
+    lab_on = [n for n, s in enabled.items() if getattr(s, "kind", "straddle") == "lab"]
+    for n, why in list((getattr(lab, "unbooked", None) or {}).items()):
+        if not config_mod.assignments(cfg, n):
+            out.append({"level": "warn", "label": shown(n), "strategy": n, "fix": "turn_on",
+                        "detail": f"Taken off its accounts ({why}). It is OFF: set it up and turn it on to trade again."})
+    seats: dict = {}                    # (account, price root) -> the ON Lab strategies booked there
+    for n in lab_on:
+        rec = labcfg.record_of(cfg, n)
+        if rec is None:
+            continue
+        if labcfg.span(rec) is None:
+            out.append({"level": "info", "label": shown(n), "detail": labcfg.SAY_EVENING, "strategy": n})
+        elif labcfg.limits_of(cfg, n) is None and not labcfg.frozen(cfg, n):
+            out.append({"level": "warn", "label": shown(n), "strategy": n, "fix": "limits",
+                        "detail": "Limits needed first: it runs in shadow until they are set."})
+        for r in config_mod.assignments(cfg, n):
+            seats.setdefault((r["account"], contracts.price_root(labcfg.row_symbol(rec, r))), []).append(n)
+    for (aid, root), names in seats.items():
+        for n in names if len(names) > 1 else ():
+            others = ", ".join(shown(o) for o in names if o != n)
+            out.append({"level": "warn", "label": shown(n), "strategy": n, "account": aid, "fix": "open",
+                        "detail": f"Shares {root} on {short(aid)} with {others}: one waits while the other holds a trade."})
+    blocks = getattr(engine, "position_blocks", None) or {}
+    today = engine._today() if blocks else None
+    for (n, aid), (day, why) in list(blocks.items()):
+        if day == today:
+            out.append({"level": "bad", "label": shown(n), "detail": why, "strategy": n, "account": aid})
+    if lab is not None and getattr(lab, "on", None) is False:
+        try:
+            at = getattr(lab, "_at", None)
+            recs, _ = lab_store.names(at)
+            if any(lab_store.booked(n, at) for n in recs):
+                out.append({"level": "bad", "label": "Lab strategies",
+                            "detail": "The Lab switch file (lab_desk.on) is missing: no Lab strategy can trade."})
+        except Exception:  # noqa: BLE001 -- a store that cannot be read adds no line, never breaks the readiness
+            pass
+    elif getattr(lab, "on", False) and hasattr(lab, "_runner") \
+            and any(config_mod.assignments(cfg, n) for n in lab_on):
+        r = lab._runner()
+        if not r.get("alive"):
+            age = r.get("age_s")
+            out.append({"level": "bad", "label": "Lab runner",
+                        "detail": "The Lab runner is not running: no Lab strategy can trade." if age is None else
+                        f"The Lab runner has not answered for {age:g} s: no Lab strategy can trade."})
+    return out
+
+
 def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                       acct_status: dict, feed_status: dict | None = None,
                       timer_status: dict | None = None,
@@ -82,15 +137,36 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
     and ALL accounts. levels: ok | info | warn | bad; ready = no bad."""
     import datetime as dt
     checks = []
+
+    def shown(n):                       # a strategy as the page names it: its label, else its id (a Lab id without "lab_")
+        s = cfg.strategies.get(n)
+        return (s.label if s is not None else None) or (n[4:] if n.startswith("lab_") else n)
+
+    def short(aid):                     # an account as a line names it: ..<the last 4 of its id>
+        return ".." + str(aid)[-4:]
+
+    # an event-day strategy (only_dates) is not part of a day it does not trade
+    enabled = {n: s for n, s in cfg.strategies.items()
+               if s.enabled and s.trades_on(now_et.date())}
     if not cfg.accounts:
         checks.append({"level": "bad", "label": "Accounts",
                        "detail": "none connected — the book is empty"})
     for aid, a in cfg.accounts.items():
         s = acct_status.get(aid, {})
-        checks.append({"level": "ok" if s.get("connected") else "bad",
+        up = bool(s.get("connected"))
+        users = [] if up else [n for n in enabled
+                               if any(r.get("account") == aid for r in config_mod.assignments(cfg, n))]
+        for n in users:                 # offline under a booked strategy: said once per strategy, not as a plain line
+            checks.append({"level": "bad", "label": shown(n),       # its own reason (a missing pin) is kept
+                           "detail": f"{short(aid)} is offline" + (f": {s['error']}" if s.get("error") else "."),
+                           "strategy": n, "account": aid, "fix": "reconnect"})
+        if users:
+            continue
+        checks.append({"level": "ok" if up else "bad",
                        "label": a.label or a.account_name or aid,
-                       "detail": "connected" if s.get("connected")
-                       else (s.get("error") or "not connected")})
+                       "detail": "connected" if up
+                       else (s.get("error") or "not connected"),
+                       "account": aid, **({} if up else {"fix": "reconnect"})})
     if power is not None:
         if power.get("discharging") and (power.get("pct") or 100) < 25:
             checks.append({"level": "bad", "label": "Power",
@@ -103,23 +179,19 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                            "detail": f"on battery ({power.get('pct')}%)" + (" — plug in" if low else "")})
         else:
             checks.append({"level": "ok", "label": "Power", "detail": "on power"})
-    def shown(n):                       # a strategy as the page names it: its label, else its id
-        return cfg.strategies[n].label or n
-
-    # an event-day strategy (only_dates) is not part of a day it does not trade
-    enabled = {n: s for n, s in cfg.strategies.items()
-               if s.enabled and s.trades_on(now_et.date())}
     teams = getattr(engine, "groups", None) or {}
     for name, s in cfg.strategies.items():             # switched OFF on accounts: says it, so OFF is never a surprise
         if getattr(s, "kind", "straddle") == "lab" and not s.enabled and config_mod.assignments(cfg, name):
-            checks.append({"level": "info", "label": shown(name), "detail": "switched OFF: it will not trade"})
+            checks.append({"level": "info", "label": shown(name), "detail": "switched OFF: it will not trade",
+                           "strategy": name, "fix": "turn_on"})
     for name, s in enabled.items():
         booked = [a["account"] for a in config_mod.assignments(cfg, name)]
         if not booked:
             if getattr(s, "kind", "straddle") == "lab":      # a promoted Lab strategy: its resting state too
                 team = next((g for g in teams.values() if name in g.get("members", ()) and g.get("mode") == "split"), None)
                 checks.append({"level": "warn", "label": shown(name),
-                               "detail": f"in team {team['name']} with no account: it never trades"} if team else
+                               "detail": f"in team {team['name']} with no account: it never trades",
+                               "strategy": name, "fix": "team"} if team else
                               {"level": "info", "label": shown(name), "detail": "no account: runs in shadow"})
                 continue
         elif getattr(s, "kind", "straddle") == "lab":       # its accounts stopped for the day (day take / lock / loss)
@@ -127,13 +199,14 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
             if locked:
                 names = ", ".join((cfg.accounts[a].label or a) if a in cfg.accounts else a for a in locked)
                 checks.append({"level": "warn" if len(locked) == len(booked) else "info", "label": shown(name),
-                               "detail": f"account stopped for today: {names}"})
+                               "detail": f"account stopped for today: {names}", "strategy": name})
         if not booked:
             # a SHADOW strategy with no account is a normal resting state —
             # it must not hold the bulb amber forever
             checks.append({"level": "info" if getattr(s, "shadow", False) else "warn",
                            "label": shown(name),
                            "detail": "enabled but no accounts assigned"})
+    checks.extend(_lab_traps(cfg, engine, lab, enabled, shown, short))
     weekday = now_et.weekday() < 5
     if weekday:                          # a booked strategy that will not trade today says why (inactive.py)
         for name, s in cfg.strategies.items():
@@ -144,7 +217,7 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
             why.pop("not_scheduled_today", None)    # an event-day strategy off its day: expected, journaled only
             if why and s.enabled and config_mod.assignments(cfg, name):
                 checks.append({"level": "warn", "label": shown(name),
-                               "detail": "inactive today — " + "; ".join(why.values())})
+                               "detail": "inactive today — " + "; ".join(why.values()), "strategy": name})
     live_strats = [n for n, s in enabled.items()
                    if not getattr(s, "shadow", False)
                    and config_mod.assignments(cfg, n)]
@@ -226,7 +299,7 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
             if said and said.get("state") == "stopped":
                 why = said.get("why") or "no reason given"
                 checks.append({"level": "warn" if why in ("Stopped for today.", "Killed today.") else "bad",
-                               "label": shown(name), "detail": "stopped for the day — " + why})
+                               "label": shown(name), "detail": "stopped for the day — " + why, "strategy": name})
                 continue
             # booked after its session opened (2026-10-21: two accounts booked at 09:05 / 09:08 and nothing traded
             # all day while the desk said ready): the runner changes the day over as soon as the strategy has no open
@@ -234,7 +307,7 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
             if said and said.get("mode") == "shadow" and config_mod.assignments(cfg, name):
                 checks.append({"level": "warn", "label": shown(name),
                                "detail": "booked after today's session opened — starts sending orders as soon as "
-                                         "it has no open trade or order"})
+                                         "it has no open trade or order", "strategy": name})
                 continue
             if status != "idle":
                 checks.append({"level": "ok", "label": shown(name), "detail": status})

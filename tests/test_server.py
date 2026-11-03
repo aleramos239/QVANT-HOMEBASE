@@ -174,8 +174,8 @@ def test_book_endpoint_sets_assignments(client):
 def test_readiness_reflects_accounts_and_book(client):
     d = client.get("/api/status").json()
     r = d["readiness"]
-    by = {c["label"]: c for c in r["checks"]}
-    assert by["MAIN"]["level"] == "bad"          # FakeAdapter never "connects"
+    off = [c for c in r["checks"] if c.get("account") == "main"]
+    assert off and all(c["level"] == "bad" and c["fix"] == "reconnect" for c in off)   # FakeAdapter never "connects"
     assert r["ready"] is False
     # strategy enabled but unassigned -> warn
     client.post("/api/book", json={"strategy": "nq930", "assignments": []})
@@ -847,7 +847,8 @@ def test_a_missing_pin_shows_its_reason_on_the_account(client):
     st = client.get("/api/status").json()
     assert st["accounts"]["main"]["connected"] is False
     assert st["accounts"]["main"]["error"] == reason
-    assert {"level": "bad", "label": "MAIN", "detail": reason} in st["readiness"]["checks"]
+    assert {"level": "bad", "label": "nq930", "detail": "..main is offline: " + reason, "strategy": "nq930",
+            "account": "main", "fix": "reconnect"} in st["readiness"]["checks"]      # said under the strategy booked there
 
 
 def test_the_webhook_and_its_secret_are_gone(client, tmp_path, monkeypatch, caplog):

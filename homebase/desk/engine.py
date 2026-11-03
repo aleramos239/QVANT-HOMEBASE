@@ -113,6 +113,8 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
         self._inactive: dict[str, dict[str, str]] = {}   # strategy -> {code: why}, today (inactive.py)
         self._inactive_date: Optional[str] = None
         self._signalled: set = set()               # (date, strategy): a bar rule produced a signal
+        # (strategy, account) -> (desk day, why): a Lab entry the account's position refused (readiness reads today's)
+        self.position_blocks: dict[tuple[str, str], tuple[str, str]] = {}
         self.books: dict[str, DayBook] = {}        # account -> today's closed P&L / lock / eval standing
         self._take_seen: dict[str, float] = {}     # account -> when a day_take touch was first seen
         self._vest_takes_off: set[tuple[str, str]] = set()     # (account, day) a Vest account's take was journaled off

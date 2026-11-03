@@ -200,6 +200,9 @@ class LabDesk:
         self._said_busy = False          # lab_store_busy / lab_store_error are journaled once each
         self._said_err = False
         self._said_view: set = set()     # (strategy, error) of the lab_view_error lines
+        # desk id -> why it was taken off its accounts (readiness says it until it is booked or turned on again)
+        # shortcut: memory only, a Desk restart forgets it; persist it if the owner misses a line after a restart
+        self.unbooked: dict[str, str] = {}
         self._intake_init()              # the intake half (task B3, below): its own fields, nothing read or sent
 
     # ------------------------------------------------------------ one desk owns the store
@@ -295,6 +298,8 @@ class LabDesk:
         for event, fields in labcfg.take_notes(self.cfg):
             if event == "lab_unbooked" and not own:
                 continue
+            if event == "lab_unbooked" and fields.get("strategy"):
+                self.unbooked[fields["strategy"]] = str(fields.get("why") or "no reason given")
             if event == "lab_removed":
                 fields = {**fields, "sidecar_removed": dropped.pop(labcfg.store_name(fields.get("strategy")), False)}
                 if not own:
@@ -789,6 +794,8 @@ class LabDesk:
         others = [dict(r) for r in self.cfg.book.get(name) or [] if r.get("account") not in self.cfg.accounts]
         await self._commit(name, labcfg.limits_of(self.cfg, name),
                            [labcfg.book_row(r) for r in rows] + others)
+        if rows:
+            self.unbooked.pop(name, None)
 
     # ------------------------------------------------------------ the switch
     async def set_enabled(self, name: str, on: bool) -> bool:
@@ -809,7 +816,10 @@ class LabDesk:
                 return False
             labcfg.set_enabled(cfg, name, on)
             return True
-        return await self._write(name, lambda: store.set_enabled(sname, on, at, mark if on else None, wait_s=REQ_WAIT_S), keep)
+        ok = await self._write(name, lambda: store.set_enabled(sname, on, at, mark if on else None, wait_s=REQ_WAIT_S), keep)
+        if ok and on:
+            self.unbooked.pop(name, None)
+        return ok
 
     # ------------------------------------------------------------ remove
     async def _remove_unusable(self, name: str) -> dict:

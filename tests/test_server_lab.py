@@ -536,21 +536,28 @@ def test_remove_never_touches_a_strategy_that_is_not_from_the_lab(client):
 
 
 # ---------------------------------------------------------------- readiness
+def up(c) -> dict:                       # every account connected: an offline one is its own line (test_readiness_traps)
+    return {a: {"connected": True} for a in c.cfg.accounts}
+
+
 def lab_checks(c, now=WED_10):
-    r = compute_readiness(now, c.cfg, c.engine, {}, {"connected": False, "watching": {}}, {"strategies": {}}, None)
+    r = compute_readiness(now, c.cfg, c.engine, up(c), {"connected": False, "watching": {}}, {"strategies": {}}, None)
     return [x for x in r["checks"] if x["label"] == "PP ORB"]
 
 
 def test_readiness_an_enabled_lab_strategy_with_no_account_is_info_not_a_warning(client):
     assert lab_checks(client) == []                                              # off: not part of the day
     client.post("/api/strategy", json={"strategy": LAB, "enabled": True})
-    assert lab_checks(client) == [{"level": "info", "label": "PP ORB", "detail": "no account: runs in shadow"}]
+    assert lab_checks(client) == [{"level": "info", "label": "PP ORB", "detail": "no account: runs in shadow"},
+                                  {"level": "warn", "label": "PP ORB", "strategy": LAB, "fix": "limits",   # spec 4.8: red
+                                   "detail": "Limits needed first: it runs in shadow until they are set."}]
 
 
 def test_readiness_says_a_strategy_switched_off_on_accounts_a_locked_account_and_a_team_member_with_none(client):
     set_limits(client)
     book(client, [("eval1", 1)])
-    assert lab_checks(client) == [{"level": "info", "label": "PP ORB", "detail": "switched OFF: it will not trade"}]
+    assert lab_checks(client) == [{"level": "info", "label": "PP ORB", "detail": "switched OFF: it will not trade",
+                                   "strategy": LAB, "fix": "turn_on"}]
     client.post("/api/strategy", json={"strategy": LAB, "enabled": True})
     assert lab_checks(client) == []
     client.engine.book("eval1").locked = "day_lock"                              # its only account stopped for today
@@ -560,12 +567,12 @@ def test_readiness_says_a_strategy_switched_off_on_accounts_a_locked_account_and
     book(client, [])
     client.engine.groups["g9"] = {"name": "apex", "members": [LAB], "accounts": ["eval1"], "mode": "split", "assign": {}}
     assert lab_checks(client) == [{"level": "warn", "label": "PP ORB",
-                                   "detail": "in team apex with no account: it never trades"}]
+                                   "detail": "in team apex with no account: it never trades", "strategy": LAB, "fix": "team"}]
 
 
 def test_readiness_a_strategy_booked_after_its_session_opened_warns_it_runs_in_shadow_today(client):
     def checks():
-        r = compute_readiness(WED_10, client.cfg, client.engine, {}, {"connected": False, "watching": {}},
+        r = compute_readiness(WED_10, client.cfg, client.engine, up(client), {"connected": False, "watching": {}},
                               {"strategies": {}}, None, lab=client.labdesk)
         return [x for x in r["checks"] if x["label"] == "PP ORB"]
     client.post("/api/strategy", json={"strategy": LAB, "enabled": True})
@@ -574,7 +581,7 @@ def test_readiness_a_strategy_booked_after_its_session_opened_warns_it_runs_in_s
     client.labdesk.heartbeat({"pid": 7, "strategies": {LAB: {"state": "running", "why": None, "mode": "shadow"}}})
     assert checks() == [{"level": "warn", "label": "PP ORB",
                          "detail": "booked after today's session opened — starts sending orders as soon as "
-                                   "it has no open trade or order"}]
+                                   "it has no open trade or order", "strategy": LAB}]
     client.labdesk.heartbeat({"pid": 7, "strategies": {LAB: {"state": "running", "why": None, "mode": "desk"}}})
     assert checks() == []
 
@@ -1687,7 +1694,11 @@ def test_with_the_lab_side_off_the_desk_is_what_it_was_before_this_task(paths, d
     with TestClient(app, base_url="http://127.0.0.1:8850") as c:
         d = c.get("/api/status").json()
         assert set(d["strategies"]) == {"nq930"} and "lab" not in d["strategies"]["nq930"]
-        assert "lab" not in json.dumps(d).lower().replace("label", "")           # no Lab key or id anywhere in the status
+        switch = {"level": "bad", "label": "Lab strategies",                      # the one exception (makeover 4.8): a
+                  "detail": "The Lab switch file (lab_desk.on) is missing: no Lab strategy can trade."}  # booked store says the flag is gone
+        assert d["readiness"]["checks"].count(switch) == 1
+        d["readiness"]["checks"].remove(switch)
+        assert "lab" not in json.dumps(d).lower().replace("label", "")           # no Lab key or id anywhere else in the status
         assert d["book"] == {"nq930": [{"account": "main", "qty": 3}]}
         asyncio.run(app.state.labdesk.refresh())                                 # even asked to: nothing
         assert asyncio.run(asyncio.wait_for(app.state.labdesk.run(), 1)) is None  # its task ends at once
@@ -1702,8 +1713,9 @@ def test_with_the_lab_side_off_the_desk_is_what_it_was_before_this_task(paths, d
         assert r.json() == {"ok": True, "strategy": "nq930", "enabled": False}
         assert c.post("/api/strategy-flatten", json={"strategy": "nq930"}).json() == {"ok": True, "enabled": False, "results": {}}
         assert c.post("/api/accounts/remove", json={"account": "eval2"}).status_code == 200
-        assert not [x for x in c.get("/api/status").json()["readiness"]["checks"] if "Lab" in x["label"]]
-    assert touched == [] and tree(desklab_root) == before                        # the store was never read, never written
+        assert [x for x in c.get("/api/status").json()["readiness"]["checks"] if "Lab" in x["label"]] == [switch]
+    # the store was never written; the readiness only lists it and reads the sidecars (is a record booked?)
+    assert set(touched) <= {"names", "booked", "get_desk"} and tree(desklab_root) == before
     assert not (desklab_root / "desk.lock").exists() and labcfg.store_state(app.state.cfg) is None
     assert "_lab" not in vars(app.state.cfg) and set(app.state.cfg.strategies) == {"nq930"}
     assert "lab_" not in (paths / "config.json").read_text()
