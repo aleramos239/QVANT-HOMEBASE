@@ -4164,6 +4164,22 @@ def test_rcfg_is_the_strategy_cfg_unless_the_round_trades_another_contract(tmp_p
     assert cfg.symbol == "NQ"                                         # the strategy's cfg itself is untouched
 
 
+def test_lab_open_symbol_is_the_open_rounds_contract_not_an_archived_ones(tmp_path):
+    eng, _, _ = mk(tmp_path)
+    assert eng.lab_open_symbol(LAB, "a1") is None
+    key = f"{LAB}@a1"
+    first = eng._state(LAB, "a1")
+    first.status, first.symbol = "done", "NQ"
+    eng._lab_mem()[key] = {**eng._lab_blank(1), "clean": True}
+    eng._lab_archive(key, first)                                       # round 1 is over: archived, first in the day's states
+    assert eng.lab_open_symbol(LAB, "a1") is None
+    second = eng._state(LAB, "a1")
+    second.status, second.symbol = "live", "MNQ"
+    assert eng.lab_open_symbol(LAB, "a1") == "MNQ" and eng.lab_open_symbol(LAB, "a2") is None
+    second.symbol = None                                               # an old round: the strategy's own market
+    assert eng.lab_open_symbol(LAB, "a1") == "NQ"
+
+
 def test_a_round_keeps_its_contract_across_a_restart(tmp_path):
     eng, ads, _ = mk(tmp_path)
     out = run(eng.lab_enter(LAB, [leg()], {"a1": 1}, max_rounds=3, contracts={"a1": "MNQ"}))

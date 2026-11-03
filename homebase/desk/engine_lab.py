@@ -891,16 +891,26 @@ class LabMixin:
     def lab_open(self, name: str) -> list[str]:
         """Accounts with a round of this strategy that is placing, placed or live, or whose orders are not checked
         (a block carried from an earlier day is one)."""
+        return sorted({st.account for st in self._lab_open_states(name)})
+
+    def _lab_open_states(self, name: str) -> list[DayState]:
+        """The states lab_open counts (oldest first); an archived, clean round of the day is not one of them."""
         cfg = self.cfg.strategies.get(name)
         if cfg is None or cfg.kind != LAB:
             return []
         self._lab_roll()
-        return sorted({st.account for st in self.day_states(name)
-                       if st.status in ("placing", "placed", "live") or not self._lab_clean(st)})
+        return [st for st in self.day_states(name)
+                if st.status in ("placing", "placed", "live") or not self._lab_clean(st)]
 
     def lab_open_on(self, name: str, account: str) -> bool:
         """True while `account` has a round of `name` that is placing, placed, live or carried (see lab_open)."""
         return account in self.lab_open(name)
+
+    def lab_open_symbol(self, name: str, account: str) -> Optional[str]:
+        """The contract of the round lab_open_on counts on `account` (the newest, if several), else None. A round that
+        has none of its own trades the strategy's market."""
+        mine = [st for st in self._lab_open_states(name) if st.account == account]
+        return (mine[-1].symbol or self.cfg.strategies[name].symbol) if mine else None
 
     # --- lab_enter ------------------------------------------------------------------------------------
     @staticmethod

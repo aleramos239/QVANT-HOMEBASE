@@ -186,3 +186,20 @@ def test_a_save_that_changes_a_contract_with_a_trade_open_on_it_is_refused_whole
     assert r.status_code == 409 and "has an open trade on MNQ; change it once it is flat." in r.json()["detail"]
     del desk.d.eng.states[f"{LAB}@{A2}"]                                    # the trade is over
     assert solo(desk, turns=False, settings={A2: {"contract": "NQ"}}).status_code == 200   # flat: allowed
+
+
+def test_the_open_rounds_contract_is_read_when_an_earlier_round_of_the_day_is_archived(desk):
+    limits(desk)
+    assert solo(desk, turns=False).status_code == 200
+    eng, key = desk.d.eng, f"{LAB}@{A2}"
+    first = eng._state(LAB, A2)
+    first.status, first.symbol = "done", "NQ"                               # round 1: over, clean, in NQ
+    eng._lab_mem()[key] = {**eng._lab_blank(1), "clean": True}
+    eng._lab_archive(key, first)
+    second = eng._state(LAB, A2)                                            # round 2: live, in MNQ (inserted after the archive)
+    second.status, second.qty, second.symbol = "live", 1, "MNQ"
+    assert [s.symbol for s in eng.day_states(LAB) if s.account == A2][0] == "NQ" and eng.lab_open_symbol(LAB, A2) == "MNQ"
+    assert solo(desk, turns=False, settings={A2: {"contract": "MNQ", "qty": 2, "size": "contracts"}}).status_code == 200   # size only
+    r = solo(desk, turns=False, settings={A2: {"contract": "NQ"}})
+    assert r.status_code == 409 and "has an open trade on MNQ; change it once it is flat." in r.json()["detail"]
+    assert eng.lab_open_symbol(LAB, A1) is None

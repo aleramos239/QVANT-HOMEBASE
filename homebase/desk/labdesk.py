@@ -760,13 +760,11 @@ class LabDesk:
             if why is not None:
                 raise Refused(why)
             rec = labcfg.record_of(self.cfg, name) or {}
-            open_on = getattr(self.engine, "lab_open_on", lambda n, a: False)
+            open_symbol = getattr(self.engine, "lab_open_symbol", lambda n, a: None)
             for r in rows if rec else ():    # a round keeps its contract: a size change waits for the next round, a contract change for flat
-                if open_on(name, r["account"]):
-                    now = next((s.symbol for s in self.engine.day_states(name) if s.account == r["account"] and s.symbol),
-                               labcfg.exec_symbol(rec))
-                    if labcfg.row_symbol(rec, r) != now:
-                        raise Refused(f"{self._label(r['account'])} has an open trade on {now}; change it once it is flat.")
+                now = open_symbol(name, r["account"])
+                if now is not None and labcfg.row_symbol(rec, r) != now:
+                    raise Refused(f"{self._label(r['account'])} has an open trade on {now}; change it once it is flat.")
 
     def can_book(self, name: str, rows: list) -> None:
         """set_book's checks alone (Refused with the sentence): so a save of several books refuses as a whole."""
