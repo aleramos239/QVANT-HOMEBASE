@@ -1046,6 +1046,7 @@ class LabRig:
         from dataclasses import asdict as _asdict
         from homebase.desk import labdesk as labdesk_mod
         from homebase.desk.metrics import live_metrics
+        from homebase.routes import variants as variant_routes
         cfg, engine, labdesk = self.cfg, self.engine, self.labdesk
         accounts = {}
         for aid, a in cfg.accounts.items():
@@ -1080,6 +1081,7 @@ class LabRig:
             "notices": [],
             "book": labdesk.book_view(),
             "groups": engine.groups_view(),
+            "variants": variant_routes.status_view(cfg, engine),
             "strategies": {
                 name: {
                     "cfg": {"symbol": s.symbol, "qty": s.qty,
@@ -1362,6 +1364,8 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
 
     from homebase.routes import groups as group_routes
     group_routes.register(app, engine=engine)            # the server's own account cycle routes, not a copy
+    from homebase.routes import variants as variant_routes
+    variant_routes.register(app, cfg=cfg, engine=engine)
     from homebase.routes import setup as setup_routes
     setup_routes.register(app, cfg=cfg, engine=engine, labdesk=labdesk)      # the Set-up save and the follow, not a copy
 

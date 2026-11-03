@@ -198,6 +198,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                                   engine=engine, paper_http=paper_http)
     routes.strategies.register(app, cfg=cfg, engine=engine, labdesk=labdesk)
     routes.groups.register(app, engine=engine)
+    routes.variants.register(app, cfg=cfg, engine=engine)
     routes.setup.register(app, cfg=cfg, engine=engine, labdesk=labdesk)
     routes.lab.register(app, labdesk=labdesk)
     routes.records.register(app, STATIC=STATIC, _equity_path=_equity_path, adapters=adapters, cfg=cfg,

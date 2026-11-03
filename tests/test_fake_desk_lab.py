@@ -720,7 +720,7 @@ def test_the_pages_chart_reads_go_to_the_private_chart_service_and_nothing_else_
 def test_the_status_has_the_real_routes_keys_three_accounts_and_the_lab_block(desk):
     s = desk.get("/api/status").json()
     assert set(s) == {"armed", "machine", "chart_trading", "et_now", "readiness", "timer", "levels", "feed", "accounts", "notices",
-                      "book", "groups", "strategies", "journal"}
+                      "book", "groups", "variants", "strategies", "journal"}
     assert s["groups"] == {}                                          # account cycle groups: none until made
     assert {a: v["env"] for a, v in s["accounts"].items()} == {A1: "demo", A2: "demo", LIVE: "live"}
     assert all(v["connected"] is True and v["label"].startswith(("SIM", "FAKELIVE")) for v in s["accounts"].values())

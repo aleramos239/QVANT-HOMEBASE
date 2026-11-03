@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 from ..backtest.slots import backtests_off, status as backtest_slots
 from ..desk import dayopen, labdesk as labdesk_mod
 from ..desk.metrics import live_metrics
+from .variants import status_view as variants_status
 
 
 def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapters, cfg, compute_readiness, engine,
@@ -72,6 +73,7 @@ def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapter
             "accounts": accounts,
             "notices": notices[::-1],      # newest first, one line each, page wording
             "book": labdesk.book_view(),   # cfg.book; for a Lab strategy only the rows of this desk's accounts
+            "variants": variants_status(cfg, engine),   # variant sets {sets, suggest}; a member gone from the Desk shrinks its set
             "groups": engine.groups_view(),     # account cycle groups: {id: {name, members, accounts, risk_usd, max_minis, on, next}}
             "strategies": {
                 name: {

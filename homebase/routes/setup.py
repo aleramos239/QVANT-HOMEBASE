@@ -17,16 +17,11 @@ import contextlib
 
 from fastapi import HTTPException, Request
 
-from ..desk import labdesk as labdesk_mod
+from ..desk import labdesk as labdesk_mod, variants
 from ..desk.engine_groups import GroupError
 from .strategies import book_rows
 
 IN_TEAM = "It is in the team {}: set it up on the team's page."
-
-
-def set_of(name: str) -> str | None:
-    """The variant set `name` is in, else None. shortcut: no set store yet (Task 5 brings variants.set_of(root, name))."""
-    return None
 
 
 def _cur(cfg, name: str) -> list:
@@ -137,9 +132,9 @@ def register(app, *, cfg, engine, labdesk) -> None:
             if not isinstance(members, list):
                 raise HTTPException(400, "Members: a list of strategies, each once.")
             for m in members:
-                vs = set_of(m)
+                vs = variants.set_of(engine._root, m)
                 if vs:
-                    raise HTTPException(409, f"It is in the set {vs}.")
+                    raise HTTPException(409, f"It is in the set {vs['name']}.")
             saved, others = dict(engine.groups), []
             try:            # a member of another team leaves it in this same Save: checked with the movers out (memory only)
                 for oid, g in saved.items():

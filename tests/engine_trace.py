@@ -15,7 +15,7 @@ import pytest
 
 _cur = None
 OUT = os.environ.get("ENGINE_TRACE_DIR")
-FILES = ("day-", "labday-", "daybook-", "rotation.json", "groups.json")
+FILES = ("day-", "labday-", "daybook-", "rotation.json", "groups.json", "variants.json")
 
 
 def _j(v):

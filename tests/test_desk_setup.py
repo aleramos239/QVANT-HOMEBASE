@@ -242,3 +242,11 @@ def test_the_open_rounds_contract_is_read_when_an_earlier_round_of_the_day_is_ar
     r = solo(desk, turns=False, settings={A2: {"contract": "NQ"}})
     assert r.status_code == 409 and "has an open trade on MNQ; change it once it is flat." in r.json()["detail"]
     assert eng.lab_open_symbol(LAB, A1) is None
+
+
+def test_a_team_save_refuses_a_set_member(desk):
+    import json
+    (desk.d.root / "variants.json").write_text(json.dumps(
+        {"sets": [{"id": "v1", "name": "cb", "members": [LAB, "lab_zz"], "labels": {}}], "dismissed": [], "next": 2}))
+    r = team(desk)
+    assert r.status_code == 409 and "It is in the set cb." in r.json()["detail"]
