@@ -1915,3 +1915,30 @@ test('splitting a set confirms, then posts split; nothing else', async () => {
   assert.match(t.confirms[0].title, /Split nq_orb\?/);
   assert.deepEqual(t.posts, [{ url: '/api/variants/split', body: { id: 'v1' } }]);
 });
+
+/* Fix round 1: a set is ON or OFF as one unit; a Save that switches a member ON asks. */
+test('set switch: ON when any member is ON; pressing it posts on:false for the set, as booked', async () => {
+  const t = setT({ book: { lab_nq_orb2: [{ account: 'a2', qty: 1 }] }, strategies: { lab_nq_orb: deskStrat(GC, { enabled: false }), lab_nq_orb2: deskStrat({ ...GC, name: 'nq_orb2' }, { label: 'NQ ORB 2', enabled: true }) } });
+  const html = t.view('lab_nq_orb');
+  assert.match(html, /aria-checked="true"\s+title="[^"]*"\s*onclick="toggleSet\(&quot;v1&quot;, false\)"/);
+  await vm.runInContext('toggleSet("v1", false)', t.ctx);
+  assert.equal(t.confirms.length, 0);
+  assert.deepEqual(plain(t.posts[0].body), { set: 'v1', accounts: ['a2'], pick: { a2: 'lab_nq_orb2' }, settings: {}, turns: false, hold: false, on: false });
+});
+
+test('set switch ON asks once, naming the live account of the member it turns on', async () => {
+  const t = setT({ book: { lab_nq_orb2: [{ account: 'a2', qty: 1 }] }, strategies: { lab_nq_orb: deskStrat(GC, { enabled: false }), lab_nq_orb2: deskStrat({ ...GC, name: 'nq_orb2' }, { label: 'NQ ORB 2', enabled: false }) } });
+  await vm.runInContext('toggleSet("v1", true)', t.ctx);
+  assert.equal(t.confirms.length, 1);
+  assert.match(t.confirms[0].body, /2R: LIVE account APEX…048\./);
+  assert.equal(t.posts[0].body.on, true);
+});
+
+test('a mixed set Save names the member it turns on and asks for its live account', async () => {
+  const t = setT({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] }, strategies: { lab_nq_orb: deskStrat(GC, { enabled: true }), lab_nq_orb2: deskStrat({ ...GC, name: 'nq_orb2' }, { label: 'NQ ORB 2', enabled: false }) } });
+  soloRoot(t, { ticked: ['a1', 'a2'], hold: true });
+  vm.runInContext('soloPick("lab_nq_orb","a2","lab_nq_orb2")', t.ctx);
+  await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+  assert.match(t.confirms[0].body, /turns on 2R/);
+  assert.match(t.confirms[0].body, /2R turns on: LIVE account APEX…048\./);
+});

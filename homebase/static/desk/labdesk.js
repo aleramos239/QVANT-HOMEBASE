@@ -173,13 +173,15 @@ function aboutRows(name, s, row) {
     ["On the Desk since", since(mark[1])], ...changed];
 }
 function labDeskView(name, s) {
-  const c = s.cfg, lab = s.lab || {}, on = c.enabled === true, nm = stratLabel(name), busy = DESKLAB_BUSY === name;
-  const book = (ST.book && ST.book[name]) || [], row = labRowOf(s);
-  const ro = DeskLab.readOnly(s), lock = DeskLab.accountsLock(s), shadow = DeskLab.inShadow(s, book);
-  const sw = `<button class="switch" role="switch" aria-label="${esc(nm)} on or off" aria-checked="${on}"
-    title="${esc(DeskLab.deskSwitchTitle(s, book, ST.accounts, deskMachine()))}"
-    onclick="toggleStrat(${jsArg(name)}, ${!on})"></button>`;      // on the Desk: always the Desk's path, booked or not
+  const c = s.cfg, lab = s.lab || {}, nm = stratLabel(name), busy = DESKLAB_BUSY === name;
   const set = labSetOf(name), members = set ? set.members.filter(m => ST.strategies[m]) : [name], vs = soloVs(name);
+  const on = vs ? members.some(m => ST.strategies[m].cfg.enabled === true) : c.enabled === true;      // a set is ON or OFF as one unit
+  const book = (ST.book && ST.book[name]) || [], row = labRowOf(s);
+  const ro = vs ? members.some(m => DeskLab.readOnly(ST.strategies[m])) : DeskLab.readOnly(s);
+  const lock = vs ? members.map(m => DeskLab.accountsLock(ST.strategies[m])).find(l => l.locked) || DeskLab.accountsLock(s) : DeskLab.accountsLock(s), shadow = DeskLab.inShadow(s, book);
+  const sw = `<button class="switch" role="switch" aria-label="${esc(vs ? vs.name : nm)} on or off" aria-checked="${on}"
+    title="${esc(DeskLab.deskSwitchTitle(s, book, ST.accounts, deskMachine()))}"
+    onclick="${vs ? `toggleSet(${jsArg(vs.id)}, ${!on})` : `toggleStrat(${jsArg(name)}, ${!on})`}"></button>`;      // on the Desk: always the Desk's path, booked or not
   const pm = vs ? setPicked(vs) : name, ps = ST.strategies[pm], prow = vs ? labRowOf(ps) : row;      // the variant Results and "Matched" show
   const sub = (members.length > 1 ? plural(members.length, "variant", "variants") + " · " : "") + (row ? DeskLab.deskSpec({}, row) : "from the Lab");
   const stateNote = DeskLab.stateNote(s), winNote = DeskLab.windowNote(s);          // its window runs past the flat time: a note, never a refusal
@@ -573,6 +575,9 @@ function soloDiff(now, b) {
                  ...Object.entries(b.settings || {}).filter(([a]) => now.accounts.includes(a) && !moved(a)).map(([a, e]) => `${acctShort(a)} ${soloEntryWords(soloMem(b, a), e)}`)];
   if (b.turns !== now.turns) parts.push(b.turns ? "take turns" : "every account");
   if (b.hold !== now.hold) parts.push(b.hold ? "holds overnight" : "flat each night");
+  const vs = b.set && soloVs(b.strategy);      // a Save writes the set's state to every member: say which it switches
+  if (vs && parts.length && vs.members.some(m => ST.strategies[m].cfg.enabled === true))
+    parts.push(...vs.members.filter(m => ST.strategies[m].cfg.enabled !== true).map(m => "turns on " + soloVarLabel(m)));
   return parts;
 }
 const soloSaveHtml = (name, parts) => parts.length ? `<div class="sd-actions"><button class="btn btn-default btn-sm" onclick="FREEZE=false;saveSolo(${jsArg(name)})">Save: ${esc(parts.join(" · "))}</button></div>` : "";
@@ -658,6 +663,22 @@ function soloSetupHtml(name, s, ro, lock) {
   if (ro || lock.locked) return `<div class="sec"><h2>Set up</h2><div class="mcap">${esc(lock.caption || DeskLab.OTHER_DESK)}</div></div>`;
   return `<div class="sec"><h2>Set up</h2><div class="solo-card">${soloCardHtml(name, s, now)}</div></div>`;
 }
+/* A set's switch: the whole set, one call (/api/setup with the accounts and picks as booked; OFF stops and disables every member).
+   ON asks once, over every member it turns on and the non-paper accounts they run. */
+async function toggleSet(id, on) {
+  const vs = ((ST.variants && ST.variants.sets) || []).find(x => x.id === id), first = vs && soloVs(vs.members[0]);
+  if (!first || switchBounced("set:" + id)) return;
+  const now = soloNow(first.members[0]), N = first.name;
+  const turning = first.members.filter(m => ST.strategies[m].cfg.enabled !== true);
+  const real = turning.map(m => [m, now.accounts.filter(a => now.pick[a] === m && isRealAcct(a))]).filter(([, a]) => a.length);
+  if (on && real.length && !await confirmDlg(`Turn ON ${N}?`, real.map(([m, a]) => `${soloVarLabel(m)}: ${riskWord(a)} account${a.length === 1 ? "" : "s"} ${a.map(acctShort).join(", ")}.`).join(" ") +
+      " It will run and execute on its assigned accounts from the next signal.", "Turn on", false)) { refresh(); return; }
+  let r, err = null;
+  try { r = await post("/api/setup", {set: id, accounts: now.accounts, pick: now.pick, settings: {}, turns: now.turns, hold: now.hold, on}); } catch (e) { err = e || new Error("no answer"); }
+  const w = answerWhy(r, err);
+  refresh();
+  toast(w ? `${N} NOT switched ${on ? "on" : "off"} — ${w}.` : `${N} is ${on ? "ON." : "OFF."}`, w ? 8000 : 4200);
+}
 /* Asks first when (ON, on any account that is not paper -- LIVE or DEMO, as its tag says): one is ticked in; a row's gear can
    send more (AcctSet.needsAsk: NQ instead of MNQ, bigger size, Most up); it stops taking turns; or it loses its last account
    while ON (today is over for it; it trades again tomorrow). */
@@ -678,6 +699,10 @@ async function saveSolo(name) {
   }
   for (const a of b.accounts) if (on && moved(a) && isRealAcct(a) && !(b.settings[a])) why.push(`${acctShort(a)} moves to ${soloVarLabel(b.pick[a])}.`);
   if (on && !b.turns && now.turns && live.length && b.accounts.length > 1) why.push(`Each trade then goes to all ${b.accounts.length} accounts, ${riskWord(live)} ones included.`);
+  if (vs && on) for (const m of vs.members.filter(m => ST.strategies[m].cfg.enabled !== true)) {      // switched ON by this Save
+    const a = b.accounts.filter(x => b.pick[x] === m && isRealAcct(x));
+    if (a.length) why.push(`${soloVarLabel(m)} turns on: ${riskWord(a)} account${a.length === 1 ? "" : "s"} ${a.map(acctShort).join(", ")}.`);
+  }
   if (on && now.accounts.length && !b.accounts.length) why.push("It loses its last account: today is over for it; it trades again tomorrow.");
   if (why.length && !await confirmDlg(`Change ${N}?`, `${parts.join(" · ")}. ${why.join(" ")}${machineWords() ? " It runs " + machineWords() + "." : ""}`, "Save", false)) { refresh(); return; }
   let r, err = null;
