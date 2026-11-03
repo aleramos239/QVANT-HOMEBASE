@@ -500,7 +500,7 @@ test('with accounts: the other note and the Set-up card -- every account a tick,
   assert.match(html, /aria-label="Settings for Lucid Eval #1"/, 'a gear on a ticked row only');
   assert.doesNotMatch(html, /solo-qty|class="solo-turns"/, 'one account ticked: no Take turns');
   assert.match(html, /class="solo-hold"/);
-  assert.match(html, /<div class="mcap pos">Ready: trades on Lucid Eval #1, 1 contract\.<\/div>/);
+  assert.doesNotMatch(html.slice(html.indexOf('<h2>Set up</h2>'), html.indexOf('<h2>Today')), /Ready|Not trading/, 'the card gives no verdict: the status line does');
   assert.doesNotMatch(html, /toggleAsgMenu|pickAsg|amenu|editQty|removeAsg|openAcctSet/, 'one place to set it up, nothing else');
   assert.doesNotMatch(html, /Set the limits first/);
 });
@@ -1261,16 +1261,26 @@ test('solo Save: a refusal is said in words and the draft stays', async () => {
   assert.equal(vm.runInContext('!!SOLO_DRAFT.lab_nq_orb', t.ctx), true);
 });
 
-test('solo status: red with every reason, the Desk OFF and an offline account named', () => {
+test('one status line: a red status line never has "Ready" in the Set up card; the reasons and their fix are on the line', () => {
   const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] } });
-  t.ctx.ST.armed = false;
-  t.ctx.ST.accounts.a2.connected = false;
-  assert.match(t.view(), /<div class="mcap warn">Not trading: the Desk is OFF · account APEX…048 is offline\.<\/div>/);
+  t.ctx.ST.readiness = { checks: [{ label: 'pp', detail: 'APEX…048 is offline.', level: 'bad', strategy: 'lab_nq_orb', account: 'a2', fix: 'reconnect' },
+    { label: 'Desk', detail: 'gone.', level: 'bad', fix: 'reconnect' }] };      // a reconnect with no account: no button
+  const html = t.view();
+  assert.match(html, /<div class="sd-state" data-level="bad"><b>Not ready · trades on 2 accounts<\/b>/);
+  const card = html.slice(html.indexOf('<h2>Set up</h2>'), html.indexOf('<h2>Today'));
+  assert.ok(card.length > 20, 'the card is there');
+  assert.doesNotMatch(card, /Ready|Not trading/);
+  assert.match(html, /<span class="h warn">pp: APEX…048 is offline\.<\/span><span class="t"><button[^>]*lookFix\(&quot;reconnect&quot;,&quot;lab_nq_orb&quot;,&quot;a2&quot;\)">Reconnect<\/button>/);
+  assert.match(html, /<span class="h warn">Desk: gone\.<\/span><span class="t"><\/span>/, 'no account to reconnect: no button');
   const none = load();
-  assert.match(none.view(), /<div class="mcap pos">No account ticked: it runs in shadow\.<\/div>/);
-  const dead = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
-  dead.ctx.ST.strategies.lab_nq_orb.lab.state = 'runner_down';
-  assert.match(dead.view(), /Not trading: its runner is not running/);
+  assert.match(none.view(), /<div class="mcap">No account ticked: it runs in shadow\.<\/div>/);
+});
+
+test('a locked or read-only Set up card says only why it cannot be edited', () => {
+  const t = load({ strategies: { lab_nq_orb: deskStrat({ read_only: true }) }, book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] } });
+  const html = t.view(), card = html.slice(html.indexOf('<h2>Set up</h2>'), html.indexOf('<h2>Today'));
+  assert.match(card, /Another copy of the Desk/);
+  assert.doesNotMatch(card, /Ready|Not trading/);
 });
 
 test('a strategy in a team has no ticks of its own: its page says so and opens the team', () => {

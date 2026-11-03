@@ -280,6 +280,23 @@
     }
     /* ---- end toolbar words ---- */
 
+    /* ---- research: the page's .labres blocks (the unseen days; a group's prop sim) into the inspector ---- */
+    function takeResearch(res, name, grp, dl) {
+      if (res) {
+        const u = $('.labres-unseen', res), p = $('.labres-prop', res);
+        if (!u) unseenBox.replaceChildren();      // a group's one Full sample block has none: nothing stale from the last page
+        if (u) { unseenH.textContent = u.classList.contains('full') ? u.dataset.h : researchWord(recordOf(grp, dl, name), !!$('.fh', u)); unseenBox.replaceChildren(u); }
+        propH.textContent = p ? p.dataset.h || '' : '';
+        propBox.replaceChildren(...(p ? [p] : []));      // a page with no prop sim keeps none from the page before
+        unseenSec.dataset.for = res.dataset.for || '';
+        res.remove();
+      }
+      unseenSec.hidden = propSec.hidden = !name || unseenSec.dataset.for !== name;
+      if (!unseenBox.childElementCount) unseenSec.hidden = true;      // never one strategy's research under another
+      if (!propBox.childElementCount) propSec.hidden = true;
+    }
+    /* ---- end research ---- */
+
     let syncing = false;
     function sync() {
       if (syncing) return;
@@ -309,17 +326,7 @@
           }
           const t = $('.sd-title', vStrat), sd = $('.sd-state b', vStrat);
           const grp = groupped();
-          const res = $(':scope > .labres', vStrat);
-          if (res) {
-            const u = $('.labres-unseen', res), p = $('.labres-prop', res);
-            if (!u) unseenBox.replaceChildren();      // a group's one Full sample block has none: nothing stale from the last page
-            if (u) { unseenH.textContent = u.classList.contains('full') ? u.dataset.h : researchWord(recordOf(grp, dl, name), !!$('.fh', u)); unseenBox.replaceChildren(u); }
-            if (p) { propH.textContent = p.dataset.h || ''; propBox.replaceChildren(p); }
-            unseenSec.dataset.for = res.dataset.for || '';
-            res.remove();
-          }
-          unseenSec.hidden = propSec.hidden = !name || unseenSec.dataset.for !== name;
-          if (!unseenBox.childElementCount) unseenSec.hidden = true;      // never one strategy's research under another
+          takeResearch($(':scope > .labres', vStrat), name, grp, dl);
           figsH.textContent = grp ? (figsBox.querySelector('[data-h="Full sample"]') ? 'Full sample' : 'Combined') : l || dl ? 'Backtest' : 'Desk results';
           setupH.textContent = dl && !grp ? 'About' : 'Setup';
           if (grp) setupGroup(grp); else if (l) setupLab(l); else if (dl) takeSec($(':scope > .sd-about', vStrat), setupBox); else setup(name);

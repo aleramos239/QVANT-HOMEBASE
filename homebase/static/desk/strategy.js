@@ -31,7 +31,7 @@ function statusLine(id, checks, st, stale) {
 function statusLineHtml(id) {
   const r = ST && readinessShown(ST.readiness, ST), L = statusLine(id, r ? r.checks : [], ST, DESK_STALE === true);
   const red = L.level === "bad" || L.level === "warn" || L.level === "stale";
-  const row = (x) => `<div class="feed-row"><span class="h${red ? " warn" : ""}">${esc(x.text)}</span><span class="t">${LOOK_FIX[x.fix]
+  const row = (x) => `<div class="feed-row"><span class="h${red ? " warn" : ""}">${esc(x.text)}</span><span class="t">${LOOK_FIX[x.fix] && (x.fix !== "reconnect" || x.account)      // a reconnect with no account has nothing to reconnect
     ? `<button class="btn btn-outline btn-sm" onclick="lookFix(${jsArg(x.fix)},${jsArg(id)},${jsArg(x.account)})">${LOOK_FIX[x.fix]}</button>` : ""}</span></div>`;
   return `<div class="sd-state" data-level="${L.level}"><b>${esc(L.text)}</b></div>${L.reasons.length ? `<div class="agroup feed static">${L.reasons.map(row).join("")}</div>` : ""}`;
 }

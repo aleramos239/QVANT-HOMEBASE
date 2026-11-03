@@ -443,3 +443,20 @@ test('desk skin: the sidebar hides its rows\' second lines but the Activity row\
   assert.match(css, /html\.hb-apple \.hb-side \.item\[onclick\^="setView\('activity'\)"\] \.it small \{ display: block;/, 'the Activity row shows it');
   assert.match(HTML, /onclick="setView\('activity'\)"[^`]*<small>\$\{issues \? plural\(issues, "thing needs", "things need"\) \+ " a look"/, 'the page still writes it there');
 });
+
+test('desk skin: a group\'s prop sim never stays under the next page (a twin or a Lab strategy has none)', () => {
+  const i = DESK_SKIN.indexOf('/* ---- research:'), j = DESK_SKIN.indexOf('/* ---- end research ---- */');
+  assert.ok(i >= 0 && j > i, 'the research block');
+  const box = () => ({ kids: [], get childElementCount() { return this.kids.length; }, replaceChildren(...k) { this.kids = k; } });
+  const node = (cls, h) => ({ cls, dataset: { h }, classList: { contains: (c) => c === 'full' && cls.includes('full') } });
+  const page = (forName, unseen, prop) => ({ dataset: { for: forName }, kids: { '.labres-unseen': unseen, '.labres-prop': prop }, remove() {} });
+  const c = vm.createContext({ unseenBox: box(), propBox: box(), unseenH: {}, propH: {}, unseenSec: { dataset: {} }, propSec: { dataset: {} },
+    $: (sel, r) => (r && r.kids ? r.kids[sel] : null) || null, researchWord: () => 'Results', recordOf: () => null });
+  vm.runInContext(DESK_SKIN.slice(i, j) + '\nglobalThis.take = takeResearch;', c);
+  c.take(page('g5', node('figs labres-unseen full', 'Full sample'), node('figs labres-prop', 'Prop sim · Apex')), 'g5', { id: 'g5' }, null);
+  assert.equal(c.propSec.hidden, false, 'the group shows its prop sim');
+  c.take(page('nq930', node('figs labres-unseen', ''), null), 'nq930', null, null);
+  assert.equal(c.propSec.hidden, true, 'the twin has none: hidden');
+  assert.equal(c.propBox.childElementCount, 0, 'and emptied');
+  assert.equal(c.unseenSec.hidden, false);
+});

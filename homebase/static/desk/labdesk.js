@@ -572,20 +572,6 @@ function soloSet(name, a, k, v, typing) {
   soloEdit(name);
   if (!typing) soloPaint(name);
 }
-function soloStatus(name, s, now) {
-  const bad = [], accts = ST.accounts || {};
-  if (!ST.armed) bad.push("the Desk is OFF");
-  if (s.cfg.enabled !== true) bad.push("it is OFF");
-  if ((s.lab || {}).state === "stopped") bad.push("it is stopped for today");
-  if ((s.lab || {}).state === "runner_down") bad.push("its runner is not running");
-  for (const a of now.accounts) {
-    if (!(accts[a] || {}).connected) bad.push(`account ${acctShort(a)} is offline`);
-    else if ((accts[a].day || {}).locked) bad.push(`account ${acctShort(a)} is stopped for today`);
-  }
-  if (bad.length) return {ok: false, text: "Not trading: " + bad.join(" · ")};
-  if (!now.accounts.length) return {ok: true, text: "No account ticked: it runs in shadow"};
-  return {ok: true, text: `Ready: trades on ${now.accounts.map(acctShort).join(" and ")}${now.accounts.length > 1 ? (now.turns ? ", take turns" : ", every account") : ""}, ${plural(now.qty, "contract", "contracts")}`};
-}
 const soloSeg = (label, opts, cur, fn) => `<div class="seg" role="group" aria-label="${esc(label)}">${opts.map(([v, t]) =>
   `<button type="button" class="${v === cur ? "sel" : ""}" aria-pressed="${v === cur}" onclick="${fn(v)}">${esc(t)}</button>`).join("")}</div>`;
 function soloSheet(name, a) {      // the gear's sheet under the row (Variant for sets: Task 16)
@@ -615,19 +601,18 @@ function soloCardHtml(name, s, now) {
       ${(p => p == null ? "" : `<span class="mono ${p > 0 ? "pos" : p < 0 ? "neg" : ""}" style="margin-left:auto" title="Today, 18:00 to 16:00 ET">${DAY_PNL_WORDS(p)}</span>`)(accts[a].day_pnl)}
       ${chosen.has(a) ? `<button type="button" class="btn btn-outline btn-sm" aria-label="Settings for ${esc(acctShort(a))}" aria-expanded="${!!gear[a]}" onclick="soloGear(${jsArg(name)},${jsArg(a)})">⚙</button>` : ""}</div>
       ${chosen.has(a) && gear[a] ? soloSheet(name, a) : ""}</div>`).join("");
-  const st = chosen.size ? soloStatus(name, s, now) : {ok: true, text: "No account ticked: it runs in shadow"};
   return `<div class="agroup feed static">${rows}
     ${chosen.size > 1 ? `<label class="feed-row" style="cursor:pointer" title="Each trade goes to ONE account, the next free one"><span class="h"><input type="checkbox" class="solo-turns" ${b.turns ? "checked" : ""}${off}> Take turns: one account a trade</span></label>` : ""}
     <label class="feed-row" style="cursor:pointer" title="Keeps a filled trade open past the day's flat time"><span class="h"><input type="checkbox" class="solo-hold" ${b.hold ? "checked" : ""}${off}> Hold overnight</span></label></div>
-    <div class="solo-save">${dr ? soloSaveHtml(name, soloDiff(now, b)) : ""}</div><div class="mcap ${st.ok ? "pos" : "warn"}">${esc(st.text)}.</div>`;
+    <div class="solo-save">${dr ? soloSaveHtml(name, soloDiff(now, b)) : ""}</div>${chosen.size ? "" : `<div class="mcap">No account ticked: it runs in shadow.</div>`}`;
 }
 function soloSetupHtml(name, s, ro, lock) {
   const team = soloTeam(name);
   if (team) return `<div class="sec"><h2>Set up</h2><div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="setView('group',${jsArg(team.id)})">In team ${esc(team.name)} → open</button></div></div>`;
-  const accts = ST.accounts || {}, now = soloNow(name), st = soloStatus(name, s, now);
-  const status = `<div class="mcap ${st.ok ? "pos" : "warn"}">${esc(st.text)}.</div>`;
-  if (!Object.keys(accts).length) return `<div class="sec"><h2>Set up</h2><div class="mcap">Add an account to run this strategy.</div>${status}</div>`;
-  if (ro || lock.locked) return `<div class="sec"><h2>Set up</h2>${lock.locked ? `<div class="mcap">${esc(lock.caption)}</div>` : ""}${status}</div>`;
+  // no verdict here: the page's one status line (statusLine) says whether it trades; the card only says why it cannot be edited
+  const accts = ST.accounts || {}, now = soloNow(name);
+  if (!Object.keys(accts).length) return `<div class="sec"><h2>Set up</h2><div class="mcap">Add an account to run this strategy.</div></div>`;
+  if (ro || lock.locked) return `<div class="sec"><h2>Set up</h2><div class="mcap">${esc(lock.caption || DeskLab.OTHER_DESK)}</div></div>`;
   return `<div class="sec"><h2>Set up</h2><div class="solo-card">${soloCardHtml(name, s, now)}</div></div>`;
 }
 /* Asks first when (ON, on any account that is not paper -- LIVE or DEMO, as its tag says): one is ticked in; a row's gear can
