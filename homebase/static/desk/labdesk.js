@@ -503,14 +503,14 @@ const soloForm = (name, a) => (SOLO_FORMS[name] || {})[a] || soloForm0(name, a);
 const soloKey = (f) => JSON.stringify([f.contract, f.size, f.size === "contracts" ? String(f.qty) : "", f.size === "risk" ? String(f.risk_usd) : "", f.size === "own" ? "" : String(f.most)]);
 /* what /api/setup gets for a row the owner changed in the gear ("own" clears the size) */
 function soloEntry(f) {
-  const n = (v) => Math.round(cycNum(v)), e = {contract: f.contract};
+  const n = (v) => { const x = Math.round(cycNum(v)); return Number.isFinite(x) && String(v).trim() !== "" ? x : null; }, e = {contract: f.contract};
   if (f.size === "own") return {...e, size: null, most: null, risk_usd: null};
   return {...e, size: f.size, ...(f.size === "risk" ? {risk_usd: n(f.risk_usd)} : {qty: n(f.qty)}), most: n(f.most)};
 }
 function soloMake(name, accounts, turns, hold) {      // settings[account] only for ticked rows the owner changed in the gear
   const settings = {};
   for (const a of accounts) { const f = (SOLO_FORMS[name] || {})[a]; if (f && soloKey(f) !== soloKey(soloForm0(name, a))) settings[a] = soloEntry(f); }
-  return {strategy: name, accounts, qty: soloNow(name).qty, turns, hold, settings};
+  return {strategy: name, accounts, turns, hold, settings};      // no qty: a booked row keeps its own, a new one is 1
 }
 function soloBody(name) {
   const root = document.querySelector("#viewStrat"), q = (sel) => root && root.querySelector(sel), now = soloNow(name);
@@ -540,7 +540,11 @@ function soloPaint(name) {      // the card again from the draft (ticks, gear): 
   const card = document.querySelector("#viewStrat") && document.querySelector("#viewStrat").querySelector(".solo-card");
   if (card) card.innerHTML = soloCardHtml(name, ST.strategies[name], soloNow(name));
 }
-function soloTick(name) { soloEdit(name); soloPaint(name); }
+function soloTick(name) {
+  const root = document.querySelector("#viewStrat"), f = SOLO_FORMS[name];
+  if (root && f) for (const b of root.querySelectorAll(".solo-acct")) if (!b.checked) delete f[b.dataset.acct];      // unticked: its gear form goes
+  soloEdit(name); soloPaint(name);
+}
 function soloGear(name, a) {
   const g = SOLO_GEAR[name] = SOLO_GEAR[name] || {};
   if (g[a]) delete g[a]; else g[a] = true;

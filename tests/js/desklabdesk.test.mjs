@@ -1284,7 +1284,7 @@ test('solo Save: one /api/setup call with the ticks, contracts, Take turns, Hold
   soloRoot(t, { ticked: ['a1'], qty: '1', turns: false, hold: true });
   await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
   assert.equal(t.confirms.length, 0, 'nothing sized up, nothing ticked in: no question');
-  assert.deepEqual(t.posts, [{ url: '/api/setup', body: { strategy: 'lab_nq_orb', accounts: ['a1'], qty: 1, turns: false, hold: true, settings: {}, on: true } }]);
+  assert.deepEqual(t.posts, [{ url: '/api/setup', body: { strategy: 'lab_nq_orb', accounts: ['a1'], turns: false, hold: true, settings: {}, on: true } }]);
   assert.deepEqual(t.toasts, ['NQ ORB saved.']);
 });
 
@@ -1851,5 +1851,40 @@ test('gear: MNQ to NQ asks on a DEMO and a LIVE account, not on paper', async ()
     assert.equal(t.confirms.length, asks, env);
     assert.equal(t.posts.length, 1);
     assert.equal(t.posts[0].body.settings.a1.contract, 'NQ');
+  }
+});
+
+test('gear: the body carries no qty that could override a booked row; a cleared Most posts null, not 0', () => {
+  const t = gearT(GC, { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 3 }] });
+  soloRoot(t, { ticked: ['a1', 'a2'] });
+  const run = (s) => vm.runInContext(s, t.ctx);
+  assert.equal('qty' in run('soloBody("lab_nq_orb")'), false);
+  run('soloSet("lab_nq_orb","a1","size","contracts")'); run('soloSet("lab_nq_orb","a1","most","",true)'); run('soloSet("lab_nq_orb","a1","qty","2",true)');
+  assert.deepEqual(plain(run('soloBody("lab_nq_orb")').settings.a1), { contract: 'MNQ', size: 'contracts', qty: 2, most: null });
+});
+
+test('gear: unticking an account drops its gear form, so a re-tick is not sent as changed', () => {
+  const t = gearT();
+  soloRoot(t, { ticked: ['a1'] });
+  vm.runInContext('soloSet("lab_nq_orb","a1","contract","NQ")', t.ctx);
+  soloRoot(t, { ticked: [] }); vm.runInContext('soloTick("lab_nq_orb")', t.ctx);
+  soloRoot(t, { ticked: ['a1'] });
+  assert.deepEqual(plain(vm.runInContext('soloBody("lab_nq_orb")', t.ctx).settings), {});
+});
+
+test('gear: a bigger Contracts number, a bigger $ risk and Most up ask on LIVE, not on paper', async () => {
+  const cases = [
+    ['contracts up', { size: 'contracts', most: 20 }, ['qty', '3']],
+    ['risk up', { size: 'risk', risk_usd: 500, most: 20 }, ['risk_usd', '800']],
+    ['most up', { size: 'contracts', most: 20 }, ['most', '30']]];
+  for (const [env, asks] of [['live', 1], ['demo', 1], ['paper', 0]]) {
+    for (const [what, row, [k, v]] of cases) {
+      const t = gearT(GC, { lab_nq_orb: [{ account: 'a1', qty: 2, contract: 'MNQ', ...row }] }, { a1: { label: 'X', env, connected: true } });
+      soloRoot(t, { ticked: ['a1'] });
+      vm.runInContext(`soloSet("lab_nq_orb","a1","${k}","${v}",true)`, t.ctx);
+      await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+      assert.equal(t.confirms.length, asks, `${env} ${what}`);
+      assert.equal(t.posts.length, 1);
+    }
   }
 });

@@ -221,7 +221,7 @@ def test_a_save_that_changes_a_contract_with_a_trade_open_on_it_is_refused_whole
     assert solo(desk, turns=False, settings={A2: {"contract": "NQ"}}).status_code == 200   # the contract it already trades in
     assert solo(desk, turns=False, settings={A2: {"qty": 2, "size": "contracts"}}).status_code == 200   # size only: next round
     st_.symbol = "MNQ"                                                      # a round in MNQ now: NQ is the change
-    r = solo(desk, turns=False, settings={A2: {"contract": "NQ"}})
+    r = solo(desk, turns=False, settings={A2: {"contract": "NQ", "qty": 3}})     # a real change (the row is written)
     assert r.status_code == 409 and "has an open trade on MNQ; change it once it is flat." in r.json()["detail"]
     del desk.d.eng.states[f"{LAB}@{A2}"]                                    # the trade is over
     assert solo(desk, turns=False, settings={A2: {"contract": "NQ"}}).status_code == 200   # flat: allowed
@@ -239,7 +239,7 @@ def test_the_open_rounds_contract_is_read_when_an_earlier_round_of_the_day_is_ar
     second.status, second.qty, second.symbol = "live", 1, "MNQ"
     assert [s.symbol for s in eng.day_states(LAB) if s.account == A2][0] == "NQ" and eng.lab_open_symbol(LAB, A2) == "MNQ"
     assert solo(desk, turns=False, settings={A2: {"contract": "MNQ", "qty": 2, "size": "contracts"}}).status_code == 200   # size only
-    r = solo(desk, turns=False, settings={A2: {"contract": "NQ"}})
+    r = solo(desk, turns=False, settings={A2: {"contract": "NQ", "qty": 3}})     # a real change (the row is written)
     assert r.status_code == 409 and "has an open trade on MNQ; change it once it is flat." in r.json()["detail"]
     assert eng.lab_open_symbol(LAB, A1) is None
 
@@ -351,3 +351,12 @@ def test_set_save_refuses_a_member_that_is_gone(desk):
     r = vset(desk, {A1: LAB, A2: "lab_gone"})
     assert r.status_code == 409 and r.json()["detail"] == "lab_gone is no longer on the Desk; open the set again."
     assert not st(desk)["book"].get(LAB)
+
+
+def test_a_solo_save_never_resizes_a_booked_row():
+    from homebase.routes.setup import _rows
+    cur = [{"account": "a1", "qty": 1}, {"account": "a2", "qty": 3}]
+    assert _rows(cur, ["a1", "a2", "a3"], None, None, {}) == [{"account": "a1", "qty": 1}, {"account": "a2", "qty": 3}, {"account": "a3", "qty": 1}]
+    assert _rows(cur[::-1], ["a2", "a1"], True, 2, {}) == [{"account": "a2", "qty": 3, "hold": True}, {"account": "a1", "qty": 1, "hold": True}]
+    assert _rows(cur, ["a1", "a3"], None, 2, {})[1] == {"account": "a3", "qty": 2}       # a new row takes the sent qty
+    assert _rows(cur, ["a2"], None, 1, {"a2": {"qty": 5}}) == [{"account": "a2", "qty": 5}]      # the gear wins

@@ -33,7 +33,7 @@ KEPT = ("size", "risk_usd", "most", "contract", "stop_after")
 
 
 def _rows(cur: list, accounts: list, hold, qty=None, settings=None) -> list:
-    """Rows on `accounts`: a booked account keeps its size (unless `qty`), a new one is 1; Hold overnight as `hold` (None: as
+    """Rows on `accounts`: a booked account keeps its own qty (unless the gear's `settings` change it), a new one gets `qty` or 1; Hold overnight as `hold` (None: as
     the strategy holds now). A solo save (`settings` a dict, maybe empty) also keeps each row's size / risk / most / contract
     and lets `settings[account]` change them (and qty); a team (None) keeps only the contract, its own size rules win."""
     by = {r["account"]: r for r in cur}
@@ -41,7 +41,7 @@ def _rows(cur: list, accounts: list, hold, qty=None, settings=None) -> list:
     out = []
     for a in accounts:
         old, new = by.get(a) or {}, (settings or {}).get(a) or {}
-        row = {"account": a, "qty": int(new.get("qty") or qty or old.get("qty") or 1)}
+        row = {"account": a, "qty": int(new.get("qty") or old.get("qty") or qty or 1)}
         for k in KEPT if settings is not None else ("contract",):
             v = new.get(k, old.get(k))
             if v is not None:
@@ -209,8 +209,8 @@ def register(app, *, cfg, engine, labdesk) -> None:
         team = next((g for g in engine.groups.values() if name in g["members"]), None)
         if team is not None:
             raise HTTPException(409, IN_TEAM.format(team["name"]))
-        qty, turns, hold = body.get("qty", 1), body.get("turns", False), body.get("hold")
-        if isinstance(qty, bool) or not isinstance(qty, int) or qty < 1:
+        qty, turns, hold = body.get("qty"), body.get("turns", False), body.get("hold")
+        if qty is not None and (isinstance(qty, bool) or not isinstance(qty, int) or qty < 1):
             raise HTTPException(400, "Contracts: a whole number above 0.")
         if not isinstance(turns, bool) or not (hold is None or isinstance(hold, bool)):
             raise HTTPException(400, "turns and hold must be true or false")
