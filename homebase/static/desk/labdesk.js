@@ -571,16 +571,19 @@ function soloBody(name) {
   const accounts = [...(root ? root.querySelectorAll(".solo-acct") : [])].filter(b => b.checked).map(b => b.dataset.acct);
   return soloMake(name, accounts, q(".solo-turns") ? q(".solo-turns").checked : now.turns, q(".solo-hold") ? q(".solo-hold").checked : now.hold);
 }
-const soloEntryWords = (m, e) => soloWords(m, e.size == null ? soloOwnWords(m) : AcctSet.words({...e, qty: e.qty || 1}, undefined, true));
+const soloSizeWords = (m, e) => e.size == null ? soloOwnWords(m) : AcctSet.words({...e, qty: e.qty || 1}, undefined, true);
+const soloEntryWords = (m, e) => soloWords(m, soloSizeWords(m, e));
 function soloDiff(now, b) {
-  const added = (a) => {      // a ticked-in account with the size it will be saved with
-    const m = soloMem(b, a), e = (b.settings || {})[a], lab = soloLab(m), c = soloContracts(m)[0];
-    return `+${acctShort(a)} (${e ? soloEntryWords(m, e) : soloWords(m, lab.own_size === true ? soloOwnWords(m) : AcctSet.words({qty: 1, contract: c}))})`;
+  const size = (a) => {      // the size an account will be saved with: its gear change, its row on that variant, else that variant's default
+    const m = soloMem(b, a), e = (b.settings || {})[a], row = bookRowOf(m, a), lab = soloLab(m), c = soloContracts(m)[0];
+    return e ? soloSizeWords(m, e) : row && row.size ? soloSizeWords(m, {...row, contract: row.contract || c})
+      : lab.own_size === true ? soloOwnWords(m) : AcctSet.words({qty: row ? row.qty || 1 : 1, contract: c});
   };
+  const added = (a) => `+${acctShort(a)} (${soloWords(soloMem(b, a), size(a))})`;      // a ticked-in account with the size it will be saved with
   const moved = (a) => now.pick && b.pick && now.pick[a] && b.pick[a] !== now.pick[a];      // an account booked on one variant, picked on another
   const parts = [...b.accounts.filter(a => !now.accounts.includes(a)).map(added),
                  ...now.accounts.filter(a => !b.accounts.includes(a)).map(a => "−" + acctShort(a)),
-                 ...b.accounts.filter(a => now.accounts.includes(a) && moved(a)).map(a => `${acctShort(a)} → ${soloVarLabel(b.pick[a])}`),
+                 ...b.accounts.filter(a => now.accounts.includes(a) && moved(a)).map(a => `${acctShort(a)} → ${soloVarLabel(b.pick[a])} (${size(a)})`),
                  ...Object.entries(b.settings || {}).filter(([a]) => now.accounts.includes(a) && !moved(a)).map(([a, e]) => `${acctShort(a)} ${soloEntryWords(soloMem(b, a), e)}`)];
   if (b.turns !== now.turns) parts.push(b.turns ? "take turns" : "every account");
   if (b.hold !== now.hold) parts.push(b.hold ? "holds overnight" : "flat each night");
@@ -621,10 +624,16 @@ function soloSet(name, a, k, v, typing) {
   soloEdit(name);
   if (!typing) soloPaint(name);
 }
-function soloPick(name, a, m) {      // the gear's Variant: the account runs another variant; its size form starts over from that variant's row
+function soloPick(name, a, m) {      // the gear's Variant: the account runs another variant; a row it has there wins, else it keeps its size
   if (soloMember(name, a) === m) return;
+  const cur = soloForm(name, a), lab = soloLab(m), cs = soloContracts(m);
   (SOLO_PICK[name] = SOLO_PICK[name] || {})[a] = m;
-  if (SOLO_FORMS[name]) delete SOLO_FORMS[name][a];
+  if (bookRowOf(m, a)) { if (SOLO_FORMS[name]) delete SOLO_FORMS[name][a]; }
+  else {
+    let f = {...cur, size: cur.size === "own" && lab.own_size !== true ? "contracts" : cur.size};
+    if (cs.length && !cs.includes(f.contract)) f = AcctSet.switchContract(f, cs[0], lab.most_default_by || {});
+    (SOLO_FORMS[name] = SOLO_FORMS[name] || {})[a] = f;
+  }
   soloEdit(name); soloPaint(name);
 }
 const soloSeg = (label, opts, cur, fn) => `<div class="seg" role="group" aria-label="${esc(label)}">${opts.map(([v, t]) =>

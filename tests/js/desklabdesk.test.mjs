@@ -1893,7 +1893,7 @@ test('a set Save: the set body carries pick for every ticked account, no strateg
   soloRoot(t2, { ticked: ['a1'] });
   vm.runInContext('soloPick("lab_nq_orb","a1","lab_nq_orb2")', t2.ctx);              // a1 (DEMO) moves from 1R to 2R
   await vm.runInContext('saveSolo("lab_nq_orb")', t2.ctx);
-  assert.match(t2.confirms[0].body, /Lucid Eval #1 → 2R\. Lucid Eval #1 moves to 2R\./);
+  assert.match(t2.confirms[0].body, /Lucid Eval #1 → 2R \(1 MNQ\)\. Lucid Eval #1 moves to 2R\./);
   assert.deepEqual(t2.posts, []);
 });
 
@@ -2009,4 +2009,15 @@ test('gear: $ risk with no amount yet says "risk not set" (never $null); the row
   vm.runInContext('soloSet("lab_nq_orb","a1","risk_usd","500",true)', t.ctx);
   assert.match(span.textContent, /^\$500 risk · MNQ/);
   assert.match(one['.solo-save'].innerHTML, /\$500 risk/);
+});
+
+test('gear Variant: a booked NQ $500 account picked onto another variant keeps its size; the body and Save words carry it', () => {
+  const t = setT({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1, contract: 'NQ', size: 'risk', risk_usd: 500, most: 2 }] } });
+  const one = soloRoot(t, { ticked: ['a1', 'a2'] });
+  vm.runInContext('soloPick("lab_nq_orb","a2","lab_nq_orb2")', t.ctx);
+  const f = plain(vm.runInContext('soloForm("lab_nq_orb","a2")', t.ctx));
+  assert.equal(f.contract, 'NQ'); assert.equal(f.size, 'risk'); assert.equal(+f.risk_usd, 500); assert.equal(+f.most, 2);
+  const s = plain(vm.runInContext('soloBody("lab_nq_orb")', t.ctx)).settings.a2;
+  assert.equal(s.contract, 'NQ'); assert.equal(s.size, 'risk'); assert.equal(+s.risk_usd, 500); assert.equal(+s.most, 2);
+  assert.match(one['.solo-save'].innerHTML, /→ 2R \(\$500 risk · NQ · most 2\)/);
 });
