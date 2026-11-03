@@ -32,7 +32,7 @@ def add_pp2(d, accounts=("a1",)):
 
 
 def test_taken_off_its_accounts_says_so_with_turn_on(tmp_path):
-    d = mkdesk(tmp_path, qty=0, rec_kw=NOLABEL)
+    d = mkdesk(tmp_path, qty=0, enabled=False, rec_kw=NOLABEL)
     labcfg._note(d.cfg, "lab_unbooked", strategy=LAB, accounts=["a1"], why="a new version")
     d.ld._say_notes({})
     got = [c for c in mine(d) if c["detail"].startswith("Taken off its accounts (")]
@@ -43,6 +43,25 @@ def test_taken_off_its_accounts_says_so_with_turn_on(tmp_path):
     assert "a new version" in c["detail"]
     run(d.ld.set_book(LAB, [{"account": "a1", "qty": 1}]))
     assert not [c for c in mine(d) if c["detail"].startswith("Taken off")]
+
+
+def test_an_on_strategy_that_lost_an_account_is_not_said_off(tmp_path):
+    d = mkdesk(tmp_path, accounts=("a1", "a2"), rec_kw=NOLABEL)
+    run(d.ld.set_book(LAB, [{"account": "a1", "qty": 1}]))
+    d.cfg.book[LAB] = []                 # its last account removed: still ON
+    labcfg._note(d.cfg, "lab_unbooked", strategy=LAB, accounts=["a1"], why="account removed")
+    d.ld._say_notes({})
+    assert not [c for c in checks(d, acct={"a2": {"connected": True}}) if "It is OFF" in c["detail"]]
+
+
+def test_a_deleted_strategy_keeps_no_taken_off_line(tmp_path):
+    d = mkdesk(tmp_path, qty=0, enabled=False, rec_kw=NOLABEL)
+    labcfg._note(d.cfg, "lab_unbooked", strategy=LAB, accounts=["a1"], why="a new version")
+    d.ld._say_notes({})
+    assert [c for c in checks(d) if "It is OFF" in c["detail"]]
+    run(d.ld.remove(LAB))
+    assert LAB not in d.cfg.strategies
+    assert not [c for c in checks(d) if "It is OFF" in c["detail"]]
 
 
 def test_two_strategies_on_one_market_and_account_warn_each(tmp_path):
@@ -84,6 +103,13 @@ def test_the_engine_sets_and_clears_a_position_block(tmp_path):
     why = run(d.eng._lab_position(LAB, d.cfg.strategies[LAB], "a1"))
     assert why == "The account already holds NQ. Check it."
     assert d.eng.position_blocks[(LAB, "a1")] == (d.eng._today(), why)
+    run(d.eng._lab_recheck_blocks())                     # still holds it: the block stays
+    assert (LAB, "a1") in d.eng.position_blocks and [c for c in checks(d) if c["detail"] == why]
+    d.ads["a1"].net = {}                                 # the account goes flat
+    d.eng._blocks_read = -1e9                            # (the 15 s spacing has passed)
+    run(d.eng.clock_tick())
+    assert d.eng.position_blocks == {}
+    assert not [c for c in checks(d) if c["level"] == "bad" and c.get("account") == "a1"]
 
 
 def test_a_window_outside_the_desk_day_says_shadow_only(tmp_path):

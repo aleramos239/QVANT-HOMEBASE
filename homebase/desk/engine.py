@@ -1401,3 +1401,5 @@ class Engine(LabMixin, GroupMixin, RotationMixin, DayRulesMixin, KillMixin):
         for g in got.values():
             if isinstance(g, BaseException):         # the journal itself failed: the clock loop says so
                 raise g
+        if self.position_blocks:                     # a Lab entry was refused for a position: is it still there?
+            await self._lab_recheck_blocks()

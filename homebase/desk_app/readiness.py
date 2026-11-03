@@ -84,7 +84,8 @@ def _lab_traps(cfg, engine, lab, enabled: dict, shown, short) -> list:
     out = []
     lab_on = [n for n, s in enabled.items() if getattr(s, "kind", "straddle") == "lab"]
     for n, why in list((getattr(lab, "unbooked", None) or {}).items()):
-        if not config_mod.assignments(cfg, n):
+        s = cfg.strategies.get(n)       # only while it is still here, OFF and unbooked (an ON one lost one account: no line)
+        if s is not None and not s.enabled and not config_mod.assignments(cfg, n):
             out.append({"level": "warn", "label": shown(n), "strategy": n, "fix": "turn_on",
                         "detail": f"Taken off its accounts ({why}). It is OFF: set it up and turn it on to trade again."})
     seats: dict = {}                    # (account, price root) -> the ON Lab strategies booked there

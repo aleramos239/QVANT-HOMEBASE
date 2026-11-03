@@ -1087,6 +1087,21 @@ class LabMixin:
                          **({"net": held[1]} if held and None not in nets else {}))
         return why
 
+    async def _lab_recheck_blocks(self) -> None:
+        """A position block lasts only while it is true: every 15 s each of today's blocks reads its account again (no
+        journal line); flat and readable lifts it, so a wait behind another trade does not leave the Desk not-ready."""
+        if not self.position_blocks or self._mono() - self.__dict__.get("_blocks_read", -1e9) < 15:
+            return
+        self._blocks_read = self._mono()
+        today = self._today()
+        for key, val in list(self.position_blocks.items()):
+            cfg = self.cfg.strategies.get(key[0])
+            if val[0] == today and cfg is not None \
+                    and await self._lab_position(key[0], cfg, key[1], said=False) is not None:
+                continue
+            if self.position_blocks.get(key) == val:     # a newer block set while the read ran stays
+                del self.position_blocks[key]
+
     def _lab_may_enter(self, name: str) -> tuple:
         """Every strategy-level precondition of an entry, as one read with no side effect: (cfg | None, the
         sentence | None). Asked when lab_enter is called AND again, with no await in between, in the run that

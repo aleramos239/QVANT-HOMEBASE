@@ -545,7 +545,7 @@ def lab_checks(c, now=WED_10):
     return [x for x in r["checks"] if x["label"] == "PP ORB"]
 
 
-def test_readiness_an_enabled_lab_strategy_with_no_account_is_info_not_a_warning(client):
+def test_readiness_an_enabled_lab_strategy_with_no_account_is_info_and_without_limits_a_warning(client):
     assert lab_checks(client) == []                                              # off: not part of the day
     client.post("/api/strategy", json={"strategy": LAB, "enabled": True})
     assert lab_checks(client) == [{"level": "info", "label": "PP ORB", "detail": "no account: runs in shadow"},
