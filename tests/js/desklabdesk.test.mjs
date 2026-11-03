@@ -1853,3 +1853,65 @@ test('gear: a newly ticked account is 1 contract in its gear and in the Save lin
   run('soloEdit("lab_nq_orb")');
   assert.match(one['.solo-save'].innerHTML, /\+APEX…048 \(1 MNQ\)/);
 });
+
+/* Task 16: a variant set is one page (its first member's), every ticked account picks one variant, Results shows one variant at a time. */
+function setT(over = {}) {
+  const t = load({ book: { lab_nq_orb: [{ account: 'a1', qty: 1 }] }, accounts: ACCOUNTS, rows: [ROW(), ROW({ name: 'nq_orb2' })],
+    strategies: { lab_nq_orb: deskStrat(GC), lab_nq_orb2: deskStrat({ ...GC, name: 'nq_orb2' }, { label: 'NQ ORB 2' }) }, ...over });
+  t.ctx.ST.variants = { sets: [{ id: 'v1', name: 'nq_orb', members: ['lab_nq_orb', 'lab_nq_orb2'], labels: { lab_nq_orb: '1R', lab_nq_orb2: '2R' } }], suggest: [] };
+  return t;
+}
+
+test('a set page: the set\'s name, the gear lists the variants, a later member points at the set', () => {
+  const t = setT();
+  soloRoot(t, { ticked: ['a1'] });
+  vm.runInContext('soloGear("lab_nq_orb","a1")', t.ctx);
+  const html = t.view('lab_nq_orb');
+  assert.match(html, /<h1 class="sd-title">nq_orb<\/h1>/);
+  assert.match(html, /<span class="h">Variant<\/span>[\s\S]*aria-label="Variant"[\s\S]*>1R<\/button>[\s\S]*>2R<\/button>/);
+  assert.match(html, /Split into separate strategies/);
+  const member = t.view('lab_nq_orb2');
+  assert.match(member, /In set nq_orb → open/);
+  assert.doesNotMatch(member, /solo-acct/);
+});
+
+test('a set Save: the set body carries pick for every ticked account, no strategy, no qty; a moved real account asks', async () => {
+  const t = setT();
+  soloRoot(t, { ticked: ['a1', 'a2'] });
+  vm.runInContext('soloPick("lab_nq_orb","a2","lab_nq_orb2")', t.ctx);
+  await vm.runInContext('saveSolo("lab_nq_orb")', t.ctx);
+  assert.match(t.confirms[0].body, /\+APEX…048 \(2R · 1 MNQ\)/);                       // a LIVE account ticked in asks, with its variant
+  assert.equal(t.posts.length, 1);
+  const b = t.posts[0].body;
+  assert.equal(t.posts[0].url, '/api/setup');
+  assert.deepEqual(plain(b.pick), { a1: 'lab_nq_orb', a2: 'lab_nq_orb2' });
+  assert.equal(b.set, 'v1');
+  assert.equal('strategy' in b, false);
+  assert.equal('qty' in b, false);
+  assert.deepEqual(plain(b.settings), {});
+  const t2 = setT({ confirm: false });
+  soloRoot(t2, { ticked: ['a1'] });
+  vm.runInContext('soloPick("lab_nq_orb","a1","lab_nq_orb2")', t2.ctx);              // a1 (DEMO) moves from 1R to 2R
+  await vm.runInContext('saveSolo("lab_nq_orb")', t2.ctx);
+  assert.match(t2.confirms[0].body, /Lucid Eval #1 → 2R\. Lucid Eval #1 moves to 2R\./);
+  assert.deepEqual(t2.posts, []);
+});
+
+test('a set Results: one variant at a time on a .seg picker; Matched the backtest follows it', () => {
+  const t = setT();
+  t.ctx.SCAL = { key: '' };
+  const first = t.view('lab_nq_orb');
+  assert.match(first, /<div class="seg" role="group" aria-label="Which variant"><button class="sel" aria-pressed="true" onclick="setPickVariant\(&quot;v1&quot;, &quot;lab_nq_orb&quot;\)">1R<\/button><button class=""/);
+  vm.runInContext('SET_PICK = {v1: "lab_nq_orb2"}', t.ctx);
+  const second = t.view('lab_nq_orb');
+  assert.match(second, /<button class="sel" aria-pressed="true" onclick="setPickVariant\(&quot;v1&quot;, &quot;lab_nq_orb2&quot;\)">2R<\/button>/);
+  assert.equal(vm.runInContext('SCAL.deskId', t.ctx), 'lab_nq_orb2');
+});
+
+test('splitting a set confirms, then posts split; nothing else', async () => {
+  const t = setT();
+  t.ctx.document.querySelector = () => null;
+  await vm.runInContext('splitSet("v1")', t.ctx);
+  assert.match(t.confirms[0].title, /Split nq_orb\?/);
+  assert.deepEqual(t.posts, [{ url: '/api/variants/split', body: { id: 'v1' } }]);
+});

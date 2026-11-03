@@ -136,3 +136,64 @@ function setView(k, name) {
   if (m) m.scrollTop = 0;
 }
 
+
+/* ---- Variant sets (owner 2026-11-02, spec 4.5) ---- The Desk only SUGGESTS ("3 strategies look like variants of nq_cb"); the owner
+   combines. A set is display only: combining never changes a booking, and no money is ever summed across variants' shadow runs. */
+/* The members' ACCOUNT P&L for the day: each account booked on any member once, its own day_pnl. Never shadow dollars. */
+function setDayPnl(set, accounts, book) {
+  const seen = new Set();
+  for (const m of (set && set.members) || []) for (const r of (book || {})[m] || []) if (r && r.account in (accounts || {})) seen.add(r.account);
+  const v = [...seen].map(a => accounts[a].day_pnl).filter(x => typeof x === "number");
+  return v.length ? v.reduce((a, b) => a + b, 0) : null;
+}
+/* Combine is blocked while two members are booked on one account (one variant an account): the sentence names it, else "" */
+function combineBlock(members, labels, book) {
+  const by = {};
+  for (const m of members) for (const r of (book || {})[m] || []) if (r && r.account) (by[r.account] = by[r.account] || []).push(m);
+  const a = Object.keys(by).find(k => by[k].length > 1);
+  return a ? `..${String(a).slice(-4)} has both ${by[a].map(m => (labels || {})[m] || m).join(" and ")}: untick one first.` : "";
+}
+let COMBINE = null;      // the suggestion being looked at: {members, labels}
+const variantSuggest = () => (ST && ST.variants && ST.variants.suggest) || [];
+function suggestLines() {      // at the top of the Trading list
+  return variantSuggest().map((s, i) => `<button class="side-more" onclick="openCombine(${i})">${esc(`${s.members.length} strategies look like variants of ${s.stem}: Combine?`)}</button>`).join("");
+}
+function openCombine(i) {
+  const s = variantSuggest()[i];
+  if (!s) return;
+  COMBINE = {members: [...s.members], labels: {...s.labels}};
+  $("#combineRows").innerHTML = COMBINE.members.map(m => `<div class="feed-row"><span class="h">${esc(stratLabel(m))}</span>
+    <input class="hb-field" type="text" maxlength="12" autocomplete="off" aria-label="Label for ${esc(stratLabel(m))}" value="${esc(COMBINE.labels[m] || "")}"
+      style="width:110px" oninput="COMBINE.labels[${jsArg(m)}]=this.value;paintCombine()"></div>`).join("");
+  paintCombine();
+  showOverlay("combineOverlay");
+}
+function paintCombine() {      // the note and the Combine button only: the fields being typed in are never rebuilt
+  if (!COMBINE) return;
+  const block = combineBlock(COMBINE.members, COMBINE.labels, ST.book);
+  $("#combineNote").textContent = block; $("#combineNote").hidden = !block;
+  $("#combineGo").disabled = !!block || COMBINE.members.some(m => !String(COMBINE.labels[m] || "").trim());
+}
+async function variantsDo(action, body, done) {
+  let r, err = null;
+  try { r = await post("/api/variants/" + action, body); } catch (e) { err = e || new Error("no answer"); }
+  const w = answerWhy(r, err);
+  refresh();
+  toast(w ? `Not done — ${w}.` : done, w ? 8000 : 4200);
+  return !w;
+}
+async function combineGo() {
+  const c = COMBINE;
+  if (!c || combineBlock(c.members, c.labels, ST.book)) return paintCombine();      // read again: a booking may have changed since it opened
+  if (await variantsDo("create", {members: c.members, labels: Object.fromEntries(c.members.map(m => [m, String(c.labels[m]).trim()]))}, "Combined. No booking changed.")) closeCombine();
+}
+async function combineNo() {
+  const c = COMBINE;
+  if (c && await variantsDo("dismiss", {members: c.members}, "Kept separate.")) closeCombine();
+}
+function closeCombine() { COMBINE = null; hideOverlay("combineOverlay"); }
+async function splitSet(id) {
+  const vs = ((ST.variants && ST.variants.sets) || []).find(x => x.id === id);
+  if (!vs || !await confirmDlg(`Split ${vs.name}?`, `Its ${vs.members.length} variants become separate strategies again. No booking changes.`, "Split", false)) return;
+  if (await variantsDo("split", {id}, "Split. No booking changed.")) setView("today");
+}

@@ -5,7 +5,7 @@ import { HTML } from './deskpage.mjs';
 
 /* Task 12: the sidebar sorts itself into Trading / Shadow / Off; a variant set is one row. */
 const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
-const CODE = between('function sideKind(', 'function renderSide(') +
+const CODE = between('function sideKind(', 'function renderSide(') + between('function setDayPnl(', 'let COMBINE = null;') +
   between('const sideFolded = ', 'function toggleSide(');
 
 function load(st) {
@@ -14,7 +14,7 @@ function load(st) {
     stratState: () => 'Ready', stratLabel: (n) => n.toUpperCase(), stratDotCls: (s) => s.cfg.enabled ? '' : 'off',
     todayPnl: () => null, readinessShown: (r) => r, SIDE_FOLD: {},
   });
-  vm.runInContext(CODE + '\nglobalThis.api = { sideSections, sideFolded };', ctx);
+  vm.runInContext(CODE + '\nglobalThis.api = { sideSections, sideFolded, setDayPnl };', ctx);
   return ctx.api;
 }
 const S = (on, extra = {}) => ({ cfg: { enabled: on, kind: 'x' }, ...extra });
@@ -146,4 +146,28 @@ test('statusLine: stale is stale, never ok, and says so', () => {
   const L = sl()('t', [], ST15, true);
   assert.equal(L.level, 'stale');
   assert.equal(L.text, 'The Desk is not answering: last known state.');
+});
+
+/* Task 16: variant sets. A set's money is its accounts' P&L, never the variants' shadow dollars; Combine is blocked while two members share an account. */
+test('setDayPnl is the members\' ACCOUNT P&L only, each account once; shadow dollars never count', () => {
+  const { setDayPnl } = load({});
+  const accounts = { a1: { day_pnl: 100 }, a2: { day_pnl: -30 }, a3: { day_pnl: 999 } };
+  const book = { m1: [{ account: 'a1' }, { account: 'a2' }], m2: [{ account: 'a1' }], other: [{ account: 'a3' }] };
+  assert.equal(setDayPnl({ members: ['m1', 'm2'] }, accounts, book), 70);
+  assert.equal(setDayPnl({ members: ['m1', 'm2'], shadow: 5000 }, {}, book), null);
+  assert.equal(setDayPnl({ members: ['m1'] }, { a1: { day_pnl: null } }, { m1: [{ account: 'a1' }] }), null);
+});
+
+test('the sidebar row of a set shows the accounts\' P&L, not the sum of its members\' shadow', () => {
+  const st = { strategies: { lab_a_r1: S(true), lab_a_r2: S(true) }, accounts: { x: { day_pnl: 40 } }, book: { lab_a_r1: [{ account: 'x' }] } };
+  const o = load(st).sideSections(Object.keys(st.strategies), st, [{ id: 'v1', name: 'A', members: ['lab_a_r1', 'lab_a_r2'] }], []);
+  assert.equal(o.trading[0].pnl, 40);
+});
+
+test('Combine is blocked while two members share an account, naming it; free otherwise', () => {
+  const ctx = vm.createContext({});
+  vm.runInContext(between('function combineBlock(', 'let COMBINE = null;') + '\nglobalThis.combineBlock = combineBlock;', ctx);
+  const labels = { m1: '1R', m2: '2R' };
+  assert.equal(ctx.combineBlock(['m1', 'm2'], labels, { m1: [{ account: 'a1' }], m2: [{ account: 'a1' }] }), '..a1 has both 1R and 2R: untick one first.');
+  assert.equal(ctx.combineBlock(['m1', 'm2'], labels, { m1: [{ account: 'a1' }], m2: [{ account: 'a2' }] }), '');
 });

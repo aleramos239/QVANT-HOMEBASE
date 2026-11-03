@@ -59,9 +59,9 @@ function sideSections(names, st, sets, labs) {
     const ms = (set.members || []).filter(n => strategies[n] && names.includes(n));
     if (ms.length < 2) continue;
     ms.forEach(n => inSet.add(n));
-    const parts = ms.map(one), k = parts.reduce((a, p) => rank[p.k] < rank[a] ? p.k : a, "off"), pn = parts.map(p => p.row.pnl).filter(v => v != null);
+    const parts = ms.map(one), k = parts.reduce((a, p) => rank[p.k] < rank[a] ? p.k : a, "off");      // its money: the accounts' P&L, never the variants' shadow dollars
     out[k].push({id: set.id, set: set.id, members: ms, label: String(set.name || set.id), warn: ms.some(n => warned.has(n)),
-      pnl: pn.length ? pn.reduce((a, v) => a + v, 0) : null, dot: k === "trading" ? "ok" : k, title: ms.length + " variants"});
+      pnl: k === "trading" ? setDayPnl({members: ms}, st.accounts, st.book) : null, dot: k === "trading" ? "ok" : k, title: ms.length + " variants"});
   }
   for (const n of names) if (strategies[n] && !inSet.has(n)) { const p = one(n); out[p.k].push(p.row); }
   for (const w of labs || []) out[w.on ? "shadow" : "off"].push({id: w.id, lab: w.lab, label: w.label, warn: false, pnl: w.pnl, dot: w.dot, title: w.title});
@@ -114,6 +114,7 @@ function renderSide(names, issues) {
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span>Today</span><span></span></button>
+    ${labSafe(suggestLines, "")}
     ${head("trading", "Trading", sec.trading.length, "")}
     ${sideFolded("trading") ? "" : rowsOf("trading")}
     ${head("shadow", "Shadow", sec.shadow.length, "")}

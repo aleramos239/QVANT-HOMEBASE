@@ -78,7 +78,7 @@ function calView(st, pick) {
    GET /api/tester/desklab/shadow: would-be fills, a booked day's shadow copy included) or, on the Desk, its LIVE ones
    (/api/strategy-live), a month at a time. Its state lives here, so a repaint keeps the month and the day picked. */
 let SCAL = {key: ""};
-function stratCal(deskId, lab, booked, extra) {      // booked: Accounts first and picked; extra: the Matched-the-backtest line
+function stratCal(deskId, lab, booked, extra, picker) {      // booked: Accounts first and picked; extra: the Matched-the-backtest line
   const key = deskId + "|" + lab;
   if (SCAL.key !== key) SCAL = {key, deskId, lab, shadow: !(deskId && booked), d: new Date(), day: "", data: null, at: 0, tok: 0};
   if (!SCAL.loading && Date.now() - SCAL.at > 60000) loadScal();         // its trades, read again each minute
@@ -86,7 +86,7 @@ function stratCal(deskId, lab, booked, extra) {      // booked: Accounts first a
   const opts = booked ? [[false, "Accounts"], [true, "Shadow"]] : [[true, "Shadow"], [false, "Accounts"]];
   const seg = deskId ? `<div class="seg" role="group" aria-label="Which trades">` + opts.map(([sh, word]) =>
     `<button class="${SCAL.shadow === sh ? "sel" : ""}" aria-pressed="${SCAL.shadow === sh}" onclick="scalMode(${sh})">${word}</button>`).join("") + `</div>` : "";
-  return `<div class="sec"><h2>Results</h2>${seg}
+  return `<div class="sec"><h2>Results</h2>${seg}${picker || ""}
     <div class="cal-head"><button class="cal-nav" onclick="scalStep(-1)" aria-label="Previous month">&lsaquo;</button>
       <span class="m" style="flex:1">${esc(v.month)}</span>
       <button class="cal-nav" onclick="scalStep(1)" aria-label="Next month">&rsaquo;</button></div>
@@ -133,6 +133,16 @@ function shadowData(days) {
 let MATCH_OPEN = "";      // the strategy whose "Matched the backtest" day list is open
 function toggleMatchDays(name) { MATCH_OPEN = MATCH_OPEN === name ? "" : name; render(); }
 const labSetOf = (name) => ((ST.variants && ST.variants.sets) || []).find(x => (x.members || []).includes(name)) || null;
+/* A variant set is one page: the page of its first member on the Desk (the sidebar opens that one). soloVs(name) = the set whose page
+   `name` is (members still on the Desk), else null; a later member's page points at it. */
+function soloVs(name) {
+  const v = labSetOf(name), ms = v ? v.members.filter(m => ST.strategies[m]) : [];
+  return ms.length > 1 && ms[0] === name ? {...v, members: ms} : null;
+}
+const soloVarLabel = (m) => { const v = labSetOf(m); return v ? ((v.labels || {})[m] || stratLabel(m)) : ""; };
+let SET_PICK = {};      // the variant whose Results and "Matched the backtest" a set's page shows (set id -> member)
+const setPicked = (vs) => vs.members.includes(SET_PICK[vs.id]) ? SET_PICK[vs.id] : vs.members[0];
+function setPickVariant(id, m) { SET_PICK[id] = m; render(); }
 /* "Matched the backtest on 18 of 19 days ›": the days the daily match checked, and how many matched */
 function matchSummary(days) {
   const seen = days.filter(m => m.ok !== null);
@@ -169,49 +179,57 @@ function labDeskView(name, s) {
   const sw = `<button class="switch" role="switch" aria-label="${esc(nm)} on or off" aria-checked="${on}"
     title="${esc(DeskLab.deskSwitchTitle(s, book, ST.accounts, deskMachine()))}"
     onclick="toggleStrat(${jsArg(name)}, ${!on})"></button>`;      // on the Desk: always the Desk's path, booked or not
-  const set = labSetOf(name), members = set ? set.members.filter(m => ST.strategies[m]) : [name];
+  const set = labSetOf(name), members = set ? set.members.filter(m => ST.strategies[m]) : [name], vs = soloVs(name);
+  const pm = vs ? setPicked(vs) : name, ps = ST.strategies[pm], prow = vs ? labRowOf(ps) : row;      // the variant Results and "Matched" show
   const sub = (members.length > 1 ? plural(members.length, "variant", "variants") + " · " : "") + (row ? DeskLab.deskSpec({}, row) : "from the Lab");
   const stateNote = DeskLab.stateNote(s), winNote = DeskLab.windowNote(s);          // its window runs past the flat time: a note, never a refusal
-  const split = DeskLab.splitRounds(lab.rounds), who = (a) => acctShort(a);
-  const trades = split.today.map(r => ({r, x: DeskLab.roundLine(r, who(r.account))})).map(({r, x}) =>
-    `<div class="feed-row"><span class="h${x.bad ? " warn" : ""}">${esc(x.text)}</span>${x.net == null ? "" : `<span class="t net">${esc(usdS(x.net))}</span>`}${r.check === true ? `<button class="btn btn-outline btn-sm" onclick="clearLabBlock(${jsArg(name)}, ${jsArg(r.account)})"${labClearing(name, r.account) ? " disabled" : ""}>${esc(DeskLab.CLEAR)}</button>` : ""}</div>` +
-    (x.detail ? `<div class="feed-row"><span class="h warn">${esc(x.detail)}</span></div>` : ""));
-  const refused = (Array.isArray(lab.refused) ? lab.refused : []).map(x => DeskLab.refusedLine(x, x && x.account ? who(x.account) : "")).map(x =>
-    `<div class="feed-row"><span class="t">${esc(x.t)}</span><span class="h warn">${esc(x.text)}</span></div>` +
-    (x.detail ? `<div class="feed-row"><span class="h warn">${esc(x.detail)}</span></div>` : ""));
-  const t = (row && row.today) || {};            // what it writes down in shadow (the chart service's summary of the day)
-  const shadowLines = shadow ? [...(Array.isArray(t.orders) ? t.orders : []).map(DeskLab.orderLine).map(o =>
-      `<div class="feed-row"><span class="t">${esc(o.t)}</span><span class="h${o.refused ? " warn" : ""}">${esc(o.text)}</span></div>`),
-    ...(Array.isArray(t.trades) ? t.trades : []).map(DeskLab.tradeLine).map(x =>
-      `<div class="feed-row"><span class="h">${esc(x.text)}</span><span class="t net">${esc(usdS(x.net))}</span></div>`)] : [];
+  const who = (a) => acctShort(a), tag = (m, text) => vs ? soloVarLabel(m) + " · " + text : text;      // a set's lines say which variant
+  const trades = [], refused = [], shadowLines = [], old = [];
+  for (const m of members) {      // a plain strategy is its own one member; a set lists every variant's day, each line its own (never a sum)
+    const sm = ST.strategies[m], lm = sm.lab || {}, rm = m === name ? row : labRowOf(sm), split = DeskLab.splitRounds(lm.rounds), M = jsArg(m);
+    trades.push(...split.today.map(r => ({r, x: DeskLab.roundLine(r, who(r.account))})).map(({r, x}) =>
+      `<div class="feed-row"><span class="h${x.bad ? " warn" : ""}">${esc(tag(m, x.text))}</span>${x.net == null ? "" : `<span class="t net">${esc(usdS(x.net))}</span>`}${r.check === true ? `<button class="btn btn-outline btn-sm" onclick="clearLabBlock(${M}, ${jsArg(r.account)})"${labClearing(m, r.account) ? " disabled" : ""}>${esc(DeskLab.CLEAR)}</button>` : ""}</div>` +
+      (x.detail ? `<div class="feed-row"><span class="h warn">${esc(x.detail)}</span></div>` : "")));
+    refused.push(...(Array.isArray(lm.refused) ? lm.refused : []).map(x => DeskLab.refusedLine(x, x && x.account ? who(x.account) : "")).map(x =>
+      `<div class="feed-row"><span class="t">${esc(x.t)}</span><span class="h warn">${esc(tag(m, x.text))}</span></div>` +
+      (x.detail ? `<div class="feed-row"><span class="h warn">${esc(x.detail)}</span></div>` : "")));
+    const t = (rm && rm.today) || {};            // what it writes down in shadow (the chart service's summary of the day)
+    if (DeskLab.inShadow(sm, (ST.book && ST.book[m]) || [])) shadowLines.push(...(Array.isArray(t.orders) ? t.orders : []).map(DeskLab.orderLine).map(o =>
+        `<div class="feed-row"><span class="t">${esc(o.t)}</span><span class="h${o.refused ? " warn" : ""}">${esc(tag(m, o.text))}</span></div>`),
+      ...(Array.isArray(t.trades) ? t.trades : []).map(DeskLab.tradeLine).map(x =>
+        `<div class="feed-row"><span class="h">${esc(tag(m, x.text))}</span><span class="t net">${esc(usdS(x.net))}</span></div>`));
+    old.push(...split.old.map(r => ({r, x: DeskLab.roundLine(r, who(r.account))})).map(({r, x}) =>
+      `<div class="feed-row"><span class="h warn">${esc(tag(m, x.text))}</span>
+        <button class="btn btn-outline btn-sm" onclick="clearLabBlock(${M}, ${jsArg(r.account)})"${labClearing(m, r.account) ? " disabled" : ""} title="${esc(x.text)}">${esc(DeskLab.CLEAR)}</button></div>`));
+  }
   const todayAll = [...trades, ...shadowLines, ...refused];
   const today = todayAll.length ? `<div class="agroup feed static">${todayAll.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.EMPTY_DAY)}</div>`;
-  const old = split.old.map(r => ({r, x: DeskLab.roundLine(r, who(r.account))})).map(({r, x}) =>
-    `<div class="feed-row"><span class="h warn">${esc(x.text)}</span>
-      <button class="btn btn-outline btn-sm" onclick="clearLabBlock(${jsArg(name)}, ${jsArg(r.account)})"${labClearing(name, r.account) ? " disabled" : ""} title="${esc(x.text)}">${esc(DeskLab.CLEAR)}</button></div>`);
   const isDay = (d) => /^\d{4}-\d\d-\d\d$/.test(String(d));
-  const days = (row && Array.isArray(row.days) ? row.days : []).map(DeskLab.matchLine);
+  const days = (prow && Array.isArray(prow.days) ? prow.days : []).map(DeskLab.matchLine);
   const dayRows = days.map(m =>
     `<div class="feed-row"><span class="t">${esc(isDay(m.date) ? shortDay(m.date) : m.date)}</span><span class="h${m.ok === false ? " warn" : ""}">${esc(m.text)}</span>${m.rebuilt ? '<span class="t dim">rebuilt</span>' : ""}<span class="t net">${esc(usdS(m.net))}</span></div>`);
-  const match = !row ? "" : days.length
-    ? `<button class="btn btn-quiet btn-sm act-link" aria-expanded="${MATCH_OPEN === name}" onclick="toggleMatchDays(${jsArg(name)})">${esc(matchSummary(days))} ›</button>${MATCH_OPEN === name ? `<div class="agroup feed static">${dayRows.join("")}</div>` : ""}`
+  const match = !prow ? "" : days.length
+    ? `<button class="btn btn-quiet btn-sm act-link" aria-expanded="${MATCH_OPEN === pm}" onclick="toggleMatchDays(${jsArg(pm)})">${esc(matchSummary(days))} ›</button>${MATCH_OPEN === pm ? `<div class="agroup feed static">${dayRows.join("")}</div>` : ""}`
     : `<div class="mcap">${esc(matchSummary(days))}</div>`;
+  const picker = !vs ? "" : `<div class="seg" role="group" aria-label="Which variant">${vs.members.map(m =>
+    `<button class="${m === pm ? "sel" : ""}" aria-pressed="${m === pm}" onclick="setPickVariant(${jsArg(vs.id)}, ${jsArg(m)})">${esc(soloVarLabel(m))}</button>`).join("")}</div>`;
   const about = labSafe(() => aboutRows(name, s, row), []).map(([k, v]) => `<div class="feed-row"><span class="t">${esc(k)}</span><span class="h">${esc(v)}</span></div>`).join("");
   return `<button class="back" onclick="setView('today')">‹ Today</button>
-    <div class="sd-top"><div><h1 class="sd-title">${esc(nm)}</h1><div class="sp mono">${esc(sub)}</div></div>${sw}</div>
+    <div class="sd-top"><div><h1 class="sd-title">${esc(vs ? vs.name : nm)}</h1><div class="sp mono">${esc(sub)}</div></div>${sw}</div>
     <div class="sd-status">${labSafe(() => statusLineHtml(name), "")}</div>
     ${stateNote ? `<div class="sd-note">${esc(stateNote)}</div>` : ""}
     ${ro ? `<div class="sd-note">${esc(DeskLab.OTHER_DESK)}</div>` : ""}
     ${labSafe(() => soloSetupHtml(name, s, ro, lock), "")}
     <div class="sec"><h2>${shadow ? "Today, in shadow" : "Today"}</h2>${today}${actBtn("s:" + name)}</div>
     ${old.length ? `<div class="sec"><h2>${esc(DeskLab.OLD_TITLE)}</h2><div class="agroup feed static">${old.join("")}</div></div>` : ""}
-    ${lab.name ? stratCal(name, lab.name, book.length > 0, match) : ""}
+    ${(ps.lab || {}).name ? stratCal(pm, ps.lab.name, members.some(m => ((ST.book && ST.book[m]) || []).length > 0), match, picker) : ""}
     ${labSafe(() => deskChangesHtml("s:" + name), "")}
     <div class="sec sd-backtest"><h2>Backtest</h2><div class="agroup feed static">${labSafe(() => backtestRows(members, set), "")}</div></div>
     <div class="sec sd-about"><h2>About</h2><div class="agroup feed static">${about}</div>${winNote ? `<div class="mcap warn">${esc(winNote)}</div>` : ""}
       ${lab.auto === true ? "" : `<div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openLabLimits(${jsArg(name)})"${ro ? " disabled" : ""}>${esc(DeskLab.EDIT_LIMITS)}</button></div>`}</div>
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat(${jsArg(name)})" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       ${deskMachine() === "server" ? "" : `<button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>`}
+      ${vs ? `<button class="btn btn-outline btn-sm" onclick="splitSet(${jsArg(vs.id)})" title="The variants become separate strategies again. No booking changes.">Split into separate strategies</button>` : ""}
       <button class="btn btn-outline btn-sm" onclick="renameLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Change the name the Desk shows for it.">Rename</button>
       <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(lab.name || "")}, ${jsArg(name)})"${busy || ro || !lab.name ? " disabled" : ""} title="Off the Desk, switched off, its accounts off, and kept. Restore it from Archive any time.">Archive</button>
       <button class="btn btn-outline btn-sm" onclick="deleteLabStrat(${jsArg(name)}, ${jsArg(lab.name || "")})"${busy || ro || !lab.name ? " disabled" : ""} title="Takes it off the Desk and deletes its shadow and day history for good. Its Lab draft stays.">Delete</button></div>`;
@@ -494,20 +512,31 @@ function renderMain(names, issues) {
 /* Set up a strategy on its own (the owner, 2026-11-02): the same card as a team's, smaller -- the accounts to tick, contracts,
    Take turns, Hold overnight and one Save (POST /api/setup: its accounts and Take turns in one go, checked whole first). ON / OFF is
    the page's own switch. A strategy in a team is set up on the team's page (the server refuses a solo save for it). */
-let SOLO_DRAFT = {}, SOLO_FORMS = {}, SOLO_GEAR = {};      // the ticks/turns/hold being edited; each account's gear form the owner touched; open sheets
+let SOLO_DRAFT = {}, SOLO_FORMS = {}, SOLO_GEAR = {}, SOLO_PICK = {};      // the ticks/turns/hold being edited; each account's gear form the owner touched; open sheets
 const soloTeam = (name) => teams().find(g => g.members.includes(name)) || null;
-function soloNow(name) {      // what the desk has now, in the card's terms
-  const s = ST.strategies[name], book = ((ST.book || {})[name] || []).filter(r => r.account in (ST.accounts || {}));
-  return {accounts: book.map(r => r.account), qty: +(book[0] || {}).qty || +s.cfg.qty || 1, turns: !!((s.rotation || {}).on), hold: book.some(r => r.hold === true)};
+function soloNow(name) {      // what the desk has now, in the card's terms (a set: every variant's accounts, and which variant each is on)
+  const vs = soloVs(name), ms = vs ? vs.members : [name], s = ST.strategies[name], pick = {};
+  const book = ms.flatMap(m => ((ST.book || {})[m] || []).filter(r => r.account in (ST.accounts || {})).map(r => { pick[r.account] = pick[r.account] || m; return r; }));
+  const now = {accounts: [...new Set(book.map(r => r.account))], qty: +(book[0] || {}).qty || +s.cfg.qty || 1, turns: ms.some(m => !!((ST.strategies[m].rotation || {}).on)), hold: book.some(r => r.hold === true)};
+  return vs ? {...now, pick} : now;
 }
+/* the variant an account is on: the one the owner picked in its gear, else the one it is booked on, else the set's first (a plain strategy: itself) */
+function soloMember(name, a) {
+  const vs = soloVs(name);
+  if (!vs) return name;
+  const p = (SOLO_PICK[name] || {})[a];
+  return vs.members.includes(p) ? p : vs.members.find(m => bookRowOf(m, a)) || name;
+}
+const bookRowOf = (m, a) => ((ST.book || {})[m] || []).find(r => r.account === a) || null;
+const soloWords = (m, text) => soloVarLabel(m) ? soloVarLabel(m) + " · " + text : text;      // a set's row says its variant first
 const soloLab = (name) => (ST.strategies[name] || {}).lab || {};
 const soloContracts = (name) => soloLab(name).contracts || [];
 const soloOwnWords = (name) => { const p = Number((soloLab(name).params || {}).risk); return p > 0 ? AcctSet.ownWords(p) : "its own size"; };
-const soloBookRow = (name, a) => ((ST.book || {})[name] || []).find(r => r.account === a) || null;
+const soloBookRow = (name, a) => bookRowOf(soloMember(name, a), a);
 /* the gear form an account opens with: its row as booked, the strategy's first contract and that contract's Most when it has none */
 function soloForm0(name, a) {
-  const lab = soloLab(name), row = soloBookRow(name, a) || {account: a, qty: 1}, f = AcctSet.formOf(row);      // a new row is 1 contract (the server)
-  const contract = row.contract || soloContracts(name)[0], most = f.most != null ? f.most : (lab.most_default_by || {})[contract];
+  const m = soloMember(name, a), lab = soloLab(m), row = soloBookRow(name, a) || {account: a, qty: 1}, f = AcctSet.formOf(row);      // a new row is 1 contract (the server)
+  const contract = row.contract || soloContracts(m)[0], most = f.most != null ? f.most : (lab.most_default_by || {})[contract];
   return {contract, size: f.size === "own" && lab.own_size !== true ? "contracts" : f.size, qty: f.qty, risk_usd: f.risk_usd, most: most == null ? "" : most};
 }
 const soloForm = (name, a) => (SOLO_FORMS[name] || {})[a] || soloForm0(name, a);
@@ -521,22 +550,27 @@ function soloEntry(f) {
 function soloMake(name, accounts, turns, hold) {      // settings[account] only for ticked rows the owner changed in the gear
   const settings = {};
   for (const a of accounts) { const f = (SOLO_FORMS[name] || {})[a]; if (f && soloKey(f) !== soloKey(soloForm0(name, a))) settings[a] = soloEntry(f); }
-  return {strategy: name, accounts, turns, hold, settings};      // no qty: a booked row keeps its own, a new one is 1
+  const vs = soloVs(name);
+  return vs ? {set: vs.id, strategy: name, accounts, pick: Object.fromEntries(accounts.map(a => [a, soloMember(name, a)])), turns, hold, settings}
+    : {strategy: name, accounts, turns, hold, settings};      // no qty: a booked row keeps its own, a new one is 1
 }
+const soloMem = (b, a) => b.pick ? b.pick[a] : b.strategy;      // the strategy an account of this body runs
 function soloBody(name) {
   const root = document.querySelector("#viewStrat"), q = (sel) => root && root.querySelector(sel), now = soloNow(name);
   const accounts = [...(root ? root.querySelectorAll(".solo-acct") : [])].filter(b => b.checked).map(b => b.dataset.acct);
   return soloMake(name, accounts, q(".solo-turns") ? q(".solo-turns").checked : now.turns, q(".solo-hold") ? q(".solo-hold").checked : now.hold);
 }
-const soloEntryWords = (name, e) => e.size == null ? soloOwnWords(name) : AcctSet.words({...e, qty: e.qty || 1}, undefined, true);
+const soloEntryWords = (m, e) => soloWords(m, e.size == null ? soloOwnWords(m) : AcctSet.words({...e, qty: e.qty || 1}, undefined, true));
 function soloDiff(now, b) {
   const added = (a) => {      // a ticked-in account with the size it will be saved with
-    const e = (b.settings || {})[a], lab = soloLab(b.strategy), c = soloContracts(b.strategy)[0];
-    return `+${acctShort(a)} (${e ? soloEntryWords(b.strategy, e) : lab.own_size === true ? soloOwnWords(b.strategy) : AcctSet.words({qty: 1, contract: c})})`;
+    const m = soloMem(b, a), e = (b.settings || {})[a], lab = soloLab(m), c = soloContracts(m)[0];
+    return `+${acctShort(a)} (${e ? soloEntryWords(m, e) : soloWords(m, lab.own_size === true ? soloOwnWords(m) : AcctSet.words({qty: 1, contract: c}))})`;
   };
+  const moved = (a) => now.pick && b.pick && now.pick[a] && b.pick[a] !== now.pick[a];      // an account booked on one variant, picked on another
   const parts = [...b.accounts.filter(a => !now.accounts.includes(a)).map(added),
                  ...now.accounts.filter(a => !b.accounts.includes(a)).map(a => "−" + acctShort(a)),
-                 ...Object.entries(b.settings || {}).filter(([a]) => now.accounts.includes(a)).map(([a, e]) => `${acctShort(a)} ${soloEntryWords(b.strategy, e)}`)];
+                 ...b.accounts.filter(a => now.accounts.includes(a) && moved(a)).map(a => `${acctShort(a)} → ${soloVarLabel(b.pick[a])}`),
+                 ...Object.entries(b.settings || {}).filter(([a]) => now.accounts.includes(a) && !moved(a)).map(([a, e]) => `${acctShort(a)} ${soloEntryWords(soloMem(b, a), e)}`)];
   if (b.turns !== now.turns) parts.push(b.turns ? "take turns" : "every account");
   if (b.hold !== now.hold) parts.push(b.hold ? "holds overnight" : "flat each night");
   return parts;
@@ -547,7 +581,7 @@ function soloEdit(name) {
   if (!root) return;
   const b = soloBody(name), parts = soloDiff(soloNow(name), b);
   if (parts.length) SOLO_DRAFT[name] = {accounts: b.accounts, turns: b.turns, hold: b.hold};
-  else delete SOLO_DRAFT[name];
+  else { delete SOLO_DRAFT[name]; delete SOLO_PICK[name]; }
   const slot = root.querySelector(".solo-save");
   if (slot) slot.innerHTML = soloSaveHtml(name, parts);
 }
@@ -557,7 +591,7 @@ function soloPaint(name) {      // the card again from the draft (ticks, gear): 
 }
 function soloTick(name) {
   const root = document.querySelector("#viewStrat"), f = SOLO_FORMS[name];
-  if (root && f) for (const b of root.querySelectorAll(".solo-acct")) if (!b.checked) delete f[b.dataset.acct];      // unticked: its gear form goes
+  if (root) for (const b of root.querySelectorAll(".solo-acct")) if (!b.checked) { if (f) delete f[b.dataset.acct]; if (SOLO_PICK[name]) delete SOLO_PICK[name][b.dataset.acct]; }      // unticked: its gear form and variant go
   soloEdit(name); soloPaint(name);
 }
 function soloGear(name, a) {
@@ -568,19 +602,26 @@ function soloGear(name, a) {
 /* one field of an account's gear form: contract (back to 1 contract, that contract's Most), size, or a typed number (no repaint) */
 function soloSet(name, a, k, v, typing) {
   const f = (SOLO_FORMS[name] = SOLO_FORMS[name] || {}), cur = soloForm(name, a);
-  f[a] = k === "contract" ? (v === cur.contract ? cur : AcctSet.switchContract(cur, v, soloLab(name).most_default_by || {})) : {...cur, [k]: v};
+  f[a] = k === "contract" ? (v === cur.contract ? cur : AcctSet.switchContract(cur, v, soloLab(soloMember(name, a)).most_default_by || {})) : {...cur, [k]: v};
   soloEdit(name);
   if (!typing) soloPaint(name);
 }
+function soloPick(name, a, m) {      // the gear's Variant: the account runs another variant; its size form starts over from that variant's row
+  if (soloMember(name, a) === m) return;
+  (SOLO_PICK[name] = SOLO_PICK[name] || {})[a] = m;
+  if (SOLO_FORMS[name]) delete SOLO_FORMS[name][a];
+  soloEdit(name); soloPaint(name);
+}
 const soloSeg = (label, opts, cur, fn) => `<div class="seg" role="group" aria-label="${esc(label)}">${opts.map(([v, t]) =>
   `<button type="button" class="${v === cur ? "sel" : ""}" aria-pressed="${v === cur}" onclick="${fn(v)}">${esc(t)}</button>`).join("")}</div>`;
-function soloSheet(name, a) {      // the gear's sheet under the row (Variant for sets: Task 16)
-  const f = soloForm(name, a), cs = soloContracts(name), lab = soloLab(name), N = jsArg(name), A = jsArg(a);
+function soloSheet(name, a) {      // the gear's sheet under the row (a set: Variant first)
+  const m = soloMember(name, a), vs = soloVs(name), f = soloForm(name, a), cs = soloContracts(m), lab = soloLab(m), N = jsArg(name), A = jsArg(a);
   const num = (k, v, label) => `<input type="text" inputmode="numeric" autocomplete="off" aria-label="${esc(label)}" value="${esc(String(v))}" style="width:72px;text-align:right"
     onfocus="FREEZE=true" onblur="FREEZE=false" oninput="soloSet(${N},${A},'${k}',this.value,true)">`;
   const row = (h, body) => `<div class="feed-row"><span class="h">${esc(h)}</span><span class="t">${body}</span></div>`;
   const sizes = [...(lab.own_size === true ? [["own", "Its own"]] : []), ["contracts", "Contracts"], ["risk", "$ risk"]];
   return `<div class="solo-sheet">
+    ${vs ? row("Variant", soloSeg("Variant", vs.members.map(x => [x, soloVarLabel(x)]), m, x => `soloPick(${N},${A},${jsArg(x)})`)) : ""}
     ${cs.length > 1 ? row("Contract", soloSeg("Contract", cs.map(c => [c, c]), f.contract, c => `soloSet(${N},${A},'contract','${c}')`)) : ""}
     ${row("Size", soloSeg("Size", sizes, f.size, v => `soloSet(${N},${A},'size','${v}')`) + (f.size === "own" ? "" : " " + (f.size === "risk" ? num("risk_usd", f.risk_usd, "$ risk a trade") : num("qty", f.qty, "Contracts"))))}
     ${f.size === "own" ? "" : row("Most contracts", num("most", f.most, "Most contracts"))}</div>`;
@@ -590,9 +631,10 @@ function soloCardHtml(name, s, now) {
   const gear = SOLO_GEAR[name] || {}, b = soloMake(name, [...chosen], dr ? dr.turns : now.turns, dr ? dr.hold : now.hold);
   const words = (a) => {
     if (!chosen.has(a)) return "";
-    if (b.settings[a]) return soloEntryWords(name, b.settings[a]);
+    const m = soloMem(b, a);
+    if (b.settings[a]) return soloEntryWords(m, b.settings[a]);
     const r = soloBookRow(name, a);
-    return !r ? "" : !r.size && soloLab(name).own_size === true ? soloOwnWords(name) : AcctSet.words(r, undefined, true);
+    return !r ? soloWords(m, "") .replace(/ · $/, "") : soloWords(m, !r.size && soloLab(m).own_size === true ? soloOwnWords(m) : AcctSet.words(r, undefined, true));
   };
   const rows = Object.keys(accts).map(a => `<div class="solo-row"><div class="feed-row">
       <label class="h" style="cursor:pointer"><input type="checkbox" class="solo-acct" data-acct="${esc(a)}" ${chosen.has(a) ? "checked" : ""}${off}> ${esc(acctShort(a))}
@@ -607,7 +649,8 @@ function soloCardHtml(name, s, now) {
     <div class="solo-save">${dr ? soloSaveHtml(name, soloDiff(now, b)) : ""}</div>${chosen.size ? "" : `<div class="mcap">No account ticked: it runs in shadow.</div>`}`;
 }
 function soloSetupHtml(name, s, ro, lock) {
-  const team = soloTeam(name);
+  const team = soloTeam(name), mine = labSetOf(name), first = mine && mine.members.filter(m => ST.strategies[m])[0];
+  if (first && first !== name) return `<div class="sec"><h2>Set up</h2><div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="setView('strat',${jsArg(first)})">In set ${esc(mine.name)} → open</button></div></div>`;
   if (team) return `<div class="sec"><h2>Set up</h2><div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="setView('group',${jsArg(team.id)})">In team ${esc(team.name)} → open</button></div></div>`;
   // no verdict here: the page's one status line (statusLine) says whether it trades; the card only says why it cannot be edited
   const accts = ST.accounts || {}, now = soloNow(name);
@@ -619,24 +662,29 @@ function soloSetupHtml(name, s, ro, lock) {
    send more (AcctSet.needsAsk: NQ instead of MNQ, bigger size, Most up); it stops taking turns; or it loses its last account
    while ON (today is over for it; it trades again tomorrow). */
 async function saveSolo(name) {
-  const s = ST.strategies[name], now = soloNow(name), b = soloBody(name), on = s.cfg.enabled === true, N = stratLabel(name);
+  const s = ST.strategies[name], vs = soloVs(name), now = soloNow(name), b = soloBody(name), N = vs ? vs.name : stratLabel(name);
+  const on = vs ? vs.members.some(m => ST.strategies[m].cfg.enabled === true) : s.cfg.enabled === true;      // a set keeps what trades trading
   const parts = soloDiff(now, b), liveIn = b.accounts.filter(a => !now.accounts.includes(a) && isRealAcct(a)), live = b.accounts.filter(isRealAcct);
-  const mb = soloLab(name).most_default_by || {}, order = [...soloContracts(name)].sort((x, y) => (mb[y] || 0) - (mb[x] || 0));      // the micro first
+  const orderOf = (m) => { const mb = soloLab(m).most_default_by || {}; return [...soloContracts(m)].sort((x, y) => (mb[y] || 0) - (mb[x] || 0)); };      // the micro first
+  const moved = (a) => !!(now.pick && now.pick[a] && b.pick[a] !== now.pick[a]);
   const why = [];
   if (on && liveIn.length) why.push(`${riskWord(liveIn)} account${liveIn.length === 1 ? "" : "s"} ticked in: ${liveIn.map(acctShort).join(", ")}.`);
   for (const [a, e] of Object.entries(b.settings)) {
+    if (on && moved(a) && isRealAcct(a)) { why.push(`${acctShort(a)}: ${soloEntryWords(b.pick[a], e)}.`); continue; }
     const r = soloBookRow(name, a);
-    if (!on || !r || liveIn.includes(a)) continue;
+    if (!on || !r || liveIn.includes(a) || moved(a)) continue;
     const next = {account: a, qty: e.qty || r.qty || 1, contract: e.contract, ...(e.size ? {size: e.size, most: e.most} : {}), ...(e.size === "risk" ? {risk_usd: e.risk_usd} : {})};
-    if (AcctSet.needsAsk({...r, contract: r.contract || order[0]}, next, isRealAcct(a), order)) why.push(`${acctShort(a)}: ${soloEntryWords(name, e)}.`);
+    if (AcctSet.needsAsk({...r, contract: r.contract || orderOf(soloMem(b, a))[0]}, next, isRealAcct(a), orderOf(soloMem(b, a)))) why.push(`${acctShort(a)}: ${soloEntryWords(soloMem(b, a), e)}.`);
   }
+  for (const a of b.accounts) if (on && moved(a) && isRealAcct(a) && !(b.settings[a])) why.push(`${acctShort(a)} moves to ${soloVarLabel(b.pick[a])}.`);
   if (on && !b.turns && now.turns && live.length && b.accounts.length > 1) why.push(`Each trade then goes to all ${b.accounts.length} accounts, ${riskWord(live)} ones included.`);
   if (on && now.accounts.length && !b.accounts.length) why.push("It loses its last account: today is over for it; it trades again tomorrow.");
   if (why.length && !await confirmDlg(`Change ${N}?`, `${parts.join(" · ")}. ${why.join(" ")}${machineWords() ? " It runs " + machineWords() + "." : ""}`, "Save", false)) { refresh(); return; }
   let r, err = null;
-  try { r = await post("/api/setup", {...b, on}); } catch (e) { err = e || new Error("no answer"); }
+  const {strategy: _s, ...sent} = b;      // the set body names the set, not a strategy
+  try { r = await post("/api/setup", {...(vs ? sent : b), on}); } catch (e) { err = e || new Error("no answer"); }
   const w = answerWhy(r, err);
-  if (w === "") { delete SOLO_DRAFT[name]; delete SOLO_FORMS[name]; }
+  if (w === "") { delete SOLO_DRAFT[name]; delete SOLO_FORMS[name]; delete SOLO_PICK[name]; }
   refresh();
   toast(w ? `${N} NOT saved — ${w}.` : `${N} saved.`, w ? 8000 : 4200);
 }
