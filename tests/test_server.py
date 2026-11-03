@@ -81,6 +81,7 @@ def test_status_shape(client):
     assert "research" in s and "live" in s
     assert d["book"] == {"nq930": [{"account": "main", "qty": 3}]}
     assert d["accounts"]["main"]["label"] == "MAIN"
+    assert d["accounts"]["main"]["prop"] is False
 
 
 def test_status_names_the_machine_from_the_no_backtests_switch(client, tmp_path, monkeypatch):

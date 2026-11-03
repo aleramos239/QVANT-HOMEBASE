@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 from ..backtest.slots import backtests_off, status as backtest_slots
 from ..desk import dayopen, labdesk as labdesk_mod
 from ..desk.metrics import live_metrics
+from ..desk_app import brokers
 from .variants import status_view as variants_status
 
 
@@ -44,6 +45,7 @@ def register(app, *, JOURNAL_TAIL, STATIC, _login_cooldown, acct_status, adapter
             cooldown_s = max(0.0, _login_cooldown.get(aid, 0) - _t.time())
             accounts[aid] = {"label": a.label or a.account_name or aid,
                              "env": "paper" if a.paper else "live" if a.live else "demo",
+                             "prop": brokers.is_prop(a),
                              "cooldown_s": round(cooldown_s, 1) if cooldown_s else 0, **m,
                              "day": engine.day_view(aid),      # the day take in force, the day's closed P&L, the lock
                              "day_pnl": dayopen.day_pnl(open_path, aid, m.get("balance"), day)}   # balance now - balance at the 18:00 open

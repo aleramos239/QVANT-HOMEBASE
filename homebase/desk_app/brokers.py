@@ -44,6 +44,14 @@ def is_vest_key(key: str) -> bool:
     return key.startswith("vest:")
 
 
+def is_prop(a) -> bool:
+    """A prop-firm eval or funded account (a label only: nothing asks or refuses by it)."""
+    n = a.account_name.upper()
+    return not a.paper and bool(
+        a.prop or is_tsx_key(a.keyring_key) or is_atr_key(a.keyring_key) or is_vest_key(a.keyring_key)
+        or n.startswith("PA") or any(w in n for w in ("APEX", "LUCID", "TOPSTEP", "FUNDEDNEXT", "ALPHA")))
+
+
 def vest_session(key: str) -> VestSession:
     """The login's one VestSession, made on first use (R47): build_adapter and the connect routes both take it here."""
     return _VEST_SESSIONS.get(key) or _VEST_SESSIONS.setdefault(key, VestSession(key))

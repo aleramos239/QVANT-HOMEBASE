@@ -1022,6 +1022,8 @@ class LabDesk:
                     "own_size": (labcfg.record_of(self.cfg, name) or {}).get("own_size") is True,   # sizes itself: no Desk size
                     "instrument": self._instrument(name),            # "micro" / "mini": the contract its orders go to; None: not switchable
                     "most_default": self._most_default(name),        # a new Most contracts box's first value
+                    "contracts": (cs := self._contracts(name)),      # its orders' contract first, then the market's other size
+                    "most_default_by": {c: self._most_default(name, c) for c in cs},
                     "labels": self._labels(name),                    # each setting's own label (the Setup card's words)
                     "state": took["state"], "why": took["why"],
                     "trades_today": took["trades_today"], "mode_today": took["mode_today"],
@@ -1626,6 +1628,14 @@ class LabDesk:
             return abs(door._entry_price(it, {"last_price": last}) - it["sl"])
         except (TypeError, KeyError):
             return None
+
+    def _contracts(self, name: str) -> list[str]:
+        rec = labcfg.record_of(self.cfg, name) or {}
+        if not rec.get("root"):
+            return []
+        first = labcfg.exec_symbol(rec)
+        other = micro_of(rec["root"]) if first == rec["root"] else rec["root"]
+        return [first, *([other] if other else [])]
 
     def _most_default(self, name: str, symbol: str | None = None) -> int:
         rec = labcfg.record_of(self.cfg, name) or {}

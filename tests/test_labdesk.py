@@ -1554,3 +1554,11 @@ def test_switching_the_strategys_contract_leaves_a_rows_own_contract_numbers_alo
     run(d.ld.set_book(LAB, [{"account": "a1", "qty": 1, "contract": "NQ"}]))
     new, limits, rows = d.ld._switch_plan(LAB, labcfg.record_of(d.cfg, LAB), "micro")
     assert rows == [{"account": "a1", "qty": 1, "contract": "NQ"}] and limits.max_qty == 10
+
+
+def test_status_view_gives_contracts_and_their_most(tmp_path):
+    v = mkdesk(tmp_path / "a", rec_kw={"exec_root": "MNQ"}).ld.status_view(LAB)
+    assert (v["contracts"], v["most_default_by"]) == (["MNQ", "NQ"], {"MNQ": 20, "NQ": 2})
+    assert mkdesk(tmp_path / "b").ld.status_view(LAB)["contracts"] == ["NQ", "MNQ"]     # trades the mini: it comes first
+    v = mkdesk(tmp_path / "c", rec_kw={"root": "GC", "exec_root": "MGC"}).ld.status_view(LAB)
+    assert v["contracts"] == ["MGC", "GC"] and set(v["most_default_by"]) == {"MGC", "GC"}   # never MNQ / NQ
