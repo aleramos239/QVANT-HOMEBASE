@@ -1,0 +1,58 @@
+{
+ "name": "nq_930_two_account_4filters",
+ "saved": "2026-11-01",
+ "status": "test months READ 2026-11-01 (owner said run it): 1:2 168 days -$24,248, Sharpe -0.82, 2/5 yrs: fails, not consistent with in-sample (oos_930.py / oos_930.md)",
+ "setup": "2 NQ per account, one long one short at market 09:30:00 ET, 50-pt stop ($2,000), flat 15:55; RR 1:1.5 and 1:2",
+ "rule": "enter if ANY of the 4 fires (cutoffs frozen from the 3:1 in-sample days)",
+ "filters": {
+  "L1 book depth top-10 at 09:29 vs 20-session median (depth10_rel20d)": {
+   "trade_if": ">=",
+   "value": 0.2127
+  },
+  "L11 contracts at top 3 levels at 09:29 vs prior 20-day avg": {
+   "trade_if": "between",
+   "low": 1.0345,
+   "high": 1.1855
+  },
+  "L10 median size per level at 09:29 vs prior 20-day avg": {
+   "trade_if": ">=",
+   "value": 1.2239
+  },
+  "Daily ATR(14) points, yesterday's": {
+   "trade_if": "between",
+   "low": 200,
+   "high": 300
+  }
+ },
+ "in_sample": {
+  "1:1.5": {
+   "days": 498,
+   "net": 97872,
+   "max_dd": -16624,
+   "sharpe": 1.75,
+   "one_wins": 85.1
+  },
+  "1:2": {
+   "days": 498,
+   "net": 140532,
+   "max_dd": -22516,
+   "sharpe": 1.73,
+   "one_wins": 74.1
+  }
+ },
+ "code": "straddle_930_study/combine_five.py all4",
+ "test_months": {
+  "1:2": {
+   "days": 168,
+   "net": -24248,
+   "max_dd": -47050,
+   "sharpe": -0.82,
+   "one_wins": 67.9
+  },
+  "every_day_1:2": {
+   "days": 308,
+   "net": 1382,
+   "sharpe": 0.03
+  }
+ }
+}
