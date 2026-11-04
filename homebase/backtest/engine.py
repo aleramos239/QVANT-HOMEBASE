@@ -705,7 +705,7 @@ class _Sim:
 
 
 def bar_ns(minutes) -> int:
-    """A bar's length in whole nanoseconds: 0.25 / 0.5 minutes (15 / 30-second bars) stay exact integers."""
+    """A bar's length in whole nanoseconds: 5/60, 0.25, 0.5 minutes (5 / 15 / 30-second bars) stay exact integers."""
     return round(minutes * 60_000_000_000)
 
 

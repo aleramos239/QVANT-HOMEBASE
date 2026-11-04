@@ -89,18 +89,20 @@ def quote_sides(src: Path, n: int) -> array | None:
 
 
 def split_delta(ts, size, side, lo: int, hi: int, bars: list) -> None:
-    """Give each bar `buy` / `sell`: the volume of its prints in [start_ns, end_ns) by `side` (prints of side 0 count for
+    """Give each bar `buy` / `sell`, and `nbuy` / `nsell` (how many prints, tester only): the volume of its prints in [start_ns, end_ns) by `side` (prints of side 0 count for
     neither). Set as plain attributes, as engine.split_flow does, so a bar's fields, `asdict` and equality stay as they were."""
     k = lo
     for b in bars:
         k0 = bisect_left(ts, b.start_ns, k, hi)
         k1 = bisect_left(ts, b.end_ns, k0, hi)
-        buy = sell = 0
+        buy = sell = nbuy = nsell = 0
         for j in range(k0, k1):
             s = side[j]
             if s > 0:
                 buy += size[j]
+                nbuy += 1
             elif s < 0:
                 sell += size[j]
-        b.buy, b.sell = buy, sell
+                nsell += 1
+        b.buy, b.sell, b.nbuy, b.nsell = buy, sell, nbuy, nsell
         k = k1
